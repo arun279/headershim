@@ -16,7 +16,8 @@
     "check:size": "pnpm build && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
     "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {},
   "devDependencies": {
