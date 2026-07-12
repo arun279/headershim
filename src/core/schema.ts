@@ -1,18 +1,25 @@
 import {
-  type BadgeColor,
   createProfile,
-  type Direction,
-  type HeaderOp,
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
-  type ResourceGroup,
   type Rule,
-  type Scope,
   type Settings,
   type StateDoc,
 } from "./model";
 import { err, ok, type Result } from "./result";
+import {
+  BADGE_COLORS,
+  DIRECTIONS,
+  HEADER_OPERATIONS,
+  hasValidHeaderValue,
+  isGeneratedValue,
+  isOneOf,
+  isRecord,
+  isResourceTypes,
+  isScope,
+  isStringArray,
+} from "./validation";
 
 export const CURRENT: StateDoc["v"] = 1;
 
@@ -84,33 +91,6 @@ export function createV1Seed(): StateDoc {
     },
   };
 }
-
-const BADGE_COLORS: readonly BadgeColor[] = [
-  "indigo",
-  "blue",
-  "teal",
-  "green",
-  "plum",
-  "magenta",
-  "crimson",
-  "slate",
-];
-
-const DIRECTIONS: readonly Direction[] = ["request", "response"];
-const HEADER_OPERATIONS: readonly HeaderOp[] = ["set", "append", "remove"];
-
-const RESOURCE_GROUPS: readonly ResourceGroup[] = [
-  "pages",
-  "subframes",
-  "xhr",
-  "scripts",
-  "stylesheets",
-  "images",
-  "fonts",
-  "media",
-  "websockets",
-  "other",
-];
 
 function versionOf(value: unknown): number | undefined {
   if (!isRecord(value)) {
@@ -214,56 +194,13 @@ function isRule(value: unknown): value is Rule {
     typeof header === "string" &&
     header.length > 0 &&
     header === header.trim().toLowerCase() &&
-    hasValidValue(value) &&
+    hasValidHeaderValue(value) &&
     isScope(scope) &&
     isResourceTypes(resourceTypes) &&
     isStringArray(initiators) &&
     typeof enabled === "boolean" &&
     (comment === undefined || typeof comment === "string") &&
     (generated === undefined || isGeneratedValue(generated))
-  );
-}
-
-function hasValidValue(rule: Record<string, unknown>): boolean {
-  const { operation, value } = rule;
-  return operation === "remove"
-    ? value === undefined
-    : typeof value === "string";
-}
-
-function isScope(value: unknown): value is Scope {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const { type, domains, pattern, regex, hosts } = value;
-  switch (type) {
-    case "domains":
-      return isStringArray(domains) && domains.length > 0;
-    case "pattern":
-      return (
-        typeof pattern === "string" &&
-        pattern.length > 0 &&
-        isStringArray(hosts)
-      );
-    case "regex":
-      return (
-        typeof regex === "string" && regex.length > 0 && isStringArray(hosts)
-      );
-    case "all":
-      return true;
-    default:
-      return false;
-  }
-}
-
-function isResourceTypes(value: unknown): value is ResourceGroup[] | "all" {
-  return (
-    value === "all" ||
-    (Array.isArray(value) &&
-      value.length > 0 &&
-      value.every((item) => isOneOf(item, RESOURCE_GROUPS)) &&
-      hasUniqueValues(value))
   );
 }
 
@@ -280,37 +217,6 @@ function isSettings(value: unknown): value is Settings {
   );
 }
 
-function isGeneratedValue(
-  value: unknown,
-): value is { kind: "uuid" | "timestamp"; at: string } {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const { kind, at } = value;
-  return (kind === "uuid" || kind === "timestamp") && typeof at === "string";
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item) => typeof item === "string" && item.length > 0)
-  );
-}
-
-function isOneOf<T extends string>(
-  value: unknown,
-  options: readonly T[],
-): value is T {
-  return (
-    typeof value === "string" && options.some((option) => option === value)
-  );
-}
-
 function hasUniqueValues<T>(values: readonly T[]): boolean {
   return new Set(values).size === values.length;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
