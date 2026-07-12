@@ -8,20 +8,56 @@
     "build": "wxt build",
     "lint": "biome lint .",
     "format": "biome format --write .",
+    "check:lint": "biome ci .",
+    "check:types": "tsc --noEmit",
+    "check:test": "vitest run --coverage",
+    "check:knip": "knip",
+    "check:dup": "jscpd",
+    "check:size": "pnpm build && size-limit",
+    "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit",
     "postinstall": "wxt prepare"
   },
   "dependencies": {},
   "devDependencies": {
+    "@size-limit/file": "^12.1.0",
     "@biomejs/biome": "^2.5.3",
     "@tsconfig/strictest": "^2.0.8",
-    "@types/chrome": "^0.2.2",
+    "@vitest/coverage-v8": "^4.1.9",
+    "jscpd": "^5.0.11",
+    "knip": "^6.24.0",
     "preact": "^10.29.7",
+    "size-limit": "^12.1.0",
     "typescript": "^7.0.2",
+    "vitest": "^4.1.9",
     "wxt": "^0.20.27"
   },
+  "size-limit": [
+    {
+      "name": "Background",
+      "path": ".output/chrome-mv3/background.js",
+      "limit": "720 B"
+    },
+    {
+      "name": "Shared UI runtime",
+      "path": ".output/chrome-mv3/chunks/jsxRuntime.module-*.js",
+      "limit": "14 kB"
+    },
+    {
+      "name": "Popup",
+      "path": ".output/chrome-mv3/chunks/popup-*.js",
+      "limit": "170 B"
+    },
+    {
+      "name": "Options",
+      "path": ".output/chrome-mv3/chunks/options-*.js",
+      "limit": "170 B"
+    }
+  ],
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "spawn-sync"
     ]
   }
 }

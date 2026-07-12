@@ -1,0 +1,7 @@
+{
+  "path": ["src", "entrypoints", "scripts"],
+  "threshold": 5,
+  "exitCode": 1,
+  "reporters": ["console", "threshold"],
+  "ignore": ["**/*.html"]
+}
