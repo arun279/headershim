@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Unsupported filter",
+    "shortTitle": "UF",
+    "backgroundColor": "#4f5bc4",
+    "version": 2,
+    "headers": [
+      {
+        "enabled": true,
+        "name": "X-Preview",
+        "value": "on",
+        "comment": "preview header"
+      }
+    ],
+    "urlFilters": [
+      {
+        "enabled": true,
+        "urlRegex": "^https://(?=preview\\.)"
+      }
+    ]
+  }
+]
