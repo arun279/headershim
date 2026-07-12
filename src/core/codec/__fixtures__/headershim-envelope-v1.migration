@@ -1,0 +1,32 @@
+{
+  "app": "headershim",
+  "schemaVersion": 1,
+  "exportedAt": "2026-07-12T19:03:00.000Z",
+  "profiles": [
+    {
+      "name": "Default",
+      "badge": "DE",
+      "color": "indigo",
+      "enabled": true,
+      "rules": [
+        {
+          "direction": "request",
+          "operation": "set",
+          "header": "x-debug",
+          "value": "on",
+          "enabled": true,
+          "scope": {
+            "type": "domains",
+            "domains": [
+              "example.com"
+            ],
+            "resourceTypes": [
+              "pages"
+            ]
+          },
+          "initiators": []
+        }
+      ]
+    }
+  ]
+}

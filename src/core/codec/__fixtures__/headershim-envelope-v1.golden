@@ -1,0 +1,101 @@
+{
+  "app": "headershim",
+  "schemaVersion": 1,
+  "exportedAt": "<exportedAt>",
+  "profiles": [
+    {
+      "name": "Default",
+      "badge": "DE",
+      "color": "indigo",
+      "enabled": true,
+      "rules": [
+        {
+          "direction": "request",
+          "operation": "set",
+          "header": "authorization",
+          "value": "Bearer secret",
+          "comment": "development",
+          "enabled": true,
+          "scope": {
+            "type": "domains",
+            "domains": [
+              "api.example.com"
+            ],
+            "resourceTypes": [
+              "pages",
+              "xhr"
+            ]
+          },
+          "initiators": [
+            "app.example.com"
+          ],
+          "generated": {
+            "kind": "uuid",
+            "at": "2026-07-12T14:03:00.000Z"
+          }
+        },
+        {
+          "direction": "response",
+          "operation": "remove",
+          "header": "server",
+          "enabled": false,
+          "scope": {
+            "type": "pattern",
+            "pattern": "||assets.example.com^",
+            "hosts": [
+              "assets.example.com"
+            ],
+            "resourceTypes": "all"
+          },
+          "initiators": []
+        }
+      ]
+    },
+    {
+      "name": "Staging",
+      "badge": "S",
+      "color": "slate",
+      "enabled": false,
+      "rules": [
+        {
+          "direction": "response",
+          "operation": "append",
+          "header": "cache-control",
+          "value": "no-store",
+          "comment": "avoid stale assets",
+          "enabled": true,
+          "scope": {
+            "type": "regex",
+            "regex": "^https://staging\\.example\\.com/",
+            "hosts": [
+              "staging.example.com"
+            ],
+            "resourceTypes": [
+              "stylesheets",
+              "images"
+            ]
+          },
+          "initiators": [],
+          "generated": {
+            "kind": "timestamp",
+            "at": "2026-07-12T14:04:00.000Z"
+          }
+        },
+        {
+          "direction": "request",
+          "operation": "set",
+          "header": "x-everywhere",
+          "value": "on",
+          "enabled": true,
+          "scope": {
+            "type": "all",
+            "resourceTypes": [
+              "other"
+            ]
+          },
+          "initiators": []
+        }
+      ]
+    }
+  ]
+}

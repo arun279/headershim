@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 import { WxtVitest } from "wxt/testing";
 
 export default defineConfig({
-  plugins: [WxtVitest()],
+  plugins: [WxtVitest({ dev: { server: { port: 3000, strictPort: true } } })],
   test: {
     setupFiles: ["./src/test/setup.ts"],
     coverage: {
