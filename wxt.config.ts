@@ -12,6 +12,7 @@ export default defineConfig({
       "declarativeNetRequestWithHostAccess",
       "storage",
       "activeTab",
+      "tabs",
     ],
     optional_host_permissions: ["*://*/*"],
     commands: {
