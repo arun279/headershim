@@ -58,6 +58,10 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "spawn-sync"
-    ]
+    ],
+    "overrides": {
+      "shell-quote": ">=1.8.4",
+      "tmp": ">=0.2.6"
+    }
   }
 }
