@@ -1,0 +1,27 @@
+{
+  "name": "headershim",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.3",
+    "@tsconfig/strictest": "^2.0.8",
+    "@types/chrome": "^0.2.2",
+    "preact": "^10.29.7",
+    "typescript": "^7.0.2",
+    "wxt": "^0.20.27"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
