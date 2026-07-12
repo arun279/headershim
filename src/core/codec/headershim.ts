@@ -66,7 +66,7 @@ export interface HeadershimEnvelope {
   readonly profiles: readonly ExportedProfile[];
 }
 
-interface ImportedProfile {
+export interface ImportedProfile {
   readonly name: string;
   readonly badgeText: string;
   readonly color: BadgeColor;
@@ -79,9 +79,9 @@ interface ImportWarning {
   readonly ruleName: string;
 }
 
-export interface ImportPlan {
+export interface ImportPlan<Warning extends ImportWarning = ImportWarning> {
   readonly profiles: readonly ImportedProfile[];
-  readonly warnings: readonly ImportWarning[];
+  readonly warnings: readonly Warning[];
 }
 
 export type ImportError =
@@ -338,7 +338,7 @@ function importScope(scope: ExportedScope): Scope {
   }
 }
 
-function availableProfileName(
+export function availableProfileName(
   base: string,
   existingProfiles: readonly Profile[],
   plannedProfiles: readonly ImportedProfile[],
