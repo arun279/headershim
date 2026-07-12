@@ -1,3 +1,5 @@
+import { isRecord } from "../validation";
+
 export type ImportFormat = "headershim" | "modheader" | "unknown";
 
 export function detectImportFormat(value: unknown): ImportFormat {
@@ -24,8 +26,4 @@ function hasModHeaderProfileFields(profile: Record<string, unknown>): boolean {
   return ["title", "headers", "respHeaders"].some((field) =>
     Object.hasOwn(profile, field),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
