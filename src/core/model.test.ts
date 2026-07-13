@@ -10,6 +10,7 @@ import {
   type Profile,
   type RuleDraft,
   type StateDoc,
+  switchToNextProfile,
 } from "./model";
 
 function emptyDoc(nextRuleNum = 1): StateDoc {
@@ -135,5 +136,58 @@ describe("profile invariants", () => {
     expect(created.badgeText).toBe("👩🏽‍💻A");
     expect(created.rules).toEqual([]);
     expect(created.id).not.toBe("");
+  });
+});
+
+describe("switchToNextProfile", () => {
+  function docWith(profiles: Profile[], focusedProfileId: string): StateDoc {
+    return { ...emptyDoc(), profiles, focusedProfileId };
+  }
+
+  it("enables exactly the profile after the focused one and focuses it", () => {
+    const doc = docWith(
+      [
+        profile("one", "Default"),
+        profile("two", "Staging"),
+        profile("three", "QA"),
+      ],
+      "one",
+    );
+
+    const next = switchToNextProfile(doc);
+
+    expect(next.focusedProfileId).toBe("two");
+    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it("wraps from the last profile to the first", () => {
+    const doc = docWith(
+      [profile("one", "Default"), profile("two", "Staging")],
+      "two",
+    );
+
+    expect(switchToNextProfile(doc).focusedProfileId).toBe("one");
+  });
+
+  it("keeps a single profile enabled and focused", () => {
+    const doc = docWith(
+      [{ ...profile("one", "Default"), enabled: false }],
+      "one",
+    );
+
+    const next = switchToNextProfile(doc);
+
+    expect(next.focusedProfileId).toBe("one");
+    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([true]);
+  });
+
+  it("returns the document unchanged when it has no profiles", () => {
+    const doc = emptyDoc();
+
+    expect(switchToNextProfile(doc)).toBe(doc);
   });
 });

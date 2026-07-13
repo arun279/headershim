@@ -5,27 +5,27 @@ interface TestPermissions {
   origins?: string[];
 }
 
-type PermissionListener = (permissions: TestPermissions) => void;
-
-function createPermissionEvent() {
-  const listeners = new Set<PermissionListener>();
+function createEvent<Args extends unknown[]>() {
+  const listeners = new Set<(...args: Args) => void>();
   return {
-    addListener: (listener: PermissionListener) => listeners.add(listener),
-    hasListener: (listener: PermissionListener) => listeners.has(listener),
+    addListener: (listener: (...args: Args) => void) => listeners.add(listener),
+    hasListener: (listener: (...args: Args) => void) => listeners.has(listener),
     hasListeners: () => listeners.size > 0,
-    removeListener: (listener: PermissionListener) =>
+    removeListener: (listener: (...args: Args) => void) =>
       listeners.delete(listener),
-    trigger: async (permissions: TestPermissions) => {
-      await Promise.all(
-        [...listeners].map((listener) => listener(permissions)),
-      );
+    removeAllListeners: () => listeners.clear(),
+    trigger: async (...args: Args) => {
+      await Promise.all([...listeners].map((listener) => listener(...args)));
     },
   };
 }
 
 const grantedOrigins = new Set<string>();
-const onAdded = createPermissionEvent();
-const onRemoved = createPermissionEvent();
+const onAdded = createEvent<[permissions: TestPermissions]>();
+const onRemoved = createEvent<[permissions: TestPermissions]>();
+const onCommand = createEvent<[command: string]>();
+
+Object.assign(fakeBrowser, { commands: { onCommand } });
 
 Object.assign(fakeBrowser.permissions, {
   contains: async ({ origins = [] }: TestPermissions) =>
@@ -60,6 +60,9 @@ Object.assign(fakeBrowser.declarativeNetRequest, {
 beforeEach(() => {
   fakeBrowser.reset();
   grantedOrigins.clear();
+  onAdded.removeAllListeners();
+  onRemoved.removeAllListeners();
+  onCommand.removeAllListeners();
 });
 
 afterEach(() => vi.restoreAllMocks());

@@ -1,4 +1,4 @@
-import type { Rule } from "./model";
+import type { Rule, StateDoc } from "./model";
 import { expandResourceTypes, originPatternForDomain } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
@@ -40,6 +40,28 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
       !granted.origins.some((grantedOrigin) =>
         originPatternContains(grantedOrigin, origin),
       ),
+  );
+}
+
+export interface RuleGrantGap {
+  readonly profileId: string;
+  readonly ruleId: string;
+  readonly missing: readonly string[];
+}
+
+export function docMissingGrants(
+  doc: StateDoc,
+  granted: GrantSnapshot,
+): RuleGrantGap[] {
+  return doc.profiles.flatMap((profile) =>
+    profile.enabled
+      ? profile.rules.flatMap((rule) => {
+          const missing = rule.enabled ? missingGrants(rule, granted) : [];
+          return missing.length === 0
+            ? []
+            : [{ profileId: profile.id, ruleId: rule.id, missing }];
+        })
+      : [],
   );
 }
 

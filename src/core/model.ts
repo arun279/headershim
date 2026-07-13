@@ -144,6 +144,25 @@ export function createProfile(draft: ProfileDraft): Profile {
   };
 }
 
+export function switchToNextProfile(doc: StateDoc): StateDoc {
+  const { profiles } = doc;
+  const focusedIndex = profiles.findIndex(
+    (profile) => profile.id === doc.focusedProfileId,
+  );
+  const next = profiles[(focusedIndex + 1) % profiles.length];
+  if (next === undefined) {
+    return doc;
+  }
+  return {
+    ...doc,
+    focusedProfileId: next.id,
+    profiles: profiles.map((profile) => ({
+      ...profile,
+      enabled: profile.id === next.id,
+    })),
+  };
+}
+
 export function isProfileNameAvailable(
   profiles: readonly Profile[],
   candidate: string,

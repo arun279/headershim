@@ -1,4 +1,4 @@
-import { browser } from "wxt/browser";
+import { type Browser, browser } from "wxt/browser";
 import type { TabOverride } from "../core/model";
 
 const SESSION_KEY = "sessionState";
@@ -21,6 +21,16 @@ export async function read(): Promise<SessionState> {
 
 export function write(state: SessionState): Promise<void> {
   return browser.storage.session.set<StoredSession>({ sessionState: state });
+}
+
+export function subscribe(callback: () => void): () => void {
+  const listener = (changes: Record<string, Browser.storage.StorageChange>) => {
+    if (SESSION_KEY in changes) {
+      callback();
+    }
+  };
+  browser.storage.session.onChanged.addListener(listener);
+  return () => browser.storage.session.onChanged.removeListener(listener);
 }
 
 export async function getReconcileError(): Promise<boolean> {
