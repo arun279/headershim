@@ -74,6 +74,13 @@ async function openPopup(
 const chips = (page: Page) => page.locator(".profiles .chip");
 const rows = (page: Page) => page.locator(".rule-row");
 
+// A popup command lands through storage write → background reconcile →
+// storage.onChanged → re-render, so the rendered result is eventually
+// consistent. On a contended CI runner that round trip can outrun the default
+// 10s expect budget; assertions that observe a mutation reflected in the popup
+// poll the real rendered state with a wider ceiling instead.
+const RENDER_TIMEOUT = 15_000;
+
 function firstRuleValue(serviceWorker: Worker): Promise<string | undefined> {
   return serviceWorker.evaluate(async () => {
     const { state } = await chrome.storage.local.get("state");
@@ -107,7 +114,9 @@ test("single-letter commands open their surfaces", async ({
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("p");
-  await expect(page.locator('.annunciator[data-state="paused"]')).toBeVisible();
+  await expect(page.locator('.annunciator[data-state="paused"]')).toBeVisible({
+    timeout: RENDER_TIMEOUT,
+  });
 
   await page.close();
 });
@@ -123,16 +132,26 @@ test("digit keys switch and toggle profiles", async ({
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("Digit2");
-  await expect(chips(page).nth(1)).toHaveAttribute("aria-current", "true");
-  await expect(chips(page).nth(1)).not.toHaveClass(/\boff\b/);
-  await expect(chips(page).first()).toHaveClass(/\boff\b/);
+  await expect(chips(page).nth(1)).toHaveAttribute("aria-current", "true", {
+    timeout: RENDER_TIMEOUT,
+  });
+  await expect(chips(page).nth(1)).not.toHaveClass(/\boff\b/, {
+    timeout: RENDER_TIMEOUT,
+  });
+  await expect(chips(page).first()).toHaveClass(/\boff\b/, {
+    timeout: RENDER_TIMEOUT,
+  });
 
   // Shift+2 toggles the second on without turning the first off.
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("Shift+Digit2");
-  await expect(chips(page).nth(1)).not.toHaveClass(/\boff\b/);
-  await expect(chips(page).first()).not.toHaveClass(/\boff\b/);
+  await expect(chips(page).nth(1)).not.toHaveClass(/\boff\b/, {
+    timeout: RENDER_TIMEOUT,
+  });
+  await expect(chips(page).first()).not.toHaveClass(/\boff\b/, {
+    timeout: RENDER_TIMEOUT,
+  });
 
   await page.close();
 });
@@ -160,14 +179,16 @@ test("rule-row keys move focus and act on the focused row", async ({
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await rows(page).first().focus();
   await page.keyboard.press(" ");
-  await expect(rows(page).first()).toHaveClass(/\bdisabled\b/);
+  await expect(rows(page).first()).toHaveClass(/\bdisabled\b/, {
+    timeout: RENDER_TIMEOUT,
+  });
 
   // Delete removes the focused row (2 → 1) and offers undo.
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await expect(rows(page)).toHaveCount(2);
   await rows(page).first().focus();
   await page.keyboard.press("Delete");
-  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(1, { timeout: RENDER_TIMEOUT });
   const toast = page.locator(".toast");
   await expect(toast).toBeVisible();
   await expect(
