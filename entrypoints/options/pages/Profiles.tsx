@@ -45,6 +45,7 @@ export function ProfilesPage({
   const [toast, setToast] = useState<string | undefined>(undefined);
   const [undo, setUndo] = useState<Undo | undefined>(undefined);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const announce = useAnnounce();
   // A freshly mounted role=status toast is not reliably re-announced, so every
   // toast also speaks through the persistent polite region.
@@ -136,6 +137,10 @@ export function ProfilesPage({
       }
       setUndo({ kind: "profile", ...outcome.value });
       showToast(copy.toast.profileDeleted(profile.name));
+      // The confirm modal restored focus to the now-unmounting profile card's
+      // Delete button; land it on the stable page heading instead of <body>
+      // (WCAG 2.4.3).
+      titleRef.current?.focus();
     });
   };
 
@@ -177,7 +182,12 @@ export function ProfilesPage({
     <section class="page" aria-labelledby="profiles-title">
       <div class="page-head">
         <div>
-          <h1 class="page-title" id="profiles-title">
+          <h1
+            class="page-title"
+            id="profiles-title"
+            ref={titleRef}
+            tabIndex={-1}
+          >
             {copy.options.profiles.title}
           </h1>
           {shouldShowRuleCountWarning(enabledRuleCount) && (
@@ -254,6 +264,10 @@ export function ProfilesPage({
       {toast !== undefined && (
         <Toast
           onDismiss={() => setToast(undefined)}
+          // While an undo is live the toast holds open (no 6s timer), so the
+          // Undo control stays reachable until the next mutation retires it —
+          // the options page's persistent-undo affordance (SPEC §9, WCAG 2.2.1).
+          persist={undo !== undefined}
           actionLabel={undo !== undefined ? copy.actions.undo : undefined}
           onAction={undo !== undefined ? runUndo : undefined}
         >

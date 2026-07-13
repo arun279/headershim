@@ -104,7 +104,7 @@ export interface ValidatedHeader {
   readonly classification: HeaderClassification;
 }
 
-const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+export const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const REQUEST_APPEND_HEADER_SET: ReadonlySet<string> = new Set(
   REQUEST_APPEND_HEADERS,
 );

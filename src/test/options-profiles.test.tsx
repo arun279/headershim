@@ -215,6 +215,9 @@ describe("profile lifecycle", () => {
     expect(root.querySelector(".toast-msg")?.textContent).toBe(
       copy.toast.profileDeleted("Alpha"),
     );
+    // The deleted card unmounted async; focus lands on the page heading, never
+    // <body> (WCAG 2.4.3).
+    expect(document.activeElement).toBe(within(root, "#profiles-title"));
 
     fire(() => findButton(root, copy.actions.undo).click());
     await settle();
@@ -374,6 +377,9 @@ describe("bulk rule actions", () => {
     const stored = await read();
     expect(stored.profiles[0]?.rules).toHaveLength(0);
     expect(stored.profiles[1]?.rules[0]?.header).toBe("x-move");
+    // Picking a move target unmounted its button; focus lands on the panel
+    // heading, never <body> (WCAG 2.4.3).
+    expect(document.activeElement).toBe(within(root, ".rules-panel-label"));
   });
 
   it("blocks a bulk-enable that crosses the 4,500 cap with the section-8 copy", async () => {

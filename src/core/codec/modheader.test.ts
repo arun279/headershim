@@ -207,10 +207,12 @@ describe("ModHeader import", () => {
 
     expect(validateRegex).toHaveBeenCalledWith("^https://(?=preview\\.)");
     expect(onlyProfile(rejected).rules).toMatchObject([{ enabled: false }]);
+    // The url filter is one profile-wide scope, so an invalid pattern is a
+    // single item naming the profile — not one warning per rule it disables.
     expect(warningsOfKind(rejected, "invalid-regex")).toEqual([
       {
         kind: "invalid-regex",
-        ruleName: "preview header",
+        ruleName: "Unsupported filter",
         pattern: "^https://(?=preview\\.)",
       },
     ]);
@@ -289,7 +291,7 @@ describe("ModHeader import", () => {
     ]);
     expect(rejected.value.warnings).toContainEqual({
       kind: "invalid-regex",
-      ruleName: "x-debug",
+      ruleName: "Combined",
       pattern: combined,
     });
   });

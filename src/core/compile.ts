@@ -1,3 +1,4 @@
+import { HTTP_TOKEN, normalizeHeaderName } from "./headers";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -8,6 +9,7 @@ import {
   type DnrResourceType,
   expandResourceTypes,
   scopeCondition,
+  validateUrlFilter,
 } from "./scope";
 
 export const DYNAMIC_PRIORITY_TOP = 5_000;
@@ -39,6 +41,68 @@ export interface DnrRule {
   priority: number;
   action: DnrRuleAction;
   condition: DnrRuleCondition;
+}
+
+// An untrusted writer can seed the enabled set with a rule Chrome rejects: a
+// ModHeader/headershim import preserves each rule's enabled flag and scope
+// verbatim (no header/urlFilter/regex grammar check), and the next-profile
+// command enables a stored profile without passing the commit guard. compileDynamic
+// would emit that rule and updateDynamicRules would reject the whole atomic batch,
+// freezing the live ruleset at its last-good revision until the user finds the one
+// bad rule. Dropping every uncompilable rule from the compiled input before it
+// reaches Chrome makes that impossible — one bad rule can never take the batch
+// down, and every other rule keeps applying. The stored doc is untouched; only
+// the compiler's view of it is filtered. Regex validity needs the browser's RE2
+// (async), so the caller resolves it into `isRegexSupported`.
+export function dropUncompilable(
+  state: StateDoc,
+  isRegexSupported: (regex: string) => boolean,
+): StateDoc {
+  return {
+    ...state,
+    profiles: state.profiles.map((profile) =>
+      profile.enabled
+        ? {
+            ...profile,
+            rules: profile.rules.filter(
+              (rule) => !rule.enabled || isCompilable(rule, isRegexSupported),
+            ),
+          }
+        : profile,
+    ),
+  };
+}
+
+function isCompilable(
+  rule: Rule,
+  isRegexSupported: (regex: string) => boolean,
+): boolean {
+  // The header-shape checks Chrome enforces before it admits a modifyHeaders
+  // rule to the atomic batch: a token-grammar name that is not a pseudo-header,
+  // and a value with no line break. Kept to the shared grammar primitives (not
+  // the full validateHeader) so this stays lean in the background bundle.
+  const header = normalizeHeaderName(rule.header);
+  if (
+    header.length === 0 ||
+    header.startsWith(":") ||
+    !HTTP_TOKEN.test(header)
+  ) {
+    return false;
+  }
+  if (
+    rule.operation !== "remove" &&
+    rule.value !== undefined &&
+    /[\r\n]/.test(rule.value)
+  ) {
+    return false;
+  }
+  if (rule.scope.type === "pattern") {
+    return validateUrlFilter(rule.scope.pattern).ok;
+  }
+  if (rule.scope.type === "regex") {
+    return isRegexSupported(rule.scope.regex);
+  }
+  return true;
 }
 
 export function compileDynamic(state: StateDoc): DnrRule[] {

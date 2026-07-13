@@ -160,9 +160,12 @@ test("header operations reconcile into accepted browser rules", async ({
     // output (already unit-covered) — the readback shape is the real gate.
     const installed = await getDynamicRules(serviceWorker);
     expect(installed).toHaveLength(1);
+    // Assert the value survived too, not just header+operation — a compile bug
+    // dropping or corrupting a set/append value would otherwise pass here.
     expect(installed[0]?.action.requestHeaders?.[0]).toMatchObject({
       header: row.draft.header,
       operation: row.draft.operation,
+      ...(row.draft.value === undefined ? {} : { value: row.draft.value }),
     });
   }
 
@@ -171,8 +174,14 @@ test("header operations reconcile into accepted browser rules", async ({
   expect(
     [...h2Installed]
       .sort((a, b) => a.id - b.id)
-      .map((rule) => rule.action.requestHeaders?.[0]?.header),
-  ).toEqual(["host", "x-headershim-h2"]);
+      .map((rule) => rule.action.requestHeaders?.[0]),
+  ).toMatchObject(
+    h2Drafts.map((draft) => ({
+      header: draft.header,
+      operation: draft.operation,
+      value: draft.value,
+    })),
+  );
 });
 
 test("HTTP/1.1 header operations are observable on the wire", async ({

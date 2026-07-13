@@ -137,4 +137,24 @@ describe("ThisTab", () => {
 
     expect((await readSession()).tabs).toEqual({});
   });
+
+  it("moves focus to a surviving row control when a middle row is removed", () => {
+    const root = mount({
+      overrides: [
+        override({ num: 1, header: "x-a" }),
+        override({ num: 2, header: "x-b" }),
+        override({ num: 3, header: "x-c" }),
+      ],
+    });
+    const removes = [
+      ...root.querySelectorAll(".this-tab-remove"),
+    ] as HTMLButtonElement[];
+    fire(() => removes[1]?.click());
+
+    const rows = [...root.querySelectorAll(".this-tab-row")];
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(
+      rows[2]?.querySelector(".save-as-rule"),
+    );
+  });
 });

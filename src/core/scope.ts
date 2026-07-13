@@ -81,10 +81,10 @@ export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
 export function validateUrlFilter(
   pattern: string,
 ): Result<void, UrlFilterError> {
-  for (const char of pattern) {
-    if ((char.codePointAt(0) ?? 0) > 0x7f) {
-      return err("non-ascii");
-    }
+  // Any code unit at or above U+0080 is non-ASCII (astral chars surface as
+  // surrogates, also >= U+0080), so this flags exactly the > 0x7f case.
+  if (/[\u0080-\uffff]/.test(pattern)) {
+    return err("non-ascii");
   }
   if (pattern.startsWith("||*")) {
     return err("domain-anchor-wildcard");

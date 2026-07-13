@@ -265,15 +265,9 @@ function Composer({
 function mapError(error: SessionMutationError): Errors {
   // A session override can only fail header validation or the session cap; the
   // dynamic store's rule/regex/byte caps never gate this write path.
-  switch (error.kind) {
-    case "session-override-limit-exceeded":
-    case "enabled-rule-limit-exceeded":
-    case "regex-rule-limit-exceeded":
-    case "doc-byte-limit-exceeded":
-      return { add: copy.errors.sessionCap };
-    default:
-      return headerErrorToFieldError(error);
-  }
+  return error.kind === "session-override-limit-exceeded"
+    ? { add: copy.errors.sessionCap }
+    : headerErrorToFieldError(error);
 }
 
 /** The rule draft a promoted temporary row seeds the editor with (SPEC §3.5). */

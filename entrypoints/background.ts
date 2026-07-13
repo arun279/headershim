@@ -1,5 +1,9 @@
 import { planBadge } from "../src/core/badge";
-import { compileDynamic, compileSession } from "../src/core/compile";
+import {
+  compileDynamic,
+  compileSession,
+  dropUncompilable,
+} from "../src/core/compile";
 import { docMissingGrants } from "../src/core/grants";
 import {
   type StateDoc,
@@ -13,6 +17,7 @@ import { applyBadge } from "../src/platform/badge";
 import {
   getDynamicRules,
   getSessionRules,
+  isRegexSupported,
   updateDynamicRules,
   updateSessionRules,
 } from "../src/platform/dnr";
@@ -102,7 +107,7 @@ export default defineBackground(() => {
       return true;
     }
     const session = await readSession();
-    const desiredDynamic = compileDynamic(doc);
+    const desiredDynamic = compileDynamic(await compilableDoc(doc));
     const desiredSession = compileSession(
       Object.values(session.tabs).flat(),
       doc.settings.paused,
@@ -127,6 +132,33 @@ export default defineBackground(() => {
       return false;
     }
     return true;
+  }
+
+  // Resolve every enabled regex against the browser's RE2 (async) so the pure
+  // core drop can strip rules Chrome would reject before they reach the atomic
+  // batch. Distinct regexes only; the common case (none, or all already valid)
+  // stays cheap.
+  async function compilableDoc(doc: StateDoc): Promise<StateDoc> {
+    const regexes = new Set<string>();
+    for (const profile of doc.profiles) {
+      if (!profile.enabled) {
+        continue;
+      }
+      for (const rule of profile.rules) {
+        if (rule.enabled && rule.scope.type === "regex") {
+          regexes.add(rule.scope.regex);
+        }
+      }
+    }
+    const supported = new Set<string>();
+    await Promise.all(
+      [...regexes].map(async (regex) => {
+        if ((await isRegexSupported(regex)).ok) {
+          supported.add(regex);
+        }
+      }),
+    );
+    return dropUncompilable(doc, (regex) => supported.has(regex));
   }
 
   async function flagReconcileError(value: boolean): Promise<void> {

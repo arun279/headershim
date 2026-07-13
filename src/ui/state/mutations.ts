@@ -27,7 +27,7 @@ import {
 } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { migrate } from "../../core/schema";
-import { type UrlFilterError, validateUrlFilter } from "../../core/scope";
+import { validateUrlFilter } from "../../core/scope";
 import { locked, readRaw, write } from "../../platform/store";
 
 /**
@@ -45,11 +45,7 @@ export type MutationError =
       readonly regex: string;
       readonly reason: unknown;
     }
-  | {
-      readonly kind: "pattern-invalid";
-      readonly pattern: string;
-      readonly reason: UrlFilterError;
-    }
+  | { readonly kind: "pattern-invalid" }
   | { readonly kind: "scope-empty" }
   | { readonly kind: "profile-name-unavailable"; readonly name: string }
   | { readonly kind: "not-found" }
@@ -128,13 +124,8 @@ export function createMutations({ validateRegex }: MutationDeps) {
         return header;
       }
       if (rule.scope.type === "pattern") {
-        const grammar = validateUrlFilter(rule.scope.pattern);
-        if (!grammar.ok) {
-          return err({
-            kind: "pattern-invalid",
-            pattern: rule.scope.pattern,
-            reason: grammar.error,
-          } as const);
+        if (!validateUrlFilter(rule.scope.pattern).ok) {
+          return err({ kind: "pattern-invalid" } as const);
         }
         continue;
       }
@@ -786,13 +777,8 @@ function normalizeScope(scope: Scope): Result<Scope, MutationError> {
       if (pattern.length === 0) {
         return err({ kind: "scope-empty" } as const);
       }
-      const grammar = validateUrlFilter(pattern);
-      if (!grammar.ok) {
-        return err({
-          kind: "pattern-invalid",
-          pattern,
-          reason: grammar.error,
-        } as const);
+      if (!validateUrlFilter(pattern).ok) {
+        return err({ kind: "pattern-invalid" } as const);
       }
       return ok({
         type: "pattern",

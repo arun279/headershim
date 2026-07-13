@@ -4,6 +4,7 @@ import {
   compileSession,
   type DnrRule,
   DYNAMIC_PRIORITY_TOP,
+  dropUncompilable,
   SESSION_PRIORITY_TOP,
 } from "./compile";
 import {
@@ -347,6 +348,50 @@ describe("dynamic rule compilation", () => {
     expect(() =>
       compileDynamic(state([profile("regex-overflow", regexRules)])),
     ).toThrow(RangeError);
+  });
+});
+
+describe("dropping uncompilable rules", () => {
+  const supportAll = () => true;
+  const compiledIds = (doc: StateDoc, supported: (regex: string) => boolean) =>
+    compileDynamic(dropUncompilable(doc, supported)).map((rule) => rule.id);
+
+  it("strips only the enabled rules Chrome would reject, so the batch survives", () => {
+    const doc = state([
+      profile("mixed", [
+        storedRule(1),
+        storedRule(2, { value: "a\r\nb" }),
+        storedRule(3, { header: ":authority" }),
+        storedRule(4, {
+          scope: { type: "pattern", pattern: "||exämple.com^", hosts: [] },
+        }),
+        storedRule(5, {
+          scope: { type: "pattern", pattern: "||*", hosts: [] },
+        }),
+        storedRule(6, {
+          scope: { type: "regex", regex: "^https://ok/", hosts: [] },
+        }),
+        storedRule(7, {
+          scope: { type: "regex", regex: "(?=bad)", hosts: [] },
+        }),
+      ]),
+    ]);
+
+    const supported = (regex: string) => !regex.includes("(?=");
+    expect(compiledIds(doc, supported)).toEqual([1, 6]);
+  });
+
+  it("never removes disabled rules or touches disabled profiles", () => {
+    const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
+    const doc = state([
+      profile("on", [storedRule(1), bad]),
+      profile("off", [storedRule(3, { header: ":authority" })], false),
+    ]);
+
+    const dropped = dropUncompilable(doc, supportAll);
+    expect(dropped.profiles[0]?.rules).toEqual([storedRule(1), bad]);
+    expect(dropped.profiles[1]).toEqual(doc.profiles[1]);
+    expect(compiledIds(doc, supportAll)).toEqual([1]);
   });
 });
 

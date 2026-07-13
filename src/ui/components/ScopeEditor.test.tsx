@@ -134,6 +134,27 @@ describe("ScopeEditor domain chips", () => {
     const ctx = mount();
     expect(ctx.micros()).toContain(copy.editor.domainsHelper);
   });
+
+  it("moves focus to a surviving chip control when a middle chip is removed", () => {
+    const ctx = mount({
+      initialScope: {
+        type: "domains",
+        domains: ["a.example.com", "b.example.com", "c.example.com"],
+        pattern: "",
+        regex: "",
+      },
+    });
+    const xs = [
+      ...ctx.root.querySelectorAll(".domain-chip-x"),
+    ] as HTMLButtonElement[];
+    fire(() => xs[1]?.click());
+
+    expect(ctx.chips()).toEqual(["a.example.com", "c.example.com"]);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      copy.editor.removeDomain("c.example.com"),
+    );
+  });
 });
 
 describe("ScopeEditor resource types", () => {

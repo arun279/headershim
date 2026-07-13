@@ -1,4 +1,5 @@
 import type { ComponentChildren } from "preact";
+import { useRef } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
@@ -36,7 +37,13 @@ export function SiteAccessPage({
   grants: GrantSnapshot;
 }) {
   const announce = useAnnounce();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const view = siteAccessView(doc, grants);
+
+  // A grant or revocation reparents the row to the other group, unmounting the
+  // button that was clicked; land focus on the stable page heading rather than
+  // <body> (WCAG 2.4.3).
+  const anchorFocus = () => titleRef.current?.focus();
 
   // permissions.request must run synchronously in the click gesture; the
   // refreshed snapshot moves the row, the live region states the outcome.
@@ -44,6 +51,7 @@ export function SiteAccessPage({
     void requestPermissions([entry.origin]).then((granted) => {
       if (granted) {
         announce(copy.toast.activeOn(entry.domain));
+        anchorFocus();
       }
     });
 
@@ -55,6 +63,7 @@ export function SiteAccessPage({
             ? text.revokedUnderAllSites(entry.domain)
             : text.revoked(entry.domain),
         );
+        anchorFocus();
       }
     });
 
@@ -76,7 +85,12 @@ export function SiteAccessPage({
 
   return (
     <section class="page" aria-labelledby="site-access-title">
-      <h1 class="page-title" id="site-access-title">
+      <h1
+        class="page-title"
+        id="site-access-title"
+        ref={titleRef}
+        tabIndex={-1}
+      >
         {text.title}
       </h1>
 

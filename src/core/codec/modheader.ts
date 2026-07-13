@@ -292,14 +292,13 @@ async function mapProfile(
   }
 
   const warnings = mappings.flatMap(({ warnings: rowWarnings }) => rowWarnings);
+  // ModHeader url filters are one scope shared by every rule in the profile, so
+  // one invalid pattern disables the whole profile. Itemize it once per distinct
+  // pattern (naming the profile), never once per rule — the summary counts each
+  // warning as an item that needs attention (SPEC §7.3), and these all clear
+  // together when the one shared scope is fixed.
   for (const pattern of scopeResult.value.invalidPatterns) {
-    for (const mapping of mappings) {
-      warnings.push({
-        kind: "invalid-regex",
-        ruleName: mapping.ruleName,
-        pattern,
-      });
-    }
+    warnings.push({ kind: "invalid-regex", ruleName: name, pattern });
   }
   appendDroppedWarnings(source, warnings);
 

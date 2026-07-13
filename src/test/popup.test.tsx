@@ -69,6 +69,25 @@ describe("popup App", () => {
     expect(root.querySelector(".foot")?.textContent).toContain("Pause");
   });
 
+  it("routes the first-run import action to the options import section", async () => {
+    const create = vi
+      .spyOn(fakeBrowser.tabs, "create")
+      .mockResolvedValue({} as never);
+    const { root } = await mount(createV1Seed());
+    const importButton = [
+      ...root.querySelectorAll(".first-run-actions button"),
+    ].find(
+      (button) => button.textContent === "Import from ModHeader or a file",
+    ) as HTMLButtonElement;
+
+    fire(() => importButton.click());
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0]?.[0]?.url).toMatch(
+      /options\.html#import-export$/,
+    );
+  });
+
   it("renders nothing but the shell while the store is still empty", async () => {
     const { root } = await mount();
     expect(root.querySelector(".popup")?.children).toHaveLength(0);
