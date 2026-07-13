@@ -1,0 +1,7 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>headershim</title>
+  <rect width="128" height="128" rx="28" fill="#12161B"/>
+  <polygon points="14,75 114,75 114,53 14,72" fill="#45C4D8"/>
+  <rect x="14" y="73" width="100" height="21" fill="#E7EDF3"/>
+  <polygon points="14,73 114,55 114,34 14,52" fill="#E7EDF3"/>
+</svg>
