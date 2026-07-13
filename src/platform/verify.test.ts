@@ -12,13 +12,22 @@ const match: RawRuleMatch = {
 };
 
 describe("verify adapter", () => {
-  it("fetches raw matches with an explicit tab id", async () => {
+  it("fetches raw matches with an explicit tab id, bounded to the last 5 min", async () => {
     const getRules = vi
       .spyOn(browser.declarativeNetRequest, "getMatchedRules")
       .mockImplementation(async () => ({ rulesMatchedInfo: [match] }));
 
+    const before = Date.now();
     await expect(getMatchedRules(91)).resolves.toEqual([match]);
-    expect(getRules).toHaveBeenCalledWith({ tabId: 91 });
+
+    const filter = getRules.mock.calls[0]?.[0];
+    expect(filter?.tabId).toBe(91);
+    // Chrome can return older matches on a long-lived tab; the explicit floor
+    // is what makes the "last 5 min" claim honest.
+    expect(filter?.minTimeStamp).toBeGreaterThanOrEqual(before - 5 * 60 * 1000);
+    expect(filter?.minTimeStamp).toBeLessThanOrEqual(
+      Date.now() - 5 * 60 * 1000,
+    );
   });
 
   it("resolves the active tab and queries it by id under the gesture", async () => {
@@ -33,9 +42,24 @@ describe("verify adapter", () => {
       tabId: 91,
       matches: [match],
     });
-    expect(getRules).toHaveBeenCalledWith({ tabId: 91 });
+    expect(getRules).toHaveBeenCalledWith({
+      tabId: 91,
+      minTimeStamp: expect.any(Number),
+    });
     // The zero-argument form throws under activeTab; it must never be reached.
     expect(getRules).not.toHaveBeenCalledWith();
+  });
+
+  it("resolves undefined when the query rejects on a restricted tab", async () => {
+    vi.spyOn(browser.tabs, "query").mockImplementation(
+      async () => [{ id: 91, url: "chrome://extensions/" }] as never,
+    );
+    vi.spyOn(
+      browser.declarativeNetRequest,
+      "getMatchedRules",
+    ).mockRejectedValue(new Error("activeTab permission not in effect"));
+
+    await expect(matchedRulesForActiveTab()).resolves.toBeUndefined();
   });
 
   it("does not query matched rules when no web tab is active", async () => {

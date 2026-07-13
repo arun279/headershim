@@ -5,7 +5,8 @@ import {
   type RawRuleMatch,
   SESSION_RULESET_ID,
 } from "./matches";
-import type { Profile, Rule, StateDoc, TabOverride } from "./model";
+import type { Rule, TabOverride } from "./model";
+import { makeDoc, profile } from "./test-fixtures";
 
 function storedRule(num: number, enabled = true): Rule {
   return {
@@ -19,27 +20,6 @@ function storedRule(num: number, enabled = true): Rule {
     resourceTypes: "all",
     initiators: [],
     enabled,
-  };
-}
-
-function profile(id: string, rules: Rule[]): Profile {
-  return {
-    id,
-    name: id,
-    badgeText: id.slice(0, 2),
-    color: "blue",
-    enabled: true,
-    rules,
-  };
-}
-
-function state(profiles: Profile[]): StateDoc {
-  return {
-    v: 1,
-    profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
-    nextRuleNum: 1_000,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
   };
 }
 
@@ -57,7 +37,7 @@ describe("matched rule decoding", () => {
     const second = storedRule(20, false);
     const inserted = storedRule(15);
     const fourMinutesAgo = 1_752_340_560_000;
-    const editedState = state([
+    const editedState = makeDoc([
       profile("second-profile", [second]),
       profile("first-profile", [inserted, first]),
     ]);
@@ -95,7 +75,7 @@ describe("matched rule decoding", () => {
 
     expect(
       decodeMatches(
-        state([profile("current", [remaining])]),
+        makeDoc([profile("current", [remaining])]),
         [],
         [
           rawMatch(10, DYNAMIC_RULESET_ID, fourMinutesAgo),
@@ -127,7 +107,7 @@ describe("matched rule decoding", () => {
 
     expect(
       decodeMatches(
-        state([profile("dynamic", [dynamic])]),
+        makeDoc([profile("dynamic", [dynamic])]),
         [override],
         [
           rawMatch(30, SESSION_RULESET_ID, 100),

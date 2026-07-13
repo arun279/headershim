@@ -6,7 +6,8 @@ import {
   type RawRuleMatch,
   SESSION_RULESET_ID,
 } from "./matches";
-import type { Profile, Rule, StateDoc, TabOverride } from "./model";
+import type { Rule, TabOverride } from "./model";
+import { makeDoc, profile } from "./test-fixtures";
 import { summarizeVerify, type VerifyHint } from "./verify";
 
 const ALLOWED_HINTS: readonly VerifyHint[] = [
@@ -28,17 +29,6 @@ function rule(num: number, overrides: Partial<Rule> = {}): Rule {
     initiators: [],
     enabled: true,
     ...overrides,
-  };
-}
-
-function profile(id: string, rules: Rule[]): Profile {
-  return {
-    id,
-    name: id,
-    badgeText: id.slice(0, 2),
-    color: "blue",
-    enabled: true,
-    rules,
   };
 }
 
@@ -255,15 +245,6 @@ describe("summarizeVerify hints stay statically determinable", () => {
 });
 
 describe("summarizeVerify over decodeMatches output", () => {
-  function doc(profiles: Profile[]): StateDoc {
-    return {
-      v: 1,
-      profiles,
-      focusedProfileId: profiles[0]?.id ?? "",
-      nextRuleNum: 1_000,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
-    };
-  }
   const raw = (ruleId: number): RawRuleMatch => ({
     rule: { ruleId, rulesetId: DYNAMIC_RULESET_ID },
     tabId: 7,
@@ -272,7 +253,7 @@ describe("summarizeVerify over decodeMatches output", () => {
 
   it("tallies retained rules and drops a deleted rule's matches", () => {
     const retained = rule(20);
-    const state = doc([profile("p", [retained])]);
+    const state = makeDoc([profile("p", [retained])]);
     const overrides: TabOverride[] = [];
     const decoded = decodeMatches(state, overrides, [
       raw(10),
@@ -304,7 +285,7 @@ describe("summarizeVerify over decodeMatches output", () => {
       header: "x-30",
       value: "session",
     };
-    const state = doc([profile("p", [dynamicRule])]);
+    const state = makeDoc([profile("p", [dynamicRule])]);
     const decoded = decodeMatches(
       state,
       [override],
