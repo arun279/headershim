@@ -154,7 +154,7 @@ export function siteAccessView(
               rule.enabled &&
               rule.initiators.length === 0 &&
               rule.scope.type !== "all" &&
-              coversSubresourceTypes(rule),
+              subresourceScopedRule(rule),
           ),
       ),
   };
@@ -181,6 +181,21 @@ export function coversSubresourceTypes(rule: Rule): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",
+  );
+}
+
+/**
+ * When the standing initiator note is worth showing on a healthy rule (verdict
+ * P2): the rule reaches subresources but NOT top-level page navigations, so its
+ * requests are genuinely started by some *other* page and that page needs
+ * granting too. A default all-types rule includes main_frame — the common
+ * direct-navigation case the user is not surprised by — so it stays quiet.
+ */
+export function subresourceScopedRule(rule: Rule): boolean {
+  const expanded = expandResourceTypes(rule.resourceTypes);
+  return (
+    !expanded.includes("main_frame") &&
+    expanded.some((type) => type !== "main_frame" && type !== "sub_frame")
   );
 }
 

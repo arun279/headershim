@@ -58,12 +58,17 @@ describe("popup App", () => {
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
     );
     const actions = [...root.querySelectorAll(".first-run-actions button")];
+    // Create a rule is the single primary and comes first; focus lands on it.
     expect(actions.map((button) => button.textContent)).toEqual([
-      "Try it on this tab",
       "Create a rule",
+      "Try it on this tab",
       "Import from ModHeader or a file",
     ]);
+    expect(actions[0]?.classList.contains("primary")).toBe(true);
     expect(document.activeElement).toBe(actions[0]);
+    expect(root.textContent).toContain(
+      "Temporary — this tab only, gone on close.",
+    );
     expect(annunciator().textContent).toBe("Live — no rules yet.");
     // The footer is always present.
     expect(root.querySelector(".foot")?.textContent).toContain("Pause");
@@ -97,7 +102,7 @@ describe("popup App", () => {
     await fakeBrowser.storage.local.set({ state: { v: 3 } });
     const { root } = await mount();
     expect(root.textContent).toContain(
-      "Your rules were saved by a newer headershim (format 3; this version reads up to 1).",
+      "Your rules were saved by a newer HeaderShim (format 3; this version reads up to 1).",
     );
   });
 
@@ -105,7 +110,7 @@ describe("popup App", () => {
     const { annunciator } = await mount(seededDoc([rule()]));
 
     expect(annunciator().textContent).toContain(
-      "1 rule can't run — headershim doesn't have access to api.example.com.",
+      "1 rule can't run — HeaderShim doesn't have access to api.example.com.",
     );
     expect(annunciator().getAttribute("data-state")).toBe("needs-access");
 
@@ -115,7 +120,27 @@ describe("popup App", () => {
     await settle();
 
     expect(annunciator().getAttribute("data-state")).toBe("live");
-    expect(annunciator().textContent).toBe("Live — 1 rule on 1 profile.");
+    expect(annunciator().textContent).toBe("Live — 1 of 1 rule enabled.");
+  });
+
+  it("hands off a single Reload-tab action after granting from the annunciator", async () => {
+    const { root, annunciator } = await mount(seededDoc([rule()]));
+    const grant = [...annunciator().querySelectorAll("button")].find(
+      (button) => button.textContent === "Grant access",
+    ) as HTMLButtonElement;
+
+    await act(async () => {
+      grant.click();
+    });
+    await settle();
+
+    // The change is live, but the open page still holds its pre-grant response;
+    // the toast hands over the reload rather than doing it unbidden (P1).
+    const toast = root.querySelector(".toast") as HTMLElement;
+    expect(toast.textContent).toContain("Access granted");
+    expect(toast.querySelector(".toast-action")?.textContent).toBe(
+      "Reload tab",
+    );
   });
 
   it("revoking a grant while mounted re-lights the loud state without a reopen", async () => {

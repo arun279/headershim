@@ -1,6 +1,6 @@
-# headershim
+# HeaderShim
 
-headershim is a free, MIT-licensed Chrome extension that modifies HTTP request and response headers using scoped rules and switchable profiles.
+HeaderShim is a free, MIT-licensed Chrome extension that modifies HTTP request and response headers using scoped rules and switchable profiles.
 
 ## Development
 

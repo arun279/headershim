@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { Rule } from "../../core/model";
+import { copy } from "../copy";
 import { fire, press, render } from "../test/render";
 import { RuleRow } from "./RuleRow";
 
@@ -194,9 +195,18 @@ describe("RuleRow states", () => {
 describe("RuleRow standing initiator note", () => {
   const note = "requests started by other pages also need those pages granted";
 
-  it("appears when a rule reaches subresources and names no initiator", () => {
-    const { line2 } = mount({ rule: rule({ initiators: [] }) });
+  it("appears on a subresource-scoped rule with no named initiator", () => {
+    const { line2 } = mount({
+      rule: rule({ initiators: [], resourceTypes: ["xhr"] }),
+    });
     expect(line2().textContent).toContain(note);
+  });
+
+  // Verdict P2: a default all-types rule includes top-level navigation, so its
+  // requests are the direct-navigation the user made — no standing caveat.
+  it("stays quiet on a default all-types (direct-navigation) rule", () => {
+    const { line2 } = mount({ rule: rule({ initiators: [] }) });
+    expect(line2().textContent).not.toContain(note);
   });
 
   it("never appears on a Pages-only rule", () => {
@@ -207,12 +217,41 @@ describe("RuleRow standing initiator note", () => {
   });
 
   it("stays quiet with named initiators or an all-sites scope", () => {
-    const named = mount({ rule: rule({ initiators: ["app.acme.dev"] }) });
+    const named = mount({
+      rule: rule({ initiators: ["app.acme.dev"], resourceTypes: ["xhr"] }),
+    });
     expect(named.line2().textContent).not.toContain(note);
     const all = mount({
-      rule: rule({ initiators: [], scope: { type: "all" } }),
+      rule: rule({
+        initiators: [],
+        scope: { type: "all" },
+        resourceTypes: ["xhr"],
+      }),
     });
     expect(all.line2().textContent).not.toContain(note);
+  });
+});
+
+describe("RuleRow saved acknowledgement", () => {
+  it("shows no Saved chip without a save pulse", () => {
+    const { root } = mount();
+    expect(root.querySelector(".rule-saved")).toBeNull();
+  });
+
+  it("pulses a transient Saved chip and clears it after ~1.5s", () => {
+    vi.useFakeTimers();
+    try {
+      const { root } = mount({ savedNonce: 1 });
+      const saved = root.querySelector(".rule-saved");
+      expect(saved?.textContent).toContain(copy.rules.saved);
+      // Decorative, so it never intercepts the overflow menu behind it.
+      expect(saved?.getAttribute("aria-hidden")).toBe("true");
+
+      fire(() => vi.advanceTimersByTime(1500));
+      expect(root.querySelector(".rule-saved")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

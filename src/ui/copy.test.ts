@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { copy, sentenceText } from "./copy";
 
 describe("copy", () => {
-  it("pluralizes the live annunciator and appends this-tab temporaries", () => {
+  it("names the enabled/configured split and appends this-tab temporaries", () => {
     expect(sentenceText(copy.annunciator.live(1, 1, 0))).toBe(
-      "Live — 1 rule on 1 profile.",
+      "Live — 1 of 1 rule enabled.",
     );
-    expect(sentenceText(copy.annunciator.live(3, 2, 0))).toBe(
-      "Live — 3 rules on 2 profiles.",
+    expect(sentenceText(copy.annunciator.live(2, 3, 0))).toBe(
+      "Live — 2 of 3 rules enabled.",
     );
-    expect(sentenceText(copy.annunciator.live(3, 2, 1))).toBe(
-      "Live — 3 rules on 2 profiles. · 1 temporary on this tab",
+    expect(sentenceText(copy.annunciator.live(2, 3, 1))).toBe(
+      "Live — 2 of 3 rules enabled. · 1 temporary on this tab",
     );
   });
 
@@ -18,12 +18,12 @@ describe("copy", () => {
     expect(
       sentenceText(copy.annunciator.needsAccess(1, "app.acme.dev", 0)),
     ).toBe(
-      "1 rule can't run — headershim doesn't have access to app.acme.dev.",
+      "1 rule can't run — HeaderShim doesn't have access to app.acme.dev.",
     );
     expect(
       sentenceText(copy.annunciator.needsAccess(2, "api.example.com", 2)),
     ).toBe(
-      "2 rules can't run — headershim doesn't have access to api.example.com and 2 more sites.",
+      "2 rules can't run — HeaderShim doesn't have access to api.example.com and 2 more sites.",
     );
   });
 
@@ -75,8 +75,16 @@ describe("copy", () => {
     expect(sentenceText(copy.editor.patternHint)).toBe(
       "||example.com^ matches the site and subdomains · *://*/api/* matches paths",
     );
-    expect(copy.verify.summary(2, 3)).toBe(
-      "2 of 3 rules matched on this tab · last 5 min",
+    expect(sentenceText(copy.verify.matchedHeadline(2))).toBe(
+      "Last request: 2 matched",
+    );
+    expect(
+      sentenceText(copy.verify.blockedHeadline(1, "api.example.com", 0)),
+    ).toBe("1 rule can't run — needs access to api.example.com.");
+    expect(
+      sentenceText(copy.verify.blockedHeadline(2, "api.example.com", 2)),
+    ).toBe(
+      "2 rules can't run — needs access to api.example.com and 2 more sites.",
     );
   });
 
@@ -88,7 +96,7 @@ describe("copy", () => {
       "Off — no profiles are on.",
     );
     expect(sentenceText(copy.annunciator.outOfSync)).toBe(
-      "Out of sync — Chrome rejected headershim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+      "Out of sync — Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
     );
     expect(copy.app.tagline).toBe(
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",

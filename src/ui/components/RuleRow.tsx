@@ -1,8 +1,9 @@
 import type { ComponentChildren, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { coversSubresourceTypes } from "../../core/grants";
+import { subresourceScopedRule } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import { copy } from "../copy";
+import { CheckGlyph } from "./glyphs";
 import { RuleFace } from "./RuleFace";
 import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
@@ -29,6 +30,12 @@ interface RuleRowProps extends RuleRowActions {
   overridden?: boolean | undefined;
   /** Session-scoped This-tab row: dotted edge + Temporary line. */
   temporary?: { host: string } | undefined;
+  /**
+   * A changing token when this row's rule was just auto-saved: pulses the
+   * transient "Saved" acknowledgement (verdict P0). Undefined the rest of the
+   * time; a new value re-triggers the pulse on a subsequent edit.
+   */
+  savedNonce?: number | undefined;
   /** "Undo last delete" stays in this menu until the next mutation. */
   undoAvailable: boolean;
   /** Profiles this rule could move to (everything but its own). */
@@ -47,10 +54,24 @@ interface RuleRowProps extends RuleRowActions {
  * breaks it with a dashed caution mark, temporary with a dotted mute one.
  */
 export function RuleRow(props: RuleRowProps) {
-  const { rule, invalid, missingHosts, temporary } = props;
+  const { rule, invalid, missingHosts, temporary, savedNonce } = props;
   const noteRef = useRef<HTMLSpanElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // The auto-save acknowledgement (verdict P0): a transient "Saved" that fades
+  // ~1.5s after a commit. Keyed on the nonce so a repeat edit re-pulses; the
+  // affordance is decorative (aria-hidden) — closure for AT comes from focus
+  // returning to the row, which re-announces the rule.
+  const [showSaved, setShowSaved] = useState(false);
+  useEffect(() => {
+    if (savedNonce === undefined) {
+      return;
+    }
+    setShowSaved(true);
+    const timer = setTimeout(() => setShowSaved(false), 1500);
+    return () => clearTimeout(timer);
+  }, [savedNonce]);
 
   const needsAccess = !invalid && (missingHosts?.length ?? 0) > 0;
   const state = invalid
@@ -104,6 +125,12 @@ export function RuleRow(props: RuleRowProps) {
         }}
       />
       <RuleFace rule={rule} secondLine={lineTwo(props, noteRef)} />
+      {showSaved && (
+        <span class="rule-saved" aria-hidden="true">
+          <CheckGlyph />
+          {copy.rules.saved}
+        </span>
+      )}
       <button
         type="button"
         class="icon-btn rule-menu-btn"
@@ -176,16 +203,18 @@ function lineTwo(
 }
 
 /**
- * SPEC §3.3's honest split: when a rule reaches subresources and names no
- * initiator, headershim cannot know whether the calling page is granted, so
- * the row carries the standing note. Named initiators are a known dimension
- * (loud when missing), and an all-sites scope grants every initiator with it.
+ * SPEC §3.3's honest split, narrowed by verdict P2: the standing note is for a
+ * rule whose requests are genuinely started by *other* pages — one that reaches
+ * subresources but not top-level navigation. A normal direct-navigation rule
+ * (all types, so main_frame included) stays quiet rather than carrying a caveat
+ * that reads as a standing alarm. Named initiators are a known dimension (loud
+ * when missing), and an all-sites scope grants every initiator with it.
  */
 function standingInitiatorNote(rule: Rule): boolean {
   return (
     rule.initiators.length === 0 &&
     rule.scope.type !== "all" &&
-    coversSubresourceTypes(rule)
+    subresourceScopedRule(rule)
   );
 }
 

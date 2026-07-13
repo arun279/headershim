@@ -89,7 +89,7 @@ describe("options frame", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    expect(root.querySelector(".wordmark")?.textContent).toBe("headershim");
+    expect(root.querySelector(".wordmark")?.textContent).toBe("HeaderShim");
     expect(root.querySelector(".version")?.textContent).toMatch(/^v/);
     const links = [
       ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),

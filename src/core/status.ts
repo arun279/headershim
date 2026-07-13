@@ -16,7 +16,10 @@ export type SystemStatus =
     }
   | {
       readonly kind: "live";
+      /** Enabled rules in enabled profiles — the numerator of "N of M enabled". */
       readonly ruleCount: number;
+      /** All rules in enabled profiles — the denominator; the configured total. */
+      readonly totalRuleCount: number;
       readonly profileCount: number;
     }
   | { readonly kind: "off" };
@@ -57,6 +60,10 @@ export function computeStatus({
     ruleCount: enabled.reduce(
       (count, profile) =>
         count + profile.rules.filter((rule) => rule.enabled).length,
+      0,
+    ),
+    totalRuleCount: enabled.reduce(
+      (count, profile) => count + profile.rules.length,
       0,
     ),
     profileCount: enabled.length,

@@ -47,7 +47,7 @@ const PAUSED_FILL = "#6E7B88";
 const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
 // SPEC §4.4 verbatim paused tooltip; the only state that names itself.
-const PAUSED_TITLE = "headershim — paused";
+const PAUSED_TITLE = "HeaderShim — paused";
 
 export function planBadge(input: BadgeInput): BadgePlan {
   return {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
+import { domainFromOriginPattern } from "../../src/core/grants";
 import { decodeMatches } from "../../src/core/matches";
 import type { Rule, RuleDraft, TabOverride } from "../../src/core/model";
 import type { Result } from "../../src/core/result";
@@ -94,7 +95,7 @@ function Ready({
 }: ReadyProps) {
   const announce = useAnnounce();
   const [toast, setToast] = useState<
-    { message: string; undo?: boolean } | undefined
+    { message: string; undo?: boolean; reload?: boolean } | undefined
   >(undefined);
   // A freshly mounted role=status node with its text already present is not
   // reliably announced, so every toast also speaks through the persistent
@@ -103,12 +104,31 @@ function Ready({
     setToast(undo === true ? { message, undo } : { message });
     announce(message);
   };
+  // The permission→reload handoff (verdict P1): a grant lands, the change is
+  // live, but the open page still holds its pre-grant response. The toast
+  // hands over a single Reload-tab action rather than reloading unbidden.
+  const showReloadToast = (message: string) => {
+    setToast({ message, reload: true });
+    announce(message);
+  };
+  const reloadTab = () => {
+    // The click is a fresh gesture, so activeTab covers the reload with no new
+    // permission (SPEC §4.3).
+    void browser.tabs.reload();
+    setToast(undefined);
+  };
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | undefined>(
     undefined,
   );
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [verify, setVerify] = useState<VerifyReadout | undefined>(undefined);
+  // The just-saved rule and a changing token, to pulse that row's transient
+  // "Saved" acknowledgement (verdict P0). Cleared whenever an editor opens so a
+  // later revert can't resurrect a stale pulse.
+  const [savedPulse, setSavedPulse] = useState<
+    { ruleId: string; nonce: number } | undefined
+  >(undefined);
   // Focus returns here when the verify panel closes (SPEC §9).
   const verifyTrigger = useRef<HTMLSpanElement>(null);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
@@ -175,8 +195,13 @@ function Ready({
       ? editing
       : undefined;
   const openNewRule = () => {
+    setSavedPulse(undefined);
     setComposing(false);
     setEditing({ profileId: doc.focusedProfileId });
+  };
+  const editRule = (profileId: string, ruleId: string) => {
+    setSavedPulse(undefined);
+    setEditing({ profileId, ruleId });
   };
   const openThisTabComposer = () => {
     setEditing(undefined);
@@ -187,6 +212,7 @@ function Ready({
   // retired once the rule commits (saveEditing), not on open, so an Esc keeps
   // the temporary override intact.
   const saveAsRule = (override: TabOverride) => {
+    setSavedPulse(undefined);
     setComposing(false);
     setEditing({
       profileId: doc.focusedProfileId,
@@ -214,6 +240,10 @@ function Ready({
     mutations.saveRule(profileId, ruleId, draft).then((outcome) => {
       if (outcome.ok) {
         setPendingUndo(undefined);
+        setSavedPulse((prev) => ({
+          ruleId: outcome.value.id,
+          nonce: (prev?.nonce ?? 0) + 1,
+        }));
         // The promotion's source row is retired on its first commit — the one
         // that creates the rule (ruleId was undefined); a later grant-scope
         // save of the same rule must not remove it twice.
@@ -297,6 +327,30 @@ function Ready({
     () => new Set(grantGaps.map((gap) => gap.ruleId)),
     [grantGaps],
   );
+  // Verify leads with the most basic unmet precondition (verdict P0): a grant
+  // gap outranks the caching essay, and its recovery (Grant) is surfaced in the
+  // panel so the user never has to dismiss it to reach the banner it covers.
+  const blockedHosts = useMemo(() => {
+    const hosts: string[] = [];
+    for (const gap of grantGaps) {
+      for (const origin of gap.missing) {
+        const host =
+          domainFromOriginPattern(origin) ?? copy.scopeSummary.allSites;
+        if (!hosts.includes(host)) {
+          hosts.push(host);
+        }
+      }
+    }
+    return hosts;
+  }, [grantGaps]);
+  const verifyBlocked =
+    grantGaps.length > 0 && blockedHosts.length > 0
+      ? {
+          ruleCount: grantGaps.length,
+          host: blockedHosts[0] as string,
+          moreSites: blockedHosts.length - 1,
+        }
+      : undefined;
   const runVerify = () => {
     void matchedRulesForActiveTab().then((active) => {
       setVerify(
@@ -338,7 +392,7 @@ function Ready({
   // when the refreshed snapshot empties the gaps. The toast (a polite live
   // region) states the outcome.
   const announceGrant = (sites: readonly string[]) => {
-    showToast(
+    showReloadToast(
       sites.length === 1
         ? copy.toast.activeOn(sites[0] as string)
         : copy.toast.activeOnSites(sites.length),
@@ -347,10 +401,16 @@ function Ready({
 
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
-    // permissions.onChanged event refreshes every surface at once.
+    // permissions.onChanged event refreshes every surface at once. The reload
+    // handoff (verdict P1) follows the grant's outcome for the annunciator and
+    // Verify Grant paths, which name no single site.
     void requestPermissions([
       ...new Set(grantGaps.flatMap((gap) => gap.missing)),
-    ]);
+    ]).then((granted) => {
+      if (granted) {
+        showReloadToast(copy.toast.accessGranted);
+      }
+    });
   };
 
   return (
@@ -420,6 +480,8 @@ function Ready({
             missingByRule={missingByRule}
             invalidRuleIds={invalidRuleIds}
             undoAvailable={pendingUndo !== undefined}
+            savedRuleId={savedPulse?.ruleId}
+            savedNonce={savedPulse?.nonce}
             editing={
               activeEditing === undefined
                 ? undefined
@@ -457,7 +519,7 @@ function Ready({
             onToggle={(profileId, ruleId, enabled) =>
               run(mutations.setRuleEnabled(profileId, ruleId, enabled))
             }
-            onEdit={(profileId, ruleId) => setEditing({ profileId, ruleId })}
+            onEdit={editRule}
             onDelete={deleteRule}
             onDuplicate={(profileId, ruleId) =>
               run(mutations.duplicateRule(profileId, ruleId))
@@ -473,11 +535,16 @@ function Ready({
         )}
       </div>
       <footer class="foot" inert={verify !== undefined}>
-        <span class="foot-new-rule" ref={newRuleTrigger}>
-          <Button kind="primary" onClick={openNewRule}>
-            {copy.actions.newRule}
-          </Button>
-        </span>
+        {/* While empty, the first-run hero owns the single primary "Create a
+            rule"; the footer's + New rule would be a redundant second one
+            (verdict P1), so it collapses until the first rule exists. */}
+        {!firstRun && (
+          <span class="foot-new-rule" ref={newRuleTrigger}>
+            <Button kind="primary" onClick={openNewRule}>
+              {copy.actions.newRule}
+            </Button>
+          </span>
+        )}
         <span class="foot-verify" ref={verifyTrigger}>
           <Button kind="quiet" onClick={runVerify}>
             {copy.actions.verify}
@@ -507,25 +574,43 @@ function Ready({
           actionLabel={
             toast.undo === true && pendingUndo !== undefined
               ? copy.actions.undo
-              : undefined
+              : toast.reload === true
+                ? copy.actions.reloadTab
+                : undefined
           }
           onAction={
             toast.undo === true && pendingUndo !== undefined
               ? undoDelete
-              : undefined
+              : toast.reload === true
+                ? reloadTab
+                : undefined
           }
         >
           {toast.message}
         </Toast>
       )}
       {verify !== undefined && (
-        <VerifyPanel readout={verify} onClose={closeVerify} />
+        <VerifyPanel
+          readout={verify}
+          blocked={verifyBlocked}
+          onGrant={grantAccess}
+          onReload={() => {
+            void browser.tabs.reload();
+            closeVerify();
+          }}
+          onClose={closeVerify}
+        />
       )}
     </main>
   );
 }
 
-/** First run is onboarding: the trust sentence and three equal ways in. */
+/**
+ * First run is onboarding with one obvious act (verdict P1): the wordmark and
+ * trust sentence, a single primary "Create a rule" that focus lands on, and two
+ * ranked-below routes — "Try it" (with its temporary/persistent tell) and
+ * Import — as quiet secondaries.
+ */
 function FirstRun({
   onCreateRule,
   onTryThisTab,
@@ -540,14 +625,18 @@ function FirstRun({
 
   return (
     <div class="first-run" ref={first}>
+      <span class="first-run-wordmark mono">{copy.app.name}</span>
       <p class="first-run-tagline">{copy.app.tagline}</p>
       <div class="first-run-actions">
-        <Button kind="quiet" onClick={onTryThisTab}>
-          {copy.firstRun.tryThisTab}
-        </Button>
-        <Button kind="quiet" onClick={onCreateRule}>
+        <Button kind="primary" onClick={onCreateRule}>
           {copy.firstRun.createRule}
         </Button>
+        <div class="first-run-secondary">
+          <Button kind="quiet" onClick={onTryThisTab}>
+            {copy.firstRun.tryThisTab}
+          </Button>
+          <p class="first-run-subline">{copy.firstRun.tryThisTabSubline}</p>
+        </div>
         <Button
           kind="quiet"
           onClick={() =>

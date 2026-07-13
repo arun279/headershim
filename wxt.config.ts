@@ -28,9 +28,9 @@ export default defineConfig({
       "activeTab",
     ],
     optional_host_permissions: ["*://*/*"],
-    // The default tooltip; the badge state machine swaps in "headershim — paused"
+    // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
     // while paused and clears back to this on exit (SPEC §4.4).
-    action: { default_title: "headershim" },
+    action: { default_title: "HeaderShim" },
     commands: {
       _execute_action: {
         suggested_key: { default: "Alt+Shift+H" },

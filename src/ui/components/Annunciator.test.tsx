@@ -43,7 +43,7 @@ describe("Annunciator states", () => {
   it("names the first host, counts the rest, and wires the Grant access verb", () => {
     const { strip, onGrantAccess } = mount(needsAccess);
     expect(strip.textContent).toBe(
-      "2 rules can't run — headershim doesn't have access to api.example.com and 2 more sites.Grant access",
+      "2 rules can't run — HeaderShim doesn't have access to api.example.com and 2 more sites.Grant access",
     );
     expect(strip.querySelector("strong")?.textContent).toBe(
       "2 rules can't run",
@@ -68,7 +68,7 @@ describe("Annunciator states", () => {
       hosts: ["app.acme.dev"],
     });
     expect(strip.textContent).toBe(
-      "1 rule can't run — headershim doesn't have access to app.acme.dev.Grant access",
+      "1 rule can't run — HeaderShim doesn't have access to app.acme.dev.Grant access",
     );
   });
 
@@ -88,22 +88,33 @@ describe("Annunciator states", () => {
     expect(strip.querySelector("button")).toBeNull();
   });
 
-  it("renders live counts with the temporary detail", () => {
-    const { strip } = mount({ kind: "live", ruleCount: 3, profileCount: 2 }, 1);
+  it("names the enabled/configured split with the temporary detail", () => {
+    const { strip } = mount(
+      { kind: "live", ruleCount: 2, totalRuleCount: 3, profileCount: 2 },
+      1,
+    );
     expect(strip.textContent).toBe(
-      "Live — 3 rules on 2 profiles. · 1 temporary on this tab",
+      "Live — 2 of 3 rules enabled. · 1 temporary on this tab",
     );
   });
 
   it("reads live-with-no-rules honestly", () => {
-    const { strip } = mount({ kind: "live", ruleCount: 0, profileCount: 1 });
+    const { strip } = mount({
+      kind: "live",
+      ruleCount: 0,
+      totalRuleCount: 0,
+      profileCount: 1,
+    });
     expect(strip.textContent).toBe("Live — no rules yet.");
   });
 
   it("never claims 'no rules yet' while a This-tab override is modifying traffic", () => {
-    const { strip } = mount({ kind: "live", ruleCount: 0, profileCount: 1 }, 1);
+    const { strip } = mount(
+      { kind: "live", ruleCount: 0, totalRuleCount: 2, profileCount: 1 },
+      1,
+    );
     expect(strip.textContent).toBe(
-      "Live — 0 rules on 1 profile. · 1 temporary on this tab",
+      "Live — 0 of 2 rules enabled. · 1 temporary on this tab",
     );
   });
 
@@ -122,7 +133,12 @@ describe("Annunciator states", () => {
 });
 
 describe("Annunciator alert-once per popup open", () => {
-  const live: SystemStatus = { kind: "live", ruleCount: 1, profileCount: 1 };
+  const live: SystemStatus = {
+    kind: "live",
+    ruleCount: 1,
+    totalRuleCount: 1,
+    profileCount: 1,
+  };
 
   function Harness({ initial }: { initial: SystemStatus }) {
     const [status, setStatus] = useState(initial);
