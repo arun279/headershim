@@ -1,11 +1,13 @@
 import { planReconcile } from "../../src/core/reconcile";
 import {
+  BROAD_GRANT_REVOCATION_UNAVAILABLE,
   DUAL_GRANT_TRANSITION_UNAVAILABLE,
   expect,
   fetchEcho,
   getDynamicRules,
   grantAllSitesViaDetails,
   ON_WIRE_GRANT_UNAVAILABLE,
+  seedState,
   seedStateAndWait,
   stateWithRules,
   test,
@@ -149,6 +151,45 @@ test("a cached response bypasses response-header modification", async ({
     { cache: "reload" },
   );
   expect(stats.requestCount).toBe(1);
+});
+
+// Case 3, UI half: an ungranted rule must light the loud needs-access state in
+// the popup, not fail silently. The network half (destination-only → initiator)
+// lives above; this asserts the surface that tells the user access is missing.
+test("an ungranted rule lights the loud needs-access state in the popup", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedState(
+    serviceWorker,
+    stateWithRules([
+      {
+        direction: "request",
+        operation: "set",
+        header: "x-headershim-loud",
+        value: "1",
+        scope: { type: "domains", domains: ["needs.example.test"] },
+        resourceTypes: ["xhr"],
+        initiators: [],
+        enabled: true,
+      },
+    ]),
+  );
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const annunciator = popup.locator(".annunciator");
+  await expect(annunciator).toHaveAttribute("data-state", "needs-access");
+  // The loud state carries its one-click recovery, not just a color change.
+  await expect(annunciator.getByRole("button")).toBeVisible();
+});
+
+// Case 8, §3.4: whether individually granted sites survive revoking a broad
+// all-sites grant. Staging it needs a real all-sites grant to then revoke,
+// which the unpacked headless posture cannot obtain.
+test("individual grants survive broad-grant revocation", async () => {
+  test.skip(true, BROAD_GRANT_REVOCATION_UNAVAILABLE);
 });
 
 test("the network stack owns the outgoing content length", async ({
