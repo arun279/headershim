@@ -78,18 +78,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 
   serviceWorker: async ({ context }, use) => {
-    let worker = context.serviceWorkers()[0];
-    if (worker === undefined) {
-      try {
-        worker = await context.waitForEvent("serviceworker", {
-          timeout: 60_000,
-        });
-      } catch (error) {
-        await dumpInstallDiagnostics(context);
-        throw error;
-      }
-    }
-    await use(worker);
+    await use(await acquireServiceWorker(context));
   },
 
   extensionId: async ({ serviceWorker }, use) => {
@@ -100,6 +89,28 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 export { expect } from "@playwright/test";
 export { getDynamicRules, readEcho, seedState } from "../fixtures";
+
+// The force-installed extension's MV3 worker is lazy: it starts once to fire
+// onInstalled and idles out before this fixture attaches, so passively waiting
+// for the "serviceworker" event races and times out. Open a throwaway tab to
+// fire the tabs.onUpdated / onRemoved events the worker subscribes to, bringing
+// it back up while we listen for it.
+async function acquireServiceWorker(context: BrowserContext): Promise<Worker> {
+  const running = context.serviceWorkers()[0];
+  if (running !== undefined) {
+    return running;
+  }
+  const started = context.waitForEvent("serviceworker", { timeout: 60_000 });
+  const page = await context.newPage();
+  await page.goto("data:text/html,<title>wake</title>");
+  await page.close();
+  try {
+    return await started;
+  } catch (error) {
+    await dumpInstallDiagnostics(context);
+    throw error;
+  }
+}
 
 // When the service worker never appears the extension did not install. Enumerate
 // the extension records Chrome holds and replay its updater/installer log so the
