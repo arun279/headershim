@@ -1,3 +1,4 @@
+import { BADGE_PALETTE } from "../badge";
 import { classifyHeaderName, normalizeHeaderName } from "../headers";
 import {
   type BadgeColor,
@@ -34,17 +35,6 @@ const PROFILE_ARRAY_FIELDS = [
   "timeFilters",
   "urlReplacements",
 ] as const;
-
-const BADGE_PALETTE = {
-  indigo: "#4f5bc4",
-  blue: "#1a6bc7",
-  teal: "#0b7285",
-  green: "#1d7a46",
-  plum: "#7a3fb5",
-  magenta: "#b03a78",
-  crimson: "#c03538",
-  slate: "#46586b",
-} as const satisfies Record<BadgeColor, string>;
 
 const DROPPED_FILTER_FIELDS = [
   ["excludeUrlFilters", "exclude-url-filter-dropped"],
@@ -172,6 +162,15 @@ export async function importModHeader(
   return ok({ profiles, warnings });
 }
 
+// Parsed once at load: BADGE_PALETTE holds eight valid hex literals, so
+// undefined entries are filtered out and the tuple type carries the invariant
+// (no per-lookup guard needed).
+const PALETTE_RGB: readonly [BadgeColor, readonly [number, number, number]][] =
+  BADGE_COLORS.flatMap((name) => {
+    const rgb = parseHexColor(BADGE_PALETTE[name]);
+    return rgb === undefined ? [] : [[name, rgb] as const];
+  });
+
 export function nearestBadgeColor(color: string | undefined): BadgeColor {
   const source = parseHexColor(color);
   if (source === undefined) {
@@ -180,12 +179,7 @@ export function nearestBadgeColor(color: string | undefined): BadgeColor {
 
   let nearest: BadgeColor = "indigo";
   let nearestDistance = Number.POSITIVE_INFINITY;
-  for (const name of BADGE_COLORS) {
-    const hex = BADGE_PALETTE[name];
-    const candidate = parseHexColor(hex);
-    if (candidate === undefined) {
-      throw new Error("badge palette contains an invalid color");
-    }
+  for (const [name, candidate] of PALETTE_RGB) {
     const distance = colorDistance(source, candidate);
     if (distance < nearestDistance) {
       nearest = name;

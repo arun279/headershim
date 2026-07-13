@@ -40,8 +40,12 @@ describe("MiddleTruncate", () => {
     const root = render(<MiddleTruncate value={value} maxChars={20} />);
     const span = root.querySelector("span") as HTMLSpanElement;
     expect(span.getAttribute("title")).toBe(value);
-    expect(span.textContent).toContain("…");
-    expect(span.textContent?.length).toBeLessThanOrEqual(20);
+    // The visible clip is truncated; the row-revealed full node carries the
+    // whole value for the keyboard-focus readout (DESIGN §1.2).
+    const clip = span.querySelector(".mt-clip");
+    expect(clip?.textContent).toContain("…");
+    expect(clip?.textContent?.length).toBeLessThanOrEqual(20);
+    expect(span.querySelector(".mt-full")?.textContent).toBe(value);
   });
 
   it("shows the whole value when it fits the budget", () => {
@@ -64,7 +68,7 @@ describe("MiddleTruncate", () => {
 
     const value = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const root = render(<MiddleTruncate value={value} />);
-    const text = (root.querySelector("span") as HTMLSpanElement).textContent;
+    const text = root.querySelector(".mt-clip")?.textContent;
 
     // 105px / 7px per char = 15 characters of budget.
     expect(text).toContain("…");

@@ -42,13 +42,15 @@ export interface ScopeCondition {
 export function expandResourceTypes(
   resourceTypes: Rule["resourceTypes"],
 ): DnrResourceType[] {
-  return resourceTypes === "all"
-    ? [...DNR_RESOURCE_TYPES]
-    : [
-        ...new Set(
-          resourceTypes.flatMap((group) => RESOURCE_TYPES_BY_GROUP[group]),
-        ),
-      ];
+  if (resourceTypes === "all") {
+    return [...DNR_RESOURCE_TYPES];
+  }
+  // Emit in canonical DNR enum order so the reconcile round-trip compares equal
+  // to whatever order Chrome echoes back, independent of UI group order.
+  const selected = new Set(
+    resourceTypes.flatMap((group) => RESOURCE_TYPES_BY_GROUP[group]),
+  );
+  return DNR_RESOURCE_TYPES.filter((type) => selected.has(type));
 }
 
 export function scopeCondition(scope: Scope): ScopeCondition {

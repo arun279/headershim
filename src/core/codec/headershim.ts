@@ -1,9 +1,9 @@
 import {
   type BadgeColor,
   createProfile,
+  createRule,
   type Direction,
   type HeaderOp,
-  importRule,
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
@@ -211,7 +211,7 @@ export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
     const rules = [];
 
     for (const imported of importedProfile.rules) {
-      const [rule, allocatedDoc] = importRule(nextDoc, imported);
+      const [rule, allocatedDoc] = createRule(nextDoc, imported);
       rules.push(rule);
       nextDoc = allocatedDoc;
     }

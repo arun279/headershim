@@ -9,7 +9,7 @@ import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
 import { activeTabDomain } from "../../src/platform/tabs";
 import { matchedRulesForActiveTab } from "../../src/platform/verify";
-import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
+import { LiveRegionProvider, useAnnounce } from "../../src/ui/a11y/LiveRegion";
 import { Annunciator } from "../../src/ui/components/Annunciator";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
@@ -92,9 +92,17 @@ function Ready({
   tabId,
   overrides,
 }: ReadyProps) {
+  const announce = useAnnounce();
   const [toast, setToast] = useState<
     { message: string; undo?: boolean } | undefined
   >(undefined);
+  // A freshly mounted role=status node with its text already present is not
+  // reliably announced, so every toast also speaks through the persistent
+  // polite region (SiteAccess does the same for its grant outcomes).
+  const showToast = (message: string, undo?: boolean) => {
+    setToast(undo === true ? { message, undo } : { message });
+    announce(message);
+  };
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | undefined>(
     undefined,
   );
@@ -238,7 +246,7 @@ function Ready({
       if (!outcome.ok) {
         const message = blockedCommitCopy(outcome.error);
         if (message !== undefined) {
-          setToast({ message });
+          showToast(message);
         }
         return;
       }
@@ -252,7 +260,7 @@ function Ready({
     void mutations.deleteRule(profileId, ruleId).then((outcome) => {
       if (outcome.ok) {
         setPendingUndo({ profileId, ...outcome.value });
-        setToast({ message: copy.toast.ruleDeleted, undo: true });
+        showToast(copy.toast.ruleDeleted, true);
       }
     });
   };
@@ -271,7 +279,11 @@ function Ready({
         return;
       }
       const message = blockedCommitCopy(outcome.error);
-      setToast(message === undefined ? undefined : { message });
+      if (message === undefined) {
+        setToast(undefined);
+      } else {
+        showToast(message);
+      }
     });
   };
 
@@ -326,12 +338,11 @@ function Ready({
   // when the refreshed snapshot empties the gaps. The toast (a polite live
   // region) states the outcome.
   const announceGrant = (sites: readonly string[]) => {
-    setToast({
-      message:
-        sites.length === 1
-          ? copy.toast.activeOn(sites[0] as string)
-          : copy.toast.activeOnSites(sites.length),
-    });
+    showToast(
+      sites.length === 1
+        ? copy.toast.activeOn(sites[0] as string)
+        : copy.toast.activeOnSites(sites.length),
+    );
   };
 
   const grantAccess = () => {
@@ -364,6 +375,10 @@ function Ready({
       />
       <div
         class={status.kind === "paused" ? "popup-body paused" : "popup-body"}
+        // The verify panel slides up opaque over the footer and rule region;
+        // marking them inert keeps Shift+Tab from landing on controls hidden
+        // behind it (WCAG 2.4.11) without trapping focus (SPEC §5/§9).
+        inert={verify !== undefined}
       >
         <ThisTab
           tabId={tabId}
@@ -454,7 +469,7 @@ function Ready({
           />
         )}
       </div>
-      <footer class="foot">
+      <footer class="foot" inert={verify !== undefined}>
         <span class="foot-new-rule" ref={newRuleTrigger}>
           <Button kind="primary" onClick={openNewRule}>
             {copy.actions.newRule}

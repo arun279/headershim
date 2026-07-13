@@ -84,10 +84,12 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
   // Cap checks run on every mutation that grows the enabled set or its regex
   // subset; shrinking mutations must never be blocked by a doc already at the
-  // boundary. Regex scopes are re-validated whenever a rule enters the enabled
-  // set — an imported RE2-invalid rule is stored disabled and indistinguishable
-  // from a user-disabled one, so the enable gesture is the last safe gate
-  // before the compiler would hand Chrome an invalid pattern.
+  // boundary. Header grammar and regex scopes are re-validated whenever a rule
+  // enters the enabled set — an imported rule (an untrusted writer) can carry a
+  // name/value that fails validateHeader's HTTP-token/CRLF grammar or an
+  // RE2-invalid scope, stored disabled and indistinguishable from a
+  // user-disabled one, so the enable gesture is the last safe gate before the
+  // compiler would hand Chrome a rule its update rejects atomically.
   async function guardCommit(
     prev: StateDoc,
     next: StateDoc,
@@ -106,7 +108,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
     const prevEnabledIds = new Set(prevEnabled.map((rule) => rule.id));
     for (const rule of nextEnabled) {
-      if (rule.scope.type !== "regex" || prevEnabledIds.has(rule.id)) {
+      if (prevEnabledIds.has(rule.id)) {
+        continue;
+      }
+      const header = validateHeader({
+        direction: rule.direction,
+        operation: rule.operation,
+        header: rule.header,
+        ...(rule.value === undefined ? {} : { value: rule.value }),
+      });
+      if (!header.ok) {
+        return header;
+      }
+      if (rule.scope.type !== "regex") {
         continue;
       }
       const supported = await validateRegex(rule.scope.regex);

@@ -175,10 +175,10 @@ test("a granted This-tab override modifies a same-origin request", async ({
     .poll(async () => (await getSessionRules(serviceWorker)).length)
     .toBe(1);
 
+  // Gate only on the grant landing; asserting the header unconditionally so a
+  // granted-but-not-applied regression fails instead of self-skipping.
+  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
+
   const result = await fetchEcho(page, `${echoServers.h1Url}/echo.json`);
-  test.skip(
-    !granted || result.requestHeaders["x-headershim-this-tab"] !== "session",
-    ON_WIRE_GRANT_UNAVAILABLE,
-  );
   expect(result.requestHeaders["x-headershim-this-tab"]).toBe("session");
 });

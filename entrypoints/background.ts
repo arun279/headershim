@@ -35,6 +35,7 @@ import {
   subscribe as subscribeState,
   write as writeState,
 } from "../src/platform/store";
+import { domainFromUrl } from "../src/platform/tabs";
 
 export default defineBackground(() => {
   // Wake-local coordination for the single-flight scheduler, not durable
@@ -72,12 +73,20 @@ export default defineBackground(() => {
   }
 
   async function runUntilSettled(): Promise<void> {
-    do {
-      dirty = false;
-      const applied = (await applyOnce()) || (await applyOnce());
-      await flagReconcileError(!applied);
-      await refreshBadge();
-    } while (dirty);
+    try {
+      do {
+        dirty = false;
+        const applied = (await applyOnce()) || (await applyOnce());
+        await flagReconcileError(!applied);
+        await refreshBadge();
+      } while (dirty);
+    } catch {
+      // A throw outside the update*Rules window (a rejected read, a compile
+      // RangeError, a storage write) must still fail closed and visible rather
+      // than escape unhandled and leave state silently unreconciled.
+      await flagReconcileError(true).catch(() => {});
+      await refreshBadge().catch(() => {});
+    }
   }
 
   async function applyOnce(): Promise<boolean> {
@@ -211,10 +220,11 @@ export default defineBackground(() => {
     tabId: number,
     url: string | undefined,
   ): Promise<void> {
-    // activeTab exposes tab.url exactly while its grant is alive; a missing
-    // or cross-origin url means the override's lifetime ended (the rows must
-    // be gone before the user can re-click the icon after an A→B→A trip).
-    const host = url === undefined ? undefined : new URL(url).hostname;
+    // activeTab exposes tab.url exactly while its grant is alive; a missing,
+    // empty, or cross-origin url means the override's lifetime ended (the rows
+    // must be gone before the user can re-click the icon after an A→B→A trip).
+    // domainFromUrl parses defensively — an uncommitted tab hands back "".
+    const host = domainFromUrl(url);
     return endOverrides(tabId, (row) => row.originHost === host);
   }
 

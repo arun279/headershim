@@ -4,6 +4,7 @@ import type { EchoServers } from "../echo-servers";
 import {
   expect,
   fetchEcho,
+  getDynamicRules,
   grantAllSitesViaDetails,
   ON_WIRE_GRANT_UNAVAILABLE,
   readEcho,
@@ -154,23 +155,23 @@ test("header operations reconcile into accepted browser rules", async ({
   serviceWorker,
 }) => {
   for (const row of headerCases) {
-    const desired = await seedStateAndWait(
-      serviceWorker,
-      stateWithRules([row.draft]),
-    );
-    expect(desired).toHaveLength(1);
-    expect(desired[0]?.action.requestHeaders?.[0]).toMatchObject({
+    await seedStateAndWait(serviceWorker, stateWithRules([row.draft]));
+    // Inspect the rule Chrome actually accepted and hands back, not the compile
+    // output (already unit-covered) — the readback shape is the real gate.
+    const installed = await getDynamicRules(serviceWorker);
+    expect(installed).toHaveLength(1);
+    expect(installed[0]?.action.requestHeaders?.[0]).toMatchObject({
       header: row.draft.header,
       operation: row.draft.operation,
     });
   }
 
-  const h2Desired = await seedStateAndWait(
-    serviceWorker,
-    stateWithRules(h2Drafts),
-  );
+  await seedStateAndWait(serviceWorker, stateWithRules(h2Drafts));
+  const h2Installed = await getDynamicRules(serviceWorker);
   expect(
-    h2Desired.map((rule) => rule.action.requestHeaders?.[0]?.header),
+    [...h2Installed]
+      .sort((a, b) => a.id - b.id)
+      .map((rule) => rule.action.requestHeaders?.[0]?.header),
   ).toEqual(["host", "x-headershim-h2"]);
 });
 

@@ -84,6 +84,7 @@ export function GrantPanel(props: GrantPanelProps) {
     <fieldset
       class="grant-panel"
       ref={rootRef}
+      aria-labelledby={`${id}-intro`}
       data-variant={pattern ? "pattern" : "domains"}
       onKeyDown={(event) => {
         if (event.key !== "Enter" || event.defaultPrevented) {
@@ -104,7 +105,9 @@ export function GrantPanel(props: GrantPanelProps) {
     >
       {pattern ? (
         <>
-          <p class="grant-line">{copy.grantPanel.patternIntro}</p>
+          <p class="grant-line" id={`${id}-intro`}>
+            {copy.grantPanel.patternIntro}
+          </p>
           <ChipField
             id={`${id}-targets`}
             label={copy.grantPanel.targetsQuestion}
@@ -132,7 +135,7 @@ export function GrantPanel(props: GrantPanelProps) {
         </>
       ) : (
         <>
-          <p class="grant-line">
+          <p class="grant-line" id={`${id}-intro`}>
             {props.targetHosts.length === 1 ? (
               copy.grantPanel.single(props.targetHosts[0] as string)
             ) : (

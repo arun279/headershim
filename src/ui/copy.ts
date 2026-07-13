@@ -612,11 +612,11 @@ export const copy = {
     importNewer: (fileVersion: number, supportedVersion: number) =>
       `This file was exported by a newer headershim (format ${fileVersion}; this version reads up to ${supportedVersion}). Update headershim, then import again. Nothing was changed.`,
     importUnrecognized:
-      "This file is valid JSON but isn't a headershim or ModHeader export, so nothing was imported and nothing was changed. headershim reads two formats: its own exports, and ModHeader profile exports.",
+      "This file is valid JSON but isn't a headershim or ModHeader export, so nothing was imported and nothing was changed. headershim reads its own exports and ModHeader profile exports only.",
     verifyNoMatch:
       "No rule matched requests on this tab in the last 5 minutes. Reload the tab, then verify again. Still nothing? Cached responses skip header rules — in DevTools, check Network → Disable cache and reload. If a rule is scoped to specific resource types, confirm the request kind matches. And if the requests you care about are started by a different site, that site needs access too (Site access in options).",
     headerNotModifiable:
-      "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1, which most modern sites no longer accept.",
+      "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1 — for most modern sites that isn't possible.",
     headerNameRequired: "Every rule needs a header name — type one to save.",
     headerNameInvalid:
       "This isn't a legal header name — letters, digits, and hyphens are the safe set.",

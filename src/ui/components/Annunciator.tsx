@@ -1,7 +1,8 @@
 import type { ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import type { SystemStatus } from "../../core/status";
-import { copy, type Sentence, type SentencePart } from "../copy";
+import { useAnnounce } from "../a11y/LiveRegion";
+import { copy, type Sentence, type SentencePart, sentenceText } from "../copy";
 import { Button } from "./Button";
 import "./Annunciator.css";
 
@@ -24,13 +25,24 @@ export function Annunciator({
   onResume,
   onGrantAccess,
 }: AnnunciatorProps) {
+  const announce = useAnnounce();
   const alertedKinds = useRef(new Set<SystemStatus["kind"]>());
   const caution =
     status.kind === "needs-access" || status.kind === "out-of-sync";
+  const sentence = sentenceFor(status, temporaryCount);
   const assertive = caution && !alertedKinds.current.has(status.kind);
-  if (caution) {
+  const announcement = caution ? sentenceText(sentence) : "";
+
+  // The role swap alone cannot announce a caution present at the popup's first
+  // render (AT ignores alerts already mounted), so push it through the root
+  // assertive region on first appearance per kind; thereafter it stays polite.
+  useEffect(() => {
+    if (!assertive) {
+      return;
+    }
     alertedKinds.current.add(status.kind);
-  }
+    announce(announcement, { assertive: true });
+  }, [assertive, status.kind, announcement, announce]);
 
   return (
     <div
@@ -41,7 +53,7 @@ export function Annunciator({
       <span class="lamp" aria-hidden="true">
         {lampGlyph(status.kind)}
       </span>
-      <p>{renderSentence(sentenceFor(status, temporaryCount))}</p>
+      <p>{renderSentence(sentence)}</p>
       {status.kind === "paused" && (
         <Button kind="quiet" onClick={onResume}>
           {copy.actions.resume}

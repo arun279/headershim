@@ -46,6 +46,36 @@ describe("planReconcile", () => {
     expect(planReconcile(desired, actual)).toBeNull();
   });
 
+  it("converges when the echo reorders resourceTypes and requestDomains (C1-1)", () => {
+    const desired: DnrRule[] = [
+      {
+        id: 3,
+        priority: 4_997,
+        action: {
+          type: "modifyHeaders",
+          requestHeaders: [{ header: "x-debug", operation: "set", value: "3" }],
+        },
+        condition: {
+          requestDomains: ["a.example", "b.example"],
+          resourceTypes: ["script", "xmlhttprequest"],
+        },
+      },
+    ];
+    // Chrome canonicalizes both arrays to some order of its own; a per-rule
+    // stringify compare must still converge or the whole ruleset churns forever.
+    const echoed: DnrRule[] = [
+      {
+        ...(desired[0] as DnrRule),
+        condition: {
+          requestDomains: ["b.example", "a.example"],
+          resourceTypes: ["xmlhttprequest", "script"],
+        },
+      },
+    ];
+
+    expect(planReconcile(desired, echoed)).toBeNull();
+  });
+
   it("returns a whole-set replacement for any drift", () => {
     const desired = [requestRule(11), requestRule(12)];
     const actual: DnrRule[] = [
