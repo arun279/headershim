@@ -4,6 +4,9 @@ import { WxtVitest } from "wxt/testing";
 export default defineConfig({
   plugins: [WxtVitest()],
   test: {
+    // Unit and integration suites live under src/; the Playwright e2e specs in
+    // e2e/ run on their own runner and must not be picked up here.
+    include: ["src/**/*.test.ts"],
     setupFiles: ["./src/platform/test-setup.ts"],
     coverage: {
       provider: "v8",

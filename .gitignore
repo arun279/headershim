@@ -3,6 +3,8 @@ node_modules/
 .output/
 coverage/
 dist/
+test-results/
+playwright-report/
 *.log
 .DS_Store
 *.tsbuildinfo
