@@ -91,24 +91,38 @@ export { expect } from "@playwright/test";
 export { getDynamicRules, readEcho, seedState } from "../fixtures";
 
 // The force-installed extension's MV3 worker is lazy: it starts once to fire
-// onInstalled and idles out before this fixture attaches, so passively waiting
-// for the "serviceworker" event races and times out. Open a throwaway tab to
-// fire the tabs.onUpdated / onRemoved events the worker subscribes to, bringing
-// it back up while we listen for it.
+// onInstalled and idles out before this fixture attaches, and the "serviceworker"
+// event for that first start races the fixture and is missed. Poll the live
+// worker list while repeatedly firing events the worker subscribes to: the
+// "verify" command hits commands.onCommand (a no-op handler) and each navigation
+// hits tabs.onUpdated, either of which restarts the worker. This also rides out
+// the brief window before the force-install completes.
 async function acquireServiceWorker(context: BrowserContext): Promise<Worker> {
   const running = context.serviceWorkers()[0];
   if (running !== undefined) {
     return running;
   }
-  const started = context.waitForEvent("serviceworker", { timeout: 60_000 });
   const page = await context.newPage();
-  await page.goto("data:text/html,<title>wake</title>");
-  await page.close();
   try {
-    return await started;
-  } catch (error) {
+    const deadline = Date.now() + 55_000;
+    while (Date.now() < deadline) {
+      await page.bringToFront();
+      await page.keyboard.press("Alt+Shift+V");
+      await page
+        .goto(`data:text/html,<title>${Date.now()}</title>`)
+        .catch(() => undefined);
+      const worker = context.serviceWorkers()[0];
+      if (worker !== undefined) {
+        return worker;
+      }
+      await page.waitForTimeout(500);
+    }
     await dumpInstallDiagnostics(context);
-    throw error;
+    throw new Error(
+      "packed extension service worker never started after wake attempts",
+    );
+  } finally {
+    await page.close();
   }
 }
 
