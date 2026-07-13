@@ -5,6 +5,7 @@ import type {
   RuleDraft,
   TabOverride,
 } from "../../core/model";
+import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import {
   type HeaderFieldError,
@@ -138,7 +139,10 @@ function OverrideRow({
         type="button"
         class="icon-btn this-tab-remove"
         aria-label={copy.thisTab.remove(override.header)}
-        onClick={onRemove}
+        onClick={(event) => {
+          focusOnRemoval(event.currentTarget);
+          onRemove();
+        }}
       >
         ✕
       </button>

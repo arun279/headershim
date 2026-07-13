@@ -30,7 +30,7 @@ describe("badge adapter", () => {
       .mockResolvedValue();
     const setText = vi.spyOn(browser.action, "setBadgeText");
 
-    await applyBadge(manual(""), []);
+    await applyBadge(manual(""), [], "");
 
     expect(setOptions).toHaveBeenCalledWith({
       displayActionCountAsBadgeText: false,
@@ -51,7 +51,7 @@ describe("badge adapter", () => {
     await browser.action.setBadgeText({ tabId: ended, text: "T" });
     const setText = vi.spyOn(browser.action, "setBadgeText");
 
-    await applyBadge(manual("QA"), [{ tabId: overridden, text: "T" }]);
+    await applyBadge(manual("QA"), [{ tabId: overridden, text: "T" }], "");
 
     expect(await browser.action.getBadgeText({ tabId: overridden })).toBe("T");
     // Passing no text drops the tab-specific value so the global text shows.
@@ -70,6 +70,7 @@ describe("badge adapter", () => {
     await applyBadge(
       { kind: "count", backgroundColor: "#3344aa", textColor: "#ffffff" },
       [],
+      "",
     );
 
     expect(await browser.action.getBadgeText({})).toBe("");
@@ -77,5 +78,19 @@ describe("badge adapter", () => {
       displayActionCountAsBadgeText: true,
     });
     expect(await browser.action.getBadgeText({ tabId })).toBe("");
+  });
+
+  it("sets the paused tooltip and clears it back to the default title", async () => {
+    vi.spyOn(
+      browser.declarativeNetRequest,
+      "setExtensionActionOptions",
+    ).mockResolvedValue();
+    const setTitle = vi.spyOn(browser.action, "setTitle");
+
+    await applyBadge(manual(""), [], "headershim — paused");
+    expect(setTitle).toHaveBeenCalledWith({ title: "headershim — paused" });
+
+    await applyBadge(manual("QA"), [], "");
+    expect(setTitle).toHaveBeenLastCalledWith({ title: "" });
   });
 });

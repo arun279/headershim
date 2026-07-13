@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Scope } from "../../core/model";
+import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { Button } from "./Button";
 import "./GrantPanel.css";
@@ -247,7 +248,10 @@ function ChipField({ id, label, inputLabel, hosts, onChange }: ChipFieldProps) {
               type="button"
               class="grant-chip-x"
               aria-label={copy.grantPanel.removeSite(host)}
-              onClick={() => remove(host)}
+              onClick={(event) => {
+                focusOnRemoval(event.currentTarget);
+                remove(host);
+              }}
             >
               ✕
             </button>

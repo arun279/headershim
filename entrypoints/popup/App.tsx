@@ -354,7 +354,10 @@ function Ready({
   };
 
   return (
-    <main class="popup" onKeyDown={onKeyDown}>
+    // tabIndex -1 (not a tab stop) lets removing the last This-tab override,
+    // which unmounts its whole section, land focus on the popup landmark rather
+    // than <body> (WCAG 2.4.3).
+    <main class="popup" tabIndex={-1} onKeyDown={onKeyDown}>
       <ProfileSwitcher
         profiles={doc.profiles}
         focusedProfileId={doc.focusedProfileId}
@@ -547,7 +550,11 @@ function FirstRun({
         </Button>
         <Button
           kind="quiet"
-          onClick={() => void browser.runtime.openOptionsPage()}
+          onClick={() =>
+            void browser.tabs.create({
+              url: browser.runtime.getURL("/options.html#import-export"),
+            })
+          }
         >
           {copy.firstRun.importFile}
         </Button>

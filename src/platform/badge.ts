@@ -5,7 +5,12 @@ import { setExtensionActionOptions } from "./dnr";
 export async function applyBadge(
   state: BadgeState,
   tabBadges: readonly TabBadgeText[],
+  title: string,
 ): Promise<void> {
+  // An empty title resets the button to its manifest default_title (SPEC §4.4);
+  // only the paused state carries its own tooltip.
+  await browser.action.setTitle({ title });
+
   if (state.kind === "count") {
     await browser.action.setBadgeText({ text: "" });
     await setExtensionActionOptions({ displayActionCountAsBadgeText: true });

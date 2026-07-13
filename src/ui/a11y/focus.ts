@@ -14,6 +14,31 @@ export function getFocusable(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
 }
 
+const REMOVAL_GROUP = ".this-tab-rows, .domain-chips, .grant-chips";
+const REMOVAL_ITEM = "li, .domain-chip, .grant-chip";
+
+/**
+ * Move focus off a chip/row control that is about to unmount to a still-present
+ * neighbor, so removal never drops focus to <body> (WCAG 2.4.3). Prefers the
+ * next focusable in the same group, then the last one remaining, then the
+ * enclosing landmark when the whole group vanishes.
+ */
+export function focusOnRemoval(anchor: HTMLElement): void {
+  const group = anchor.closest<HTMLElement>(REMOVAL_GROUP);
+  const item = anchor.closest(REMOVAL_ITEM);
+  if (group === null || item === null) {
+    anchor.closest<HTMLElement>("main")?.focus();
+    return;
+  }
+  const focusables = getFocusable(group);
+  const here = focusables.indexOf(anchor);
+  const outside = focusables.filter((element) => !item.contains(element));
+  const next =
+    outside.find((element) => focusables.indexOf(element) > here) ??
+    outside.at(-1);
+  (next ?? anchor.closest<HTMLElement>("main"))?.focus();
+}
+
 interface FocusTrapOptions {
   initialFocus?: RefObject<HTMLElement | null> | undefined;
 }

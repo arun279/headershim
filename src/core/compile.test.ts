@@ -385,23 +385,6 @@ describe("session rule compilation", () => {
     }
   });
 
-  it("rejects a row missing either tab confinement field", () => {
-    const row = {
-      num: 1,
-      direction: "request" as const,
-      operation: "set" as const,
-      header: "x-session",
-      value: "on",
-    };
-
-    expect(() =>
-      compileSession([{ ...row, originHost: "example.com" }], false),
-    ).toThrow(TypeError);
-    expect(() => compileSession([{ ...row, tabId: 42 }], false)).toThrow(
-      TypeError,
-    );
-  });
-
   it("rejects a session rule count above its bounded priority band", () => {
     expect(() =>
       compileSession(

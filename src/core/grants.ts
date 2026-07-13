@@ -13,6 +13,17 @@ export interface GrantSnapshot {
 }
 
 export function requiredOrigins(rule: Rule): string[] {
+  // A pattern/regex rule names no host to grant. Without one Chrome applies
+  // nothing unless all-sites is granted, so the honest requirement is broad
+  // access — not the empty set, which would read as already-live (initiators
+  // are moot once broad access is what's asked).
+  if (
+    (rule.scope.type === "pattern" || rule.scope.type === "regex") &&
+    rule.scope.hosts.length === 0
+  ) {
+    return [ALL_SITES_ORIGIN];
+  }
+
   const targets = (() => {
     switch (rule.scope.type) {
       case "domains":

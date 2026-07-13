@@ -593,6 +593,8 @@ export const copy = {
       "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses — it has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
     regexOversize:
       "This pattern compiles to more than Chrome's 2 KB limit for a single rule. Shorten or split it.",
+    patternInvalid:
+      "Chrome's rule engine can't use this URL pattern — it can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
     grantDeclined: (host: string) =>
       `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access whenever you're ready — the rule starts working immediately.`,
     appendDisallowed: (name: string) =>

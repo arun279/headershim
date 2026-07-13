@@ -24,10 +24,19 @@
   color: var(--trace-ink);
 }
 
-/* The radio is visually hidden; its focus ring lands on the segment skin. */
+/* The radio is visually hidden; its focus ring lands on the segment skin. The
+   ring is inset (offset -2px) because .segments clips overflow. */
 .segment:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
+}
+
+/* On the selected segment the fill is --trace, so a --focus (== --trace) ring
+   would vanish. Switch to --trace-ink, the token proven >=3:1 against --trace in
+   both themes (it is the segment's own text color) so the ring stays visible
+   while the radiogroup keeps focus on the checked segment (WCAG 2.4.7). */
+.segment.checked:focus-within {
+  outline-color: var(--trace-ink);
 }
 
 /* Subordinate by design: all-sites routes through its own grant flow. */

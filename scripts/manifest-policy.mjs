@@ -57,6 +57,13 @@ if (
 ) {
   violations.push("host_permissions must be absent or empty");
 }
+if (
+  manifest.optional_permissions !== undefined &&
+  (!Array.isArray(manifest.optional_permissions) ||
+    manifest.optional_permissions.length > 0)
+) {
+  violations.push("optional_permissions must be absent or empty");
+}
 if (manifest.content_scripts !== undefined) {
   violations.push("content_scripts must be absent");
 }
@@ -66,11 +73,18 @@ if (manifest.web_accessible_resources !== undefined) {
 if (manifest.sandbox !== undefined) {
   violations.push("sandbox must be absent");
 }
-if (
-  manifest.content_security_policy !== undefined &&
-  /https?:\/\//.test(JSON.stringify(manifest.content_security_policy))
-) {
-  violations.push("content_security_policy must not reference remote sources");
+if (manifest.content_security_policy !== undefined) {
+  const csp = JSON.stringify(manifest.content_security_policy);
+  if (/https?:\/\//.test(csp)) {
+    violations.push(
+      "content_security_policy must not reference remote sources",
+    );
+  }
+  if (/unsafe-eval|wasm-unsafe-eval|unsafe-inline/.test(csp)) {
+    violations.push(
+      "content_security_policy must not weaken the no-eval posture (unsafe-eval, wasm-unsafe-eval, unsafe-inline)",
+    );
+  }
 }
 
 const allowedCommands = [

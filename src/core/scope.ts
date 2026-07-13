@@ -1,4 +1,5 @@
 import type { ResourceGroup, Rule, Scope } from "./model";
+import { err, ok, type Result } from "./result";
 
 export const DNR_RESOURCE_TYPES = [
   "main_frame",
@@ -68,4 +69,25 @@ export function scopeCondition(scope: Scope): ScopeCondition {
 
 export function originPatternForDomain(domain: string): string {
   return `*://*.${domain}/*`;
+}
+
+export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
+
+// A non-empty urlFilter that breaks Chrome's grammar is not rejected per-rule —
+// updateDynamicRules fails the whole atomic batch, freezing the live ruleset at
+// the last-good revision. Gate the two forms Chrome refuses (a non-ASCII filter,
+// and a domain anchor immediately followed by a wildcard) at save and enable so
+// one bad pattern can never take the batch down.
+export function validateUrlFilter(
+  pattern: string,
+): Result<void, UrlFilterError> {
+  for (const char of pattern) {
+    if ((char.codePointAt(0) ?? 0) > 0x7f) {
+      return err("non-ascii");
+    }
+  }
+  if (pattern.startsWith("||*")) {
+    return err("domain-anchor-wildcard");
+  }
+  return ok(undefined);
 }

@@ -20,6 +20,8 @@ export function blockedCommitCopy(error: MutationError): string | undefined {
       return error.reason === "memoryLimitExceeded"
         ? copy.errors.regexOversize
         : copy.errors.regexInvalid;
+    case "pattern-invalid":
+      return copy.errors.patternInvalid;
     case "profile-name-unavailable":
       return copy.options.profiles.nameTaken(error.name);
     default:

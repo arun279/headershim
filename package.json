@@ -50,7 +50,7 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "4.5 kB"
+      "limit": "4.75 kB"
     },
     {
       "name": "Shared UI runtime",

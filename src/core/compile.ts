@@ -41,9 +41,6 @@ export interface DnrRule {
   condition: DnrRuleCondition;
 }
 
-type SessionCompileRow = Omit<TabOverride, "originHost" | "tabId"> &
-  Partial<Pick<TabOverride, "originHost" | "tabId">>;
-
 export function compileDynamic(state: StateDoc): DnrRule[] {
   const enabledRules = state.profiles.flatMap((profile) =>
     profile.enabled ? profile.rules.filter((rule) => rule.enabled) : [],
@@ -80,7 +77,7 @@ export function compileDynamic(state: StateDoc): DnrRule[] {
 }
 
 export function compileSession(
-  overrides: readonly SessionCompileRow[],
+  overrides: readonly TabOverride[],
   paused: boolean,
 ): DnrRule[] {
   if (overrides.length > MAX_SESSION_OVERRIDES) {
@@ -88,23 +85,11 @@ export function compileSession(
       `Cannot compile ${overrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
     );
   }
-  const confinedOverrides = overrides.map((override): TabOverride => {
-    if (override.tabId === undefined || !override.originHost) {
-      throw new TypeError(
-        "Session rules require both a tab id and an origin host",
-      );
-    }
-    return {
-      ...override,
-      tabId: override.tabId,
-      originHost: override.originHost,
-    };
-  });
   if (paused) {
     return [];
   }
 
-  return confinedOverrides.map((override, index) => ({
+  return overrides.map((override, index) => ({
     id: override.num,
     priority: SESSION_PRIORITY_TOP - index,
     action: headerAction(override),

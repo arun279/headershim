@@ -51,12 +51,19 @@ export default defineBackground(() => {
   subscribeSession(() => void reconcile());
   // Grants are not a compile input: Chrome enforces host access at match
   // time, so a grant change only moves badge and needs-access surfaces.
-  onGrantsChanged(() => void refreshBadge());
-  browser.tabs.onRemoved.addListener((tabId) => endOverrides(tabId));
-  browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) =>
-    enforceOverrideLifetime(tabId, tab.url),
+  // Fire-and-forget cleanup listeners swallow their own rejections (a rejected
+  // write must not escape unhandled, matching runUntilSettled's fail-closed
+  // discipline) while still returning the promise so callers can await settling.
+  onGrantsChanged(() => refreshBadge().catch(noop));
+  browser.tabs.onRemoved.addListener((tabId) =>
+    endOverrides(tabId).catch(noop),
   );
-  browser.commands.onCommand.addListener((command) => handleCommand(command));
+  browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) =>
+    enforceOverrideLifetime(tabId, tab.url).catch(noop),
+  );
+  browser.commands.onCommand.addListener((command) =>
+    handleCommand(command)?.catch(noop),
+  );
 
   function reconcile(): Promise<void> {
     if (running !== undefined) {
@@ -84,8 +91,8 @@ export default defineBackground(() => {
       // A throw outside the update*Rules window (a rejected read, a compile
       // RangeError, a storage write) must still fail closed and visible rather
       // than escape unhandled and leave state silently unreconciled.
-      await flagReconcileError(true).catch(() => {});
-      await refreshBadge().catch(() => {});
+      await flagReconcileError(true).catch(noop);
+      await refreshBadge().catch(noop);
     }
   }
 
@@ -130,30 +137,33 @@ export default defineBackground(() => {
 
   async function loadDoc(): Promise<StateDoc | undefined> {
     const raw = await readRaw();
-    if (raw !== undefined) {
-      const outcome = migrate(raw);
-      if (outcome.ok) {
-        if (outcome.value !== raw) {
-          await locked(() => writeState(outcome.value));
-        }
-        return outcome.value;
-      }
-      if (outcome.error.kind === "newer-store") {
-        // No downgrade chain exists; the newer version installed the live
-        // rules deliberately, so leave storage and DNR untouched.
-        return undefined;
-      }
+    const outcome = migrate(raw);
+    if (outcome.ok) {
+      // An already-current doc is returned lock-free; a real migration is
+      // persisted under the lock (re-reading first, so a commit that landed
+      // since this unlocked read is not clobbered by the migrated older doc).
+      return outcome.value === raw ? outcome.value : resolveStoredDoc();
     }
-    return recoverDoc();
+    // No downgrade chain exists; the newer version installed the live rules
+    // deliberately, so leave storage and DNR untouched.
+    if (outcome.error.kind === "newer-store") {
+      return undefined;
+    }
+    // A corrupt doc to quarantine or an absent doc to seed, under the lock.
+    return resolveStoredDoc();
   }
 
-  // Fail closed: quarantine whatever was stored and reseed, so no header
-  // rules survive a state the user can no longer inspect.
-  function recoverDoc(): Promise<StateDoc | undefined> {
+  // Fail closed: persist a real migration, quarantine an unreadable state and
+  // reseed, so no header rules survive a state the user can no longer inspect.
+  // The whole read-migrate-write cycle runs inside the state lock.
+  function resolveStoredDoc(): Promise<StateDoc | undefined> {
     return locked(async () => {
       const raw = await readRaw();
       const outcome = migrate(raw);
       if (outcome.ok) {
+        if (outcome.value !== raw) {
+          await writeState(outcome.value);
+        }
         return outcome.value;
       }
       if (outcome.error.kind === "newer-store") {
@@ -178,7 +188,7 @@ export default defineBackground(() => {
       readSession(),
       getReconcileError(),
     ]);
-    const { state, tabBadges } = planBadge({
+    const { state, tabBadges, title } = planBadge({
       doc: outcome.value,
       status: computeStatus({
         doc: outcome.value,
@@ -187,7 +197,7 @@ export default defineBackground(() => {
       }),
       overrideTabIds: overrideTabIds(session),
     });
-    await applyBadge(state, tabBadges);
+    await applyBadge(state, tabBadges, title);
   }
 
   async function endOverrides(
@@ -250,6 +260,8 @@ export default defineBackground(() => {
     });
   }
 });
+
+function noop(): void {}
 
 function overrideTabIds(session: SessionState): number[] {
   return Object.entries(session.tabs)

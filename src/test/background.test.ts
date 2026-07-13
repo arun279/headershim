@@ -543,6 +543,7 @@ describe("background lifecycle", () => {
     });
     await settle();
     const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+    const setTitle = vi.spyOn(browser.action, "setTitle");
     const setOptions = vi.spyOn(
       browser.declarativeNetRequest,
       "setExtensionActionOptions",
@@ -555,6 +556,7 @@ describe("background lifecycle", () => {
       displayActionCountAsBadgeText: false,
     });
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
+    expect(setTitle).toHaveBeenCalledWith({ title: "headershim — paused" });
     expect(await browser.action.getBadgeText({})).toBe("");
   });
 
