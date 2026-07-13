@@ -4,8 +4,8 @@ import "./Toast.css";
 
 interface ToastProps {
   children: ComponentChildren;
-  actionLabel?: string;
-  onAction?: () => void;
+  actionLabel?: string | undefined;
+  onAction?: (() => void) | undefined;
   onDismiss: () => void;
   /** Auto-dismiss delay; the action itself is never timing-locked (SPEC §9). */
   duration?: number;

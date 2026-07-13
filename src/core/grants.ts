@@ -21,7 +21,7 @@ export function requiredOrigins(rule: Rule): string[] {
     }
   })();
 
-  if (!hasSubresourceType(rule)) {
+  if (!coversSubresourceTypes(rule)) {
     return [...new Set(targets)];
   }
 
@@ -65,7 +65,12 @@ export function docMissingGrants(
   );
 }
 
-function hasSubresourceType(rule: Rule): boolean {
+/**
+ * Whether the rule reaches beyond navigations. Only then does the platform
+ * require the initiating page granted too, so only then can an unnamed
+ * initiator be a silent gap worth a standing note.
+ */
+export function coversSubresourceTypes(rule: Rule): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",

@@ -41,7 +41,7 @@ describe("copy", () => {
       "Active on api.example.com",
     );
     expect(copy.toast.profileDeleted("QA roles")).toBe(
-      "Profile 'QA roles' deleted · Undo",
+      "Profile 'QA roles' deleted",
     );
     expect(copy.actions.allowOn("3 sites")).toBe("Allow on 3 sites");
     expect(copy.emptyState.profile("Staging")).toBe("No rules in Staging yet.");

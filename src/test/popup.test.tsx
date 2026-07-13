@@ -1,12 +1,12 @@
 // @vitest-environment happy-dom
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { act } from "preact/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/popup/App";
 import type { Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import { read, write } from "../platform/store";
-import { render, settle } from "../ui/test/render";
+import { press, render, settle } from "../ui/test/render";
 
 async function mount(doc?: StateDoc) {
   if (doc !== undefined) {
@@ -233,5 +233,209 @@ describe("popup App", () => {
       true,
     ]);
     expect(stored.focusedProfileId).toBe("p2");
+  });
+});
+
+describe("popup rule list integration", () => {
+  const twoRules = () =>
+    seededDoc([
+      rule(),
+      rule({ id: "rule-2", num: 2, header: "x-debug", value: "1" }),
+    ]);
+
+  async function grantAndMount(doc: StateDoc) {
+    await fakeBrowser.permissions.request({
+      origins: ["*://*.api.example.com/*"],
+    });
+    return mount(doc);
+  }
+
+  it("renders the focused profile's rules as a grouped list", async () => {
+    const { root } = await grantAndMount(twoRules());
+    expect(root.querySelector(".rule-group-label")?.textContent).toBe(
+      "Default",
+    );
+    const rows = [...root.querySelectorAll(".rule-row")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain("authorization");
+    expect(rows[1]?.textContent).toContain("x-debug");
+  });
+
+  it("toggles a rule from its switch, instantly and persistently", async () => {
+    const { root } = await grantAndMount(twoRules());
+    const ruleSwitch = root.querySelector(
+      '[aria-label="Rule on: authorization"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      ruleSwitch.click();
+    });
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
+  });
+
+  it("keyboard delete shows the undo toast and undo restores in place", async () => {
+    const { root } = await grantAndMount(twoRules());
+    const row = root.querySelector(".rule-row") as HTMLElement;
+    press(row, "Delete");
+    await settle();
+
+    expect(
+      (await read()).profiles[0]?.rules.map((entry) => entry.header),
+    ).toEqual(["x-debug"]);
+    const toast = root.querySelector(".toast") as HTMLElement;
+    expect(toast.textContent).toContain("Rule deleted");
+
+    const undo = toast.querySelector(".toast-action") as HTMLButtonElement;
+    expect(undo.textContent).toBe("Undo");
+    await act(async () => {
+      undo.click();
+    });
+    await settle();
+    expect(
+      (await read()).profiles[0]?.rules.map((entry) => entry.header),
+    ).toEqual(["authorization", "x-debug"]);
+    expect(root.querySelector(".toast")).toBeNull();
+  });
+
+  it("undo survives the toast timeout via the overflow menu", async () => {
+    const { root } = await grantAndMount(twoRules());
+    vi.useFakeTimers();
+    try {
+      press(root.querySelector(".rule-row") as HTMLElement, "Delete");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      expect(root.querySelector(".toast")).not.toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6100);
+      });
+      expect(root.querySelector(".toast")).toBeNull();
+
+      const menuButton = root.querySelector(
+        ".rule-menu-btn",
+      ) as HTMLButtonElement;
+      await act(async () => {
+        menuButton.click();
+      });
+      const undo = [...root.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent === "Undo last delete",
+      ) as HTMLButtonElement;
+      await act(async () => {
+        undo.click();
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      expect(
+        (await read()).profiles[0]?.rules.map((entry) => entry.header),
+      ).toEqual(["authorization", "x-debug"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the next mutation retires the pending undo", async () => {
+    const { root } = await grantAndMount(twoRules());
+    press(root.querySelector(".rule-row") as HTMLElement, "Delete");
+    await settle();
+
+    const ruleSwitch = root.querySelector(
+      '[aria-label="Rule on: x-debug"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      ruleSwitch.click();
+    });
+    await settle();
+
+    const menuButton = root.querySelector(
+      ".rule-menu-btn",
+    ) as HTMLButtonElement;
+    await act(async () => {
+      menuButton.click();
+    });
+    const labels = [...root.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent,
+    );
+    expect(labels).not.toContain("Undo last delete");
+  });
+
+  it("p toggles pause and 2 / Shift+2 drive the second profile", async () => {
+    const base = twoRules();
+    const first = base.profiles[0] as StateDoc["profiles"][number];
+    const { root } = await grantAndMount({
+      ...base,
+      profiles: [
+        first,
+        {
+          id: "p2",
+          name: "Second",
+          badgeText: "SE",
+          color: "blue",
+          enabled: false,
+          rules: [],
+        },
+      ],
+    });
+    const main = root.querySelector(".popup") as HTMLElement;
+
+    press(main, "p");
+    await settle();
+    expect((await read()).settings.paused).toBe(true);
+    press(main, "p");
+    await settle();
+    expect((await read()).settings.paused).toBe(false);
+
+    await act(async () => {
+      main.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "2",
+          code: "Digit2",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await settle();
+    let stored = await read();
+    expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
+      false,
+      true,
+    ]);
+    expect(stored.focusedProfileId).toBe("p2");
+
+    await act(async () => {
+      main.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "@",
+          code: "Digit1",
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await settle();
+    stored = await read();
+    expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it("Escape closes the popup when no layer is open", async () => {
+    const closeSpy = vi.spyOn(window, "close").mockImplementation(() => {});
+    const { root } = await grantAndMount(twoRules());
+    press(root.querySelector(".popup") as HTMLElement, "Escape");
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    closeSpy.mockRestore();
+  });
+
+  it("single letters stay inert while a text field has focus", async () => {
+    const { root } = await grantAndMount(twoRules());
+    const field = document.createElement("input");
+    root.querySelector(".popup")?.appendChild(field);
+    press(field, "p");
+    await settle();
+    expect((await read()).settings.paused).toBe(false);
+    field.remove();
   });
 });

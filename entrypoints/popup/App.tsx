@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
+import type { Rule } from "../../src/core/model";
 import type { Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
 import { isRegexSupported } from "../../src/platform/dnr";
@@ -9,6 +10,7 @@ import { Annunciator } from "../../src/ui/components/Annunciator";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { ProfileSwitcher } from "../../src/ui/components/ProfileSwitcher";
+import { RuleList } from "../../src/ui/components/RuleList";
 import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
 import { copy } from "../../src/ui/copy";
@@ -17,6 +19,8 @@ import {
   type MutationError,
 } from "../../src/ui/state/mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
+import { useInvalidRules } from "../../src/ui/state/useInvalidRules";
+import { popupKeyHandler } from "./keyboard";
 import "./App.css";
 
 const mutations = createMutations({ validateRegex: isRegexSupported });
@@ -51,8 +55,19 @@ export function App() {
 
 type ReadyProps = Omit<Extract<AppState, { phase: "ready" }>, "phase">;
 
+interface PendingUndo {
+  profileId: string;
+  rule: Rule;
+  index: number;
+}
+
 function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [toast, setToast] = useState<
+    { message: string; undo?: boolean } | undefined
+  >(undefined);
+  const [pendingUndo, setPendingUndo] = useState<PendingUndo | undefined>(
+    undefined,
+  );
   const theme = doc.settings.theme;
   // The token stylesheet follows the OS unless the stored theme stamps the
   // root; System leaves it unset (tokens.css contract).
@@ -71,14 +86,68 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
   const enabledProfilesEmpty = doc.profiles.every(
     (profile) => !profile.enabled || profile.rules.length === 0,
   );
+  const enabledProfiles = useMemo(
+    () => doc.profiles.filter((profile) => profile.enabled),
+    [doc],
+  );
+  const invalidRuleIds = useInvalidRules(enabledProfiles, isRegexSupported);
+  const missingByRule = new Map(
+    grantGaps.map((gap) => [gap.ruleId, gap.missing]),
+  );
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
       if (!outcome.ok) {
-        setError(blockedCommitCopy(outcome.error));
+        const message = blockedCommitCopy(outcome.error);
+        if (message !== undefined) {
+          setToast({ message });
+        }
+        return;
+      }
+      // Undo is not timing-locked, but it only survives until the next
+      // mutation; any other successful commit retires it.
+      setPendingUndo(undefined);
+    });
+  };
+
+  const deleteRule = (profileId: string, ruleId: string) => {
+    void mutations.deleteRule(profileId, ruleId).then((outcome) => {
+      if (outcome.ok) {
+        setPendingUndo({ profileId, ...outcome.value });
+        setToast({ message: copy.toast.ruleDeleted, undo: true });
       }
     });
   };
+
+  const undoDelete = () => {
+    if (pendingUndo === undefined) {
+      return;
+    }
+    const { profileId, rule, index } = pendingUndo;
+    void mutations.restoreRule(profileId, rule, index).then((outcome) => {
+      if (outcome.ok) {
+        setPendingUndo(undefined);
+        setToast(undefined);
+      }
+    });
+  };
+
+  const onKeyDown = popupKeyHandler({
+    togglePause: () => run(mutations.setPaused(status.kind !== "paused")),
+    activateProfile: (position) => {
+      const profile = doc.profiles[position - 1];
+      if (profile !== undefined) {
+        run(mutations.activateProfile(profile.id));
+      }
+    },
+    toggleProfile: (position) => {
+      const profile = doc.profiles[position - 1];
+      if (profile !== undefined) {
+        run(mutations.setProfileEnabled(profile.id, !profile.enabled));
+      }
+    },
+    closePopup: () => window.close(),
+  });
 
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
@@ -89,7 +158,7 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
   };
 
   return (
-    <main class="popup">
+    <main class="popup" onKeyDown={onKeyDown}>
       <ProfileSwitcher
         profiles={doc.profiles}
         focusedProfileId={doc.focusedProfileId}
@@ -121,7 +190,27 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
             actions={<Button kind="primary">{copy.actions.newRule}</Button>}
           />
         ) : (
-          <div class="rules" />
+          <RuleList
+            profiles={enabledProfiles}
+            allProfiles={doc.profiles}
+            missingByRule={missingByRule}
+            invalidRuleIds={invalidRuleIds}
+            undoAvailable={pendingUndo !== undefined}
+            onToggle={(profileId, ruleId, enabled) =>
+              run(mutations.setRuleEnabled(profileId, ruleId, enabled))
+            }
+            onDelete={deleteRule}
+            onDuplicate={(profileId, ruleId) =>
+              run(mutations.duplicateRule(profileId, ruleId))
+            }
+            onMove={(profileId, ruleId, toProfileId) =>
+              run(mutations.moveRuleToProfile(profileId, ruleId, toProfileId))
+            }
+            onRegenerate={(profileId, ruleId) =>
+              run(mutations.regenerateValue(profileId, ruleId))
+            }
+            onUndoDelete={undoDelete}
+          />
         )}
       </div>
       <footer class="foot">
@@ -143,8 +232,14 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
           <GearGlyph />
         </Button>
       </footer>
-      {error !== undefined && (
-        <Toast onDismiss={() => setError(undefined)}>{error}</Toast>
+      {toast !== undefined && (
+        <Toast
+          onDismiss={() => setToast(undefined)}
+          actionLabel={toast.undo === true ? copy.actions.undo : undefined}
+          onAction={toast.undo === true ? undoDelete : undefined}
+        >
+          {toast.message}
+        </Toast>
       )}
     </main>
   );

@@ -101,8 +101,43 @@ export const copy = {
 
   toast: {
     activeOn: (host: string) => `Active on ${host}`,
-    ruleDeleted: "Rule deleted · Undo",
-    profileDeleted: (name: string) => `Profile '${name}' deleted · Undo`,
+    // "· Undo" is the toast's action button, not part of the message.
+    ruleDeleted: "Rule deleted",
+    profileDeleted: (name: string) => `Profile '${name}' deleted`,
+  },
+
+  rules: {
+    listLabel: "Rules",
+    switchLabel: (header: string, on: boolean) =>
+      `Rule ${on ? "on" : "off"}: ${header}`,
+    menuLabel: (header: string) => `Rule actions: ${header}`,
+    direction: { request: "request", response: "response" },
+    operation: { set: "set", append: "append", remove: "remove" },
+    needsAccess: (host: string, moreSites: number): Sentence => [
+      "Needs access · ",
+      data(host),
+      ...(moreSites > 0 ? [" +", data(moreSites)] : []),
+    ],
+    // Silkscreen tag; stays sentence case in the DOM, uppercased via CSS only.
+    temporaryTag: "Temporary",
+    temporary: (host: string): Sentence => [
+      "applies to ",
+      data(host),
+      " requests in this tab",
+    ],
+    invalidRegex: "Invalid regex — edit the scope to enable",
+    overridden: "overridden by a rule above",
+    initiatorNote:
+      "requests started by other pages also need those pages granted",
+  },
+
+  menu: {
+    edit: "Edit",
+    duplicate: "Duplicate",
+    moveToProfile: "Move to profile",
+    regenerateValue: "Regenerate value",
+    undoLastDelete: "Undo last delete",
+    delete: "Delete",
   },
 
   emptyState: {
@@ -113,6 +148,29 @@ export const copy = {
 
   scopeSummary: {
     allSites: "all sites",
+    pattern: "pattern",
+    regex: "regex",
+    domains: (first: string, more: number): Sentence => [
+      data(first),
+      ...(more > 0 ? [" +", data(more)] : []),
+    ],
+  },
+
+  resourceTypes: {
+    groups: {
+      pages: "Pages",
+      subframes: "Subframes",
+      xhr: "XHR/fetch",
+      scripts: "Scripts",
+      stylesheets: "Stylesheets",
+      images: "Images",
+      fonts: "Fonts",
+      media: "Media",
+      websockets: "WebSockets",
+      other: "Other",
+    },
+    only: (group: string) => `${group} only`,
+    count: (n: number) => `${n} types`,
   },
 
   generatedValue: {
