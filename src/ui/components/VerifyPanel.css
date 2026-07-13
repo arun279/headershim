@@ -106,6 +106,25 @@
   border-top: var(--hairline) solid var(--bezel);
 }
 
+/* The in-panel recovery row (verdict P0): Grant for a blocked rule, or the
+   reload-to-test hint paired with a Reload-tab button. */
+.verify-recover {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.verify-recover-hint {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.verify-recover .btn {
+  flex: none;
+}
+
 .verify-guidance {
   font-size: 12px;
   line-height: 1.45;

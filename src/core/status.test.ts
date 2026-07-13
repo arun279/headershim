@@ -94,7 +94,12 @@ describe("computeStatus precedence", () => {
       grantGaps: [],
       reconcileError: false,
     });
-    expect(status).toEqual({ kind: "live", ruleCount: 2, profileCount: 2 });
+    expect(status).toEqual({
+      kind: "live",
+      ruleCount: 2,
+      totalRuleCount: 3,
+      profileCount: 2,
+    });
   });
 
   it("is off when no profile is enabled", () => {

@@ -68,25 +68,29 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* surfaces (dark: lit panel, blue-slate) */
-    --panel-0: #12161B;
-    --panel-1: #1A2027;
-    --panel-2: #0D1115;
+    /* surfaces (dark: bluish charcoal). panel-0 is the base both the popup and
+       the options page paint; it is lifted off near-black so the popup's bare
+       field reads as the same charcoal as the options view rather than as a
+       second, blacker app (verdict theme note). panel-1/2 keep their elevation
+       steps above/below it. */
+    --panel-0: #171C24;
+    --panel-1: #202832;
+    --panel-2: #0E1319;
     --bezel: #2A323C;
     --bezel-strong: #3A4550;
 
-    --ink: #E7EDF3; /* 15.40:1 on panel-0 */
-    --ink-mute: #9AA7B4; /* 7.40:1 on panel-0 */
+    --ink: #E7EDF3; /* 14.50:1 on panel-0 */
+    --ink-mute: #9AA7B4; /* 6.97:1 on panel-0 */
 
-    --trace: #45C4D8; /* 8.77:1 on panel-0 */
+    --trace: #45C4D8; /* 8.26:1 on panel-0 */
     --trace-ink: #08262C; /* 7.66:1 on trace */
-    --caution: #F0B429; /* 9.74:1 on panel-0 */
+    --caution: #F0B429; /* 9.17:1 on panel-0 */
     --caution-bg: #2B2212;
     --caution-edge: #5C4A18;
     --caution-lamp: #F0B429; /* 8.41:1 vs caution-bg */
-    --advisory: #4CC38A; /* 8.20:1 on panel-0 */
+    --advisory: #4CC38A; /* 7.72:1 on panel-0 */
 
-    --sw-off: #626F7C; /* 3.53:1 vs panel-0 */
+    --sw-off: #626F7C; /* 3.33:1 vs panel-0 */
 
     /* badges keep their light hexes: lightening for dark was the worst AA fail. */
 
@@ -100,9 +104,9 @@
    duplicated rather than factored out. */
 /* jscpd:ignore-start */
 :root[data-theme="dark"] {
-  --panel-0: #12161B;
-  --panel-1: #1A2027;
-  --panel-2: #0D1115;
+  --panel-0: #171C24;
+  --panel-1: #202832;
+  --panel-2: #0E1319;
   --bezel: #2A323C;
   --bezel-strong: #3A4550;
 

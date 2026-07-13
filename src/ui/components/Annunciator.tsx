@@ -89,7 +89,7 @@ function sentenceFor(status: SystemStatus, temporaryCount: number): Sentence {
         ? copy.annunciator.liveEmpty
         : copy.annunciator.live(
             status.ruleCount,
-            status.profileCount,
+            status.totalRuleCount,
             temporaryCount,
           );
   }

@@ -22,18 +22,32 @@ function rule(id: string, header: string): Rule {
   };
 }
 
-function mount(readout: VerifyReadout) {
+interface Blocked {
+  ruleCount: number;
+  host: string;
+  moreSites: number;
+}
+
+function mount(readout: VerifyReadout, blocked?: Blocked) {
   const onClose = vi.fn();
+  const onGrant = vi.fn();
+  const onReload = vi.fn();
   const root = render(
     <LiveRegionProvider>
-      <VerifyPanel readout={readout} onClose={onClose} />
+      <VerifyPanel
+        readout={readout}
+        blocked={blocked}
+        onGrant={onGrant}
+        onReload={onReload}
+        onClose={onClose}
+      />
     </LiveRegionProvider>,
   );
   const panel = root.querySelector(".verify") as HTMLElement;
-  return { root, panel, onClose };
+  return { root, panel, onClose, onGrant, onReload };
 }
 
-const twoOfThree: VerifyReadout = {
+const twoMatched: VerifyReadout = {
   matched: [
     { profileId: "p", rule: rule("r1", "authorization"), count: 12 },
     {
@@ -52,11 +66,17 @@ const twoOfThree: VerifyReadout = {
   total: 3,
 };
 
+const nothingFired: VerifyReadout = {
+  matched: [],
+  unmatched: [{ profileId: "p", rule: rule("r1", "authorization") }],
+  total: 1,
+};
+
 describe("VerifyPanel readout", () => {
-  it("shows the honest fraction, per-rule tallies, and the static hint", () => {
-    const { panel } = mount(twoOfThree);
+  it("leads with the match count, per-rule tallies, and the static hint", () => {
+    const { panel } = mount(twoMatched);
     expect(panel.querySelector(".verify-summary")?.textContent).toBe(
-      "2 of 3 rules matched on this tab · last 5 min",
+      "Last request: 2 matched",
     );
 
     const fired = [...panel.querySelectorAll(".verify-row:not(.unmatched)")];
@@ -74,7 +94,7 @@ describe("VerifyPanel readout", () => {
   });
 
   it("labels tallies for assistive tech and hides the lamp glyphs", () => {
-    const { panel } = mount(twoOfThree);
+    const { panel } = mount(twoMatched);
     expect(
       panel
         .querySelector(".verify-row .verify-tally")
@@ -91,25 +111,50 @@ describe("VerifyPanel readout", () => {
   });
 
   it("carries the honest-limits footer verbatim from the spec", () => {
-    const { panel } = mount(twoOfThree);
+    const { panel } = mount(twoMatched);
     expect(panel.querySelector(".verify-limits")?.textContent).toBe(
       copy.verify.limits,
     );
   });
 
-  it("replaces the rows with the zero-match guidance verbatim when nothing fired", () => {
-    const { panel } = mount({
-      matched: [],
-      unmatched: [{ profileId: "p", rule: rule("r1", "authorization") }],
-      total: 1,
-    });
-    expect(panel.querySelector(".verify-guidance")?.textContent).toBe(
-      copy.errors.verifyNoMatch,
+  it("leads with reload-to-test when nothing fired and nothing is blocked", () => {
+    const { panel, onReload } = mount(nothingFired);
+    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
+      copy.verify.noRequestHeadline,
     );
     expect(panel.querySelector(".verify-rows")).toBeNull();
-    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
-      "0 of 1 rules matched on this tab · last 5 min",
+    expect(panel.querySelector(".verify-recover-hint")?.textContent).toBe(
+      copy.verify.reloadHint,
     );
+    expect(panel.querySelector(".verify-guidance")?.textContent).toBe(
+      copy.verify.stillNothing,
+    );
+
+    const reload = [...panel.querySelectorAll("button")].find(
+      (button) => button.textContent === copy.actions.reloadTab,
+    ) as HTMLButtonElement;
+    fire(() => reload.click());
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("leads with the grant gap and surfaces Grant when a rule is blocked", () => {
+    const { panel, onGrant } = mount(nothingFired, {
+      ruleCount: 1,
+      host: "api.example.com",
+      moreSites: 0,
+    });
+    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
+      "1 rule can't run — needs access to api.example.com.",
+    );
+    // The caching essay never leads over the more basic precondition.
+    expect(panel.querySelector(".verify-rows")).toBeNull();
+    expect(panel.querySelector(".verify-guidance")).toBeNull();
+
+    const grant = [...panel.querySelectorAll("button")].find(
+      (button) => button.textContent === copy.actions.grantAccess,
+    ) as HTMLButtonElement;
+    fire(() => grant.click());
+    expect(onGrant).toHaveBeenCalledTimes(1);
   });
 
   it("lists a no-match rule without a hint when no static cause is known", () => {
@@ -125,16 +170,16 @@ describe("VerifyPanel readout", () => {
     expect(missed.querySelector(".verify-hint")).toBeNull();
   });
 
-  it("moves focus to the summary and announces it politely on open", () => {
-    const { root, panel } = mount(twoOfThree);
+  it("moves focus to the headline and announces it politely on open", () => {
+    const { root, panel } = mount(twoMatched);
     expect(document.activeElement).toBe(panel.querySelector(".verify-summary"));
     expect(root.querySelector(".sr-only")?.textContent).toBe(
-      "2 of 3 rules matched on this tab · last 5 min",
+      "Last request: 2 matched",
     );
   });
 
   it("closes on the close control and on Escape", () => {
-    const { panel, onClose } = mount(twoOfThree);
+    const { panel, onClose } = mount(twoMatched);
     fire(() => (panel.querySelector(".icon-btn") as HTMLButtonElement).click());
     expect(onClose).toHaveBeenCalledTimes(1);
 

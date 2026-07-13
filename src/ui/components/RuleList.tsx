@@ -22,6 +22,9 @@ interface RuleListProps {
   invalidRuleIds: ReadonlySet<string>;
   /** A delete is waiting for undo; surfaces "Undo last delete" in row menus. */
   undoAvailable: boolean;
+  /** The just-saved rule and a changing token, to pulse its "Saved" ack (P0). */
+  savedRuleId?: string | undefined;
+  savedNonce?: number | undefined;
   /**
    * Inline editor placement: with a ruleId the editor replaces that row in
    * place; without one it appends to the profile's group (created if empty).
@@ -180,6 +183,9 @@ export function RuleList(props: RuleListProps) {
                   missingHosts={missingHosts(props.missingByRule.get(rule.id))}
                   invalid={props.invalidRuleIds.has(rule.id)}
                   overridden={overridden.has(rule.id)}
+                  savedNonce={
+                    rule.id === props.savedRuleId ? props.savedNonce : undefined
+                  }
                   undoAvailable={props.undoAvailable}
                   moveTargets={props.allProfiles.filter(
                     (target) => target.id !== profile.id,

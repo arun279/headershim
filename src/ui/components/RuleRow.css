@@ -62,6 +62,47 @@
   font-family: var(--font-data);
 }
 
+/* The transient auto-save acknowledgement: a small ✓ Saved chip that rides in
+   over the row's right edge (clear of the overflow ⋯) and fades after ~1.5s.
+   Purely visual and non-interactive, so it never intercepts the ⋯ click. */
+.rule-saved {
+  position: absolute;
+  top: 50%;
+  right: 44px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-inner);
+  background: var(--panel-0);
+  border: var(--hairline) solid var(--bezel);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--advisory);
+  pointer-events: none;
+  animation: rule-saved 1500ms var(--ease) forwards;
+}
+
+.rule-saved svg {
+  display: block;
+}
+
+@keyframes rule-saved {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .rule-menu {
   right: 12px;
   top: calc(100% - 8px);

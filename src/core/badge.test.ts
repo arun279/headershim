@@ -90,7 +90,7 @@ describe("planBadge precedence", () => {
         textColor: WHITE,
       },
       tabBadges: [],
-      title: "headershim — paused",
+      title: "HeaderShim — paused",
     });
   });
 
@@ -252,7 +252,7 @@ describe("planBadge single-winner precedence across the input space", () => {
 
                 // Only the paused state names itself in the tooltip; every
                 // other winner clears back to the default title (SPEC §4.4).
-                expect(plan.title).toBe(paused ? "headershim — paused" : "");
+                expect(plan.title).toBe(paused ? "HeaderShim — paused" : "");
               });
             }
           }
