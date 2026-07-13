@@ -1,3 +1,5 @@
+import { checkEnabledRuleLimits } from "./limits";
+
 export type Direction = "request" | "response";
 export type HeaderOp = "set" | "append" | "remove";
 
@@ -142,6 +144,34 @@ export function createProfile(draft: ProfileDraft): Profile {
     enabled: draft.enabled,
     rules: [],
   };
+}
+
+export function switchToNextProfile(doc: StateDoc): StateDoc {
+  const { profiles } = doc;
+  const focusedIndex = profiles.findIndex(
+    (profile) => profile.id === doc.focusedProfileId,
+  );
+  // A stored profile can hold more enabled rules than the live caps permit;
+  // exclusively enabling one would make the document uncompilable, so the
+  // cycle passes over it.
+  for (let step = 1; step <= profiles.length; step += 1) {
+    const next = profiles[(focusedIndex + step) % profiles.length];
+    if (
+      next === undefined ||
+      !checkEnabledRuleLimits(next.rules.filter((rule) => rule.enabled)).ok
+    ) {
+      continue;
+    }
+    return {
+      ...doc,
+      focusedProfileId: next.id,
+      profiles: profiles.map((profile) => ({
+        ...profile,
+        enabled: profile.id === next.id,
+      })),
+    };
+  }
+  return doc;
 }
 
 export function isProfileNameAvailable(

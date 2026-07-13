@@ -1,0 +1,10 @@
+{
+  "ExtensionSettings": {
+    "__EXTENSION_ID__": {
+      "installation_mode": "force_installed",
+      "update_url": "__UPDATE_URL__",
+      "runtime_allowed_hosts": ["*://*"],
+      "toolbar_pin": "force_pinned"
+    }
+  }
+}

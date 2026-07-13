@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_SITES_ORIGIN,
+  docMissingGrants,
   type GrantSnapshot,
   missingGrants,
   requiredOrigins,
 } from "./grants";
-import type { Rule, Scope } from "./model";
+import type { Rule, Scope, StateDoc } from "./model";
 import { originPatternForDomain } from "./scope";
 
 function rule(
@@ -202,5 +203,54 @@ describe("missingGrants", () => {
         allSites: false,
       }),
     ).toEqual([originPatternForDomain("app.example.com")]);
+  });
+});
+
+describe("docMissingGrants", () => {
+  const none: GrantSnapshot = { origins: [], allSites: false };
+
+  it("reports gaps only for enabled rules inside enabled profiles", () => {
+    const ungranted = rule(
+      { type: "domains", domains: ["api.example.com"] },
+      "all",
+    );
+    const disabledRule = {
+      ...rule({ type: "domains", domains: ["off.example.com"] }, "all"),
+      id: "rule-2",
+      enabled: false,
+    };
+    const doc: StateDoc = {
+      v: 1,
+      profiles: [
+        {
+          id: "profile-on",
+          name: "On",
+          badgeText: "ON",
+          color: "blue",
+          enabled: true,
+          rules: [ungranted, disabledRule],
+        },
+        {
+          id: "profile-off",
+          name: "Off",
+          badgeText: "OF",
+          color: "teal",
+          enabled: false,
+          rules: [{ ...ungranted, id: "rule-3" }],
+        },
+      ],
+      focusedProfileId: "profile-on",
+      nextRuleNum: 4,
+      settings: { paused: false, theme: "system", badgeMode: "count" },
+    };
+
+    expect(docMissingGrants(doc, none)).toEqual([
+      {
+        profileId: "profile-on",
+        ruleId: "rule-1",
+        missing: [originPatternForDomain("api.example.com")],
+      },
+    ]);
+    expect(docMissingGrants(doc, { origins: [], allSites: true })).toEqual([]);
   });
 });
