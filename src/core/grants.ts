@@ -85,7 +85,7 @@ function originPatternContains(granted: string, required: string): boolean {
   return requiredDomain?.endsWith(`.${grantedDomain}`) ?? false;
 }
 
-function domainFromOriginPattern(pattern: string): string | undefined {
+export function domainFromOriginPattern(pattern: string): string | undefined {
   const match = /^\*:\/\/\*\.([^/]+)\/\*$/.exec(pattern);
   return match?.[1];
 }

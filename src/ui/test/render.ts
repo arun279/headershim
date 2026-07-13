@@ -28,6 +28,18 @@ export function press(target: HTMLElement, key: string): void {
   });
 }
 
+/**
+ * Flushes a few macrotask rounds under act, letting storage events, lock
+ * queues, and subscription reloads land before assertions.
+ */
+export async function settle(): Promise<void> {
+  await act(async () => {
+    for (let round = 0; round < 3; round += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  });
+}
+
 afterEach(() => {
   if (container !== null) {
     preactRender(null, container);

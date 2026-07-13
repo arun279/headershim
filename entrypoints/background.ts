@@ -8,6 +8,7 @@ import {
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
 import { createV1Seed, migrate } from "../src/core/schema";
+import { computeStatus } from "../src/core/status";
 import { applyBadge } from "../src/platform/badge";
 import {
   getDynamicRules,
@@ -170,8 +171,11 @@ export default defineBackground(() => {
     ]);
     const { state, tabBadges } = planBadge({
       doc: outcome.value,
-      needsAccess: docMissingGrants(outcome.value, granted).length > 0,
-      reconcileError,
+      status: computeStatus({
+        doc: outcome.value,
+        grantGaps: docMissingGrants(outcome.value, granted),
+        reconcileError,
+      }),
       overrideTabIds: overrideTabIds(session),
     });
     await applyBadge(state, tabBadges);

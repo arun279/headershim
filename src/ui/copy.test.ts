@@ -1,24 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { copy } from "./copy";
+import { copy, sentenceText } from "./copy";
 
 describe("copy", () => {
   it("pluralizes the live annunciator and appends this-tab temporaries", () => {
-    expect(copy.annunciator.live(1, 1, 0)).toBe("Live — 1 rule on 1 profile.");
-    expect(copy.annunciator.live(3, 2, 0)).toBe(
+    expect(sentenceText(copy.annunciator.live(1, 1, 0))).toBe(
+      "Live — 1 rule on 1 profile.",
+    );
+    expect(sentenceText(copy.annunciator.live(3, 2, 0))).toBe(
       "Live — 3 rules on 2 profiles.",
     );
-    expect(copy.annunciator.live(3, 2, 1)).toBe(
+    expect(sentenceText(copy.annunciator.live(3, 2, 1))).toBe(
       "Live — 3 rules on 2 profiles. · 1 temporary on this tab",
     );
   });
 
   it("names one site inline and counts the rest for needs-access", () => {
-    expect(copy.annunciator.needsAccess(1, "app.acme.dev", 0)).toBe(
+    expect(
+      sentenceText(copy.annunciator.needsAccess(1, "app.acme.dev", 0)),
+    ).toBe(
       "1 rule can't run — headershim doesn't have access to app.acme.dev.",
     );
-    expect(copy.annunciator.needsAccess(2, "api.example.com", 2)).toBe(
+    expect(
+      sentenceText(copy.annunciator.needsAccess(2, "api.example.com", 2)),
+    ).toBe(
       "2 rules can't run — headershim doesn't have access to api.example.com and 2 more sites.",
     );
+  });
+
+  it("marks hostnames and counts as data segments for the mono face", () => {
+    const parts = copy.annunciator.needsAccess(2, "api.example.com", 2);
+    expect(parts.filter((part) => typeof part !== "string")).toEqual([
+      { data: "2" },
+      { data: "api.example.com" },
+      { data: "2" },
+    ]);
   });
 
   it("builds host-bound toasts, grants, and errors", () => {
@@ -56,15 +71,27 @@ describe("copy", () => {
   });
 
   it("keeps the static canonical strings verbatim", () => {
-    expect(copy.annunciator.paused).toBe(
+    expect(sentenceText(copy.annunciator.paused)).toBe(
       "Paused — no headers are being modified.",
     );
-    expect(copy.annunciator.off).toBe("Off — no profiles are on.");
+    expect(sentenceText(copy.annunciator.off)).toBe(
+      "Off — no profiles are on.",
+    );
+    expect(sentenceText(copy.annunciator.outOfSync)).toBe(
+      "Out of sync — Chrome rejected headershim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+    );
     expect(copy.app.tagline).toBe(
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
     );
     expect(copy.errors.headerNotModifiable).toMatch(
       /^Header names starting with ':'/,
+    );
+    expect(copy.errors.storageBudget).toContain("safe budget of 4 MB");
+    expect(copy.errors.regexRuleCap).toContain(
+      "caps regex-scoped rules at 1,000",
+    );
+    expect(copy.errors.newerStore(2, 1)).toContain(
+      "format 2; this version reads up to 1",
     );
     expect(copy.verify.limits).toContain('check "Disable cache"');
   });
