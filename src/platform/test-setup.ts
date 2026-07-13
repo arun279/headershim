@@ -27,6 +27,10 @@ const onCommand = createEvent<[command: string]>();
 
 Object.assign(fakeBrowser, { commands: { onCommand } });
 
+Object.assign(fakeBrowser.runtime, {
+  getManifest: () => ({ version: "1.0.0" }),
+});
+
 Object.assign(fakeBrowser.permissions, {
   contains: async ({ origins = [] }: TestPermissions) =>
     origins.every((origin) => grantedOrigins.has(origin)),

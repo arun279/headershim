@@ -1,0 +1,72 @@
+/* An inset well, deliberately distinct from the panel-1 block that frames it. */
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+}
+
+.import-counts {
+  color: var(--ink);
+}
+
+.import-attention {
+  color: var(--ink-mute);
+}
+
+.import-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  list-style: none;
+}
+
+.import-warning {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--caution-bg);
+  border: var(--hairline) solid var(--caution-edge);
+  border-radius: var(--radius-inner);
+}
+
+/* Caution lamp: a filled triangle, matching the annunciator's alert glyph. */
+.import-warning-lamp {
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-top: 5px;
+  border-inline: 5px solid transparent;
+  border-bottom: 9px solid var(--caution-lamp);
+}
+
+.import-warning-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--caution);
+}
+
+.import-warning-body p {
+  color: var(--ink);
+}
+
+.import-warning-name {
+  overflow-wrap: anywhere;
+}
+
+.import-error {
+  color: var(--caution);
+}
+
+.import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}

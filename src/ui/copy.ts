@@ -84,6 +84,130 @@ export const copy = {
       `${focused ? ", focused" : ""}${on ? ", on" : ", off"}`,
   },
 
+  // The full-tab options surface: frame, profile management, and bulk actions.
+  options: {
+    nav: {
+      label: "Sections",
+      profiles: "Profiles",
+      importExport: "Import & export",
+      siteAccess: "Site access",
+      about: "Appearance & about",
+    },
+    version: (version: string) => `v${version}`,
+    profiles: {
+      title: "Profiles",
+      new: "+ New",
+      // The name a fresh profile is created under before the user renames it;
+      // availableProfileName resolves collisions ("New profile 2", …).
+      newName: "New profile",
+      ruleCount: (count: number) => `${count} ${rules(count)}`,
+      nameLabel: "Profile name",
+      rename: "Rename",
+      clone: "Clone",
+      delete: "Delete",
+      toggleLabel: (name: string, on: boolean) =>
+        `Profile ${on ? "on" : "off"}: ${name}`,
+      // The disclosure that opens a profile for badge/rule editing.
+      expand: (name: string) => `Edit ${name}`,
+      reorderHandle: (name: string) =>
+        `Reorder ${name}; press the arrow keys to move it`,
+      reordered: (name: string, position: number) =>
+        `${name}, moved to position ${position}`,
+      nameTaken: (name: string) =>
+        `A profile named '${name}' already exists — pick a different name.`,
+      deleteConfirm: {
+        title: (name: string) => `Delete profile '${name}'?`,
+        body: (count: number) =>
+          `Its ${count} ${rules(count)} will be deleted. Site grants are not changed.`,
+        confirm: "Delete profile",
+      },
+    },
+    badge: {
+      textLabel: "Badge text",
+      colorLabel: "Badge color",
+      colorNames: {
+        indigo: "Indigo",
+        blue: "Blue",
+        teal: "Teal",
+        green: "Green",
+        plum: "Plum",
+        magenta: "Magenta",
+        crimson: "Crimson",
+        slate: "Slate",
+      },
+    },
+    rules: {
+      sectionLabel: (name: string) => `Rules in ${name}`,
+      selectAll: "Select all rules",
+      selected: (count: number) => `${count} ${rules(count)} selected`,
+      selectRule: (header: string) => `Select rule: ${header}`,
+      enable: "Enable",
+      disable: "Disable",
+      move: "Move",
+      moveTo: (name: string) => `Move to ${name}`,
+      delete: "Delete",
+    },
+    importExport: {
+      title: "Import & export",
+      importHeading: "Import",
+      instruction:
+        "headershim JSON or ModHeader export — detected automatically.",
+      choose: "Choose file…",
+      fileInputLabel: "Import a headershim or ModHeader export",
+      exportHeading: "Export",
+      exportEverything: "Export everything",
+      exportOne: "Export one profile",
+      exportChoiceLabel: "Profile to export",
+      // Shown verbatim on every export.
+      secretsReminder:
+        "This file contains the header values you typed — including any tokens or keys. Treat it like a credentials file.",
+      everythingFilename: "headershim-export.json",
+      profileFilename: (slug: string) => `headershim-${slug}.json`,
+      summaryHeading: "Import summary",
+      counts: (profileCount: number, ruleCount: number): Sentence => [
+        "Import will create ",
+        data(profileCount),
+        ` ${profiles(profileCount)} / `,
+        data(ruleCount),
+        ` ${rules(ruleCount)}.`,
+      ],
+      needAttention: (count: number) =>
+        count === 1
+          ? "1 item needs attention:"
+          : `${count} items need attention:`,
+      import: "Import",
+      convert: "Convert to frozen value",
+      imported: (count: number) =>
+        `Imported ${count} ${profiles(count)}, off — turn them on when you're ready.`,
+      warnings: {
+        appendDegraded: (header: string): Sentence => [
+          "Chrome only allows appending to a fixed set of request headers, and ",
+          data(header),
+          " isn't one of them — imported as Set.",
+        ],
+        cookieSemantics:
+          "Imported as a whole-header append on cookie; per-cookie merge behaves differently.",
+        setCookieSemantics:
+          "Imported as Set on set-cookie; a set collapses multiple Set-Cookie headers into one.",
+        cspSemantics:
+          "Browsers combine CSPs restrictively; this cannot loosen a page's own policy.",
+        invalidRegex: (pattern: string): Sentence => [
+          "This pattern isn't valid RE2, so the rule was imported disabled: ",
+          data(pattern),
+        ],
+        dynamicToken:
+          "Contains a request-time token Chrome extensions can no longer compute.",
+        droppedExcludeUrl:
+          "Dropped — headershim has no per-rule URL exclusion in this version.",
+        droppedInitiatorDomain:
+          "Dropped — headershim has no initiator scoping in this version.",
+        droppedTab: "Dropped — use This-tab overrides for per-tab needs.",
+        droppedUrlReplacement:
+          "Dropped — headershim changes headers only, never redirects.",
+      },
+    },
+  },
+
   actions: {
     newRule: "+ New rule",
     verify: "Verify",
@@ -104,6 +228,7 @@ export const copy = {
     activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
+    rulesDeleted: (count: number) => `${count} ${rules(count)} deleted`,
     profileDeleted: (name: string) => `Profile '${name}' deleted`,
   },
 

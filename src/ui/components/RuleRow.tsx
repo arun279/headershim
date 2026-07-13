@@ -2,8 +2,9 @@ import type { ComponentChildren, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { coversSubresourceTypes } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
-import { copy, type Sentence } from "../copy";
-import { MiddleTruncate } from "./MiddleTruncate";
+import { copy } from "../copy";
+import { RuleFace } from "./RuleFace";
+import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
 import { Toggle } from "./Toggle";
 import "./RuleRow.css";
@@ -102,24 +103,7 @@ export function RuleRow(props: RuleRowProps) {
           }
         }}
       />
-      <span class="rule-dir">
-        <span role="img" aria-label={copy.rules.direction[rule.direction]}>
-          {rule.direction === "request" ? "→" : "←"}
-        </span>
-        <span class="rule-op">{copy.rules.operation[rule.operation]}</span>
-      </span>
-      <div class="rule-lines">
-        <p class="rule-line1">
-          <span class="rule-name">{rule.header}</span>
-          {rule.operation !== "remove" && rule.value !== undefined && (
-            <>
-              <span class="colon">: </span>
-              <MiddleTruncate value={rule.value} class="rule-value" />
-            </>
-          )}
-        </p>
-        <p class="rule-line2">{lineTwo(props, noteRef)}</p>
-      </div>
+      <RuleFace rule={rule} secondLine={lineTwo(props, noteRef)} />
       <button
         type="button"
         class="icon-btn rule-menu-btn"
@@ -189,38 +173,6 @@ function lineTwo(
       {standingInitiatorNote(rule) && <> · {copy.rules.initiatorNote}</>}
     </>
   );
-}
-
-function scopeSummary(rule: Rule): Sentence {
-  switch (rule.scope.type) {
-    case "domains": {
-      const [first] = rule.scope.domains;
-      return first === undefined
-        ? []
-        : copy.scopeSummary.domains(first, rule.scope.domains.length - 1);
-    }
-    case "pattern":
-      return [copy.scopeSummary.pattern];
-    case "regex":
-      return [copy.scopeSummary.regex];
-    case "all":
-      return [copy.scopeSummary.allSites];
-  }
-}
-
-function typesSummary(rule: Rule): string | undefined {
-  if (rule.resourceTypes === "all") {
-    return undefined;
-  }
-  const names = rule.resourceTypes.map(
-    (group) => copy.resourceTypes.groups[group],
-  );
-  if (names.length === 1) {
-    return copy.resourceTypes.only(names[0] as string);
-  }
-  return names.length === 2
-    ? names.join(", ")
-    : copy.resourceTypes.count(names.length);
 }
 
 /**

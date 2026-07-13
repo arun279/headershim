@@ -1,0 +1,52 @@
+.badge-editor {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+
+.badge-preview {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  font-size: 10px;
+}
+
+.badge-text-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.badge-text-input {
+  width: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.badge-swatches {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.badge-swatch {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--radius-inner);
+  border: var(--hairline) solid rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+/* The checked swatch reads as selected without relying on hue alone. */
+.badge-swatch:has(input:checked) {
+  box-shadow:
+    0 0 0 2px var(--panel-1),
+    0 0 0 4px var(--trace);
+}
+
+.badge-swatch:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

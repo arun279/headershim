@@ -1,3 +1,149 @@
+import type { JSX } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { browser } from "wxt/browser";
+import { CURRENT } from "../../src/core/schema";
+import { isRegexSupported } from "../../src/platform/dnr";
+import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
+import { EmptyState } from "../../src/ui/components/EmptyState";
+import { copy } from "../../src/ui/copy";
+import { createMutations } from "../../src/ui/state/mutations";
+import { useAppState } from "../../src/ui/state/useAppState";
+import { ImportExportPage } from "./pages/ImportExport";
+import { ProfilesPage } from "./pages/Profiles";
+import "./App.css";
+
+const mutations = createMutations({ validateRegex: isRegexSupported });
+const VERSION = browser.runtime.getManifest().version;
+
+const SECTIONS = [
+  { id: "profiles", label: copy.options.nav.profiles },
+  { id: "import-export", label: copy.options.nav.importExport },
+  { id: "site-access", label: copy.options.nav.siteAccess },
+  { id: "about", label: copy.options.nav.about },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
 export function App() {
-  return <main>headershim</main>;
+  const app = useAppState();
+  const section = useHashRoute();
+  const theme = app.phase === "ready" ? app.doc.settings.theme : "system";
+  // The token stylesheet follows the OS unless the stored theme stamps the
+  // root; System leaves it unset (tokens.css contract).
+  useEffect(() => {
+    if (theme === "system") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+  }, [theme]);
+
+  return (
+    <LiveRegionProvider>
+      <div class="options">
+        <header class="options-header">
+          <span class="wordmark">{copy.app.name}</span>
+          <span class="version mono">{copy.options.version(VERSION)}</span>
+        </header>
+        <div class="options-body">
+          <OptionsNav current={section} />
+          <main class="options-content">
+            {app.phase === "initializing" ? (
+              <div aria-busy="true" />
+            ) : app.phase === "newer-store" ? (
+              <EmptyState
+                message={copy.errors.newerStore(app.foundVersion, CURRENT)}
+              />
+            ) : section === "profiles" ? (
+              <ProfilesPage doc={app.doc} mutations={mutations} />
+            ) : section === "import-export" ? (
+              <ImportExportPage doc={app.doc} mutations={mutations} />
+            ) : (
+              <section class="page" aria-labelledby="page-title">
+                <h1 class="page-title" id="page-title">
+                  {SECTIONS.find((entry) => entry.id === section)?.label}
+                </h1>
+              </section>
+            )}
+          </main>
+        </div>
+      </div>
+    </LiveRegionProvider>
+  );
+}
+
+function OptionsNav({ current }: { current: SectionId }) {
+  const links = useRef<(HTMLAnchorElement | null)[]>([]);
+  const currentIndex = Math.max(
+    0,
+    SECTIONS.findIndex((entry) => entry.id === current),
+  );
+  const [roving, setRoving] = useState(currentIndex);
+
+  const moveTo = (index: number) => {
+    const target = Math.max(0, Math.min(index, SECTIONS.length - 1));
+    setRoving(target);
+    links.current[target]?.focus();
+  };
+
+  const onKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLElement>) => {
+    switch (event.key) {
+      case "ArrowDown":
+        moveTo(roving + 1);
+        break;
+      case "ArrowUp":
+        moveTo(roving - 1);
+        break;
+      case "Home":
+        moveTo(0);
+        break;
+      case "End":
+        moveTo(SECTIONS.length - 1);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  };
+
+  return (
+    <nav
+      class="options-nav"
+      aria-label={copy.options.nav.label}
+      onKeyDown={onKeyDown}
+    >
+      {SECTIONS.map((entry, index) => (
+        <a
+          key={entry.id}
+          href={`#${entry.id}`}
+          class="options-nav-link"
+          aria-current={entry.id === current ? "page" : undefined}
+          tabIndex={index === roving ? 0 : -1}
+          ref={(node) => {
+            links.current[index] = node;
+          }}
+          onFocus={() => setRoving(index)}
+        >
+          {entry.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function currentSection(): SectionId {
+  const id = window.location.hash.replace(/^#/, "");
+  return SECTIONS.some((entry) => entry.id === id)
+    ? (id as SectionId)
+    : SECTIONS[0].id;
+}
+
+function useHashRoute(): SectionId {
+  const [section, setSection] = useState<SectionId>(currentSection);
+  useEffect(() => {
+    const onChange = () => setSection(currentSection());
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return section;
 }

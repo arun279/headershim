@@ -35,14 +35,7 @@
 .chip-badge {
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-inner);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-data);
   font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #fff;
 }
 
 .chip.off .chip-badge {
