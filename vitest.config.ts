@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     // Unit and integration suites live under src/; the Playwright e2e specs in
     // e2e/ run on their own runner and must not be picked up here.
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/platform/test-setup.ts"],
     coverage: {
       provider: "v8",

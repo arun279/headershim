@@ -1,0 +1,47 @@
+/* 36x20 painted track inside a >=24px hit area (WCAG 2.5.8 target size). */
+.sw {
+  position: relative;
+  width: 36px;
+  height: 24px;
+  flex: none;
+  border-radius: 12px;
+  background: transparent;
+  padding: 0;
+}
+
+.sw::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--sw-off);
+  transition: background var(--t-fast);
+}
+
+.sw::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel-1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform var(--t-fast);
+}
+
+.sw[aria-checked="true"]::before {
+  background: var(--sw-on);
+}
+
+.sw[aria-checked="true"]::after {
+  transform: translateX(16px);
+}
+
+.sw:disabled {
+  cursor: default;
+}

@@ -1,0 +1,29 @@
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 400px;
+  padding: var(--sp-5);
+  background: var(--panel-1);
+  border-radius: var(--radius-outer);
+  box-shadow: var(--shadow-pop);
+}
+
+.modal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.modal-body {
+  margin-top: var(--sp-3);
+  font-size: 13px;
+  color: var(--ink);
+}

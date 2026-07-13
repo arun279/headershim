@@ -1,0 +1,67 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 30px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-outer);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.btn.primary {
+  background: var(--trace);
+  color: var(--trace-ink);
+}
+
+.btn.quiet {
+  background: var(--panel-0);
+  border: var(--hairline) solid var(--bezel-strong);
+  color: var(--ink);
+}
+
+/* Caution-outline: only ever used inside caution surfaces. */
+.btn.caution {
+  background: transparent;
+  border: var(--hairline) solid var(--caution);
+  color: var(--caution);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-inner);
+  color: var(--ink-mute);
+}
+
+.icon-btn:hover {
+  background: var(--panel-2);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 28px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-inner);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background: var(--panel-2);
+}
+
+.menu-item.destructive {
+  color: var(--caution);
+}
+
+.btn:disabled,
+.icon-btn:disabled,
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

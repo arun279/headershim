@@ -1,0 +1,28 @@
+/* Slides up over the footer, one at a time, self-dismissing (no close control). */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  max-width: 376px;
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+  box-shadow: var(--shadow-toast);
+}
+
+.toast-msg {
+  flex: 1;
+  font-size: 12px;
+}
+
+.toast-action {
+  flex: none;
+  min-height: 24px;
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
