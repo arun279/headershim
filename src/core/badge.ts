@@ -18,6 +18,11 @@ export type BadgeState =
 export interface BadgePlan {
   readonly state: BadgeState;
   readonly tabBadges: readonly TabBadgeText[];
+  // The toolbar button's tooltip. Only the paused state names itself (SPEC
+  // §4.4); every other state clears back to the manifest default_title. Lives
+  // here beside the badge glyphs, not in copy.ts, so the service worker never
+  // has to import the whole copy module (it blows the background size budget).
+  readonly title: string;
 }
 
 export interface BadgeInput {
@@ -41,12 +46,21 @@ const WHITE = "#FFFFFF";
 const PAUSED_FILL = "#6E7B88";
 const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
+// SPEC §4.4 verbatim paused tooltip; the only state that names itself.
+const PAUSED_TITLE = "headershim — paused";
 
-export function planBadge({
+export function planBadge(input: BadgeInput): BadgePlan {
+  return {
+    ...planFace(input),
+    title: input.status.kind === "paused" ? PAUSED_TITLE : "",
+  };
+}
+
+function planFace({
   doc,
   status,
   overrideTabIds,
-}: BadgeInput): BadgePlan {
+}: BadgeInput): Omit<BadgePlan, "title"> {
   if (status.kind === "paused") {
     return globalBadge(PAUSED_FILL);
   }
@@ -93,7 +107,7 @@ export function planBadge({
   };
 }
 
-function globalBadge(backgroundColor: string): BadgePlan {
+function globalBadge(backgroundColor: string): Omit<BadgePlan, "title"> {
   return {
     state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
     tabBadges: [],

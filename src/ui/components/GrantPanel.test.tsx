@@ -141,6 +141,25 @@ describe("GrantPanel — pattern/regex two-chip variant (§3.2)", () => {
     });
   });
 
+  it("moves focus to a surviving chip control when a middle target chip is removed", () => {
+    const ctx = mount({
+      scopeType: "pattern",
+      targetHosts: [],
+      editableTargets: true,
+      targetPrefill: ["a.acme.dev", "b.acme.dev", "c.acme.dev"],
+      initiator: { kind: "none" },
+    });
+    const xs = [
+      ...ctx.root.querySelectorAll(".grant-chip-x"),
+    ] as HTMLButtonElement[];
+    fire(() => xs[1]?.click());
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      copy.grantPanel.removeSite("c.acme.dev"),
+    );
+  });
+
   it("offers the buried all-sites escape hatch", () => {
     const ctx = mount({
       scopeType: "regex",

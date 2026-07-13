@@ -90,6 +90,7 @@ describe("planBadge precedence", () => {
         textColor: WHITE,
       },
       tabBadges: [],
+      title: "headershim — paused",
     });
   });
 
@@ -102,6 +103,7 @@ describe("planBadge precedence", () => {
         textColor: WHITE,
       },
       tabBadges: [],
+      title: "",
     });
   });
 
@@ -139,6 +141,7 @@ describe("planBadge precedence", () => {
           textColor: WHITE,
         },
         tabBadges: [],
+        title: "",
       },
     );
   });
@@ -161,6 +164,7 @@ describe("planBadge precedence", () => {
           { tabId: 4, text: "T" },
           { tabId: 9, text: "T" },
         ],
+        title: "",
       },
     );
   });
@@ -171,6 +175,7 @@ describe("planBadge precedence", () => {
     expect(planBadge(input({ doc: disabled, overrideTabIds: [4] }))).toEqual({
       state: { kind: "count", backgroundColor: NEUTRAL_GREY, textColor: WHITE },
       tabBadges: [],
+      title: "",
     });
   });
 });
@@ -244,6 +249,10 @@ describe("planBadge single-winner precedence across the input space", () => {
                         : NEUTRAL_GREY,
                 );
                 expect(plan.state.textColor).toBe(WHITE);
+
+                // Only the paused state names itself in the tooltip; every
+                // other winner clears back to the default title (SPEC §4.4).
+                expect(plan.title).toBe(paused ? "headershim — paused" : "");
               });
             }
           }

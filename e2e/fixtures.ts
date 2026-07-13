@@ -300,7 +300,7 @@ export async function grantAllSitesViaDetails(
   );
 }
 
-export async function toggleAllSitesViaDetails(
+async function toggleAllSitesViaDetails(
   context: BrowserContext,
   extensionId: string,
 ): Promise<void> {

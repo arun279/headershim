@@ -79,6 +79,15 @@ describe("requiredOrigins", () => {
     ]);
   });
 
+  it.each<Scope>([
+    { type: "pattern", pattern: "||example.com^", hosts: [] },
+    { type: "regex", regex: "^https://x/", hosts: [] },
+  ])("requires broad access for a %s rule that names no host (Chrome applies nothing without a grant)", (scope) => {
+    expect(requiredOrigins(rule(scope, ["xhr"], ["app.example.com"]))).toEqual([
+      ALL_SITES_ORIGIN,
+    ]);
+  });
+
   it("deduplicates target and initiator origin patterns", () => {
     expect(
       requiredOrigins(

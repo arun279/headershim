@@ -87,6 +87,9 @@ describe("options site access", () => {
     await settle();
 
     expectGranted(root, "api.example.com");
+    // The clicked row reparented to the granted group, unmounting its button;
+    // focus lands on the page heading, never <body> (WCAG 2.4.3).
+    expect(document.activeElement?.id).toBe("site-access-title");
   });
 
   it("lists a pattern rule's persisted hosts among needed origins", async () => {

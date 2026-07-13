@@ -6,6 +6,7 @@ import {
   originPatternForDomain,
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
+  validateUrlFilter,
 } from "./scope";
 
 describe("resource type expansion", () => {
@@ -58,6 +59,21 @@ describe("resource type expansion", () => {
     ]);
     expect(expandResourceTypes([])).toEqual([]);
   });
+
+  it("emits a multi-group subset in canonical DNR order, not UI-group order", () => {
+    // xhr+scripts in UI order would be [xmlhttprequest, script]; the compiler
+    // must emit DNR enum order so the reconcile round-trip compares equal to
+    // whatever order Chrome echoes back (C1-1).
+    expect(expandResourceTypes(["xhr", "scripts"])).toEqual([
+      "script",
+      "xmlhttprequest",
+    ]);
+    expect(expandResourceTypes(["media", "pages", "images"])).toEqual([
+      "main_frame",
+      "image",
+      "media",
+    ]);
+  });
 });
 
 describe("scope conditions", () => {
@@ -93,5 +109,26 @@ describe("origin patterns", () => {
     expect(originPatternForDomain("api.example.com")).toBe(
       "*://*.api.example.com/*",
     );
+  });
+});
+
+describe("urlFilter grammar", () => {
+  it.each([
+    "||example.com^",
+    "*://*/api/*",
+    "|https://x/*|",
+    "/path",
+  ])("accepts the Chrome-legal filter %s", (pattern) => {
+    expect(validateUrlFilter(pattern).ok).toBe(true);
+  });
+
+  it("rejects a non-ASCII filter (an unconverted IDN)", () => {
+    const result = validateUrlFilter("||exämple.com^");
+    expect(result).toEqual({ ok: false, error: "non-ascii" });
+  });
+
+  it("rejects a wildcard immediately after the domain anchor", () => {
+    const result = validateUrlFilter("||*.example.com");
+    expect(result).toEqual({ ok: false, error: "domain-anchor-wildcard" });
   });
 });

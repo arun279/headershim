@@ -133,13 +133,6 @@ export function cloneRule(doc: StateDoc, rule: Rule): [Rule, StateDoc] {
   return createRule(doc, rule);
 }
 
-export function importRule(
-  doc: StateDoc,
-  imported: RuleDraft,
-): [Rule, StateDoc] {
-  return createRule(doc, imported);
-}
-
 export function createProfile(draft: ProfileDraft): Profile {
   return {
     id: crypto.randomUUID(),

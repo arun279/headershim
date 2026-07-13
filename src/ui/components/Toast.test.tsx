@@ -53,4 +53,20 @@ describe("Toast", () => {
     vi.advanceTimersByTime(1000);
     expect(onDismiss).toHaveBeenCalledOnce();
   });
+
+  it("holds open with no auto-dismiss while persist keeps an action reachable", () => {
+    const onDismiss = vi.fn();
+    render(
+      <Toast
+        onDismiss={onDismiss}
+        persist
+        actionLabel="Undo"
+        onAction={() => {}}
+      >
+        Profile deleted
+      </Toast>,
+    );
+    vi.advanceTimersByTime(60_000);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
 });

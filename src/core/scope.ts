@@ -1,4 +1,5 @@
 import type { ResourceGroup, Rule, Scope } from "./model";
+import { err, ok, type Result } from "./result";
 
 export const DNR_RESOURCE_TYPES = [
   "main_frame",
@@ -42,13 +43,15 @@ export interface ScopeCondition {
 export function expandResourceTypes(
   resourceTypes: Rule["resourceTypes"],
 ): DnrResourceType[] {
-  return resourceTypes === "all"
-    ? [...DNR_RESOURCE_TYPES]
-    : [
-        ...new Set(
-          resourceTypes.flatMap((group) => RESOURCE_TYPES_BY_GROUP[group]),
-        ),
-      ];
+  if (resourceTypes === "all") {
+    return [...DNR_RESOURCE_TYPES];
+  }
+  // Emit in canonical DNR enum order so the reconcile round-trip compares equal
+  // to whatever order Chrome echoes back, independent of UI group order.
+  const selected = new Set(
+    resourceTypes.flatMap((group) => RESOURCE_TYPES_BY_GROUP[group]),
+  );
+  return DNR_RESOURCE_TYPES.filter((type) => selected.has(type));
 }
 
 export function scopeCondition(scope: Scope): ScopeCondition {
@@ -66,4 +69,25 @@ export function scopeCondition(scope: Scope): ScopeCondition {
 
 export function originPatternForDomain(domain: string): string {
   return `*://*.${domain}/*`;
+}
+
+export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
+
+// A non-empty urlFilter that breaks Chrome's grammar is not rejected per-rule —
+// updateDynamicRules fails the whole atomic batch, freezing the live ruleset at
+// the last-good revision. Gate the two forms Chrome refuses (a non-ASCII filter,
+// and a domain anchor immediately followed by a wildcard) at save and enable so
+// one bad pattern can never take the batch down.
+export function validateUrlFilter(
+  pattern: string,
+): Result<void, UrlFilterError> {
+  // Any code unit at or above U+0080 is non-ASCII (astral chars surface as
+  // surrogates, also >= U+0080), so this flags exactly the > 0x7f case.
+  if (/[\u0080-\uffff]/.test(pattern)) {
+    return err("non-ascii");
+  }
+  if (pattern.startsWith("||*")) {
+    return err("domain-anchor-wildcard");
+  }
+  return ok(undefined);
 }

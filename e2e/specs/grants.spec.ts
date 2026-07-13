@@ -12,7 +12,6 @@ import {
   seedStateAndWait,
   stateWithRules,
   test,
-  toggleAllSitesViaDetails,
 } from "../fixtures";
 
 const HEADER = "x-headershim-grant-edge";
@@ -82,7 +81,15 @@ test("adding initiator access activates a destination-granted rule without a rew
   expect(beforeGrant.status).toBe(200);
   expect(beforeGrant.requestHeaders).not.toHaveProperty(HEADER);
 
-  await toggleAllSitesViaDetails(context, extensionId);
+  const granted = await grantAllSitesViaDetails(
+    context,
+    extensionId,
+    serviceWorker,
+  );
+  // Gate on the grant landing (an independent permissions signal), not on the
+  // header itself — folding the on-wire check into the skip would let a
+  // grant-lands-but-DNR-stops-applying regression report as an env-skip.
+  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
 
   // The next operation after the permission transition is the request itself:
   // no permission query, storage write, rule toggle, or extension-page reload
@@ -90,10 +97,6 @@ test("adding initiator access activates a destination-granted rule without a rew
   const afterGrant = await fetchEcho(
     page,
     `${echoServers.h1CrossUrl}/echo.json?permission=after`,
-  );
-  test.skip(
-    afterGrant.requestHeaders[HEADER] !== VALUE,
-    ON_WIRE_GRANT_UNAVAILABLE,
   );
   expect(afterGrant.status).toBe(200);
   expect(afterGrant.requestHeaders[HEADER]).toBe(VALUE);

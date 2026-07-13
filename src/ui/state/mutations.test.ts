@@ -293,6 +293,71 @@ describe("setRuleEnabled", () => {
   });
 });
 
+// SEC1-1: header grammar and urlFilter grammar are re-checked whenever a stored
+// rule enters the enabled set. An imported (untrusted) rule can carry a CRLF
+// value, a pseudo-header name, or a urlFilter Chrome rejects — stored disabled
+// and structurally indistinguishable from a user-disabled one — so the enable
+// gesture, on every path, is the last gate before the compiler.
+describe("enable-path grammar re-validation", () => {
+  it.each<[string, Partial<Rule>, MutationError["kind"]]>([
+    ["a CRLF header value", { value: "a\r\nb" }, "value-line-break"],
+    ["a pseudo-header name", { header: ":authority" }, "name-not-modifiable"],
+    [
+      "a non-ASCII url pattern",
+      { scope: { type: "pattern", pattern: "||exämple.com^", hosts: [] } },
+      "pattern-invalid",
+    ],
+    [
+      "a wildcard-after-anchor url pattern",
+      { scope: { type: "pattern", pattern: "||*", hosts: [] } },
+      "pattern-invalid",
+    ],
+  ])("setRuleEnabled refuses %s and leaves the doc untouched", async (_label, overrides, kind) => {
+    const invalid = rule({ enabled: false, ...overrides });
+    const doc = await seed([profile("p1", { rules: [invalid] })]);
+
+    expect(
+      errorKind(await mutations.setRuleEnabled("p1", invalid.id, true)),
+    ).toBe(kind);
+    expect(await read()).toEqual(doc);
+  });
+
+  it("setRulesEnabled refuses a bad rule entering the batch", async () => {
+    const invalid = rule({ enabled: false, value: "a\r\nb" });
+    const doc = await seed([profile("p1", { rules: [invalid] })]);
+
+    expect(
+      errorKind(await mutations.setRulesEnabled("p1", [invalid.id], true)),
+    ).toBe("value-line-break");
+    expect(await read()).toEqual(doc);
+  });
+
+  it("setProfileEnabled refuses a profile carrying a bad enabled rule", async () => {
+    const invalid = rule({ header: ":authority" });
+    const doc = await seed([
+      profile("p1", { rules: [invalid], enabled: false }),
+    ]);
+
+    expect(errorKind(await mutations.setProfileEnabled("p1", true))).toBe(
+      "name-not-modifiable",
+    );
+    expect(await read()).toEqual(doc);
+  });
+
+  it("moveRulesToProfile re-checks a rule crossing into an enabled profile", async () => {
+    const invalid = rule({ value: "a\r\nb" });
+    const doc = await seed([
+      profile("p1", { rules: [invalid], enabled: false }),
+      profile("p2", { rules: [], enabled: true }),
+    ]);
+
+    expect(
+      errorKind(await mutations.moveRulesToProfile("p1", [invalid.id], "p2")),
+    ).toBe("value-line-break");
+    expect(await read()).toEqual(doc);
+  });
+});
+
 describe("bulk rule actions", () => {
   it("enables and disables the named rules in one commit", async () => {
     const a = rule({ enabled: false });

@@ -1,5 +1,6 @@
 import { useId, useState } from "preact/hooks";
 import type { ResourceGroup, Scope } from "../../core/model";
+import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { sentence } from "./sentence";
 import "./ScopeEditor.css";
@@ -182,7 +183,10 @@ function DomainChips(props: ScopeEditorProps) {
               type="button"
               class="domain-chip-x"
               aria-label={copy.editor.removeDomain(domain)}
-              onClick={() => removeChip(domain)}
+              onClick={(event) => {
+                focusOnRemoval(event.currentTarget);
+                removeChip(domain);
+              }}
             >
               ✕
             </button>
@@ -261,7 +265,7 @@ function ResourceTypes({
           type="button"
           class="disclosure"
           aria-expanded={open}
-          aria-controls={`${id}-panel`}
+          aria-controls={open ? `${id}-panel` : undefined}
           onClick={() => setOpen((current) => !current)}
         >
           {typesSummary(resourceTypes)} <span aria-hidden="true">▾</span>

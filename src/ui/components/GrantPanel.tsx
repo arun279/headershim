@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Scope } from "../../core/model";
+import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { Button } from "./Button";
 import "./GrantPanel.css";
@@ -84,6 +85,7 @@ export function GrantPanel(props: GrantPanelProps) {
     <fieldset
       class="grant-panel"
       ref={rootRef}
+      aria-labelledby={`${id}-intro`}
       data-variant={pattern ? "pattern" : "domains"}
       onKeyDown={(event) => {
         if (event.key !== "Enter" || event.defaultPrevented) {
@@ -104,7 +106,9 @@ export function GrantPanel(props: GrantPanelProps) {
     >
       {pattern ? (
         <>
-          <p class="grant-line">{copy.grantPanel.patternIntro}</p>
+          <p class="grant-line" id={`${id}-intro`}>
+            {copy.grantPanel.patternIntro}
+          </p>
           <ChipField
             id={`${id}-targets`}
             label={copy.grantPanel.targetsQuestion}
@@ -132,7 +136,7 @@ export function GrantPanel(props: GrantPanelProps) {
         </>
       ) : (
         <>
-          <p class="grant-line">
+          <p class="grant-line" id={`${id}-intro`}>
             {props.targetHosts.length === 1 ? (
               copy.grantPanel.single(props.targetHosts[0] as string)
             ) : (
@@ -244,7 +248,10 @@ function ChipField({ id, label, inputLabel, hosts, onChange }: ChipFieldProps) {
               type="button"
               class="grant-chip-x"
               aria-label={copy.grantPanel.removeSite(host)}
-              onClick={() => remove(host)}
+              onClick={(event) => {
+                focusOnRemoval(event.currentTarget);
+                remove(host);
+              }}
             >
               ✕
             </button>

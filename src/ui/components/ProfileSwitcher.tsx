@@ -98,7 +98,7 @@ export function ProfileSwitcher({
           </span>
           {profile.name}
           {!profile.enabled && (
-            <span class="offtag" aria-hidden="true">
+            <span class="silk" aria-hidden="true">
               {copy.profiles.offTag}
             </span>
           )}

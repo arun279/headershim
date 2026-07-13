@@ -21,6 +21,9 @@ export function installDnr() {
     updateSessionRules: vi.fn((options: UpdateRulesOptions) =>
       fake.updateSessionRules(options),
     ),
+    // The background re-validates every enabled regex against RE2 before it
+    // compiles, so the reconcile pass needs this seam wired too.
+    isRegexSupported: vi.fn((regex: string) => fake.isRegexSupported(regex)),
   };
   Object.assign(fakeBrowser.declarativeNetRequest, handlers);
   return { fake, ...handlers };

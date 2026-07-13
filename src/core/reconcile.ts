@@ -15,19 +15,22 @@ export function normalize(rules: DnrRule[]): DnrRule[] {
       type: rule.action.type,
     },
     condition: {
+      // Order-insensitive arrays are sorted so a per-rule stringify compare is
+      // stable however Chrome canonicalizes them on readback (header
+      // modifications are NOT sorted — append order is meaningful).
       ...(rule.condition.initiatorDomains === undefined
         ? {}
-        : { initiatorDomains: [...rule.condition.initiatorDomains] }),
+        : { initiatorDomains: [...rule.condition.initiatorDomains].sort() }),
       ...(rule.condition.regexFilter === undefined
         ? {}
         : { regexFilter: rule.condition.regexFilter }),
       ...(rule.condition.requestDomains === undefined
         ? {}
-        : { requestDomains: [...rule.condition.requestDomains] }),
-      resourceTypes: [...rule.condition.resourceTypes],
+        : { requestDomains: [...rule.condition.requestDomains].sort() }),
+      resourceTypes: [...rule.condition.resourceTypes].sort(),
       ...(rule.condition.tabIds === undefined
         ? {}
-        : { tabIds: [...rule.condition.tabIds] }),
+        : { tabIds: [...rule.condition.tabIds].sort((a, b) => a - b) }),
       ...(rule.condition.urlFilter === undefined
         ? {}
         : { urlFilter: rule.condition.urlFilter }),

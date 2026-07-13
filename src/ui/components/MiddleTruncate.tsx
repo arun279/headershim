@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import "./MiddleTruncate.css";
 
 /**
  * Splits in the middle so both ends stay visible ("Bearer eyJhbGci…J9.sflKx") —
@@ -63,12 +64,22 @@ export function MiddleTruncate({
   }, [maxChars, value]);
 
   const display = fit !== undefined ? truncateMiddle(value, fit) : value;
+  const truncated = display !== value;
 
-  // The full value shows on hover via `title`; the owning row exposes it to
-  // assistive tech as its accessible description (DESIGN §1.2 / §4.1).
+  // The full value shows on hover via `title` and to assistive tech via the
+  // owning row's accessible description; when truncated it is also carried in a
+  // hidden node the focused row reveals inline, so a sighted keyboard user gets
+  // the tooltip-style readout on focus too (DESIGN §1.2 / §4.1).
   return (
     <span ref={ref} class={className} title={value}>
-      {display}
+      {truncated ? (
+        <>
+          <span class="mt-clip">{display}</span>
+          <span class="mt-full">{value}</span>
+        </>
+      ) : (
+        value
+      )}
     </span>
   );
 }

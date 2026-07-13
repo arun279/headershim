@@ -1,5 +1,6 @@
 import { useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
+import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
   BADGE_COLORS,
   type Profile,
@@ -7,6 +8,7 @@ import {
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
+import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
@@ -43,6 +45,14 @@ export function ProfilesPage({
   const [toast, setToast] = useState<string | undefined>(undefined);
   const [undo, setUndo] = useState<Undo | undefined>(undefined);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const announce = useAnnounce();
+  // A freshly mounted role=status toast is not reliably re-announced, so every
+  // toast also speaks through the persistent polite region.
+  const showToast = (message: string) => {
+    setToast(message);
+    announce(message);
+  };
 
   const open =
     doc.profiles.find((profile) => profile.id === openId) ??
@@ -54,10 +64,20 @@ export function ProfilesPage({
     return null;
   }
 
+  // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap
+  // (SPEC §2 limits); the count mirrors the enabled set the cap governs.
+  const enabledRuleCount = doc.profiles
+    .filter((profile) => profile.enabled)
+    .reduce(
+      (total, profile) =>
+        total + profile.rules.filter((rule) => rule.enabled).length,
+      0,
+    );
+
   const flash = (error: MutationError) => {
     const message = blockedCommitCopy(error);
     if (message !== undefined) {
-      setToast(message);
+      showToast(message);
     }
   };
 
@@ -116,7 +136,11 @@ export function ProfilesPage({
         return;
       }
       setUndo({ kind: "profile", ...outcome.value });
-      setToast(copy.toast.profileDeleted(profile.name));
+      showToast(copy.toast.profileDeleted(profile.name));
+      // The confirm modal restored focus to the now-unmounting profile card's
+      // Delete button; land it on the stable page heading instead of <body>
+      // (WCAG 2.4.3).
+      titleRef.current?.focus();
     });
   };
 
@@ -131,7 +155,7 @@ export function ProfilesPage({
         profileId: open.id,
         removed: outcome.value.removed,
       });
-      setToast(copy.toast.rulesDeleted(outcome.value.removed.length));
+      showToast(copy.toast.rulesDeleted(outcome.value.removed.length));
     });
   };
 
@@ -145,20 +169,33 @@ export function ProfilesPage({
         : mutations.restoreRules(undo.profileId, undo.removed);
     void mutation.then((outcome) => {
       setUndo(undefined);
-      setToast(
-        outcome.ok
-          ? undefined
-          : (blockedCommitCopy(outcome.error) ?? undefined),
-      );
+      const message = outcome.ok ? undefined : blockedCommitCopy(outcome.error);
+      if (message === undefined) {
+        setToast(undefined);
+      } else {
+        showToast(message);
+      }
     });
   };
 
   return (
     <section class="page" aria-labelledby="profiles-title">
       <div class="page-head">
-        <h1 class="page-title" id="profiles-title">
-          {copy.options.profiles.title}
-        </h1>
+        <div>
+          <h1
+            class="page-title"
+            id="profiles-title"
+            ref={titleRef}
+            tabIndex={-1}
+          >
+            {copy.options.profiles.title}
+          </h1>
+          {shouldShowRuleCountWarning(enabledRuleCount) && (
+            <p class="rule-counter">
+              {copy.errors.ruleCounter(enabledRuleCount)}
+            </p>
+          )}
+        </div>
         <Button kind="primary" onClick={create}>
           {copy.options.profiles.new}
         </Button>
@@ -227,6 +264,10 @@ export function ProfilesPage({
       {toast !== undefined && (
         <Toast
           onDismiss={() => setToast(undefined)}
+          // While an undo is live the toast holds open (no 6s timer), so the
+          // Undo control stays reachable until the next mutation retires it —
+          // the options page's persistent-undo affordance (SPEC §9, WCAG 2.2.1).
+          persist={undo !== undefined}
           actionLabel={undo !== undefined ? copy.actions.undo : undefined}
           onAction={undo !== undefined ? runUndo : undefined}
         >

@@ -4,7 +4,6 @@ import {
   cloneRule,
   createProfile,
   createRule,
-  importRule,
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
@@ -65,7 +64,7 @@ describe("rule allocation", () => {
       enabled: false,
     });
     const [cloned, afterClone] = cloneRule(afterSecond, first);
-    const [imported, afterImport] = importRule(afterClone, {
+    const [imported, afterImport] = createRule(afterClone, {
       ...baseDraft,
       scope: {
         type: "regex",

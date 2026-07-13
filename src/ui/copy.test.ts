@@ -138,4 +138,93 @@ describe("copy", () => {
       copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
     ).toBe("api.example.com grant removed — all-sites access still covers it");
   });
+
+  // A global guard on the SPEC §8 voice rules and the naming rule (line 27), so
+  // a new string can't ship an exclamation, emoji, apology-as-decoration, or a
+  // competitor/vendor/incident name without a test going red. Function-valued
+  // copy is resolved with sample args of every shape to reach its branches.
+  it("holds the copy voice and naming invariants for every reachable string", () => {
+    const sampleArgs: readonly unknown[][] = [
+      ["api.example.com", 2, 1],
+      [2, "api.example.com", 1],
+      [4120, 4500],
+      [1, 1, 0],
+      [3, 2, 1],
+      ["QA roles"],
+      ["x-custom-token"],
+      ["2026-07-12 14:03 UTC"],
+      [true, true],
+      [false, false],
+      [1],
+      [0],
+    ];
+
+    const strings: string[] = [];
+    const collect = (value: unknown): void => {
+      if (typeof value === "string") {
+        strings.push(value);
+      } else if (Array.isArray(value)) {
+        for (const part of value) {
+          if (part !== null && typeof part === "object" && "data" in part) {
+            collect((part as { data: unknown }).data);
+          } else {
+            collect(part);
+          }
+        }
+      } else if (typeof value === "function") {
+        for (const args of sampleArgs) {
+          try {
+            collect((value as (...a: unknown[]) => unknown)(...args));
+          } catch {
+            // A sample tuple that doesn't fit this signature; another will.
+          }
+        }
+      } else if (value !== null && typeof value === "object") {
+        for (const child of Object.values(value)) {
+          collect(child);
+        }
+      }
+    };
+    collect(copy);
+
+    // A representative, not exhaustive, denylist of header-extension
+    // competitors and notable extension incidents. "ModHeader" is the sole
+    // sanctioned name (SPEC line 27) and is checked separately below.
+    const denylist = [
+      "requestly",
+      "header editor",
+      "simple modify headers",
+      "modify header value",
+      "the great suspender",
+      "dataspii",
+      "nano adblocker",
+      "nano defender",
+      "stylish",
+      "hola",
+    ];
+
+    expect(strings.length).toBeGreaterThan(100);
+    for (const text of strings) {
+      const lower = text.toLowerCase();
+      expect(text, `exclamation mark in: ${text}`).not.toContain("!");
+      expect(text, `emoji in: ${text}`).not.toMatch(
+        /\p{Extended_Pictographic}/u,
+      );
+      expect(lower, `apology-as-decoration in: ${text}`).not.toMatch(
+        /oops|uh-oh/,
+      );
+      for (const name of denylist) {
+        expect(
+          lower,
+          `competitor/incident name "${name}" in: ${text}`,
+        ).not.toContain(name);
+      }
+      // ModHeader is allowed only as an import/export format label (§7.2).
+      if (lower.includes("modheader")) {
+        expect(lower, `ModHeader outside import context: ${text}`).toMatch(
+          /import|export/,
+        );
+      }
+    }
+  });
 });

@@ -56,7 +56,10 @@ export function checkEnabledRuleLimits(
 
 export function checkSessionOverrideLimit(
   candidateCount: number,
-): Result<void, LimitError> {
+): Result<
+  void,
+  Extract<LimitError, { kind: "session-override-limit-exceeded" }>
+> {
   return candidateCount <= MAX_SESSION_OVERRIDES
     ? ok(undefined)
     : err({

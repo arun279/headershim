@@ -91,11 +91,17 @@ test("cross-tab confinement holds regardless of open same-origin and cross-origi
   expect(rules[0]?.condition.tabIds).toEqual([firstTabId]);
 });
 
-test("a cross-site navigation ends the override and it stays ended across an A→B→A round trip", async ({
+test("a navigation with no visible url drains the override and it stays ended across a round trip", async ({
   context,
   echoServers,
   serviceWorker,
 }) => {
+  // Headless without an activeTab grant, tab.url is undefined on every
+  // onUpdated, so enforceOverrideLifetime prunes on every navigation. This spec
+  // therefore proves the drain-and-stay-drained lifecycle, not the
+  // same-site-keeps vs cross-site-drops distinction — that distinction is owned
+  // by the unit test in src/test/background.test.ts, which can feed a visible
+  // same-origin url and assert the row survives.
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/a`);
   const tabId = await activeTabId(serviceWorker);
@@ -103,8 +109,7 @@ test("a cross-site navigation ends the override and it stays ended across an A�
 
   await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
 
-  // A → B (cross-site): the row is deleted on the cross-origin hop (§3), which
-  // drains the session band.
+  // A → B: the row is pruned on the hop, draining the session band.
   await page.goto(`${echoServers.h1CrossUrl}/b`);
   await expect
     .poll(async () => (await getSessionRules(serviceWorker)).length)
@@ -175,10 +180,10 @@ test("a granted This-tab override modifies a same-origin request", async ({
     .poll(async () => (await getSessionRules(serviceWorker)).length)
     .toBe(1);
 
+  // Gate only on the grant landing; asserting the header unconditionally so a
+  // granted-but-not-applied regression fails instead of self-skipping.
+  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
+
   const result = await fetchEcho(page, `${echoServers.h1Url}/echo.json`);
-  test.skip(
-    !granted || result.requestHeaders["x-headershim-this-tab"] !== "session",
-    ON_WIRE_GRANT_UNAVAILABLE,
-  );
   expect(result.requestHeaders["x-headershim-this-tab"]).toBe("session");
 });

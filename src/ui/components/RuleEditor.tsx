@@ -376,6 +376,8 @@ function mapError(
             ? copy.errors.regexOversize
             : copy.errors.regexInvalid,
       };
+    case "pattern-invalid":
+      return { scope: copy.errors.patternInvalid };
     case "scope-empty":
       return { scope: copy.errors.scopeEmpty[scopeType] };
     case "enabled-rule-limit-exceeded":

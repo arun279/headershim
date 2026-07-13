@@ -5,6 +5,7 @@ import type {
   RuleDraft,
   TabOverride,
 } from "../../core/model";
+import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import {
   type HeaderFieldError,
@@ -138,7 +139,10 @@ function OverrideRow({
         type="button"
         class="icon-btn this-tab-remove"
         aria-label={copy.thisTab.remove(override.header)}
-        onClick={onRemove}
+        onClick={(event) => {
+          focusOnRemoval(event.currentTarget);
+          onRemove();
+        }}
       >
         ✕
       </button>
@@ -261,15 +265,9 @@ function Composer({
 function mapError(error: SessionMutationError): Errors {
   // A session override can only fail header validation or the session cap; the
   // dynamic store's rule/regex/byte caps never gate this write path.
-  switch (error.kind) {
-    case "session-override-limit-exceeded":
-    case "enabled-rule-limit-exceeded":
-    case "regex-rule-limit-exceeded":
-    case "doc-byte-limit-exceeded":
-      return { add: copy.errors.sessionCap };
-    default:
-      return headerErrorToFieldError(error);
-  }
+  return error.kind === "session-override-limit-exceeded"
+    ? { add: copy.errors.sessionCap }
+    : headerErrorToFieldError(error);
 }
 
 /** The rule draft a promoted temporary row seeds the editor with (SPEC §3.5). */

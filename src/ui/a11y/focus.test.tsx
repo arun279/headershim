@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { useRef } from "preact/hooks";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { render } from "../test/render";
-import { getFocusable, useFocusTrap } from "./focus";
+import { focusOnRemoval, getFocusable, useFocusTrap } from "./focus";
 
 describe("getFocusable", () => {
   it("collects enabled, tabbable elements in document order", () => {
@@ -19,6 +19,62 @@ describe("getFocusable", () => {
     expect(
       getFocusable(root).map((el) => el.textContent?.trim() || el.tagName),
     ).toEqual(["a", "b", "INPUT", "d"]);
+  });
+});
+
+describe("focusOnRemoval", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function anchor(html: string, ariaLabel: string): HTMLElement {
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.append(host);
+    return host.querySelector(`[aria-label="${ariaLabel}"]`) as HTMLElement;
+  }
+
+  const label = () => document.activeElement?.getAttribute("aria-label");
+
+  it("hands focus to the next chip's control when a middle chip goes", () => {
+    focusOnRemoval(
+      anchor(
+        `<div class="domain-chips">
+          <span class="domain-chip"><button aria-label="a">x</button></span>
+          <span class="domain-chip"><button aria-label="b">x</button></span>
+          <input aria-label="add" />
+        </div>`,
+        "a",
+      ),
+    );
+    expect(label()).toBe("b");
+  });
+
+  it("falls back to the group input when the last chip goes", () => {
+    focusOnRemoval(
+      anchor(
+        `<div class="grant-chips">
+          <span class="grant-chip"><button aria-label="a">x</button></span>
+          <input aria-label="add" />
+        </div>`,
+        "a",
+      ),
+    );
+    expect(label()).toBe("add");
+  });
+
+  it("lands on the enclosing landmark when the whole group unmounts", () => {
+    focusOnRemoval(
+      anchor(
+        `<main tabindex="-1">
+          <ul class="this-tab-rows">
+            <li><button aria-label="only">x</button></li>
+          </ul>
+        </main>`,
+        "only",
+      ),
+    );
+    expect(document.activeElement?.tagName).toBe("MAIN");
   });
 });
 

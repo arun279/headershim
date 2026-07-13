@@ -24,7 +24,12 @@ export interface OverrideDraft {
   readonly value?: string;
 }
 
-export type SessionMutationError = LimitError | HeaderValidationError;
+// addOverride can fail only on the session-override cap or header validation;
+// the dynamic store's rule/regex/byte caps never gate this write path, so they
+// stay out of the type (and out of ThisTab's error mapping).
+export type SessionMutationError =
+  | Extract<LimitError, { kind: "session-override-limit-exceeded" }>
+  | HeaderValidationError;
 
 export function addOverride(
   tabId: number,

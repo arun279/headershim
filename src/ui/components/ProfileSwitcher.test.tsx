@@ -64,8 +64,8 @@ describe("ProfileSwitcher", () => {
 
   it("shows the silkscreen off tag only on disabled profiles", () => {
     const { chips } = mount();
-    expect(chips[0]?.querySelector(".offtag")).toBeNull();
-    expect(chips[2]?.querySelector(".offtag")?.textContent).toBe("off");
+    expect(chips[0]?.querySelector(".silk")).toBeNull();
+    expect(chips[2]?.querySelector(".silk")?.textContent).toBe("off");
     expect(chips[2]?.classList.contains("off")).toBe(true);
   });
 

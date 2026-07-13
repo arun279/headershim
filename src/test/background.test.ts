@@ -6,6 +6,7 @@ import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
 import {
   createProfile,
   createRule,
+  type Rule,
   type RuleDraft,
   type StateDoc,
 } from "../core/model";
@@ -543,6 +544,7 @@ describe("background lifecycle", () => {
     });
     await settle();
     const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+    const setTitle = vi.spyOn(browser.action, "setTitle");
     const setOptions = vi.spyOn(
       browser.declarativeNetRequest,
       "setExtensionActionOptions",
@@ -555,6 +557,7 @@ describe("background lifecycle", () => {
       displayActionCountAsBadgeText: false,
     });
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
+    expect(setTitle).toHaveBeenCalledWith({ title: "headershim — paused" });
     expect(await browser.action.getBadgeText({})).toBe("");
   });
 
@@ -643,5 +646,63 @@ describe("background lifecycle", () => {
       false,
       false,
     ]);
+  });
+
+  // The next-profile command writes state without the commit guard, so an
+  // imported disabled profile can carry an enabled rule Chrome rejects (a bad
+  // urlFilter, a CRLF value) that would sink the whole atomic batch when the
+  // command enables it. The reconcile drops that one rule from the compiled set,
+  // so the profile's other rules still apply and the ruleset never freezes.
+  it("drops an invalid rule enabled by the next-profile command instead of freezing the batch", async () => {
+    start();
+    const seed = createV1Seed();
+    const shell = createProfile({
+      name: "Imported",
+      badgeText: "IM",
+      color: "plum",
+      enabled: false,
+    });
+    const good: Rule = {
+      id: "good",
+      num: 8001,
+      direction: "request",
+      operation: "set",
+      header: "x-good",
+      value: "1",
+      scope: { type: "domains", domains: ["example.com"] },
+      resourceTypes: "all",
+      initiators: [],
+      enabled: true,
+    };
+    const bad: Rule = {
+      ...good,
+      id: "bad",
+      num: 8002,
+      header: "x-bad",
+      scope: { type: "pattern", pattern: "||*", hosts: [] },
+    };
+    const imported = { ...shell, rules: [good, bad] };
+    await writeState({
+      ...seed,
+      profiles: [...seed.profiles, imported],
+      nextRuleNum: 8003,
+    });
+    await settle();
+
+    await triggerCommand("next-profile");
+    await settle();
+
+    const doc = await readState();
+    // The command enables the profile and preserves both rules on disk …
+    expect(doc.profiles.at(-1)?.enabled).toBe(true);
+    expect(doc.profiles.at(-1)?.rules.map((rule) => rule.id)).toEqual([
+      "good",
+      "bad",
+    ]);
+    // … but only the compilable rule reaches Chrome, so the batch reconciles.
+    expect((await dnr.fake.getDynamicRules()).map((rule) => rule.id)).toEqual([
+      good.num,
+    ]);
+    expect(await getReconcileError()).toBe(false);
   });
 });

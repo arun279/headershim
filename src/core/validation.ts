@@ -1,22 +1,8 @@
-import type {
-  BadgeColor,
-  Direction,
-  HeaderOp,
-  ResourceGroup,
-  Rule,
-  Scope,
-} from "./model";
+import type { Direction, HeaderOp, ResourceGroup, Rule, Scope } from "./model";
 
-export const BADGE_COLORS: readonly BadgeColor[] = [
-  "indigo",
-  "blue",
-  "teal",
-  "green",
-  "plum",
-  "magenta",
-  "crimson",
-  "slate",
-];
+// Single source of truth lives in model.ts (source of the BadgeColor type);
+// re-exported here so schema/codec validators keep one import hub.
+export { BADGE_COLORS } from "./model";
 
 export const DIRECTIONS: readonly Direction[] = ["request", "response"];
 export const HEADER_OPERATIONS: readonly HeaderOp[] = [

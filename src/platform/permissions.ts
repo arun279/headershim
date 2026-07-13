@@ -1,12 +1,6 @@
 import { browser } from "wxt/browser";
 import { type GrantSnapshot, isAllSitesOrigin } from "../core/grants";
 
-export interface HostAccessRequest {
-  documentId?: string;
-  pattern?: string;
-  tabId?: number;
-}
-
 export async function snapshot(): Promise<GrantSnapshot> {
   const granted = await browser.permissions.getAll();
   const origins = granted.origins ?? [];
@@ -15,10 +9,6 @@ export async function snapshot(): Promise<GrantSnapshot> {
     // Broad grants need an explicit flag because core containment is domain-based.
     allSites: origins.some(isAllSitesOrigin),
   };
-}
-
-export function contains(origins: string[]): Promise<boolean> {
-  return browser.permissions.contains({ origins });
 }
 
 export function request(origins: string[]): Promise<boolean> {
@@ -37,14 +27,4 @@ export function onChanged(callback: () => void): () => void {
     browser.permissions.onAdded.removeListener(listener);
     browser.permissions.onRemoved.removeListener(listener);
   };
-}
-
-export function addHostAccessRequest(
-  request: HostAccessRequest,
-): Promise<void> {
-  const addRequest = browser.permissions.addHostAccessRequest;
-  if (typeof addRequest !== "function") {
-    return Promise.resolve();
-  }
-  return addRequest(request);
 }

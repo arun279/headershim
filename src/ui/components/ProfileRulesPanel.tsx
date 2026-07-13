@@ -28,6 +28,7 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [moving, setMoving] = useState(false);
   const selectAll = useRef<HTMLInputElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
 
   const ruleIds = profile.rules.map((rule) => rule.id);
@@ -63,9 +64,22 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
     setMoving(false);
   };
 
+  // Picking a move target unmounts the target picker (and the moved rows), so
+  // focus would fall to <body>; the panel heading is the stable anchor (WCAG
+  // 2.4.3). tabindex=-1 makes it programmatically focusable without a tab stop.
+  const moveTo = (toProfileId: string) => {
+    act(() => props.onMove(chosen, toProfileId));
+    heading.current?.focus();
+  };
+
   return (
     <section class="rules-panel" aria-labelledby={headingId}>
-      <h2 class="silk rules-panel-label" id={headingId}>
+      <h2
+        class="silk rules-panel-label"
+        id={headingId}
+        ref={heading}
+        tabIndex={-1}
+      >
         {copy.options.rules.sectionLabel(profile.name)}
       </h2>
       {profile.rules.length === 0 ? (
@@ -122,7 +136,7 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
                   key={target.id}
                   kind="quiet"
                   label={copy.options.rules.moveTo(target.name)}
-                  onClick={() => act(() => props.onMove(chosen, target.id))}
+                  onClick={() => moveTo(target.id)}
                 >
                   {target.name}
                 </Button>

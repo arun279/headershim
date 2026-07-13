@@ -27,6 +27,7 @@ import {
 } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { migrate } from "../../core/schema";
+import { validateUrlFilter } from "../../core/scope";
 import { locked, readRaw, write } from "../../platform/store";
 
 /**
@@ -44,6 +45,7 @@ export type MutationError =
       readonly regex: string;
       readonly reason: unknown;
     }
+  | { readonly kind: "pattern-invalid" }
   | { readonly kind: "scope-empty" }
   | { readonly kind: "profile-name-unavailable"; readonly name: string }
   | { readonly kind: "not-found" }
@@ -84,10 +86,13 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
   // Cap checks run on every mutation that grows the enabled set or its regex
   // subset; shrinking mutations must never be blocked by a doc already at the
-  // boundary. Regex scopes are re-validated whenever a rule enters the enabled
-  // set — an imported RE2-invalid rule is stored disabled and indistinguishable
-  // from a user-disabled one, so the enable gesture is the last safe gate
-  // before the compiler would hand Chrome an invalid pattern.
+  // boundary. Header grammar and pattern/regex scopes are re-validated whenever
+  // a rule enters the enabled set — an imported rule (an untrusted writer) can
+  // carry a name/value that fails validateHeader's HTTP-token/CRLF grammar, an
+  // RE2-invalid regex, or a urlFilter Chrome's grammar rejects, stored disabled
+  // and indistinguishable from a user-disabled one, so the enable gesture is the
+  // last safe gate before the compiler would hand Chrome a rule whose update
+  // rejects the whole atomic batch.
   async function guardCommit(
     prev: StateDoc,
     next: StateDoc,
@@ -106,7 +111,25 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
     const prevEnabledIds = new Set(prevEnabled.map((rule) => rule.id));
     for (const rule of nextEnabled) {
-      if (rule.scope.type !== "regex" || prevEnabledIds.has(rule.id)) {
+      if (prevEnabledIds.has(rule.id)) {
+        continue;
+      }
+      const header = validateHeader({
+        direction: rule.direction,
+        operation: rule.operation,
+        header: rule.header,
+        ...(rule.value === undefined ? {} : { value: rule.value }),
+      });
+      if (!header.ok) {
+        return header;
+      }
+      if (rule.scope.type === "pattern") {
+        if (!validateUrlFilter(rule.scope.pattern).ok) {
+          return err({ kind: "pattern-invalid" } as const);
+        }
+        continue;
+      }
+      if (rule.scope.type !== "regex") {
         continue;
       }
       const supported = await validateRegex(rule.scope.regex);
@@ -751,9 +774,17 @@ function normalizeScope(scope: Scope): Result<Scope, MutationError> {
     }
     case "pattern": {
       const pattern = scope.pattern.trim();
-      return pattern.length === 0
-        ? err({ kind: "scope-empty" } as const)
-        : ok({ type: "pattern", pattern, hosts: normalizeHosts(scope.hosts) });
+      if (pattern.length === 0) {
+        return err({ kind: "scope-empty" } as const);
+      }
+      if (!validateUrlFilter(pattern).ok) {
+        return err({ kind: "pattern-invalid" } as const);
+      }
+      return ok({
+        type: "pattern",
+        pattern,
+        hosts: normalizeHosts(scope.hosts),
+      });
     }
     case "regex":
       return scope.regex.trim().length === 0

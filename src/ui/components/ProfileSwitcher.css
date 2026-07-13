@@ -43,11 +43,3 @@
   border: 1.5px solid var(--bezel-strong);
   color: var(--ink-mute);
 }
-
-.offtag {
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
