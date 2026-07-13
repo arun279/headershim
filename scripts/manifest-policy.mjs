@@ -9,6 +9,7 @@ const packageJson = JSON.parse(
   readFileSync(path.join(root, "package.json"), "utf8"),
 );
 const violations = [];
+const isRelease = process.argv.includes("--release");
 
 function containsKey(value, key) {
   if (Array.isArray(value)) {
@@ -115,6 +116,16 @@ if (
 }
 if (manifest.version !== packageJson.version) {
   violations.push("manifest version must equal package.json version");
+}
+if (isRelease) {
+  const releaseTag = process.env.RELEASE_TAG;
+  if (!releaseTag) {
+    violations.push("RELEASE_TAG must be set when --release is used");
+  } else if (manifest.version !== releaseTag.replace(/^v/, "")) {
+    violations.push(
+      `manifest version (${manifest.version}) must equal release tag (${releaseTag})`,
+    );
+  }
 }
 
 if (violations.length > 0) {
