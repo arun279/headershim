@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
-import type { Rule, RuleDraft } from "../../src/core/model";
+import { decodeMatches } from "../../src/core/matches";
+import type { Rule, RuleDraft, TabOverride } from "../../src/core/model";
 import type { Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
+import { summarizeVerify, type VerifyReadout } from "../../src/core/verify";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
 import { activeTabDomain } from "../../src/platform/tabs";
+import { matchedRulesForActiveTab } from "../../src/platform/verify";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Annunciator } from "../../src/ui/components/Annunciator";
 import { Button } from "../../src/ui/components/Button";
@@ -13,13 +16,19 @@ import { EmptyState } from "../../src/ui/components/EmptyState";
 import { ProfileSwitcher } from "../../src/ui/components/ProfileSwitcher";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { RuleList } from "../../src/ui/components/RuleList";
+import { overrideToRuleDraft, ThisTab } from "../../src/ui/components/ThisTab";
 import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
+import { VerifyPanel } from "../../src/ui/components/VerifyPanel";
 import { copy } from "../../src/ui/copy";
 import {
   createMutations,
   type MutationError,
 } from "../../src/ui/state/mutations";
+import {
+  pruneForeignOrigins,
+  removeOverride,
+} from "../../src/ui/state/session-mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
 import { useInvalidRules } from "../../src/ui/state/useInvalidRules";
 import { popupKeyHandler } from "./keyboard";
@@ -50,7 +59,8 @@ export function App() {
         status={app.status}
         grants={app.grants}
         grantGaps={app.grantGaps}
-        overrideCount={app.overrideCount}
+        tabId={app.tabId}
+        overrides={app.overrides}
       />
     </LiveRegionProvider>
   );
@@ -64,20 +74,54 @@ interface PendingUndo {
   index: number;
 }
 
-function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
+interface Editing {
+  profileId: string;
+  ruleId?: string;
+  /** A full draft to seed a new rule from (This-tab "Save as rule…", §3.5). */
+  prefill?: RuleDraft;
+  /** The temporary row this new rule promotes; removed once the rule saves. */
+  promote?: { tabId: number; num: number };
+}
+
+function Ready({
+  doc,
+  status,
+  grants,
+  grantGaps,
+  tabId,
+  overrides,
+}: ReadyProps) {
   const [toast, setToast] = useState<
     { message: string; undo?: boolean } | undefined
   >(undefined);
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | undefined>(
     undefined,
   );
-  const [editing, setEditing] = useState<
-    { profileId: string; ruleId?: string } | undefined
-  >(undefined);
+  const [editing, setEditing] = useState<Editing | undefined>(undefined);
+  const [composing, setComposing] = useState(false);
+  const [verify, setVerify] = useState<VerifyReadout | undefined>(undefined);
+  // Focus returns here when the verify panel closes (SPEC §9).
+  const verifyTrigger = useRef<HTMLSpanElement>(null);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
+  const [tabResolved, setTabResolved] = useState(false);
   useEffect(() => {
-    void activeTabDomain().then(setTabDomain);
+    void activeTabDomain().then((host) => {
+      setTabDomain(host);
+      setTabResolved(true);
+    });
   }, []);
+  // Fallback lifetime enforcement (SPEC §3.5): the background prunes a tab's
+  // overrides on cross-origin navigation, but a navigation it slept through
+  // leaves stale rows the popup must not surface as live — so prune once on
+  // open against where the tab actually sits now.
+  const prunedRef = useRef(false);
+  useEffect(() => {
+    if (prunedRef.current || !tabResolved || tabId === undefined) {
+      return;
+    }
+    prunedRef.current = true;
+    void pruneForeignOrigins(tabId, tabDomain);
+  }, [tabResolved, tabId, tabDomain]);
   const theme = doc.settings.theme;
   // The token stylesheet follows the OS unless the stored theme stamps the
   // root; System leaves it unset (tokens.css contract).
@@ -121,7 +165,26 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
     (editing.ruleId === undefined || editingRule !== undefined)
       ? editing
       : undefined;
-  const openNewRule = () => setEditing({ profileId: doc.focusedProfileId });
+  const openNewRule = () => {
+    setComposing(false);
+    setEditing({ profileId: doc.focusedProfileId });
+  };
+  const openThisTabComposer = () => {
+    setEditing(undefined);
+    setComposing(true);
+  };
+  // Promote a temporary row into a real rule in the focused profile (§3.5):
+  // open the editor pre-filled and enter the normal grant flow; the row is
+  // retired once the rule commits (saveEditing), not on open, so an Esc keeps
+  // the temporary override intact.
+  const saveAsRule = (override: TabOverride) => {
+    setComposing(false);
+    setEditing({
+      profileId: doc.focusedProfileId,
+      prefill: overrideToRuleDraft(override, tabDomain ?? override.originHost),
+      promote: { tabId: override.tabId, num: override.num },
+    });
+  };
 
   // A new rule lands in the focused profile even when that profile is off or
   // empty; its group appears for the editor's stay.
@@ -137,10 +200,17 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
     profileId: string,
     ruleId: string | undefined,
     draft: RuleDraft,
+    promote: Editing["promote"],
   ) =>
     mutations.saveRule(profileId, ruleId, draft).then((outcome) => {
       if (outcome.ok) {
         setPendingUndo(undefined);
+        // The promotion's source row is retired on its first commit — the one
+        // that creates the rule (ruleId was undefined); a later grant-scope
+        // save of the same rule must not remove it twice.
+        if (ruleId === undefined && promote !== undefined) {
+          void removeOverride(promote.tabId, promote.num);
+        }
       }
       return outcome;
     });
@@ -204,8 +274,37 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
     });
   };
 
+  // Verify is on-demand and per-tab (SPEC §5): the click/`v` gesture grants
+  // activeTab, so the active tab is resolved and its matched-rules record
+  // fetched with the tab id explicit. Tallies come from decodeMatches for
+  // stable-id attribution; the hints Verify may name stay statically
+  // determinable (core/verify). Session matches never enter the profile-rule
+  // count, so the decode overrides are empty here.
+  const needsAccessRuleIds = useMemo(
+    () => new Set(grantGaps.map((gap) => gap.ruleId)),
+    [grantGaps],
+  );
+  const runVerify = () => {
+    void matchedRulesForActiveTab().then((active) => {
+      setVerify(
+        summarizeVerify({
+          profiles: enabledProfiles,
+          matches: decodeMatches(doc, [], active?.matches ?? []),
+          tabHost: tabDomain,
+          needsAccessRuleIds,
+        }),
+      );
+    });
+  };
+  const closeVerify = () => {
+    setVerify(undefined);
+    verifyTrigger.current?.querySelector("button")?.focus();
+  };
+
   const onKeyDown = popupKeyHandler({
     newRule: openNewRule,
+    newThisTabOverride: openThisTabComposer,
+    verify: runVerify,
     togglePause: () => run(mutations.setPaused(status.kind !== "paused")),
     activateProfile: (position) => {
       const profile = doc.profiles[position - 1];
@@ -258,15 +357,31 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
       />
       <Annunciator
         status={status}
-        temporaryCount={overrideCount}
+        temporaryCount={overrides.length}
         onResume={() => run(mutations.setPaused(false))}
         onGrantAccess={grantAccess}
       />
       <div
         class={status.kind === "paused" ? "popup-body paused" : "popup-body"}
       >
+        <ThisTab
+          tabId={tabId}
+          host={tabDomain}
+          overrides={overrides}
+          composing={composing}
+          onSaveAsRule={saveAsRule}
+          onCreateRule={openNewRule}
+          onCloseComposer={() => setComposing(false)}
+        />
         {activeEditing === undefined && firstRun ? (
-          <FirstRun onCreateRule={openNewRule} />
+          // The This-tab section stands in for the hero once it has a row or an
+          // open composer; the trust hero only shows on a truly empty open.
+          overrides.length > 0 || composing ? null : (
+            <FirstRun
+              onCreateRule={openNewRule}
+              onTryThisTab={openThisTabComposer}
+            />
+          )
         ) : activeEditing === undefined &&
           someProfileEnabled &&
           enabledProfilesEmpty &&
@@ -296,15 +411,22 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
                       <RuleEditor
                         key={activeEditing.ruleId ?? "new-rule"}
                         rule={editingRule}
+                        prefill={activeEditing.prefill}
                         prefillDomain={
-                          activeEditing.ruleId === undefined
+                          activeEditing.ruleId === undefined &&
+                          activeEditing.prefill === undefined
                             ? tabDomain
                             : undefined
                         }
                         grants={grants}
                         tabDomain={tabDomain}
                         onSave={(ruleId, draft) =>
-                          saveEditing(activeEditing.profileId, ruleId, draft)
+                          saveEditing(
+                            activeEditing.profileId,
+                            ruleId,
+                            draft,
+                            activeEditing.promote,
+                          )
                         }
                         onRequestGrant={requestPermissions}
                         onGranted={announceGrant}
@@ -337,7 +459,11 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
             {copy.actions.newRule}
           </Button>
         </span>
-        <Button kind="quiet">{copy.actions.verify}</Button>
+        <span class="foot-verify" ref={verifyTrigger}>
+          <Button kind="quiet" onClick={runVerify}>
+            {copy.actions.verify}
+          </Button>
+        </span>
         <span class="pause">
           {copy.actions.pause}
           <Toggle
@@ -373,12 +499,21 @@ function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
           {toast.message}
         </Toast>
       )}
+      {verify !== undefined && (
+        <VerifyPanel readout={verify} onClose={closeVerify} />
+      )}
     </main>
   );
 }
 
 /** First run is onboarding: the trust sentence and three equal ways in. */
-function FirstRun({ onCreateRule }: { onCreateRule: () => void }) {
+function FirstRun({
+  onCreateRule,
+  onTryThisTab,
+}: {
+  onCreateRule: () => void;
+  onTryThisTab: () => void;
+}) {
   const first = useRef<HTMLDivElement>(null);
   useEffect(() => {
     first.current?.querySelector("button")?.focus();
@@ -388,7 +523,9 @@ function FirstRun({ onCreateRule }: { onCreateRule: () => void }) {
     <div class="first-run" ref={first}>
       <p class="first-run-tagline">{copy.app.tagline}</p>
       <div class="first-run-actions">
-        <Button kind="quiet">{copy.firstRun.tryThisTab}</Button>
+        <Button kind="quiet" onClick={onTryThisTab}>
+          {copy.firstRun.tryThisTab}
+        </Button>
         <Button kind="quiet" onClick={onCreateRule}>
           {copy.firstRun.createRule}
         </Button>

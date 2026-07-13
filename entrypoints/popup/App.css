@@ -1,5 +1,6 @@
 /* 400px wide; height content-driven up to 560, only the body region scrolls. */
 .popup {
+  position: relative;
   width: 400px;
   max-height: 560px;
   display: flex;
@@ -52,8 +53,10 @@
   background: var(--panel-1);
 }
 
-/* Focus-return anchor for the new-rule editor; invisible to layout. */
-.foot-new-rule {
+/* Focus-return anchors for the new-rule editor and verify panel; the wrapper
+   holds the ref without becoming a layout box of its own. */
+.foot-new-rule,
+.foot-verify {
   display: contents;
 }
 

@@ -132,6 +132,29 @@ export const copy = {
       "requests started by other pages also need those pages granted",
   },
 
+  thisTab: {
+    // Silkscreen section label; " · host · N temporary" follows it.
+    sectionLabel: "This tab",
+    summary: (host: string, count: number): Sentence => [
+      " · ",
+      data(host),
+      " · ",
+      data(count),
+      " temporary",
+    ],
+    composerTitle: "New this-tab override",
+    saveAsRule: "Save as rule…",
+    remove: (header: string) => `Remove temporary override: ${header}`,
+    // Persistent honesty line under the section (SPEC §3.5); "Create a rule"
+    // is the action button between the two spans.
+    standingBefore:
+      "Calling a different API from this page? That needs a saved rule and a one-click site grant — ",
+    standingAction: "Create a rule",
+    standingAfter: " pre-fills it.",
+    // No web origin to bind to (chrome:// or store page).
+    noHost: "Open the popup on a website to add a temporary override for it.",
+  },
+
   menu: {
     edit: "Edit",
     duplicate: "Duplicate",
@@ -282,6 +305,8 @@ export const copy = {
       "Chrome separately caps regex-scoped rules at 1,000, and enabling this would pass that limit. Disable or delete regex rules you're not using, or switch some scopes to URL patterns.",
     storageBudget:
       "Chrome gives an extension limited local storage, and this change would pass headershim's safe budget of 4 MB. Shorten long header values, or delete rules you're not using.",
+    sessionCap:
+      "Chrome caps temporary tab rules, and this would pass headershim's limit of 1,000. Remove a temporary override you're done with, or save this one as a rule instead.",
     importParse:
       "This file isn't valid JSON, so nothing was imported and nothing was changed. If it came from ModHeader, export it again with Profile → Export → JSON.",
     importNewer: (fileVersion: number, supportedVersion: number) =>
@@ -322,5 +347,19 @@ export const copy = {
       'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug) — trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
     summary: (matched: number, total: number) =>
       `${matched} of ${total} rules matched on this tab · last 5 min`,
+    // Silkscreen heading; stays sentence case in the DOM, uppercased via CSS.
+    heading: "Verify · this tab",
+    regionLabel: "Verify results",
+    matchedLabel: "Rules that fired",
+    noMatchesLabel: "No matches",
+    close: "Close verify",
+    matchCount: (n: number) =>
+      n === 0 ? "no matches" : n === 1 ? "1 match" : `${n} matches`,
+    // Per-rule hints: only the statically determinable causes (SPEC §5).
+    hints: {
+      disabled: "disabled",
+      "scope-excludes": "scope excludes this site",
+      "needs-access": "needs access",
+    } as const,
   },
 } as const;
