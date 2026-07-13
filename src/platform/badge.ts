@@ -19,22 +19,20 @@ export async function applyBadge(
     browser.action.setBadgeTextColor({ color: state.textColor }),
   ]);
 
-  if (state.kind === "count") {
-    return;
-  }
-
-  if (state.global) {
-    await Promise.all(
-      tabBadges.map(({ tabId }) =>
-        browser.action.setBadgeText({ tabId, text: "" }),
-      ),
-    );
-    return;
-  }
-
+  // Tab-scoped text outlives the override that painted it (Chrome resets it
+  // only on navigation or close), so every paint sweeps all open tabs and
+  // restores the ones no longer in the plan to the global badge.
+  const textByTab = new Map(tabBadges.map(({ tabId, text }) => [tabId, text]));
+  const tabs = await browser.tabs.query({});
   await Promise.all(
-    tabBadges.map(({ tabId, text }) =>
-      browser.action.setBadgeText({ tabId, text }),
-    ),
+    tabs.map(({ id }) => {
+      if (id === undefined) {
+        return undefined;
+      }
+      const text = textByTab.get(id);
+      return browser.action.setBadgeText(
+        text === undefined ? { tabId: id } : { tabId: id, text },
+      );
+    }),
   );
 }

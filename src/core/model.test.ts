@@ -8,6 +8,7 @@ import {
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
+  type Rule,
   type RuleDraft,
   type StateDoc,
   switchToNextProfile,
@@ -190,4 +191,57 @@ describe("switchToNextProfile", () => {
 
     expect(switchToNextProfile(doc)).toBe(doc);
   });
+
+  it("skips a profile whose enabled rules exceed the live caps", () => {
+    const oversized: Profile = {
+      ...profile("two", "Bulk"),
+      enabled: false,
+      rules: bulkRules(4_501),
+    };
+    const doc = docWith(
+      [profile("one", "Default"), oversized, profile("three", "QA")],
+      "one",
+    );
+
+    const next = switchToNextProfile(doc);
+
+    expect(next.focusedProfileId).toBe("three");
+    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  it("keeps the document unchanged when every candidate exceeds the caps", () => {
+    const regexRules = bulkRules(1_001).map((rule) => ({
+      ...rule,
+      scope: {
+        type: "regex" as const,
+        regex: "^https://api\\.example\\.com/",
+        hosts: ["api.example.com"],
+      },
+    }));
+    const doc = docWith(
+      [{ ...profile("one", "Default"), rules: regexRules }],
+      "one",
+    );
+
+    expect(switchToNextProfile(doc)).toBe(doc);
+  });
 });
+
+function bulkRules(count: number): Rule[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `rule-${index}`,
+    num: index + 1,
+    direction: "request" as const,
+    operation: "set" as const,
+    header: "x-bulk",
+    value: "1",
+    scope: { type: "domains" as const, domains: ["example.com"] },
+    resourceTypes: "all" as const,
+    initiators: [],
+    enabled: true,
+  }));
+}

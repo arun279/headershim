@@ -276,6 +276,23 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
   });
 
+  it("reconciles a revision stored while the badge refresh is in flight", async () => {
+    start();
+    const docA = withRule(createV1Seed(), "x-a");
+    const docB = withRule(docA, "x-b");
+    vi.spyOn(
+      browser.declarativeNetRequest,
+      "setExtensionActionOptions",
+    ).mockImplementationOnce(async () => {
+      await writeState(docB);
+    });
+
+    await writeState(docA);
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
+  });
+
   it("retries a rejected update once from a fresh read", async () => {
     start();
     const doc = withRule(createV1Seed(), "x-one");

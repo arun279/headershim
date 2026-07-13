@@ -63,6 +63,9 @@ export default defineBackground(() => {
     }
     running = runUntilSettled().finally(() => {
       running = undefined;
+      if (dirty) {
+        void reconcile();
+      }
     });
     return running;
   }
@@ -72,8 +75,8 @@ export default defineBackground(() => {
       dirty = false;
       const applied = (await applyOnce()) || (await applyOnce());
       await flagReconcileError(!applied);
+      await refreshBadge();
     } while (dirty);
-    await refreshBadge();
   }
 
   async function applyOnce(): Promise<boolean> {

@@ -12,11 +12,7 @@ interface BadgeColors {
 
 export type BadgeState =
   | (BadgeColors & { readonly kind: "count" })
-  | (BadgeColors & {
-      readonly kind: "manual";
-      readonly global: boolean;
-      readonly text: string;
-    });
+  | (BadgeColors & { readonly kind: "manual"; readonly text: string });
 
 export interface BadgePlan {
   readonly state: BadgeState;
@@ -71,7 +67,6 @@ export function planBadge({
   return {
     state: {
       kind: "manual",
-      global: false,
       text: focused?.badgeText ?? "",
       backgroundColor,
       textColor: WHITE,
@@ -82,13 +77,7 @@ export function planBadge({
 
 function globalBadge(backgroundColor: string): BadgePlan {
   return {
-    state: {
-      kind: "manual",
-      global: true,
-      text: "",
-      backgroundColor,
-      textColor: WHITE,
-    },
+    state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
     tabBadges: [],
   };
 }

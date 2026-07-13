@@ -42,7 +42,6 @@ describe("planBadge", () => {
     expect(planBadge(input(paused, true, [7]))).toEqual({
       state: {
         kind: "manual",
-        global: true,
         text: "",
         backgroundColor: "#6E7B88",
         textColor: "#FFFFFF",
@@ -56,7 +55,6 @@ describe("planBadge", () => {
 
     expect(plan.state).toMatchObject({
       kind: "manual",
-      global: true,
       text: "",
       backgroundColor: "#B07B00",
     });
@@ -79,7 +77,6 @@ describe("planBadge", () => {
     expect(planBadge(input(initials, false, [4, 9]))).toEqual({
       state: {
         kind: "manual",
-        global: false,
         text: "DE",
         backgroundColor: BADGE_PALETTE.indigo,
         textColor: "#FFFFFF",
