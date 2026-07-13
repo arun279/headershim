@@ -22,6 +22,10 @@ declare const chrome: {
   };
   declarativeNetRequest: {
     getDynamicRules(): Promise<unknown[]>;
+    updateDynamicRules(options: {
+      addRules?: unknown[];
+      removeRuleIds?: number[];
+    }): Promise<void>;
     getMatchedRules(filter: {
       tabId: number;
     }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;

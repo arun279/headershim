@@ -6,11 +6,14 @@ import {
   type BrowserContext,
   test as base,
   chromium,
+  expect,
   type Page,
   type Worker,
 } from "@playwright/test";
-import type { DnrRule } from "../src/core/compile";
-import type { StateDoc } from "../src/core/model";
+import { compileDynamic, type DnrRule } from "../src/core/compile";
+import { createRule, type RuleDraft, type StateDoc } from "../src/core/model";
+import { planReconcile } from "../src/core/reconcile";
+import { createV1Seed } from "../src/core/schema";
 import {
   type EchoServers,
   spawnEchoServers,
@@ -75,7 +78,27 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 });
 
-export { expect } from "@playwright/test";
+export { expect };
+
+export const ON_WIRE_GRANT_UNAVAILABLE =
+  "Chrome exposes no automatable grant for the optional wildcard host permission in headless mode for this manifest posture; the on-wire assertion requires a grant that grantAllSitesViaDetails could not obtain (see e2e/README.md).";
+
+export const DUAL_GRANT_TRANSITION_UNAVAILABLE =
+  "Chrome exposes no automatable per-origin grant in headless mode for this unpacked manifest posture, so the harness cannot establish the destination-only starting state required to add the initiator grant (see e2e/README.md).";
+
+export function stateWithRules(drafts: readonly RuleDraft[]): StateDoc {
+  let doc = createV1Seed();
+  const rules = drafts.map((draft) => {
+    const [rule, next] = createRule(doc, draft);
+    doc = next;
+    return rule;
+  });
+  const [profile] = doc.profiles;
+  if (profile === undefined) {
+    throw new Error("seed document is missing its Default profile");
+  }
+  return { ...doc, profiles: [{ ...profile, rules }] };
+}
 
 export function seedState(worker: Worker, doc: StateDoc): Promise<void> {
   // Take the same "state" lock the background holds around its recovery and
@@ -90,6 +113,21 @@ export function seedState(worker: Worker, doc: StateDoc): Promise<void> {
   );
 }
 
+export async function seedStateAndWait(
+  worker: Worker,
+  doc: StateDoc,
+): Promise<DnrRule[]> {
+  const desired = compileDynamic(doc);
+  await seedState(worker, doc);
+  await expect
+    .poll(
+      async () =>
+        planReconcile(desired, await getDynamicRules(worker)) === null,
+    )
+    .toBe(true);
+  return desired;
+}
+
 export async function getDynamicRules(worker: Worker): Promise<DnrRule[]> {
   const rules = await worker.evaluate(() =>
     chrome.declarativeNetRequest.getDynamicRules(),
@@ -102,6 +140,45 @@ export async function readEcho(page: Page): Promise<Record<string, string>> {
   return JSON.parse(text ?? "{}") as Record<string, string>;
 }
 
+export interface EchoFetchInit {
+  body?: string;
+  cache?: "default" | "reload";
+  headers?: Record<string, string>;
+  method?: "GET" | "POST";
+}
+
+export interface EchoFetchResult {
+  responseHeaders: Record<string, string>;
+  requestCount?: number;
+  requestHeaders: Record<string, string>;
+  status: number;
+}
+
+export function fetchEcho(
+  page: Page,
+  url: string,
+  init: EchoFetchInit = {},
+): Promise<EchoFetchResult> {
+  return page.evaluate(
+    async ({ requestUrl, requestInit }) => {
+      const response = await fetch(requestUrl, requestInit);
+      const payload = (await response.json()) as {
+        headers: Record<string, string>;
+        requestCount?: number;
+      };
+      return {
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        ...(payload.requestCount === undefined
+          ? {}
+          : { requestCount: payload.requestCount }),
+        requestHeaders: payload.headers,
+        status: response.status,
+      };
+    },
+    { requestUrl: url, requestInit: init },
+  );
+}
+
 // Drives the extension's own Details page to grant the optional wildcard host
 // permission. Returns whether the grant actually landed — see e2e/README.md for
 // why it currently does not in headless Chromium for this permission posture.
@@ -110,6 +187,16 @@ export async function grantAllSitesViaDetails(
   extensionId: string,
   worker: Worker,
 ): Promise<boolean> {
+  await toggleAllSitesViaDetails(context, extensionId);
+  return worker.evaluate(() =>
+    chrome.permissions.contains({ origins: ["*://*/*"] }),
+  );
+}
+
+export async function toggleAllSitesViaDetails(
+  context: BrowserContext,
+  extensionId: string,
+): Promise<void> {
   const page = await context.newPage();
   await page.goto(`chrome://extensions/?id=${extensionId}`);
   const toggle = page.locator("extensions-toggle-row#allHostsToggle cr-toggle");
@@ -118,7 +205,4 @@ export async function grantAllSitesViaDetails(
     await toggle.click();
   }
   await page.close();
-  return worker.evaluate(() =>
-    chrome.permissions.contains({ origins: ["*://*/*"] }),
-  );
 }

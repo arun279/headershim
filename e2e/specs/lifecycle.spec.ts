@@ -1,4 +1,4 @@
-import { compileDynamic } from "../../src/core/compile";
+import { compileDynamic, type DnrRule } from "../../src/core/compile";
 import { createRule, type StateDoc } from "../../src/core/model";
 import { planReconcile } from "../../src/core/reconcile";
 import { createV1Seed } from "../../src/core/schema";
@@ -70,6 +70,67 @@ test("seeded rule reconciles into DNR and reads back normalized-equal", async ({
   const settled = await getDynamicRules(serviceWorker);
   expect(planReconcile(desired, settled)).toBeNull();
   expect(settled).toEqual(readback);
+});
+
+test("reconcile repairs direct dynamic-rule corruption and converges", async ({
+  serviceWorker,
+}) => {
+  const doc = ruleDoc("localhost");
+  const desired = compileDynamic(doc);
+  await seedState(serviceWorker, doc);
+  await expect
+    .poll(
+      async () =>
+        planReconcile(desired, await getDynamicRules(serviceWorker)) === null,
+    )
+    .toBe(true);
+
+  const corrupted = desired.map((rule) => ({
+    ...rule,
+    action: {
+      ...rule.action,
+      requestHeaders: rule.action.requestHeaders?.map((modification) => ({
+        ...modification,
+        value: "corrupted-outside-the-store",
+      })),
+    },
+  }));
+  // Keep the direct write and its snapshot in one worker evaluation. The
+  // storage write above can still have a reconcile finishing in the
+  // background; yielding to Playwright between these calls lets that pass
+  // repair the corruption before the test has observed it.
+  const drifted = (await serviceWorker.evaluate(
+    async ({ addRules, removeRuleIds }) => {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        addRules,
+        removeRuleIds,
+      });
+      return chrome.declarativeNetRequest.getDynamicRules();
+    },
+    {
+      addRules: corrupted,
+      removeRuleIds: desired.map((rule) => rule.id),
+    },
+  )) as DnrRule[];
+  expect(drifted[0]?.action.requestHeaders?.[0]?.value).toBe(
+    "corrupted-outside-the-store",
+  );
+  expect(planReconcile(desired, drifted)).not.toBeNull();
+
+  await seedState(serviceWorker, {
+    ...doc,
+    settings: { ...doc.settings, theme: "light" },
+  });
+  await expect
+    .poll(
+      async () =>
+        planReconcile(desired, await getDynamicRules(serviceWorker)) === null,
+    )
+    .toBe(true);
+
+  const repaired = await getDynamicRules(serviceWorker);
+  expect(planReconcile(desired, repaired)).toBeNull();
+  expect(repaired).toEqual(await getDynamicRules(serviceWorker));
 });
 
 test("h2 echo server negotiates HTTP/2", async ({ context, echoServers }) => {

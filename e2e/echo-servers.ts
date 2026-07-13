@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const echoServerScript = path.join(root, "scripts", "echo-server.mjs");
 
 export interface EchoServers {
+  h1CrossUrl: string;
   h1Url: string;
   h2Url: string;
 }
