@@ -1,0 +1,125 @@
+.options {
+  min-height: 100vh;
+  background: var(--panel-0);
+}
+
+.options-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.wordmark {
+  font-family: var(--font-data);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.version {
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.options-body {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+  padding: var(--sp-6);
+}
+
+.options-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  position: sticky;
+  top: var(--sp-6);
+}
+
+.options-nav-link {
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-inner);
+  color: var(--ink-mute);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.options-nav-link:hover {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+
+.options-nav-link[aria-current="page"] {
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel);
+  color: var(--ink);
+}
+
+.options-content {
+  min-width: 0;
+  max-width: 720px;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.page-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Sections are panel-1 cards (DESIGN §4.13: hairline, 6px radius). The profile
+   list keeps its rows edge-to-edge for hairline separators; the rules panel
+   takes the standard 16px padding. */
+.page > .profile-list {
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+  overflow: hidden;
+}
+
+.rules-panel,
+.ie-block,
+.sa-card,
+.about-card {
+  padding: var(--sp-5);
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+}
+
+.ie-block,
+.sa-card,
+.about-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.options .modal-card {
+  max-width: 480px;
+}
+
+.modal-text {
+  color: var(--ink);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}

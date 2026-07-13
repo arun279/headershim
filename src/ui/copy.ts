@@ -84,6 +84,305 @@ export const copy = {
       `${focused ? ", focused" : ""}${on ? ", on" : ", off"}`,
   },
 
+  // The full-tab options surface: frame, profile management, and bulk actions.
+  options: {
+    nav: {
+      label: "Sections",
+      profiles: "Profiles",
+      importExport: "Import & export",
+      siteAccess: "Site access",
+      about: "Appearance & about",
+    },
+    version: (version: string) => `v${version}`,
+    profiles: {
+      title: "Profiles",
+      new: "+ New",
+      // The name a fresh profile is created under before the user renames it;
+      // availableProfileName resolves collisions ("New profile 2", …).
+      newName: "New profile",
+      ruleCount: (count: number) => `${count} ${rules(count)}`,
+      nameLabel: "Profile name",
+      rename: "Rename",
+      clone: "Clone",
+      delete: "Delete",
+      toggleLabel: (name: string, on: boolean) =>
+        `Profile ${on ? "on" : "off"}: ${name}`,
+      // The disclosure that opens a profile for badge/rule editing.
+      expand: (name: string) => `Edit ${name}`,
+      reorderHandle: (name: string) =>
+        `Reorder ${name}; press the arrow keys to move it`,
+      reordered: (name: string, position: number) =>
+        `${name}, moved to position ${position}`,
+      nameTaken: (name: string) =>
+        `A profile named '${name}' already exists — pick a different name.`,
+      deleteConfirm: {
+        title: (name: string) => `Delete profile '${name}'?`,
+        body: (count: number) =>
+          `Its ${count} ${rules(count)} will be deleted. Site grants are not changed.`,
+        confirm: "Delete profile",
+      },
+    },
+    badge: {
+      textLabel: "Badge text",
+      colorLabel: "Badge color",
+      colorNames: {
+        indigo: "Indigo",
+        blue: "Blue",
+        teal: "Teal",
+        green: "Green",
+        plum: "Plum",
+        magenta: "Magenta",
+        crimson: "Crimson",
+        slate: "Slate",
+      },
+    },
+    rules: {
+      sectionLabel: (name: string) => `Rules in ${name}`,
+      selectAll: "Select all rules",
+      selected: (count: number) => `${count} ${rules(count)} selected`,
+      selectRule: (header: string) => `Select rule: ${header}`,
+      enable: "Enable",
+      disable: "Disable",
+      move: "Move",
+      moveTo: (name: string) => `Move to ${name}`,
+      delete: "Delete",
+    },
+    importExport: {
+      title: "Import & export",
+      importHeading: "Import",
+      instruction:
+        "headershim JSON or ModHeader export — detected automatically.",
+      choose: "Choose file…",
+      fileInputLabel: "Import a headershim or ModHeader export",
+      exportHeading: "Export",
+      exportEverything: "Export everything",
+      exportOne: "Export one profile",
+      exportChoiceLabel: "Profile to export",
+      // Shown verbatim on every export.
+      secretsReminder:
+        "This file contains the header values you typed — including any tokens or keys. Treat it like a credentials file.",
+      everythingFilename: "headershim-export.json",
+      profileFilename: (slug: string) => `headershim-${slug}.json`,
+      summaryHeading: "Import summary",
+      counts: (profileCount: number, ruleCount: number): Sentence => [
+        "Import will create ",
+        data(profileCount),
+        ` ${profiles(profileCount)} / `,
+        data(ruleCount),
+        ` ${rules(ruleCount)}.`,
+      ],
+      needAttention: (count: number) =>
+        count === 1
+          ? "1 item needs attention:"
+          : `${count} items need attention:`,
+      import: "Import",
+      convert: "Convert to frozen value",
+      imported: (count: number) =>
+        `Imported ${count} ${profiles(count)}, off — turn them on when you're ready.`,
+      warnings: {
+        appendDegraded: (header: string): Sentence => [
+          "Chrome only allows appending to a fixed set of request headers, and ",
+          data(header),
+          " isn't one of them — imported as Set.",
+        ],
+        cookieSemantics:
+          "Imported as a whole-header append on cookie; per-cookie merge behaves differently.",
+        setCookieSemantics:
+          "Imported as Set on set-cookie; a set collapses multiple Set-Cookie headers into one.",
+        cspSemantics:
+          "Browsers combine CSPs restrictively; this cannot loosen a page's own policy.",
+        invalidRegex: (pattern: string): Sentence => [
+          "This pattern isn't valid RE2, so the rule was imported disabled: ",
+          data(pattern),
+        ],
+        dynamicToken:
+          "Contains a request-time token Chrome extensions can no longer compute.",
+        droppedExcludeUrl:
+          "Dropped — headershim has no per-rule URL exclusion in this version.",
+        droppedInitiatorDomain:
+          "Dropped — headershim has no initiator scoping in this version.",
+        droppedTab: "Dropped — use This-tab overrides for per-tab needs.",
+        droppedUrlReplacement:
+          "Dropped — headershim changes headers only, never redirects.",
+      },
+    },
+    siteAccess: {
+      title: "Site access",
+      neededHeading: "Needed but not granted",
+      grantedHeading: "Granted",
+      usedBy: (count: number) => `used by ${count} ${rules(count)}`,
+      ruleCount: (count: number) => `${count} ${rules(count)}`,
+      grant: "Grant",
+      grantLabel: (domain: string) => `Grant access to ${domain}`,
+      revoke: "Revoke",
+      revokeLabel: (domain: string) => `Revoke access to ${domain}`,
+      revoked: (domain: string) => `Access to ${domain} revoked`,
+      // A narrow grant removed while the broad grant stands changes nothing
+      // about reach — saying "revoked" there would claim access ended.
+      revokedUnderAllSites: (domain: string) =>
+        `${domain} grant removed — all-sites access still covers it`,
+      // The standing note (SPEC §3.3): shown while any enabled rule reaches
+      // subresources without naming the pages that start those requests.
+      initiatorNote:
+        "Requests started by other pages also need those pages granted.",
+      allSites: {
+        heading: "Allow on all sites",
+        // Verbatim SPEC §3.4, including Chrome's real warning string.
+        body: "If you're constantly adding rules for new sites, you can grant headershim access to every site at once. Chrome will show its strongest warning — \"Read and change all your data on all websites\" — and that warning is accurate: this is real, broad access, which is exactly why headershim doesn't ask for it by default. Your rules still only apply where their scopes say; this only removes the per-site permission step. You can revoke it here at any time.",
+        button: "Allow on all sites",
+        on: "All-sites access is on",
+        revoked: "All-sites access revoked",
+      },
+    },
+    // The trust page (SPEC §4.2): prose a security reviewer can paste into an
+    // approval request. Claim wording is bound by SPEC §1: "no install-time
+    // warning", never "no permission text anywhere"; the CWS caveat is stated,
+    // never "verify the store build".
+    about: {
+      appearanceHeading: "Appearance",
+      theme: {
+        label: "Theme",
+        options: { system: "System", light: "Light", dark: "Dark" },
+      },
+      badgeMode: {
+        label: "Badge shows",
+        options: { count: "Matched-rule count", initials: "Profile initials" },
+      },
+      shortcuts: "Keyboard shortcuts — manage in Chrome",
+      trustHeading: "About & trust",
+      build: (version: string, commit: string): Sentence => [
+        "headershim v",
+        data(version),
+        " · commit ",
+        data(commit),
+      ],
+      permissions: {
+        heading: "Permissions, justified",
+        intro:
+          'headershim installs with no install-time warning — it requests no host access and no warning-bearing permission at install. Chrome\'s details page shows its generic site-access line ("This extension can read and change your data on sites. You can control which sites the extension can access."), and that line is accurate: site access is granted per site, by you, when a rule needs it, and revoked in one click.',
+        columns: {
+          permission: "Permission",
+          why: "Why it's needed",
+          when: "When",
+        },
+        rows: [
+          {
+            permission: "declarativeNetRequestWithHostAccess",
+            why: "Applies your header rules through Chrome's declarative rule engine, which only acts on sites you've granted.",
+            when: "At install — no warning dialog.",
+          },
+          {
+            permission: "storage",
+            why: "Saves your profiles, rules, and settings on this device — nothing else, nowhere else.",
+            when: "At install — no warning dialog.",
+          },
+          {
+            permission: "activeTab",
+            why: "Lets This-tab overrides and Verify act on the tab where you clicked, with no site grant.",
+            when: "Only on your gesture — the click or keyboard shortcut is the consent.",
+          },
+          {
+            permission: "Site access (optional)",
+            why: "Lets rules change headers on the sites you name — Chrome asks with its own prompt, scoped to exactly those sites.",
+            when: "When a rule first needs a site — revocable any time in Site access.",
+          },
+        ],
+      },
+      storage: {
+        heading: "What's stored",
+        body: "headershim stores exactly what you typed: rule definitions and UI preferences, locally, and nothing else. It never records traffic, headers it observed, hostnames you visited, or history of any kind. You can export the entire store at any time to a human-readable file and inspect it byte for byte — the export is the inspection surface. Your rules can contain secrets (tokens, keys); they live on your device unencrypted, like any local config file, and an export deserves the same care as a .env file.",
+      },
+      neverList: {
+        heading: "What headershim will never do",
+        intro:
+          "Every absence the manifest can express is enforced by an executable policy check in CI — checkable by reading the manifest, not claimed. The rest are standing commitments, in writing here and in the listing.",
+        // Verbatim SPEC §10.
+        items: [
+          {
+            lead: "No telemetry/analytics ever",
+            detail:
+              "the exfiltration vector; also nothing to disclose in the store data panel.",
+          },
+          {
+            lead: "No accounts, no cloud sync, no vendor server",
+            detail:
+              "a vendor server is a dependency today and a monetization ratchet tomorrow; sharing = files.",
+          },
+          {
+            lead: "No remote config of any kind",
+            detail:
+              'remote data, however "legal", is the mechanism by which a trusted extension changes behavior after review; all behavior local and bundled.',
+          },
+          {
+            lead: "No content scripts, no scripting permission, no web-accessible resources, no webRequest",
+            detail:
+              'the ad-injection vector; with no code path into pages, "could this inject ads" is answerable by reading the manifest.',
+          },
+          {
+            lead: "No header history / traffic log",
+            detail:
+              "a log of observed headers is a store of tokens and credentials waiting to leak; headershim stores rule definitions, never observed traffic. If a debug log is ever added: in-memory, off by default.",
+          },
+          {
+            lead: "No request-time dynamic values",
+            detail:
+              'impossible under the platform; promising it recreates the "didn\'t work" review cycle.',
+          },
+          {
+            lead: "No response-body modification",
+            detail:
+              "requires the debugger API; out of scope, stated explicitly to preempt the recurring ask.",
+          },
+          {
+            lead: "No monetization, no sale, no ownership transfer",
+            detail:
+              "stated in README and listing; ownership change is the top predictor of a trusted extension going bad.",
+          },
+          {
+            lead: "Zero runtime dependencies",
+            detail:
+              "enforced in CI; nothing in the shipped artifact that wasn't written or vendored deliberately.",
+          },
+          {
+            lead: "No URL redirect/rewrite",
+            detail:
+              "adjacent scope creep; breaks the single stated purpose that keeps store review clean.",
+          },
+          {
+            lead: "No notifications permission",
+            detail: "status lives on the badge and in the popup.",
+          },
+        ],
+      },
+      verifyBuild: {
+        heading: "Verify this build",
+        intro:
+          "Every release zip is built by public CI from a tagged commit. The GitHub release carries the zip, a SHA256SUMS file, and a signed provenance attestation binding the artifact to the exact commit and workflow run.",
+        steps: [
+          [
+            "Check the zip you downloaded against the published hashes: ",
+            data("sha256sum -c SHA256SUMS"),
+          ],
+          [
+            "Check that the zip was built from the tagged commit by the public workflow: ",
+            data("gh attestation verify <zip> --repo arun279/headershim"),
+          ],
+        ] as readonly Sentence[],
+        caveat:
+          "The Chrome Web Store re-packages and signs what we upload, so the installed extension can't be byte-compared against our zip. What you can verify: the files inside your installed extension match the attested release files, and the attestation chains to the public source.",
+      },
+      links: {
+        license: "MIT license",
+        repository: "Repository",
+        repositoryUrl: "https://github.com/arun279/headershim",
+        issues: "Issues",
+        issuesUrl: "https://github.com/arun279/headershim/issues",
+        changelog: "Changelog",
+        changelogUrl: "https://github.com/arun279/headershim/releases",
+      },
+    },
+  },
+
   actions: {
     newRule: "+ New rule",
     verify: "Verify",
@@ -104,6 +403,7 @@ export const copy = {
     activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
+    rulesDeleted: (count: number) => `${count} ${rules(count)} deleted`,
     profileDeleted: (name: string) => `Profile '${name}' deleted`,
   },
 

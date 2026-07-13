@@ -10,8 +10,17 @@ import {
   type Page,
   type Worker,
 } from "@playwright/test";
-import { compileDynamic, type DnrRule } from "../src/core/compile";
-import { createRule, type RuleDraft, type StateDoc } from "../src/core/model";
+import {
+  compileDynamic,
+  compileSession,
+  type DnrRule,
+} from "../src/core/compile";
+import {
+  createRule,
+  type RuleDraft,
+  type StateDoc,
+  type TabOverride,
+} from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
 import { createV1Seed } from "../src/core/schema";
 import {
@@ -85,6 +94,104 @@ export const ON_WIRE_GRANT_UNAVAILABLE =
 
 export const DUAL_GRANT_TRANSITION_UNAVAILABLE =
   "Chrome exposes no automatable per-origin grant in headless mode for this unpacked manifest posture, so the harness cannot establish the destination-only starting state required to add the initiator grant (see e2e/README.md).";
+
+// getMatchedRules needs either the declarativeNetRequestFeedback permission
+// (barred by the manifest policy) or an activeTab grant from a real user
+// gesture on the extension action. Chrome's action click, the _execute_action
+// command, and the custom verify command are all browser-level UI that neither
+// Playwright nor CDP can synthesize headless, so every match-tally, edit-window
+// attribution, quota, and count-badge *number* assertion self-skips here and
+// moves to the packed/real-Chrome checklist (see e2e/README.md).
+export const MATCHED_RULES_GESTURE_UNAVAILABLE =
+  "getMatchedRules requires an activeTab-granting user gesture (action click / _execute_action / verify command) that is not scriptable in headless Chromium, and the declarativeNetRequestFeedback permission is barred by the manifest policy (see e2e/README.md).";
+
+// Distinguishing a same-site or SPA navigation (override continues) from a
+// cross-site one (override ends) relies on tab.url in tabs.onUpdated, which the
+// browser only exposes while the activeTab grant is live. Without that grant the
+// background reads url === undefined on every navigation and prunes
+// conservatively, so only the cross-site-ends half is observable headless.
+export const SAME_SITE_LIFETIME_GRANT_UNAVAILABLE =
+  "The same-site/SPA continues half of the This-tab lifetime needs the activeTab grant that populates tab.url; without it the background prunes on every navigation, so only the cross-site-ends half runs headless (see e2e/README.md).";
+
+// Case §3.4 asks whether individually granted sites survive revoking a broad
+// all-sites grant. Staging it needs a real all-sites grant to revoke, which the
+// unpacked headless posture cannot obtain (grantAllSitesViaDetails governs only
+// declared host patterns, and none are declared).
+export const BROAD_GRANT_REVOCATION_UNAVAILABLE =
+  "The §3.4 broad-grant revocation-survival question needs a real all-sites grant to then revoke; Chrome exposes none to the unpacked headless posture, so it stays a packed/real-Chrome checklist item (see e2e/README.md).";
+
+interface SessionSeed {
+  nextNum: number;
+  tabs: { [tabId: number]: TabOverride[] };
+}
+
+export async function activeTabId(worker: Worker): Promise<number> {
+  const id = await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    return tab?.id;
+  });
+  if (id === undefined) {
+    throw new Error("no active tab to derive a tab id from");
+  }
+  return id;
+}
+
+export async function getSessionRules(worker: Worker): Promise<DnrRule[]> {
+  const rules = await worker.evaluate(() =>
+    chrome.declarativeNetRequest.getSessionRules(),
+  );
+  return rules as DnrRule[];
+}
+
+export function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
+  // Same "state" lock the background holds around its session pruning, so a
+  // seed cannot interleave with an in-flight onUpdated/onRemoved cleanup.
+  return worker.evaluate(
+    (s) =>
+      navigator.locks.request("state", () =>
+        chrome.storage.session.set({ sessionState: s }),
+      ),
+    seed,
+  );
+}
+
+export async function seedSessionAndWait(
+  worker: Worker,
+  overrides: readonly TabOverride[],
+): Promise<DnrRule[]> {
+  const desired = compileSession(overrides, false);
+  const tabs: { [tabId: number]: TabOverride[] } = {};
+  for (const override of overrides) {
+    const rows = tabs[override.tabId] ?? [];
+    rows.push(override);
+    tabs[override.tabId] = rows;
+  }
+  const nextNum = overrides.reduce((max, o) => Math.max(max, o.num), 0) + 1;
+  await seedSession(worker, { nextNum, tabs });
+  await expect
+    .poll(
+      async () =>
+        planReconcile(desired, await getSessionRules(worker)) === null,
+    )
+    .toBe(true);
+  return desired;
+}
+
+export function getBadgeText(worker: Worker, tabId?: number): Promise<string> {
+  return worker.evaluate(
+    (id) => chrome.action.getBadgeText(id === null ? {} : { tabId: id }),
+    tabId ?? null,
+  );
+}
+
+export function getBadgeColor(
+  worker: Worker,
+): Promise<[number, number, number, number]> {
+  return worker.evaluate(() => chrome.action.getBadgeBackgroundColor({}));
+}
 
 export function stateWithRules(drafts: readonly RuleDraft[]): StateDoc {
   let doc = createV1Seed();

@@ -56,6 +56,9 @@ export interface MutationDeps {
   readonly validateRegex: RegexValidator;
 }
 
+/** The write API surface shared by the popup and options entrypoints. */
+export type Mutations = ReturnType<typeof createMutations>;
+
 export function createMutations({ validateRegex }: MutationDeps) {
   function commit<T>(
     mutate: (doc: StateDoc) => Step<T> | Promise<Step<T>>,
@@ -273,6 +276,108 @@ export function createMutations({ validateRegex }: MutationDeps) {
         );
         return ok([
           withRules(removed, toProfileId, (list) => [...list, rule]),
+          undefined,
+        ]);
+      });
+    },
+
+    // Bulk actions from the options Profiles page (SPEC §4.2). Each is one
+    // commit under the shared lock, so the enabled-set cap, regex re-validation,
+    // and byte budget in guardCommit gate the whole batch atomically rather than
+    // rule by rule.
+    setRulesEnabled(
+      profileId: string,
+      ruleIds: readonly string[],
+      enabled: boolean,
+    ): MutationResult<void> {
+      return commit((doc) => {
+        if (findProfile(doc, profileId) === undefined) {
+          return notFound();
+        }
+        const ids = new Set(ruleIds);
+        return ok([
+          withRules(doc, profileId, (list) =>
+            list.map((rule) =>
+              ids.has(rule.id) ? { ...rule, enabled } : rule,
+            ),
+          ),
+          undefined,
+        ]);
+      });
+    },
+
+    deleteRules(
+      profileId: string,
+      ruleIds: readonly string[],
+    ): MutationResult<{ removed: readonly { rule: Rule; index: number }[] }> {
+      return commit((doc) => {
+        const profile = findProfile(doc, profileId);
+        if (profile === undefined) {
+          return notFound();
+        }
+        const ids = new Set(ruleIds);
+        const removed = profile.rules
+          .map((rule, index) => ({ rule, index }))
+          .filter((entry) => ids.has(entry.rule.id));
+        return ok([
+          withRules(doc, profileId, (list) =>
+            list.filter((rule) => !ids.has(rule.id)),
+          ),
+          { removed },
+        ]);
+      });
+    },
+
+    restoreRules(
+      profileId: string,
+      removed: readonly { rule: Rule; index: number }[],
+    ): MutationResult<void> {
+      return commit((doc) => {
+        if (findProfile(doc, profileId) === undefined) {
+          return notFound();
+        }
+        const present = new Set(
+          doc.profiles.flatMap((profile) =>
+            profile.rules.map((rule) => rule.id),
+          ),
+        );
+        // Re-insert at the original positions in ascending order so each stored
+        // index still addresses the slot it was removed from.
+        const toInsert = removed
+          .filter((entry) => !present.has(entry.rule.id))
+          .sort((a, b) => a.index - b.index);
+        return ok([
+          withRules(doc, profileId, (list) =>
+            toInsert.reduce(
+              (next, entry) => insertAt(next, entry.rule, entry.index),
+              [...list],
+            ),
+          ),
+          undefined,
+        ]);
+      });
+    },
+
+    moveRulesToProfile(
+      fromProfileId: string,
+      ruleIds: readonly string[],
+      toProfileId: string,
+    ): MutationResult<void> {
+      return commit((doc) => {
+        const from = findProfile(doc, fromProfileId);
+        if (from === undefined || findProfile(doc, toProfileId) === undefined) {
+          return notFound();
+        }
+        const ids = new Set(ruleIds);
+        const moving = from.rules.filter((rule) => ids.has(rule.id));
+        if (fromProfileId === toProfileId || moving.length === 0) {
+          return ok([doc, undefined]);
+        }
+        const removed = withRules(doc, fromProfileId, (list) =>
+          list.filter((rule) => !ids.has(rule.id)),
+        );
+        return ok([
+          withRules(removed, toProfileId, (list) => [...list, ...moving]),
           undefined,
         ]);
       });

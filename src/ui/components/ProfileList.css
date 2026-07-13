@@ -1,0 +1,87 @@
+.profile-list {
+  list-style: none;
+}
+
+.profile-card + .profile-card {
+  border-top: var(--hairline) solid var(--bezel);
+}
+
+/* The open card tints to group its expanded detail with its header. */
+.profile-card.open {
+  background: var(--panel-2);
+  border-radius: var(--radius-inner);
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.drag-handle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: var(--ink-mute);
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.profile-open {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+}
+
+.profile-badge {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  font-size: 9px;
+}
+
+.profile-badge.off {
+  border: 1.5px solid var(--bezel-strong);
+  color: var(--ink-mute);
+}
+
+.profile-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-weight: 500;
+}
+
+.profile-rulecount {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.profile-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-3) var(--sp-4) 36px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: var(--sp-2);
+}

@@ -1,0 +1,73 @@
+/* .sa-card takes the shared options card recipe (App.css). */
+
+.sa-all-on {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sa-all-on-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-weight: 500;
+}
+
+.sa-group:not(:first-child) {
+  margin-top: var(--sp-3);
+}
+
+.sa-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.sa-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+
+.sa-row + .sa-row {
+  border-top: var(--hairline) solid var(--bezel);
+}
+
+.sa-glyph {
+  flex: none;
+  display: inline-flex;
+}
+
+.sa-glyph.granted {
+  color: var(--advisory);
+}
+
+.sa-glyph.needed {
+  color: var(--caution-lamp);
+}
+
+.sa-domain {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sa-count {
+  margin-left: auto;
+  color: var(--ink-mute);
+  white-space: nowrap;
+}
+
+.sa-empty,
+.sa-note {
+  color: var(--ink-mute);
+}
+
+.sa-all-heading {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sa-all-body {
+  color: var(--ink-mute);
+}

@@ -1,0 +1,36 @@
+.ie-block-label {
+  margin-bottom: var(--sp-1);
+}
+
+.ie-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.ie-hint {
+  color: var(--ink-mute);
+  font-size: 12.5px;
+}
+
+.ie-export-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.ie-select {
+  min-height: 30px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.ie-error {
+  color: var(--caution);
+}

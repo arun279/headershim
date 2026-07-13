@@ -3,6 +3,13 @@ import type { RegexValidator } from "../../core/codec/modheader";
 import type { Profile, Rule, RuleDraft, StateDoc } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { read, write } from "../../platform/store";
+import {
+  profile,
+  resetFixtures,
+  rule,
+  rules,
+  stateDoc,
+} from "../test/fixtures";
 import { createMutations, type MutationError } from "./mutations";
 
 const validRegex: RegexValidator = () => Promise.resolve(ok(undefined));
@@ -11,56 +18,13 @@ const invalidRegex: RegexValidator = () => Promise.resolve(err("unsupported"));
 const mutations = createMutations({ validateRegex: validRegex });
 const strictMutations = createMutations({ validateRegex: invalidRegex });
 
-let seq = 0;
-beforeEach(() => {
-  seq = 0;
-});
-
-function rule(overrides: Partial<Rule> = {}): Rule {
-  seq += 1;
-  return {
-    id: `rule-${seq}`,
-    num: seq,
-    direction: "request",
-    operation: "set",
-    header: "x-test",
-    value: "1",
-    scope: { type: "domains", domains: ["example.com"] },
-    resourceTypes: "all",
-    initiators: [],
-    enabled: true,
-    ...overrides,
-  };
-}
-
-function rules(count: number, overrides: Partial<Rule> = {}): Rule[] {
-  return Array.from({ length: count }, () => rule(overrides));
-}
-
-function profile(id: string, overrides: Partial<Profile> = {}): Profile {
-  return {
-    id,
-    name: id,
-    badgeText: "DE",
-    color: "indigo",
-    enabled: true,
-    rules: [],
-    ...overrides,
-  };
-}
+beforeEach(resetFixtures);
 
 async function seed(
   profiles: Profile[],
   overrides: Partial<StateDoc> = {},
 ): Promise<StateDoc> {
-  const doc: StateDoc = {
-    v: 1,
-    profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
-    nextRuleNum: seq + 1,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
-    ...overrides,
-  };
+  const doc = stateDoc(profiles, overrides);
   await write(doc);
   return doc;
 }
@@ -326,6 +290,122 @@ describe("setRuleEnabled", () => {
     expect(
       (await strictMutations.setRuleEnabled("p1", plain.id, true)).ok,
     ).toBe(true);
+  });
+});
+
+describe("bulk rule actions", () => {
+  it("enables and disables the named rules in one commit", async () => {
+    const a = rule({ enabled: false });
+    const b = rule({ enabled: false });
+    const c = rule({ enabled: false });
+    await seed([profile("p1", { rules: [a, b, c] })]);
+
+    expect((await mutations.setRulesEnabled("p1", [a.id, c.id], true)).ok).toBe(
+      true,
+    );
+    const enabled = (await read()).profiles[0]?.rules.map((r) => r.enabled);
+    expect(enabled).toEqual([true, false, true]);
+  });
+
+  it("stops the whole batch at the cap boundary and changes nothing", async () => {
+    const offA = rule({ enabled: false });
+    const offB = rule({ enabled: false });
+    const doc = await seed([
+      profile("p1", { rules: [...rules(4_499), offA, offB] }),
+    ]);
+
+    // 4,499 enabled + 2 more crosses 4,500; the batch is all-or-nothing.
+    expect(
+      errorKind(
+        await mutations.setRulesEnabled("p1", [offA.id, offB.id], true),
+      ),
+    ).toBe("enabled-rule-limit-exceeded");
+    expect(await read()).toEqual(doc);
+
+    // Enabling exactly one lands us on the 4,500 boundary.
+    expect((await mutations.setRulesEnabled("p1", [offA.id], true)).ok).toBe(
+      true,
+    );
+  });
+
+  it("deletes a selection with indices and restores it in place", async () => {
+    const [a, b, c, d] = [rule(), rule(), rule(), rule()];
+    await seed([profile("p1", { rules: [a, b, c, d] })]);
+
+    const deleted = await mutations.deleteRules("p1", [b.id, d.id]);
+    expect(deleted.ok && deleted.value.removed).toEqual([
+      { rule: b, index: 1 },
+      { rule: d, index: 3 },
+    ]);
+    expect(await storedRuleIds()).toEqual([a.id, c.id]);
+
+    expect(
+      deleted.ok &&
+        (await mutations.restoreRules("p1", deleted.value.removed)).ok,
+    ).toBe(true);
+    expect(await storedRuleIds()).toEqual([a.id, b.id, c.id, d.id]);
+  });
+
+  it("is idempotent, and its restore honours the cap on the growth path", async () => {
+    const doomed = rule();
+    const stored = await seed([
+      profile("p1", { rules: [doomed, ...rules(4_500)] }),
+    ]);
+
+    // Restoring a rule that is still present is a no-op.
+    expect(
+      (await mutations.restoreRules("p1", [{ rule: doomed, index: 0 }])).ok,
+    ).toBe(true);
+    expect(await read()).toEqual(stored);
+
+    // After removal the enabled set has room; putting it back would overflow.
+    const deleted = await mutations.deleteRules("p1", [doomed.id]);
+    expect(
+      deleted.ok &&
+        errorKind(await mutations.restoreRules("p1", deleted.value.removed)),
+    ).toBe("enabled-rule-limit-exceeded");
+  });
+
+  it("moves a selection to another profile, preserving order and enabled flags", async () => {
+    const [a, b, c] = [rule(), rule({ enabled: false }), rule()];
+    await seed([
+      profile("p1", { rules: [a, b, c] }),
+      profile("p2", { rules: [] }),
+    ]);
+
+    expect(
+      (await mutations.moveRulesToProfile("p1", [a.id, b.id], "p2")).ok,
+    ).toBe(true);
+    const stored = await read();
+    expect(stored.profiles[0]?.rules.map((r) => r.id)).toEqual([c.id]);
+    expect(stored.profiles[1]?.rules).toEqual([a, b]);
+  });
+
+  it("move to a full enabled destination cannot exceed the enabled cap", async () => {
+    const target = rule();
+    await seed([
+      profile("p1", { rules: rules(4_500) }),
+      profile("p2", { rules: [target], enabled: false }),
+    ]);
+
+    expect(
+      errorKind(await mutations.moveRulesToProfile("p2", [target.id], "p1")),
+    ).toBe("enabled-rule-limit-exceeded");
+  });
+
+  it("reports not-found for a missing source or destination profile", async () => {
+    const target = rule();
+    await seed([profile("p1", { rules: [target] })]);
+
+    expect(
+      errorKind(await mutations.setRulesEnabled("nope", [target.id], true)),
+    ).toBe("not-found");
+    expect(errorKind(await mutations.deleteRules("nope", [target.id]))).toBe(
+      "not-found",
+    );
+    expect(
+      errorKind(await mutations.moveRulesToProfile("p1", [target.id], "nope")),
+    ).toBe("not-found");
   });
 });
 

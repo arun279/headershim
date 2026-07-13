@@ -1,0 +1,80 @@
+[
+  {
+    "title": "Kitchen Sink",
+    "shortTitle": "KS",
+    "backgroundColor": "#2ea9af",
+    "version": 2,
+    "headers": [
+      {
+        "enabled": true,
+        "name": "X-Debug",
+        "value": "on",
+        "appendMode": "append",
+        "comment": "append to a header Chrome won't append"
+      },
+      {
+        "enabled": true,
+        "name": "Authorization",
+        "value": "Bearer {{uuid}} at {{timestamp}}",
+        "comment": "request-time token header"
+      }
+    ],
+    "cookieHeaders": [
+      {
+        "enabled": true,
+        "name": "session",
+        "value": "preview",
+        "comment": "preview cookie"
+      }
+    ],
+    "setCookieHeaders": [
+      {
+        "enabled": false,
+        "name": "theme",
+        "value": "dark",
+        "comment": "theme cookie"
+      }
+    ],
+    "cspHeaders": [
+      {
+        "enabled": true,
+        "name": "connect-src",
+        "value": "'self' https://api.example.com",
+        "comment": "api policy"
+      }
+    ],
+    "urlFilters": [
+      { "enabled": true, "urlRegex": "^https://(?:www\\.)?example\\.com/" }
+    ],
+    "excludeUrlFilters": [{ "enabled": true, "urlRegex": "logout" }],
+    "initiatorDomainFilters": [
+      { "enabled": true, "domain": "app.example.com" }
+    ],
+    "tabFilters": [{ "enabled": true, "tabId": 42 }],
+    "tabGroupFilters": [{ "enabled": true, "tabGroupId": 7 }],
+    "windowFilters": [{ "enabled": true, "windowId": 3 }],
+    "timeFilters": [{ "enabled": true, "name": "business hours" }],
+    "urlReplacements": [
+      {
+        "enabled": true,
+        "name": "^https://old.example.com/",
+        "value": "https://new.example.com/"
+      }
+    ]
+  },
+  {
+    "title": "Bad Pattern",
+    "shortTitle": "BP",
+    "backgroundColor": "#4f5bc4",
+    "version": 2,
+    "headers": [
+      {
+        "enabled": true,
+        "name": "X-Preview",
+        "value": "on",
+        "comment": "preview header"
+      }
+    ],
+    "urlFilters": [{ "enabled": true, "urlRegex": "^https://(?=preview\\.)" }]
+  }
+]

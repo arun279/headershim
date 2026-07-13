@@ -1,10 +1,24 @@
+import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
+
+// The trust page displays the commit each build came from (SPEC §4.2); a
+// release build is always a git checkout, so the working tree is the source.
+function commitHash(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
 
 export default defineConfig({
   vite: () => ({
     esbuild: {
       jsx: "automatic",
       jsxImportSource: "preact",
+    },
+    define: {
+      __COMMIT__: JSON.stringify(commitHash()),
     },
   }),
   manifest: {

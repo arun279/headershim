@@ -21,6 +21,7 @@ import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
 import { VerifyPanel } from "../../src/ui/components/VerifyPanel";
 import { copy } from "../../src/ui/copy";
+import { blockedCommitCopy } from "../../src/ui/state/commit-copy";
 import {
   createMutations,
   type MutationError,
@@ -538,31 +539,6 @@ function FirstRun({
       </div>
     </div>
   );
-}
-
-/**
- * The switcher and footer can hit blocking save rules (rule cap, regex, byte
- * budget); the popup's surface for those is a toast. Errors without popup-level
- * copy (stale ids from a concurrent options-page edit) resolve themselves on
- * the storage re-render and stay silent.
- */
-function blockedCommitCopy(error: MutationError): string | undefined {
-  switch (error.kind) {
-    case "enabled-rule-limit-exceeded":
-      return copy.errors.ruleCap;
-    case "regex-rule-limit-exceeded":
-      return copy.errors.regexRuleCap;
-    case "doc-byte-limit-exceeded":
-      return copy.errors.storageBudget;
-    case "regex-invalid":
-      // Chrome's validator distinguishes an oversized compilation from a
-      // dialect error; the fix directions differ.
-      return error.reason === "memoryLimitExceeded"
-        ? copy.errors.regexOversize
-        : copy.errors.regexInvalid;
-    default:
-      return undefined;
-  }
 }
 
 function GearGlyph() {

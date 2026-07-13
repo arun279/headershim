@@ -36,15 +36,20 @@ export interface Rule {
   generated?: { kind: "uuid" | "timestamp"; at: string };
 }
 
-export type BadgeColor =
-  | "indigo"
-  | "blue"
-  | "teal"
-  | "green"
-  | "plum"
-  | "magenta"
-  | "crimson"
-  | "slate";
+// The fixed badge palette, in swatch order. Each hue meets the contrast bar
+// against white 2-char text in both themes (see tokens.css / core/badge.ts).
+export const BADGE_COLORS = [
+  "indigo",
+  "blue",
+  "teal",
+  "green",
+  "plum",
+  "magenta",
+  "crimson",
+  "slate",
+] as const;
+
+export type BadgeColor = (typeof BADGE_COLORS)[number];
 
 export interface Profile {
   id: string;

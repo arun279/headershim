@@ -1,4 +1,10 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "preact/hooks";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
 import type { HeaderOp } from "../../core/model";
@@ -44,7 +50,13 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   const classification = classifyHeaderName(props.value);
 
   // Mount-time gesture: focus moves into the editor when it opens, never again.
-  useEffect(() => {
+  // Synchronous with the commit that mounts the editor, not a post-paint effect:
+  // the just-vacated row would otherwise drop focus to <body> for a frame, and a
+  // key pressed in that gap (Esc on a slow machine) reaches neither the editor
+  // nor the popup-root handler — both sit under <main>, below where body events
+  // bubble — so it is silently dropped. Landing focus inside the editor in the
+  // same commit that makes it visible closes that gap.
+  useLayoutEffect(() => {
     if (props.autoFocus === true) {
       inputRef.current?.focus();
     }

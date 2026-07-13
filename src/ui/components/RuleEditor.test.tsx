@@ -125,6 +125,15 @@ describe("RuleEditor commit model", () => {
     expect(labels.some((label) => /apply|save/i.test(label))).toBe(false);
   });
 
+  it("lands focus in the header field the moment it opens", () => {
+    // Opening the editor must take focus in the same commit that mounts it: the
+    // row it replaces drops focus to <body>, and a key pressed before focus
+    // settles reaches neither the editor nor the popup-root handler (both sit
+    // under <main>), so Esc would be silently dropped.
+    const ctx = mount();
+    expect(document.activeElement).toBe(ctx.nameInput());
+  });
+
   it("commits on Enter with the draft as typed and closes", async () => {
     const ctx = mount();
     await fillAndCommit(ctx, "X-Custom");

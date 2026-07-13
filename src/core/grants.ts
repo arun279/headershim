@@ -3,6 +3,10 @@ import { expandResourceTypes, originPatternForDomain } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
 
+export function isAllSitesOrigin(origin: string): boolean {
+  return origin === ALL_SITES_ORIGIN || origin === "<all_urls>";
+}
+
 export interface GrantSnapshot {
   readonly origins: readonly string[];
   readonly allSites: boolean;
@@ -73,6 +77,88 @@ export function docMissingGrants(
         })
       : [],
   );
+}
+
+export interface SiteAccessEntry {
+  readonly origin: string;
+  readonly domain: string;
+  readonly ruleCount: number;
+}
+
+export interface SiteAccessView {
+  readonly needed: readonly SiteAccessEntry[];
+  readonly granted: readonly SiteAccessEntry[];
+  readonly initiatorNote: boolean;
+}
+
+/**
+ * The Site access page's world: origins enabled rules still need, origins
+ * already granted with the rules that reference them (pattern and regex rules
+ * count through their persisted hosts, via requiredOrigins), and whether the
+ * standing initiator note applies. Needed entries never include the broad
+ * origin — the all-sites card is its only grant affordance, so broad access
+ * stays behind its honest framing. Granted counts span all rules regardless of
+ * enabled state, because grants outlive the rules that asked for them.
+ */
+export function siteAccessView(
+  doc: StateDoc,
+  granted: GrantSnapshot,
+): SiteAccessView {
+  const needed = new Map<string, number>();
+  for (const gap of docMissingGrants(doc, granted)) {
+    for (const origin of gap.missing) {
+      if (!isAllSitesOrigin(origin)) {
+        needed.set(origin, (needed.get(origin) ?? 0) + 1);
+      }
+    }
+  }
+
+  const required = doc.profiles.flatMap((profile) =>
+    profile.rules.map(requiredOrigins),
+  );
+  return {
+    needed: [...needed]
+      .map(([origin, ruleCount]) => entry(origin, ruleCount))
+      .sort(byDomain),
+    granted: granted.origins
+      .filter((origin) => !isAllSitesOrigin(origin))
+      .map((origin) =>
+        entry(
+          origin,
+          required.filter((origins) =>
+            origins.some((candidate) =>
+              originPatternContains(origin, candidate),
+            ),
+          ).length,
+        ),
+      )
+      .sort(byDomain),
+    initiatorNote:
+      !granted.allSites &&
+      doc.profiles.some(
+        (profile) =>
+          profile.enabled &&
+          profile.rules.some(
+            (rule) =>
+              rule.enabled &&
+              rule.initiators.length === 0 &&
+              rule.scope.type !== "all" &&
+              coversSubresourceTypes(rule),
+          ),
+      ),
+  };
+}
+
+function entry(origin: string, ruleCount: number): SiteAccessEntry {
+  return {
+    origin,
+    domain: domainFromOriginPattern(origin) ?? origin,
+    ruleCount,
+  };
+}
+
+function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
+  return a.domain.localeCompare(b.domain);
 }
 
 /**

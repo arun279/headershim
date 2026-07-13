@@ -86,7 +86,7 @@ export function ProfileSwitcher({
           onFocus={() => setRoving(index)}
         >
           <span
-            class="chip-badge"
+            class="chip-badge badge-glyph"
             aria-hidden="true"
             style={
               profile.enabled

@@ -1,0 +1,86 @@
+/* .about-card takes the shared options card recipe (App.css). */
+
+.about-radios {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  border: none;
+}
+
+.about-radios legend {
+  float: left;
+  margin-right: var(--sp-5);
+  font-weight: 500;
+}
+
+/* Whole label is the target, kept at the 24px minimum (WCAG 2.5.8). */
+.about-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 24px;
+}
+
+.about-radio input {
+  accent-color: var(--trace);
+  width: 16px;
+  height: 16px;
+}
+
+.about-link-button {
+  color: var(--trace);
+  font-weight: 500;
+  padding: var(--sp-2) 0;
+}
+
+.about-group {
+  margin-top: var(--sp-4);
+}
+
+.about-build {
+  font-weight: 500;
+}
+
+.about-table-scroll {
+  overflow-x: auto;
+}
+
+.about-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.about-table th,
+.about-table td {
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.about-table thead th {
+  color: var(--ink-mute);
+  font-weight: 600;
+}
+
+.about-table tbody th {
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.about-never,
+.about-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-left: var(--sp-5);
+}
+
+.about-links {
+  margin-top: var(--sp-4);
+  color: var(--ink-mute);
+}
+
+.about-link {
+  color: var(--trace);
+}

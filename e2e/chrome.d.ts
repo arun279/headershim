@@ -13,21 +13,32 @@ interface ChromeMatchedRule {
   rule: { ruleId: number };
 }
 
+interface ChromeTab {
+  id?: number;
+  url?: string;
+}
+
 declare const chrome: {
   storage: {
     local: {
       set(items: Record<string, unknown>): Promise<void>;
       get(keys?: string | string[]): Promise<Record<string, unknown>>;
     };
+    session: {
+      set(items: Record<string, unknown>): Promise<void>;
+      get(keys?: string | string[]): Promise<Record<string, unknown>>;
+    };
   };
   declarativeNetRequest: {
     getDynamicRules(): Promise<unknown[]>;
+    getSessionRules(): Promise<unknown[]>;
     updateDynamicRules(options: {
       addRules?: unknown[];
       removeRuleIds?: number[];
     }): Promise<void>;
     getMatchedRules(filter: {
       tabId: number;
+      minTimeStamp?: number;
     }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;
     setExtensionActionOptions(options: {
       displayActionCountAsBadgeText: boolean;
@@ -35,12 +46,16 @@ declare const chrome: {
   };
   action: {
     getBadgeText(details: { tabId?: number }): Promise<string>;
+    getBadgeBackgroundColor(details: {
+      tabId?: number;
+    }): Promise<[number, number, number, number]>;
   };
   tabs: {
     query(query: {
       active?: boolean;
+      currentWindow?: boolean;
       lastFocusedWindow?: boolean;
-    }): Promise<{ id?: number }[]>;
+    }): Promise<ChromeTab[]>;
   };
   permissions: {
     getAll(): Promise<{ origins: string[]; permissions: string[] }>;

@@ -3,10 +3,12 @@ import {
   ALL_SITES_ORIGIN,
   docMissingGrants,
   type GrantSnapshot,
+  isAllSitesOrigin,
   missingGrants,
   requiredOrigins,
+  siteAccessView,
 } from "./grants";
-import type { Rule, Scope, StateDoc } from "./model";
+import type { Profile, Rule, Scope, StateDoc } from "./model";
 import { originPatternForDomain } from "./scope";
 
 function rule(
@@ -252,5 +254,131 @@ describe("docMissingGrants", () => {
       },
     ]);
     expect(docMissingGrants(doc, { origins: [], allSites: true })).toEqual([]);
+  });
+});
+
+describe("siteAccessView", () => {
+  const none: GrantSnapshot = { origins: [], allSites: false };
+
+  function doc(profiles: Profile[]): StateDoc {
+    return {
+      v: 1,
+      profiles,
+      focusedProfileId: profiles[0]?.id ?? "",
+      nextRuleNum: 100,
+      settings: { paused: false, theme: "system", badgeMode: "count" },
+    };
+  }
+
+  function profile(id: string, enabled: boolean, rules: Rule[]): Profile {
+    return { id, name: id, badgeText: "PR", color: "blue", enabled, rules };
+  }
+
+  it("aggregates needed origins across rules, sorted by domain", () => {
+    const subject = doc([
+      profile("p1", true, [
+        rule({ type: "domains", domains: ["zeta.example.com"] }, "all"),
+        {
+          ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+          id: "rule-2",
+        },
+        {
+          ...rule(
+            {
+              type: "pattern",
+              pattern: "||api.example.com^",
+              hosts: ["api.example.com"],
+            },
+            "all",
+          ),
+          id: "rule-3",
+        },
+      ]),
+    ]);
+
+    expect(siteAccessView(subject, none).needed).toEqual([
+      {
+        origin: originPatternForDomain("api.example.com"),
+        domain: "api.example.com",
+        ruleCount: 2,
+      },
+      {
+        origin: originPatternForDomain("zeta.example.com"),
+        domain: "zeta.example.com",
+        ruleCount: 1,
+      },
+    ]);
+  });
+
+  it("routes broad needs to the all-sites card, never a needed row", () => {
+    const subject = doc([profile("p1", true, [rule({ type: "all" }, "all")])]);
+
+    expect(siteAccessView(subject, none).needed).toEqual([]);
+  });
+
+  it("counts every rule that references a grant, enabled or not", () => {
+    const granted = originPatternForDomain("api.example.com");
+    const subject = doc([
+      profile("p1", false, [
+        { ...rule({ type: "domains", domains: ["api.example.com"] }, "all") },
+        {
+          ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+          id: "rule-2",
+          enabled: false,
+        },
+      ]),
+    ]);
+
+    expect(
+      siteAccessView(subject, { origins: [granted], allSites: false }).granted,
+    ).toEqual([{ origin: granted, domain: "api.example.com", ruleCount: 2 }]);
+  });
+
+  it("keeps a rule-less grant listed with a zero count", () => {
+    const granted = originPatternForDomain("old.example.com");
+
+    expect(
+      siteAccessView(doc([]), { origins: [granted], allSites: false }).granted,
+    ).toEqual([{ origin: granted, domain: "old.example.com", ruleCount: 0 }]);
+  });
+
+  it("excludes the broad origin from the granted list", () => {
+    expect(
+      siteAccessView(doc([]), {
+        origins: [ALL_SITES_ORIGIN, "<all_urls>"],
+        allSites: true,
+      }).granted,
+    ).toEqual([]);
+    expect(isAllSitesOrigin(ALL_SITES_ORIGIN)).toBe(true);
+    expect(isAllSitesOrigin(originPatternForDomain("example.com"))).toBe(false);
+  });
+
+  it("raises the standing initiator note only for enabled subresource rules with no named initiator", () => {
+    const bare = rule({ type: "domains", domains: ["api.example.com"] }, [
+      "xhr",
+    ]);
+
+    expect(
+      siteAccessView(doc([profile("p1", true, [bare])]), none).initiatorNote,
+    ).toBe(true);
+    expect(
+      siteAccessView(
+        doc([
+          profile("p1", true, [
+            { ...bare, initiators: ["app.example.com"] },
+            { ...bare, id: "rule-2", resourceTypes: ["pages"] },
+            { ...bare, id: "rule-3", enabled: false },
+          ]),
+          profile("p2", false, [{ ...bare, id: "rule-4" }]),
+        ]),
+        none,
+      ).initiatorNote,
+    ).toBe(false);
+    expect(
+      siteAccessView(doc([profile("p1", true, [bare])]), {
+        origins: [ALL_SITES_ORIGIN],
+        allSites: true,
+      }).initiatorNote,
+    ).toBe(false);
   });
 });

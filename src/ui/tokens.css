@@ -162,6 +162,25 @@ button {
   color: var(--ink-mute);
 }
 
+/* Shared two-character profile badge glyph; the hue is set inline per profile. */
+.badge-glyph {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-inner);
+  font-family: var(--font-data);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+/* Inset text field: the well look shared by the badge-text and rename inputs. */
+.inset-field {
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+  color: var(--ink);
+}
+
 /* Silkscreen micro-label: source copy stays sentence case, caps via CSS only. */
 .silk {
   font-size: 10px;

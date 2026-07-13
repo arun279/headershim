@@ -20,6 +20,17 @@ export function fire(interaction: () => void): void {
   act(interaction);
 }
 
+/** Finds the button whose visible text is exactly `label`, or throws. */
+export function findButton(root: ParentNode, label: string): HTMLButtonElement {
+  const button = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
+    (candidate) => candidate.textContent === label,
+  );
+  if (button === undefined) {
+    throw new Error(`no button labeled "${label}"`);
+  }
+  return button;
+}
+
 export function press(target: HTMLElement, key: string): void {
   act(() => {
     target.dispatchEvent(

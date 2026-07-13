@@ -105,4 +105,37 @@ describe("copy", () => {
     );
     expect(copy.verify.limits).toContain('check "Disable cache"');
   });
+
+  it("keeps the trust-page claims inside their honest wording bounds", () => {
+    // The all-sites card quotes Chrome's real warning string and keeps the
+    // revocation promise.
+    expect(copy.options.siteAccess.allSites.body).toContain(
+      '"Read and change all your data on all websites"',
+    );
+    expect(copy.options.siteAccess.allSites.body).toContain(
+      "You can revoke it here at any time.",
+    );
+    // The install claim is always "no install-time warning" — never a broader
+    // "no permission text anywhere" — and the build claim never says the store
+    // build itself is verifiable.
+    expect(copy.options.about.permissions.intro).toContain(
+      "no install-time warning",
+    );
+    expect(copy.options.about.verifyBuild.caveat).toContain(
+      "re-packages and signs",
+    );
+    expect(JSON.stringify(copy.options.about)).not.toMatch(
+      /verify the store build/i,
+    );
+    expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
+    expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");
+    expect(copy.options.siteAccess.revoked("api.example.com")).toBe(
+      "Access to api.example.com revoked",
+    );
+    // While the broad grant stands, removing a narrow grant must not claim
+    // access ended.
+    expect(
+      copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
+    ).toBe("api.example.com grant removed — all-sites access still covers it");
+  });
 });

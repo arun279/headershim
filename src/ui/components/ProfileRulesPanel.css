@@ -1,0 +1,59 @@
+.rules-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.rules-panel-label {
+  font-size: 10px;
+}
+
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.bulk-select-all {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.bulk-actions,
+.bulk-move-targets {
+  display: flex;
+  gap: var(--sp-2);
+  margin-inline-start: auto;
+}
+
+.bulk-move-targets {
+  flex-wrap: wrap;
+  margin-inline-start: 0;
+}
+
+.selectable-rules {
+  list-style: none;
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+  overflow: hidden;
+}
+
+.selectable-rule {
+  display: grid;
+  grid-template-columns: auto auto 34px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+  min-height: 44px;
+  padding: 5px 12px;
+  background: var(--panel-1);
+}
+
+.selectable-rule + .selectable-rule {
+  border-top: var(--hairline) solid var(--bezel);
+}

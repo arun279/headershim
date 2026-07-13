@@ -29,6 +29,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.5.3",
     "@playwright/test": "1.61.1",
     "@resvg/resvg-js": "^2.6.2",
@@ -53,8 +54,8 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/jsxRuntime.module-*.js",
-      "limit": "14 kB"
+      "path": ".output/chrome-mv3/chunks/glyphs-*.js",
+      "limit": "21 kB"
     },
     {
       "name": "Popup",
@@ -64,7 +65,7 @@
     {
       "name": "Options",
       "path": ".output/chrome-mv3/chunks/options-*.js",
-      "limit": "170 B"
+      "limit": "7.5 kB"
     }
   ],
   "pnpm": {
