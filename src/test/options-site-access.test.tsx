@@ -187,6 +187,20 @@ describe("options site access", () => {
     expect(root.textContent).toContain(copy.emptyState.siteAccess);
   });
 
+  it("announces that a narrow revoke leaves all-sites access standing", async () => {
+    await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
+    await grantOrigins("api.example.com");
+    const root = await mount([profile("p1")]);
+
+    fire(() => rowButton(root, text.revokeLabel("api.example.com")).click());
+    await settle();
+
+    expect(root.querySelector('[role="status"]')?.textContent).toBe(
+      text.revokedUnderAllSites("api.example.com"),
+    );
+    expect(root.textContent).toContain(text.allSites.on);
+  });
+
   it("drives the standing initiator note from resource types", async () => {
     const withNote = await mount([
       profile("p1", {

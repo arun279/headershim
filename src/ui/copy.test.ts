@@ -132,5 +132,10 @@ describe("copy", () => {
     expect(copy.options.siteAccess.revoked("api.example.com")).toBe(
       "Access to api.example.com revoked",
     );
+    // While the broad grant stands, removing a narrow grant must not claim
+    // access ended.
+    expect(
+      copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
+    ).toBe("api.example.com grant removed — all-sites access still covers it");
   });
 });

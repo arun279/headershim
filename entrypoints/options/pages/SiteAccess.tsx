@@ -50,7 +50,11 @@ export function SiteAccessPage({
   const revoke = (entry: SiteAccessEntry) =>
     void removePermissions([entry.origin]).then((removed) => {
       if (removed) {
-        announce(text.revoked(entry.domain));
+        announce(
+          grants.allSites
+            ? text.revokedUnderAllSites(entry.domain)
+            : text.revoked(entry.domain),
+        );
       }
     });
 

@@ -217,6 +217,10 @@ export const copy = {
       revoke: "Revoke",
       revokeLabel: (domain: string) => `Revoke access to ${domain}`,
       revoked: (domain: string) => `Access to ${domain} revoked`,
+      // A narrow grant removed while the broad grant stands changes nothing
+      // about reach — saying "revoked" there would claim access ended.
+      revokedUnderAllSites: (domain: string) =>
+        `${domain} grant removed — all-sites access still covers it`,
       // The standing note (SPEC §3.3): shown while any enabled rule reaches
       // subresources without naming the pages that start those requests.
       initiatorNote:
@@ -275,7 +279,7 @@ export const copy = {
           {
             permission: "activeTab",
             why: "Lets This-tab overrides and Verify act on the tab where you clicked, with no site grant.",
-            when: "Only when you click — the click is the consent.",
+            when: "Only on your gesture — the click or keyboard shortcut is the consent.",
           },
           {
             permission: "Site access (optional)",
@@ -291,7 +295,7 @@ export const copy = {
       neverList: {
         heading: "What headershim will never do",
         intro:
-          "Each absence is structural, enforced by an executable manifest policy in CI — checkable by reading the manifest, not claimed.",
+          "Every absence the manifest can express is enforced by an executable policy check in CI — checkable by reading the manifest, not claimed. The rest are standing commitments, in writing here and in the listing.",
         // Verbatim SPEC §10.
         items: [
           {
