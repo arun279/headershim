@@ -55,7 +55,7 @@
     {
       "name": "Popup",
       "path": ".output/chrome-mv3/chunks/popup-*.js",
-      "limit": "19 kB"
+      "limit": "20.5 kB"
     },
     {
       "name": "Options",

@@ -1,4 +1,10 @@
 import { useId, useRef, useState } from "preact/hooks";
+import {
+  coversSubresourceTypes,
+  type GrantSnapshot,
+  missingGrants,
+  originGranted,
+} from "../../core/grants";
 import type {
   Direction,
   HeaderOp,
@@ -8,8 +14,14 @@ import type {
   Scope,
 } from "../../core/model";
 import type { Result } from "../../core/result";
+import { originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
+import {
+  GrantPanel,
+  type GrantSelection,
+  type InitiatorControl,
+} from "./GrantPanel";
 import { HeaderNameInput } from "./HeaderNameInput";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { ValueField } from "./ValueField";
@@ -20,9 +32,29 @@ interface RuleEditorProps {
   rule?: Rule | undefined;
   /** Domain of the tab the popup opened on; pre-fills a new Domains scope. */
   prefillDomain?: string | undefined;
-  onSave: (draft: RuleDraft) => Promise<Result<Rule, MutationError>>;
+  /** Live grant snapshot, so the grant moment (§3.1) fires only when needed. */
+  grants: GrantSnapshot;
+  /** Origin of the tab the popup opened on: the inferred initiator (§3.3). */
+  tabDomain?: string | undefined;
+  onSave: (
+    ruleId: string | undefined,
+    draft: RuleDraft,
+  ) => Promise<Result<Rule, MutationError>>;
+  /** Fires the in-gesture permission prompt; resolves to Chrome's decision. */
+  onRequestGrant: (origins: string[]) => Promise<boolean>;
+  /** A grant landed: the now-active sites, for the "Active on …" toast. */
+  onGranted?: (sites: readonly string[]) => void;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
+}
+
+interface GrantStep {
+  rule: Rule;
+  scopeType: Scope["type"];
+  targets: string[];
+  editableTargets: boolean;
+  targetPrefill: string[];
+  initiator: InitiatorControl;
 }
 
 interface Draft {
@@ -59,12 +91,18 @@ export function RuleEditor(props: RuleEditorProps) {
     initialDraft(props.rule, props.prefillDomain),
   );
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
   // Handlers that fire mid-gesture (chip blur, then the editor's focus-leave
   // commit in the same event turn) must see each other's writes; state alone
   // only lands on the next render.
   const draftRef = useRef(draft);
   const dirtyRef = useRef(false);
   const busyRef = useRef(false);
+  // The saved rule's id survives a new-rule commit so the grant step can persist
+  // its collected sites onto that same rule rather than creating a second one.
+  const savedIdRef = useRef(props.rule?.id);
+  const grantOpenRef = useRef(false);
+  grantOpenRef.current = grantStep !== undefined;
 
   const update = (transform: (draft: Draft) => Draft) => {
     dirtyRef.current = true;
@@ -73,7 +111,7 @@ export function RuleEditor(props: RuleEditorProps) {
     setErrors({});
   };
 
-  const commit = async () => {
+  const commit = async (grantImmediately = false) => {
     if (busyRef.current) {
       return;
     }
@@ -85,20 +123,76 @@ export function RuleEditor(props: RuleEditorProps) {
     }
     busyRef.current = true;
     try {
-      const outcome = await props.onSave(toRuleDraft(current, props.rule));
-      if (outcome.ok) {
+      const outcome = await props.onSave(
+        savedIdRef.current,
+        toRuleDraft(current, props.rule),
+      );
+      if (!outcome.ok) {
+        const mapped = mapError(outcome.error, current.scope.type);
+        if (mapped === "close") {
+          props.onClose();
+        } else {
+          setErrors(mapped);
+        }
+        return;
+      }
+      const saved = outcome.value;
+      savedIdRef.current = saved.id;
+      const step = planGrant(saved, props.grants, props.tabDomain);
+      if (step === undefined) {
         props.onClose();
         return;
       }
-      const mapped = mapError(outcome.error, current.scope.type);
-      if (mapped === "close") {
-        props.onClose();
-      } else {
-        setErrors(mapped);
+      setGrantStep(step);
+      if (grantImmediately) {
+        // Ctrl/Cmd+Enter: prompt in the same gesture, with the panel's defaults.
+        allow(step, defaultSelection(step));
       }
     } finally {
       busyRef.current = false;
     }
+  };
+
+  // The permission prompt is created synchronously here so it stays inside the
+  // click/keydown gesture; the store write and the prompt's outcome are awaited
+  // afterwards. Granting a host permission itself never recompiles — the
+  // permissions.onChanged event drives only the badge (background lifecycle).
+  const allow = (step: GrantStep, selection: GrantSelection) => {
+    const origins = [
+      ...new Set(
+        [...selection.targetHosts, ...selection.initiators].map(
+          originPatternForDomain,
+        ),
+      ),
+    ];
+    const granted =
+      origins.length === 0
+        ? Promise.resolve(true)
+        : props.onRequestGrant(origins);
+    void finishGrant(step.rule, selection, granted);
+  };
+
+  const finishGrant = async (
+    rule: Rule,
+    selection: GrantSelection,
+    granted: Promise<boolean>,
+  ) => {
+    const persisted = withGrantScope(rule, selection);
+    if (persisted !== undefined) {
+      // Best-effort: the grant itself has already landed, and the loud surfaces
+      // read the live permission snapshot, not this write. A rare failure here
+      // (byte budget, a concurrent edit) leaves the rule running but its granted
+      // sites unrecorded, so a later revoke can't relight it — no worse than the
+      // grant never having been offered, and nothing the closing popup can undo.
+      await props.onSave(rule.id, persisted);
+    }
+    const sites = [
+      ...new Set([...selection.targetHosts, ...selection.initiators]),
+    ];
+    if ((await granted) && sites.length > 0) {
+      props.onGranted?.(sites);
+    }
+    props.onClose();
   };
 
   const generate = (kind: "uuid" | "timestamp") => {
@@ -133,10 +227,12 @@ export function RuleEditor(props: RuleEditorProps) {
         const target =
           event.target instanceof HTMLElement ? event.target : null;
         if (event.key === "Enter") {
-          // Enter on a button activates it; everywhere else it commits.
+          // Enter on a button activates it; everywhere else it commits. The open
+          // grant panel owns its own Ctrl/Cmd+Enter (it grants with the sites as
+          // edited), so this only reaches the field editor before that step.
           if (target?.tagName !== "BUTTON") {
             event.preventDefault();
-            void commit();
+            void commit(event.metaKey || event.ctrlKey);
           }
           return;
         }
@@ -154,7 +250,11 @@ export function RuleEditor(props: RuleEditorProps) {
         ) {
           return;
         }
-        if (dirtyRef.current) {
+        // Focus leaving during the grant step abandons it: the rule is already
+        // saved and loud, and the annunciator's Grant access re-offers the prompt.
+        if (grantOpenRef.current) {
+          props.onClose();
+        } else if (dirtyRef.current) {
           void commit();
         } else {
           props.onClose();
@@ -277,6 +377,19 @@ export function RuleEditor(props: RuleEditorProps) {
         <p class="editor-error editor-error-global" role="alert">
           {errors.editor}
         </p>
+      )}
+
+      {grantStep !== undefined && (
+        <GrantPanel
+          scopeType={grantStep.scopeType}
+          targetHosts={grantStep.targets}
+          editableTargets={grantStep.editableTargets}
+          targetPrefill={grantStep.targetPrefill}
+          initiator={grantStep.initiator}
+          onAllow={(selection) => allow(grantStep, selection)}
+          onNotNow={props.onClose}
+          onAllSites={props.onClose}
+        />
       )}
     </fieldset>
   );
@@ -437,6 +550,160 @@ function keptHosts(
   return rule !== undefined && rule.scope.type === type
     ? [...rule.scope.hosts]
     : [];
+}
+
+/**
+ * Whether a just-committed rule still needs a grant the popup can prompt for,
+ * and the shape of the panel that collects it. All-sites scopes route through
+ * the buried options flow (§3.4), never a popup prompt; a fully-granted rule
+ * needs no panel at all.
+ */
+function planGrant(
+  rule: Rule,
+  grants: GrantSnapshot,
+  tabDomain: string | undefined,
+): GrantStep | undefined {
+  if (grants.allSites || rule.scope.type === "all") {
+    return undefined;
+  }
+  const covers = coversSubresourceTypes(rule);
+  const { scope } = rule;
+
+  if (scope.type === "pattern" || scope.type === "regex") {
+    const initiator: InitiatorControl = covers
+      ? {
+          kind: "chips",
+          prefill: tabDomain !== undefined ? [tabDomain] : [...rule.initiators],
+        }
+      : { kind: "none" };
+    // A configured pattern rule whose named hosts are all granted asks nothing
+    // — unless the inferred initiator page is a still-ungranted subresource gap.
+    if (
+      scope.hosts.length > 0 &&
+      missingGrants(rule, grants).length === 0 &&
+      !initiatorNeedsGrant(initiator, grants)
+    ) {
+      return undefined;
+    }
+    return {
+      rule,
+      scopeType: scope.type,
+      targets: [],
+      editableTargets: true,
+      targetPrefill: tabDomain !== undefined ? [tabDomain] : [...scope.hosts],
+      initiator,
+    };
+  }
+
+  const targets = [...scope.domains];
+  const initiator = domainInitiator(rule, tabDomain, covers, targets);
+  // The target domains can already be granted while the inferred initiator page
+  // isn't: a cross-host subresource rule still needs that page granted to run,
+  // and the rule's own initiators list can't reveal a page it hasn't recorded.
+  if (
+    missingGrants(rule, grants).length === 0 &&
+    !initiatorNeedsGrant(initiator, grants)
+  ) {
+    return undefined;
+  }
+  return {
+    rule,
+    scopeType: "domains",
+    targets,
+    editableTargets: false,
+    targetPrefill: [],
+    initiator,
+  };
+}
+
+/** An inferred initiator worth a panel: one whose host isn't granted yet. */
+function initiatorNeedsGrant(
+  initiator: InitiatorControl,
+  grants: GrantSnapshot,
+): boolean {
+  switch (initiator.kind) {
+    case "checkbox":
+      return !originGranted(initiator.host, grants);
+    case "chips":
+      return initiator.prefill.some((host) => !originGranted(host, grants));
+    case "none":
+      return false;
+  }
+}
+
+/**
+ * §3.3's honest split for a Domains rule reaching subresources: pre-check the
+ * tab's own origin when it differs from the target (the inferred initiator);
+ * offer an explicit optional input when no page context could be captured;
+ * ask nothing when the rule stays on navigations or the tab is the target.
+ */
+function domainInitiator(
+  rule: Rule,
+  tabDomain: string | undefined,
+  covers: boolean,
+  targets: readonly string[],
+): InitiatorControl {
+  if (!covers) {
+    return { kind: "none" };
+  }
+  if (tabDomain === undefined) {
+    return { kind: "chips", prefill: [...rule.initiators] };
+  }
+  if (!targets.includes(tabDomain)) {
+    return {
+      kind: "checkbox",
+      host: tabDomain,
+      target: targets[0] ?? tabDomain,
+    };
+  }
+  return { kind: "none" };
+}
+
+function defaultSelection(step: GrantStep): GrantSelection {
+  return {
+    targetHosts: step.editableTargets
+      ? [...step.targetPrefill]
+      : [...step.targets],
+    initiators:
+      step.initiator.kind === "checkbox"
+        ? [step.initiator.host]
+        : step.initiator.kind === "chips"
+          ? [...step.initiator.prefill]
+          : [],
+  };
+}
+
+/**
+ * The rule draft that records what the grant panel collected — target hosts on
+ * a pattern/regex scope, initiators on the rule — or undefined when the
+ * selection adds nothing new. Target hosts drive grant computation alone;
+ * initiators also narrow the match to those pages (initiatorDomains), so a
+ * newly named initiator recompiles the rule while a new target host does not.
+ */
+function withGrantScope(
+  rule: Rule,
+  selection: GrantSelection,
+): RuleDraft | undefined {
+  const addedInitiators = selection.initiators.filter(
+    (host) => !rule.initiators.includes(host),
+  );
+  const { scope } = rule;
+  const addedHosts =
+    scope.type === "pattern" || scope.type === "regex"
+      ? selection.targetHosts.filter((host) => !scope.hosts.includes(host))
+      : [];
+  if (addedInitiators.length === 0 && addedHosts.length === 0) {
+    return undefined;
+  }
+  const { id: _id, num: _num, ...draft } = rule;
+  return {
+    ...draft,
+    scope:
+      scope.type === "pattern" || scope.type === "regex"
+        ? { ...scope, hosts: [...scope.hosts, ...addedHosts] }
+        : scope,
+    initiators: [...rule.initiators, ...addedInitiators],
+  };
 }
 
 /** "2026-07-12T14:03:27.000Z" → "2026-07-12 14:03 UTC" (the designed reading). */

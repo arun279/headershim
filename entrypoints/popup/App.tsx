@@ -48,6 +48,7 @@ export function App() {
       <Ready
         doc={app.doc}
         status={app.status}
+        grants={app.grants}
         grantGaps={app.grantGaps}
         overrideCount={app.overrideCount}
       />
@@ -63,7 +64,7 @@ interface PendingUndo {
   index: number;
 }
 
-function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
+function Ready({ doc, status, grants, grantGaps, overrideCount }: ReadyProps) {
   const [toast, setToast] = useState<
     { message: string; undo?: boolean } | undefined
   >(undefined);
@@ -133,17 +134,16 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
       : enabledProfiles;
 
   const saveEditing = (
-    target: { profileId: string; ruleId?: string },
+    profileId: string,
+    ruleId: string | undefined,
     draft: RuleDraft,
   ) =>
-    mutations
-      .saveRule(target.profileId, target.ruleId, draft)
-      .then((outcome) => {
-        if (outcome.ok) {
-          setPendingUndo(undefined);
-        }
-        return outcome;
-      });
+    mutations.saveRule(profileId, ruleId, draft).then((outcome) => {
+      if (outcome.ok) {
+        setPendingUndo(undefined);
+      }
+      return outcome;
+    });
 
   // When the new-rule editor closes and focus fell with it, the + New rule
   // trigger takes it back; a focus the user moved stays put.
@@ -222,6 +222,18 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
     closePopup: () => window.close(),
   });
 
+  // A grant from the editor's panel lands; the loud surfaces clear themselves
+  // when the refreshed snapshot empties the gaps. The toast (a polite live
+  // region) states the outcome.
+  const announceGrant = (sites: readonly string[]) => {
+    setToast({
+      message:
+        sites.length === 1
+          ? copy.toast.activeOn(sites[0] as string)
+          : copy.toast.activeOnSites(sites.length),
+    });
+  };
+
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
     // permissions.onChanged event refreshes every surface at once.
@@ -289,7 +301,13 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
                             ? tabDomain
                             : undefined
                         }
-                        onSave={(draft) => saveEditing(activeEditing, draft)}
+                        grants={grants}
+                        tabDomain={tabDomain}
+                        onSave={(ruleId, draft) =>
+                          saveEditing(activeEditing.profileId, ruleId, draft)
+                        }
+                        onRequestGrant={requestPermissions}
+                        onGranted={announceGrant}
                         onClose={() => setEditing(undefined)}
                       />
                     ),

@@ -28,6 +28,7 @@ export type AppState =
       readonly phase: "ready";
       readonly doc: StateDoc;
       readonly status: SystemStatus;
+      readonly grants: GrantSnapshot;
       readonly grantGaps: readonly RuleGrantGap[];
       readonly overrideCount: number;
     };
@@ -118,6 +119,7 @@ export function useAppState(): AppState {
     phase: "ready",
     doc: docSource.doc,
     status: computeStatus({ doc: docSource.doc, grantGaps, reconcileError }),
+    grants,
     grantGaps,
     overrideCount: tabId === undefined ? 0 : (session.tabs[tabId] ?? []).length,
   };

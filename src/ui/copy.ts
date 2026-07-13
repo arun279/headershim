@@ -101,6 +101,7 @@ export const copy = {
 
   toast: {
     activeOn: (host: string) => `Active on ${host}`,
+    activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
     profileDeleted: (name: string) => `Profile '${name}' deleted`,
@@ -246,6 +247,22 @@ export const copy = {
       `To change headers on ${siteCount} sites, Chrome requires you to grant headershim access to those sites:`,
     initiator: (initiator: string, target: string) =>
       `Also allow on ${initiator} (the site you're on) — needed when its pages call ${target}.`,
+    // Pattern/regex scopes: Chrome grants by site, not by pattern, so the two
+    // dimensions the platform needs are collected as separate labeled inputs.
+    patternIntro:
+      "This rule matches by pattern. Chrome grants access by site, so name both:",
+    targetsQuestion: "Which sites do the requests go to?",
+    initiatorsQuestion: "Which pages start those requests?",
+    patternEffect:
+      "The rule matches wherever its pattern says, but only takes effect where both sites are granted.",
+    allSitesLink: "All of them / I can't enumerate",
+    // No page-under-test context (authored from options, or an untracked tab):
+    // no initiator can be inferred, so the input is explicit and optional.
+    noContextInitiators: "Pages that call these sites",
+    addSite: "+ add",
+    targetInputLabel: "Add a site the requests go to",
+    initiatorInputLabel: "Add a page that starts these requests",
+    removeSite: (host: string) => `Remove ${host}`,
   },
 
   errors: {

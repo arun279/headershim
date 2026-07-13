@@ -30,6 +30,16 @@ export function requiredOrigins(rule: Rule): string[] {
   ];
 }
 
+export function originGranted(domain: string, granted: GrantSnapshot): boolean {
+  if (granted.allSites) {
+    return true;
+  }
+  const required = originPatternForDomain(domain);
+  return granted.origins.some((origin) =>
+    originPatternContains(origin, required),
+  );
+}
+
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
   if (granted.allSites) {
     return [];
