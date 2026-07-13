@@ -6,7 +6,7 @@ import { App } from "../../entrypoints/popup/App";
 import type { Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import { read, write } from "../platform/store";
-import { press, render, settle } from "../ui/test/render";
+import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 async function mount(doc?: StateDoc) {
   if (doc !== undefined) {
@@ -236,20 +236,20 @@ describe("popup App", () => {
   });
 });
 
+const twoRules = () =>
+  seededDoc([
+    rule(),
+    rule({ id: "rule-2", num: 2, header: "x-debug", value: "1" }),
+  ]);
+
+async function grantAndMount(doc: StateDoc) {
+  await fakeBrowser.permissions.request({
+    origins: ["*://*.api.example.com/*"],
+  });
+  return mount(doc);
+}
+
 describe("popup rule list integration", () => {
-  const twoRules = () =>
-    seededDoc([
-      rule(),
-      rule({ id: "rule-2", num: 2, header: "x-debug", value: "1" }),
-    ]);
-
-  async function grantAndMount(doc: StateDoc) {
-    await fakeBrowser.permissions.request({
-      origins: ["*://*.api.example.com/*"],
-    });
-    return mount(doc);
-  }
-
   it("renders the focused profile's rules as a grouped list", async () => {
     const { root } = await grantAndMount(twoRules());
     expect(root.querySelector(".rule-group-label")?.textContent).toBe(
@@ -437,5 +437,89 @@ describe("popup rule list integration", () => {
     await settle();
     expect((await read()).settings.paused).toBe(false);
     field.remove();
+  });
+});
+
+describe("popup inline editor integration", () => {
+  it("n opens a new-rule editor with focus in the header name field", async () => {
+    const { root } = await grantAndMount(twoRules());
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+    expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(document.activeElement).toBe(
+      root.querySelector('[role="combobox"]'),
+    );
+  });
+
+  async function openFirstRowEditor(root: HTMLElement) {
+    const row = root.querySelector(".rule-row") as HTMLElement;
+    fire(() => row.focus());
+    press(row, "Enter");
+    await settle();
+  }
+
+  it("Enter on a row opens its editor pre-filled; Esc reverts and returns focus", async () => {
+    const { root } = await grantAndMount(twoRules());
+    await openFirstRowEditor(root);
+    const name = root.querySelector('[role="combobox"]') as HTMLInputElement;
+    expect(name.value).toBe("authorization");
+
+    press(name, "Escape");
+    await settle();
+    expect(root.querySelector(".rule-editor")).toBeNull();
+    expect(
+      (document.activeElement as HTMLElement).classList.contains("rule-row"),
+    ).toBe(true);
+    // Nothing was saved by the revert.
+    expect((await read()).profiles[0]?.rules).toHaveLength(2);
+  });
+
+  it("commits a new rule end to end: typed, chipped, stored, listed", async () => {
+    const { root } = await grantAndMount(twoRules());
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "x-api-key",
+    );
+    typeInto(
+      root.querySelector(".value-row input") as HTMLInputElement,
+      "secret",
+    );
+    const chipInput = root.querySelector(
+      ".domain-chip-input",
+    ) as HTMLInputElement;
+    typeInto(chipInput, "api.example.com");
+    press(chipInput, "Enter");
+    press(chipInput, "Enter");
+    await settle();
+
+    expect(root.querySelector(".rule-editor")).toBeNull();
+    const stored = await read();
+    expect(stored.profiles[0]?.rules.map((entry) => entry.header)).toEqual([
+      "authorization",
+      "x-debug",
+      "x-api-key",
+    ]);
+    expect(root.textContent).toContain("x-api-key");
+  });
+
+  it("edits an existing rule in place keeping its identity", async () => {
+    const { root } = await grantAndMount(twoRules());
+    await openFirstRowEditor(root);
+
+    const value = root.querySelector(".value-row input") as HTMLInputElement;
+    typeInto(value, "Bearer rotated");
+    press(value, "Enter");
+    await settle();
+
+    const stored = await read();
+    expect(stored.profiles[0]?.rules[0]).toMatchObject({
+      id: "rule-1",
+      num: 1,
+      header: "authorization",
+      value: "Bearer rotated",
+    });
   });
 });

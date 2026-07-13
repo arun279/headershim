@@ -95,14 +95,7 @@
 }
 
 .rule-menu {
-  position: absolute;
   right: 12px;
   top: calc(100% - 8px);
-  z-index: 1;
   min-width: 160px;
-  padding: var(--sp-2);
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel-strong);
-  border-radius: var(--radius-outer);
-  box-shadow: var(--shadow-pop);
 }

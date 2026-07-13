@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
-import type { Rule } from "../../src/core/model";
+import type { Rule, RuleDraft } from "../../src/core/model";
 import type { Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
+import { activeTabDomain } from "../../src/platform/tabs";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Annunciator } from "../../src/ui/components/Annunciator";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { ProfileSwitcher } from "../../src/ui/components/ProfileSwitcher";
+import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { RuleList } from "../../src/ui/components/RuleList";
 import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
@@ -68,6 +70,13 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
   const [pendingUndo, setPendingUndo] = useState<PendingUndo | undefined>(
     undefined,
   );
+  const [editing, setEditing] = useState<
+    { profileId: string; ruleId?: string } | undefined
+  >(undefined);
+  const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    void activeTabDomain().then(setTabDomain);
+  }, []);
   const theme = doc.settings.theme;
   // The token stylesheet follows the OS unless the stored theme stamps the
   // root; System leaves it unset (tokens.css contract).
@@ -94,6 +103,64 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
   const missingByRule = new Map(
     grantGaps.map((gap) => [gap.ruleId, gap.missing]),
   );
+
+  // Editing state survives only as long as its targets do; a concurrent
+  // options-page edit that removes them simply collapses the editor.
+  const editingProfile =
+    editing === undefined
+      ? undefined
+      : doc.profiles.find((profile) => profile.id === editing.profileId);
+  const editingRule =
+    editing?.ruleId === undefined
+      ? undefined
+      : editingProfile?.rules.find((rule) => rule.id === editing.ruleId);
+  const activeEditing =
+    editing !== undefined &&
+    editingProfile !== undefined &&
+    (editing.ruleId === undefined || editingRule !== undefined)
+      ? editing
+      : undefined;
+  const openNewRule = () => setEditing({ profileId: doc.focusedProfileId });
+
+  // A new rule lands in the focused profile even when that profile is off or
+  // empty; its group appears for the editor's stay.
+  const listProfiles =
+    activeEditing !== undefined &&
+    activeEditing.ruleId === undefined &&
+    editingProfile !== undefined &&
+    !enabledProfiles.some((profile) => profile.id === editingProfile.id)
+      ? [...enabledProfiles, editingProfile]
+      : enabledProfiles;
+
+  const saveEditing = (
+    target: { profileId: string; ruleId?: string },
+    draft: RuleDraft,
+  ) =>
+    mutations
+      .saveRule(target.profileId, target.ruleId, draft)
+      .then((outcome) => {
+        if (outcome.ok) {
+          setPendingUndo(undefined);
+        }
+        return outcome;
+      });
+
+  // When the new-rule editor closes and focus fell with it, the + New rule
+  // trigger takes it back; a focus the user moved stays put.
+  const newRuleTrigger = useRef<HTMLSpanElement>(null);
+  const wasEditingNew = useRef(false);
+  useEffect(() => {
+    const wasNew = wasEditingNew.current;
+    wasEditingNew.current =
+      activeEditing !== undefined && activeEditing.ruleId === undefined;
+    if (!wasNew || activeEditing !== undefined) {
+      return;
+    }
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      newRuleTrigger.current?.querySelector("button")?.focus();
+    }
+  });
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
@@ -133,6 +200,7 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
   };
 
   const onKeyDown = popupKeyHandler({
+    newRule: openNewRule,
     togglePause: () => run(mutations.setPaused(status.kind !== "paused")),
     activateProfile: (position) => {
       const profile = doc.profiles[position - 1];
@@ -180,25 +248,52 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
       <div
         class={status.kind === "paused" ? "popup-body paused" : "popup-body"}
       >
-        {firstRun ? (
-          <FirstRun />
-        ) : someProfileEnabled &&
+        {activeEditing === undefined && firstRun ? (
+          <FirstRun onCreateRule={openNewRule} />
+        ) : activeEditing === undefined &&
+          someProfileEnabled &&
           enabledProfilesEmpty &&
           focused !== undefined ? (
           <EmptyState
             message={copy.emptyState.profile(focused.name)}
-            actions={<Button kind="primary">{copy.actions.newRule}</Button>}
+            actions={
+              <Button kind="primary" onClick={openNewRule}>
+                {copy.actions.newRule}
+              </Button>
+            }
           />
         ) : (
           <RuleList
-            profiles={enabledProfiles}
+            profiles={listProfiles}
             allProfiles={doc.profiles}
             missingByRule={missingByRule}
             invalidRuleIds={invalidRuleIds}
             undoAvailable={pendingUndo !== undefined}
+            editing={
+              activeEditing === undefined
+                ? undefined
+                : {
+                    profileId: activeEditing.profileId,
+                    ruleId: activeEditing.ruleId,
+                    node: (
+                      <RuleEditor
+                        key={activeEditing.ruleId ?? "new-rule"}
+                        rule={editingRule}
+                        prefillDomain={
+                          activeEditing.ruleId === undefined
+                            ? tabDomain
+                            : undefined
+                        }
+                        onSave={(draft) => saveEditing(activeEditing, draft)}
+                        onClose={() => setEditing(undefined)}
+                      />
+                    ),
+                  }
+            }
             onToggle={(profileId, ruleId, enabled) =>
               run(mutations.setRuleEnabled(profileId, ruleId, enabled))
             }
+            onEdit={(profileId, ruleId) => setEditing({ profileId, ruleId })}
             onDelete={deleteRule}
             onDuplicate={(profileId, ruleId) =>
               run(mutations.duplicateRule(profileId, ruleId))
@@ -214,7 +309,11 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
         )}
       </div>
       <footer class="foot">
-        <Button kind="primary">{copy.actions.newRule}</Button>
+        <span class="foot-new-rule" ref={newRuleTrigger}>
+          <Button kind="primary" onClick={openNewRule}>
+            {copy.actions.newRule}
+          </Button>
+        </span>
         <Button kind="quiet">{copy.actions.verify}</Button>
         <span class="pause">
           {copy.actions.pause}
@@ -246,7 +345,7 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
 }
 
 /** First run is onboarding: the trust sentence and three equal ways in. */
-function FirstRun() {
+function FirstRun({ onCreateRule }: { onCreateRule: () => void }) {
   const first = useRef<HTMLDivElement>(null);
   useEffect(() => {
     first.current?.querySelector("button")?.focus();
@@ -257,7 +356,9 @@ function FirstRun() {
       <p class="first-run-tagline">{copy.app.tagline}</p>
       <div class="first-run-actions">
         <Button kind="quiet">{copy.firstRun.tryThisTab}</Button>
-        <Button kind="quiet">{copy.firstRun.createRule}</Button>
+        <Button kind="quiet" onClick={onCreateRule}>
+          {copy.firstRun.createRule}
+        </Button>
         <Button
           kind="quiet"
           onClick={() => void browser.runtime.openOptionsPage()}

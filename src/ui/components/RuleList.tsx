@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   listNavCommand,
@@ -21,6 +22,17 @@ interface RuleListProps {
   invalidRuleIds: ReadonlySet<string>;
   /** A delete is waiting for undo; surfaces "Undo last delete" in row menus. */
   undoAvailable: boolean;
+  /**
+   * Inline editor placement: with a ruleId the editor replaces that row in
+   * place; without one it appends to the profile's group (created if empty).
+   */
+  editing?:
+    | {
+        profileId: string;
+        ruleId?: string | undefined;
+        node: ComponentChildren;
+      }
+    | undefined;
   onToggle: (profileId: string, ruleId: string, enabled: boolean) => void;
   /** Opens the inline editor; optional until a host surface provides one. */
   onEdit?: (profileId: string, ruleId: string) => void;
@@ -40,9 +52,19 @@ interface RuleListProps {
  * "rule 3 of 12" over the whole collection.
  */
 export function RuleList(props: RuleListProps) {
-  const groups = props.profiles.filter((profile) => profile.rules.length > 0);
+  const { editing } = props;
+  const editingNew = editing !== undefined && editing.ruleId === undefined;
+  const groups = props.profiles.filter(
+    (profile) =>
+      profile.rules.length > 0 ||
+      (editingNew && profile.id === editing.profileId),
+  );
+  // The row being edited leaves the keyboard collection while its editor
+  // stands in for it.
   const flat = groups.flatMap((profile) =>
-    profile.rules.map((rule) => ({ profile, rule })),
+    profile.rules
+      .filter((rule) => rule.id !== editing?.ruleId)
+      .map((rule) => ({ profile, rule })),
   );
   const overridden = new Set(
     findOverriddenRules(flat.map((entry) => entry.rule)).map(
@@ -87,12 +109,37 @@ export function RuleList(props: RuleListProps) {
     setRovingId(flat[Math.min(rovingIndex, flat.length - 1)]?.rule.id);
   });
 
+  // When the in-place editor closes and took keyboard focus down with it,
+  // focus returns to the row it stood in for (DESIGN: focus returns to the
+  // trigger). A focus the user moved elsewhere is left alone.
+  const lastEditedRuleId = useRef(editing?.ruleId);
+  useEffect(() => {
+    const previous = lastEditedRuleId.current;
+    lastEditedRuleId.current = editing?.ruleId;
+    if (previous === undefined || editing?.ruleId === previous) {
+      return;
+    }
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      rows.current.get(previous)?.focus();
+    }
+  }, [editing?.ruleId]);
+
   let posinset = 0;
   return (
     <section
       class="rules"
       aria-label={copy.rules.listLabel}
       onKeyDown={(event) => {
+        // The inline editor owns every key pressed inside it; row navigation
+        // must never pull focus out of its fields.
+        if (
+          event.defaultPrevented ||
+          (event.target instanceof HTMLElement &&
+            event.target.closest(".editor-slot") !== null)
+        ) {
+          return;
+        }
         const nav = listNavCommand(event);
         if (nav === undefined || flat.length === 0) {
           return;
@@ -117,6 +164,13 @@ export function RuleList(props: RuleListProps) {
           </span>
           <ul aria-labelledby={`rule-group-${profile.id}`}>
             {profile.rules.map((rule) => {
+              if (rule.id === editing?.ruleId) {
+                return (
+                  <li key={rule.id} class="editor-slot">
+                    {editing.node}
+                  </li>
+                );
+              }
               posinset += 1;
               const index = posinset - 1;
               return (
@@ -176,6 +230,9 @@ export function RuleList(props: RuleListProps) {
                 />
               );
             })}
+            {editingNew && profile.id === editing.profileId && (
+              <li class="editor-slot">{editing.node}</li>
+            )}
           </ul>
         </div>
       ))}

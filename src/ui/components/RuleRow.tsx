@@ -4,6 +4,7 @@ import { coversSubresourceTypes } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import { copy, type Sentence } from "../copy";
 import { MiddleTruncate } from "./MiddleTruncate";
+import { sentence } from "./sentence";
 import { Toggle } from "./Toggle";
 import "./RuleRow.css";
 
@@ -234,13 +235,6 @@ function standingInitiatorNote(rule: Rule): boolean {
   );
 }
 
-/** Hostnames and counts render in the data face; the words stay UI face. */
-function sentence(parts: Sentence): ComponentChildren {
-  return parts.map((part) =>
-    typeof part === "string" ? part : <span class="mono">{part.data}</span>,
-  );
-}
-
 function CautionTriangle() {
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
@@ -296,7 +290,7 @@ function RowMenu(props: RowMenuProps) {
 
   return (
     <div
-      class="rule-menu"
+      class="menu-pop rule-menu"
       role="menu"
       aria-label={copy.rules.menuLabel(rule.header)}
       ref={listRef}

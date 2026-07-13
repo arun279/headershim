@@ -52,6 +52,11 @@
   background: var(--panel-1);
 }
 
+/* Focus-return anchor for the new-rule editor; invisible to layout. */
+.foot-new-rule {
+  display: contents;
+}
+
 .pause {
   margin-left: auto;
   display: flex;

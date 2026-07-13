@@ -1,0 +1,326 @@
+// @vitest-environment happy-dom
+import { describe, expect, it, vi } from "vitest";
+import type { Rule } from "../../core/model";
+import { err, ok } from "../../core/result";
+import { copy } from "../copy";
+import type { MutationError } from "../state/mutations";
+import {
+  fire,
+  focusOut,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../test/render";
+import { RuleEditor } from "./RuleEditor";
+
+const rule = (overrides: Partial<Rule> = {}): Rule => ({
+  id: "r1",
+  num: 7,
+  direction: "request",
+  operation: "set",
+  header: "authorization",
+  value: "Bearer staging",
+  scope: { type: "domains", domains: ["api.acme.dev"] },
+  resourceTypes: "all",
+  initiators: [],
+  enabled: true,
+  ...overrides,
+});
+
+function mount(
+  props: Partial<Parameters<typeof RuleEditor>[0]> = {},
+  saveOutcome: { ok: true } | { error: MutationError } = { ok: true },
+) {
+  const onSave = vi.fn(async () =>
+    "error" in saveOutcome ? err(saveOutcome.error) : ok(rule()),
+  );
+  const onClose = vi.fn();
+  const root = render(
+    <RuleEditor
+      prefillDomain="api.example.com"
+      onSave={onSave}
+      onClose={onClose}
+      {...props}
+    />,
+  );
+  return {
+    root,
+    onSave,
+    onClose,
+    editor: root.querySelector(".rule-editor") as HTMLElement,
+    nameInput: () =>
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+    valueInput: () =>
+      root.querySelector(".value-row input") as HTMLInputElement,
+    chipInput: () =>
+      root.querySelector(".domain-chip-input") as HTMLInputElement,
+    select: () => root.querySelector("select") as HTMLSelectElement,
+    errors: () =>
+      [...root.querySelectorAll(".editor-error")].map(
+        (node) => node.textContent,
+      ),
+  };
+}
+
+function setOperation(select: HTMLSelectElement, operation: string) {
+  fire(() => {
+    select.value = operation;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+async function fillAndCommit(
+  ctx: ReturnType<typeof mount>,
+  header = "x-custom",
+) {
+  typeInto(ctx.nameInput(), header);
+  typeInto(ctx.valueInput(), "v1");
+  press(ctx.nameInput(), "Enter");
+  await settle();
+}
+
+describe("RuleEditor commit model", () => {
+  it("has no Apply or Save button anywhere", () => {
+    const { root } = mount();
+    const labels = [...root.querySelectorAll("button")].map(
+      (button) => button.textContent ?? "",
+    );
+    expect(labels.some((label) => /apply|save/i.test(label))).toBe(false);
+  });
+
+  it("commits on Enter with the draft as typed and closes", async () => {
+    const ctx = mount();
+    await fillAndCommit(ctx, "X-Custom");
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith({
+      direction: "request",
+      operation: "set",
+      header: "X-Custom",
+      value: "v1",
+      scope: { type: "domains", domains: ["api.example.com"] },
+      resourceTypes: "all",
+      initiators: [],
+      enabled: true,
+    });
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("reverts on Esc without saving", () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    press(ctx.nameInput(), "Escape");
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Esc closes the suggestion list first, the editor second", () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "auth");
+    expect(ctx.root.querySelector('[role="listbox"]')).not.toBeNull();
+    press(ctx.nameInput(), "Escape");
+    expect(ctx.root.querySelector('[role="listbox"]')).toBeNull();
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    press(ctx.nameInput(), "Escape");
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("commits a dirty draft when focus leaves the editor", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    focusOut(ctx.editor, document.body);
+    await settle();
+    expect(ctx.onSave).toHaveBeenCalledOnce();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("abandons an untouched editor quietly when focus leaves", () => {
+    const ctx = mount();
+    focusOut(ctx.editor, document.body);
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("stays open when focus moves within the editor", () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    focusOut(ctx.nameInput(), ctx.valueInput());
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.onClose).not.toHaveBeenCalled();
+  });
+
+  it("blocks an empty commit with the required-field copy, unsaved", async () => {
+    const ctx = mount({ prefillDomain: undefined });
+    press(ctx.nameInput(), "Enter");
+    await settle();
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.errors()).toEqual([
+      copy.errors.headerNameRequired,
+      copy.errors.valueRequired,
+      copy.errors.scopeEmpty.domains,
+    ]);
+  });
+
+  it("pre-fills an edited rule and keeps its identity fields in the draft", async () => {
+    const existing = rule({
+      comment: "staging token",
+      initiators: ["app.example.com"],
+      enabled: false,
+    });
+    const ctx = mount({ rule: existing });
+    expect(ctx.nameInput().value).toBe("authorization");
+    expect(ctx.valueInput().value).toBe("Bearer staging");
+    typeInto(ctx.valueInput(), "Bearer other");
+    press(ctx.valueInput(), "Enter");
+    await settle();
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        value: "Bearer other",
+        comment: "staging token",
+        initiators: ["app.example.com"],
+        enabled: false,
+      }),
+    );
+  });
+});
+
+describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
+  it("renders the pseudo-header copy under the name field", async () => {
+    const ctx = mount(
+      {},
+      {
+        error: {
+          kind: "name-not-modifiable",
+          copyId: "header-not-modifiable",
+        },
+      },
+    );
+    await fillAndCommit(ctx, ":authority");
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    expect(ctx.nameInput().value).toBe(":authority");
+    const field = ctx.nameInput().closest(".editor-field");
+    expect(field?.textContent).toContain(copy.errors.headerNotModifiable);
+  });
+
+  it("renders the append-allowlist copy under the operation control", async () => {
+    const ctx = mount(
+      {},
+      {
+        error: {
+          kind: "request-append-not-allowed",
+          copyId: "request-append-not-allowed",
+          header: "x-custom-token",
+        },
+      },
+    );
+    setOperation(ctx.select(), "append");
+    await fillAndCommit(ctx, "x-custom-token");
+    expect(ctx.nameInput().value).toBe("x-custom-token");
+    const field = ctx.select().closest(".editor-field");
+    expect(field?.textContent).toContain(
+      copy.errors.appendDisallowed("x-custom-token"),
+    );
+  });
+
+  it.each([
+    ["syntaxError", copy.errors.regexInvalid],
+    ["memoryLimitExceeded", copy.errors.regexOversize],
+  ])("renders the regex copy for %s under the scope field", async (reason, message) => {
+    const ctx = mount(
+      {},
+      { error: { kind: "regex-invalid", regex: "(a|b", reason } },
+    );
+    const regexRadio = [...ctx.root.querySelectorAll(".segments input")].at(
+      2,
+    ) as HTMLInputElement;
+    fire(() => regexRadio.click());
+    const regexInput = ctx.root.querySelector(
+      '[aria-label="Regex"]',
+    ) as HTMLInputElement;
+    typeInto(regexInput, "(a|b");
+    await fillAndCommit(ctx);
+    expect(ctx.errors()).toContain(message);
+    expect(
+      (ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement)
+        .value,
+    ).toBe("(a|b");
+  });
+
+  it.each([
+    [
+      { kind: "enabled-rule-limit-exceeded", count: 4501, limit: 4500 },
+      copy.errors.ruleCap,
+    ],
+    [
+      { kind: "regex-rule-limit-exceeded", count: 1001, limit: 1000 },
+      copy.errors.regexRuleCap,
+    ],
+    [
+      { kind: "doc-byte-limit-exceeded", bytes: 1, limit: 4194304 },
+      copy.errors.storageBudget,
+    ],
+  ] as const)("renders cap and budget errors at editor level", async (error, message) => {
+    const ctx = mount({}, { error: error as MutationError });
+    await fillAndCommit(ctx);
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    expect(ctx.errors()).toContain(message);
+    expect(ctx.nameInput().value).toBe("x-custom");
+  });
+});
+
+describe("RuleEditor advisories and value field", () => {
+  it("surfaces the hop-by-hop advisory prominently the moment append is selected", () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "te");
+    const advisory = () => ctx.root.querySelector(".editor-advisory");
+    expect(advisory()?.textContent).toBe(copy.advisories.managedHeader);
+    expect(advisory()?.classList.contains("prominent")).toBe(false);
+    setOperation(ctx.select(), "append");
+    expect(advisory()?.classList.contains("prominent")).toBe(true);
+  });
+
+  it("hides the value field for remove", () => {
+    const ctx = mount();
+    expect(ctx.root.querySelector(".value-row")).not.toBeNull();
+    setOperation(ctx.select(), "remove");
+    expect(ctx.root.querySelector(".value-row")).toBeNull();
+  });
+
+  it("inserts a generated UUID literal with the frozen note, regenerates, and clears on hand edit", () => {
+    const ctx = mount();
+    const insert = ctx.root.querySelector(".insert-btn") as HTMLButtonElement;
+    fire(() => insert.click());
+    const uuidItem = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === copy.editor.insertUuid,
+    ) as HTMLButtonElement;
+    fire(() => uuidItem.click());
+    const first = ctx.valueInput().value;
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(ctx.root.textContent).toContain(copy.generatedValue.note);
+
+    const regenerate = ctx.root.querySelector(
+      ".editor-micro .link-btn",
+    ) as HTMLButtonElement;
+    expect(regenerate.textContent).toBe(copy.actions.regenerate);
+    fire(() => regenerate.click());
+    expect(ctx.valueInput().value).not.toBe(first);
+
+    typeInto(ctx.valueInput(), "hand-edited");
+    expect(ctx.root.textContent).not.toContain(copy.generatedValue.note);
+  });
+
+  it("shows the freeze time for a saved generated value", () => {
+    const ctx = mount({
+      rule: rule({
+        value: "5cb4",
+        generated: { kind: "uuid", at: "2026-07-12T14:03:27.000Z" },
+      }),
+    });
+    expect(ctx.root.textContent).toContain(
+      copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
+    );
+    expect(ctx.root.querySelector(".editor-micro .link-btn")?.textContent).toBe(
+      copy.actions.regenerate,
+    );
+  });
+});

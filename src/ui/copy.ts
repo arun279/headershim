@@ -173,10 +173,70 @@ export const copy = {
     count: (n: number) => `${n} types`,
   },
 
+  editor: {
+    editRule: "Edit rule",
+    newRule: "New rule",
+    labels: {
+      direction: "Direction",
+      operation: "Operation",
+      headerName: "Header name",
+      value: "Value",
+      scope: "Scope",
+      comment: "Comment",
+      resourceTypes: "Resource types",
+    },
+    direction: { request: "Request", response: "Response" },
+    operation: { set: "Set", append: "Append", remove: "Remove" },
+    savedAs: (name: string): Sentence => ["saved as ", data(name)],
+    suggestions: (n: number) => (n === 1 ? "1 suggestion" : `${n} suggestions`),
+    scopeType: {
+      domains: "Domains",
+      pattern: "URL pattern",
+      regex: "Regex",
+    },
+    allSites: "All sites",
+    domainsHelper: "matches this domain and its subdomains",
+    addDomain: "+ add",
+    domainInputLabel: "Add domain",
+    removeDomain: (domain: string) => `Remove ${domain}`,
+    patternHint: [
+      data("||example.com^"),
+      " matches the site and subdomains · ",
+      data("*://*/api/*"),
+      " matches paths",
+    ] as Sentence,
+    grantNote: "This rule only takes effect on sites you've granted access to.",
+    allTypes: "All types",
+    includesPages: "Includes top-level pages",
+    insert: "Insert",
+    insertUuid: "UUID",
+    insertTimestamp: "Timestamp (ISO 8601)",
+  },
+
+  // Optional one-word context after a suggested name ("authorization — credentials").
+  headerHints: {
+    authorization: "credentials",
+    "user-agent": "client identity",
+    "content-type": "media type",
+    "content-security-policy": "content policy",
+    cookie: "stored cookies",
+    "set-cookie": "cookie to store",
+    origin: "requesting origin",
+    referer: "linking page",
+    accept: "acceptable media types",
+    "accept-language": "preferred languages",
+    "accept-encoding": "acceptable encodings",
+    "cache-control": "caching directives",
+    "access-control-allow-origin": "CORS origins",
+    "x-forwarded-for": "client address",
+    host: "target authority",
+    etag: "resource version",
+    location: "redirect target",
+  } as Partial<Record<string, string>>,
+
   generatedValue: {
     note: "Generated when you saved this rule — this value is frozen; it does not change per request.",
-    frozen: (savedAtUtc: string) =>
-      `Frozen at save · ${savedAtUtc} · Regenerate`,
+    frozen: (savedAtUtc: string) => `Frozen at save · ${savedAtUtc}`,
   },
 
   grantPanel: {
@@ -215,6 +275,20 @@ export const copy = {
       "No rule matched requests on this tab in the last 5 minutes. Reload the tab, then verify again. Still nothing? Cached responses skip header rules — in DevTools, check Network → Disable cache and reload. If a rule is scoped to specific resource types, confirm the request kind matches. And if the requests you care about are started by a different site, that site needs access too (Site access in options).",
     headerNotModifiable:
       "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1, which most modern sites no longer accept.",
+    headerNameRequired: "Every rule needs a header name — type one to save.",
+    headerNameInvalid:
+      "This isn't a legal header name — letters, digits, and hyphens are the safe set.",
+    valueRequired:
+      "Set and append need a value — type one, or switch the operation to Remove.",
+    valueLineBreak:
+      "Header values can't contain line breaks — remove them to save.",
+    scopeEmpty: {
+      domains: "Name at least one domain this rule applies to.",
+      pattern: "Type a URL pattern this rule applies to.",
+      regex: "Type a regex this rule applies to.",
+      all: "Pick a scope for this rule.",
+      resourceTypes: "Pick at least one resource type.",
+    },
     newerStore: (foundVersion: number, supportedVersion: number) =>
       `Your rules were saved by a newer headershim (format ${foundVersion}; this version reads up to ${supportedVersion}). Update headershim to pick them back up — nothing has been changed.`,
   },

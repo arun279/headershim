@@ -28,6 +28,23 @@ export function press(target: HTMLElement, key: string): void {
   });
 }
 
+/** Sets an input's value the way a user would: value + bubbling input event. */
+export function typeInto(input: HTMLInputElement, value: string): void {
+  act(() => {
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Dispatches a focus departure from `from` towards `to` (null = nowhere). */
+export function focusOut(from: HTMLElement, to: EventTarget | null): void {
+  act(() => {
+    from.dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, relatedTarget: to }),
+    );
+  });
+}
+
 /**
  * Flushes a few macrotask rounds under act, letting storage events, lock
  * queues, and subscription reloads land before assertions.

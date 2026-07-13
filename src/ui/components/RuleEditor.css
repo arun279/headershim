@@ -1,0 +1,115 @@
+/* The row expands in place: a bordered well inside the list, 160ms enter. */
+.rule-editor {
+  min-width: 0;
+  margin: var(--sp-2) var(--sp-3);
+  padding: 10px var(--sp-4) var(--sp-4);
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-outer);
+  animation: editor-in var(--t-med) var(--ease);
+}
+
+@keyframes editor-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.editor-title {
+  display: block;
+  margin-bottom: var(--sp-3);
+}
+
+.editor-field {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.editor-label {
+  flex: none;
+  width: 88px;
+  padding-top: 5px;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
+
+.editor-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.field {
+  width: 100%;
+  min-height: 26px;
+  padding: 4px var(--sp-3);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+}
+
+.field.mono {
+  font-family: var(--font-data);
+}
+
+.editor-select {
+  width: auto;
+  min-width: 96px;
+}
+
+.editor-radios {
+  display: flex;
+  gap: var(--sp-4);
+  padding-top: 4px;
+}
+
+.editor-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 24px;
+  font-size: 12px;
+}
+
+.editor-micro {
+  margin-top: var(--sp-1);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-mute);
+}
+
+.editor-advisory {
+  margin-top: var(--sp-1);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-mute);
+}
+
+/* Append on a hop-by-hop name: same words, said at the moment of selection. */
+.editor-advisory.prominent {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.editor-error {
+  margin-top: var(--sp-1);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--caution);
+}
+
+.editor-error-global {
+  margin-top: var(--sp-3);
+}
+
+.link-btn {
+  min-height: 24px;
+  padding: 0 var(--sp-1);
+  font-size: 11px;
+  color: var(--trace);
+}
