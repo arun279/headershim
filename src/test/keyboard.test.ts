@@ -164,12 +164,20 @@ describe("rowCommand", () => {
     expect(rowCommand(keydown({ key }))).toBe(expected);
   });
 
+  it("Shift+F10 opens the menu for keyboards without a ContextMenu key", () => {
+    expect(rowCommand(keydown({ key: "F10", shiftKey: true }))).toBe("menu");
+    expect(rowCommand(keydown({ key: "F10" }))).toBeUndefined();
+  });
+
   it("ignores other and modified keys", () => {
     expect(rowCommand(keydown({ key: "a" }))).toBeUndefined();
     expect(
       rowCommand(keydown({ key: "Enter", ctrlKey: true })),
     ).toBeUndefined();
     expect(rowCommand(keydown({ key: " ", shiftKey: true }))).toBeUndefined();
+    expect(
+      rowCommand(keydown({ key: "F10", shiftKey: true, altKey: true })),
+    ).toBeUndefined();
   });
 });
 

@@ -92,6 +92,7 @@ export function RuleRow(props: RuleRowProps) {
         checked={rule.enabled}
         label={copy.rules.switchLabel(rule.header, rule.enabled)}
         ariaDisabled={invalid}
+        tabIndex={-1}
         onChange={(enabled) => {
           // An invalid rule cannot be enabled; activation points at the reason.
           if (invalid) {
@@ -126,6 +127,7 @@ export function RuleRow(props: RuleRowProps) {
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         ref={menuButtonRef}
+        tabIndex={-1}
         onClick={() => setMenuOpen((open) => !open)}
       >
         ⋯
@@ -279,13 +281,13 @@ function RowMenu(props: RowMenuProps) {
     listRef.current?.querySelector("button")?.focus();
   }, [view]);
 
-  const moveFocus = (delta: number) => {
+  const moveFocus = (to: number | ((active: number) => number)) => {
     const buttons = [
       ...(listRef.current?.querySelectorAll("button") ?? []),
     ] as HTMLButtonElement[];
     const active = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const next = (active + delta + buttons.length) % buttons.length;
-    buttons[next]?.focus();
+    const target = typeof to === "number" ? to : to(active);
+    buttons[(target + buttons.length) % buttons.length]?.focus();
   };
 
   return (
@@ -299,9 +301,15 @@ function RowMenu(props: RowMenuProps) {
         event.stopPropagation();
         switch (event.key) {
           case "ArrowDown":
-            moveFocus(1);
+            moveFocus((active) => active + 1);
             break;
           case "ArrowUp":
+            moveFocus((active) => active - 1);
+            break;
+          case "Home":
+            moveFocus(0);
+            break;
+          case "End":
             moveFocus(-1);
             break;
           case "Escape":
@@ -330,6 +338,7 @@ function RowMenu(props: RowMenuProps) {
           key={item.label}
           type="button"
           role="menuitem"
+          tabIndex={-1}
           class={
             item.destructive === true ? "menu-item destructive" : "menu-item"
           }

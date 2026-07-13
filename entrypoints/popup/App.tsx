@@ -192,10 +192,15 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
     }
     const { profileId, rule, index } = pendingUndo;
     void mutations.restoreRule(profileId, rule, index).then((outcome) => {
+      // One shot either way: a restore that failed (rule cap reached, profile
+      // deleted underneath) won't succeed on a retry of the same undo.
+      setPendingUndo(undefined);
       if (outcome.ok) {
-        setPendingUndo(undefined);
         setToast(undefined);
+        return;
       }
+      const message = blockedCommitCopy(outcome.error);
+      setToast(message === undefined ? undefined : { message });
     });
   };
 
@@ -334,8 +339,18 @@ function Ready({ doc, status, grantGaps, overrideCount }: ReadyProps) {
       {toast !== undefined && (
         <Toast
           onDismiss={() => setToast(undefined)}
-          actionLabel={toast.undo === true ? copy.actions.undo : undefined}
-          onAction={toast.undo === true ? undoDelete : undefined}
+          // The action follows the pending undo, not the toast: a mutation
+          // that retires the undo strips the button from a toast still shown.
+          actionLabel={
+            toast.undo === true && pendingUndo !== undefined
+              ? copy.actions.undo
+              : undefined
+          }
+          onAction={
+            toast.undo === true && pendingUndo !== undefined
+              ? undoDelete
+              : undefined
+          }
         >
           {toast.message}
         </Toast>

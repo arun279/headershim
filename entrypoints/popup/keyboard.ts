@@ -126,8 +126,12 @@ export type RowCommand = "edit" | "toggle" | "delete" | "menu";
 
 /** Keys that act on the focused rule row (the row element itself, not a control inside it). */
 export function rowCommand(event: KeyLike): RowCommand | undefined {
-  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
     return undefined;
+  }
+  // Shift+F10 is the context-menu key for keyboards without a ContextMenu key.
+  if (event.shiftKey) {
+    return event.key === "F10" ? "menu" : undefined;
   }
   switch (event.key) {
     case "Enter":

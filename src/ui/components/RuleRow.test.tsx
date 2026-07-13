@@ -284,6 +284,31 @@ describe("RuleRow overflow menu", () => {
     expect(menuLabels()).not.toContain("Move to profile ▸");
   });
 
+  it("keeps the switch, trigger, and menu items out of the tab order", () => {
+    const { row, toggle, menuButton, root } = mount();
+    expect(row.tabIndex).toBe(0);
+    expect(toggle().tabIndex).toBe(-1);
+    expect(menuButton().tabIndex).toBe(-1);
+    fire(() => menuButton().click());
+    for (const item of root.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitem"]',
+    )) {
+      expect(item.tabIndex).toBe(-1);
+    }
+  });
+
+  it("Home and End jump to the first and last menu item", () => {
+    const { menuButton, root } = mount();
+    fire(() => menuButton().click());
+    const items = [
+      ...root.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ];
+    press(document.activeElement as HTMLElement, "End");
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    press(document.activeElement as HTMLElement, "Home");
+    expect(document.activeElement).toBe(items[0]);
+  });
+
   it("moves focus in on open, arrows cycle, Esc returns to the trigger", () => {
     const { menuButton, root } = mount();
     fire(() => menuButton().click());

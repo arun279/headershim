@@ -346,6 +346,10 @@ describe("popup rule list integration", () => {
     });
     await settle();
 
+    // A still-visible delete toast loses its Undo button with the undo.
+    expect(root.querySelector(".toast")).not.toBeNull();
+    expect(root.querySelector(".toast .toast-action")).toBeNull();
+
     const menuButton = root.querySelector(
       ".rule-menu-btn",
     ) as HTMLButtonElement;

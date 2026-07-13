@@ -12,6 +12,8 @@ interface ToggleProps {
    * focuses its note instead of toggling).
    */
   ariaDisabled?: boolean | undefined;
+  /** -1 inside roving-tabindex composites; the owning row carries the tab stop. */
+  tabIndex?: number;
 }
 
 export function Toggle({
@@ -20,6 +22,7 @@ export function Toggle({
   onChange,
   disabled,
   ariaDisabled,
+  tabIndex,
 }: ToggleProps) {
   return (
     <button
@@ -30,6 +33,7 @@ export function Toggle({
       aria-disabled={ariaDisabled}
       class="sw"
       disabled={disabled}
+      tabIndex={tabIndex}
       onClick={() => onChange(!checked)}
     />
   );

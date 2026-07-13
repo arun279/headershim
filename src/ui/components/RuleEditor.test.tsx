@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { Rule } from "../../core/model";
-import { err, ok } from "../../core/result";
+import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
 import {
@@ -110,6 +110,25 @@ describe("RuleEditor commit model", () => {
     typeInto(ctx.nameInput(), "x-custom");
     press(ctx.nameInput(), "Escape");
     expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Esc during an in-flight save waits for the outcome instead of pretending to revert", async () => {
+    let release: (outcome: Result<Rule, MutationError>) => void = () => {};
+    const onSave = vi.fn(
+      () =>
+        new Promise<Result<Rule, MutationError>>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const ctx = mount({ onSave });
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    press(ctx.nameInput(), "Enter");
+    press(ctx.nameInput(), "Escape");
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    fire(() => release(ok(rule())));
+    await settle();
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 

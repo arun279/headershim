@@ -44,7 +44,26 @@ function shadows(earlier: Rule, later: Rule): boolean {
   return (
     earlier.direction === later.direction &&
     resourceTypesContain(earlier.resourceTypes, later.resourceTypes) &&
-    scopeContains(earlier.scope, later.scope)
+    scopeContains(earlier.scope, later.scope) &&
+    initiatorsContain(earlier.initiators, later.initiators)
+  );
+}
+
+/** Empty means any initiator; otherwise every later initiator needs earlier cover. */
+function initiatorsContain(
+  earlier: readonly string[],
+  later: readonly string[],
+): boolean {
+  if (earlier.length === 0) {
+    return true;
+  }
+  return (
+    later.length > 0 &&
+    later.every((laterDomain) =>
+      earlier.some((earlierDomain) =>
+        domainContains(earlierDomain, laterDomain),
+      ),
+    )
   );
 }
 

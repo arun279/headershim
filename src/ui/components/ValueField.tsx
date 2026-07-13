@@ -114,16 +114,23 @@ function InsertMenu({
               event.stopPropagation();
               setOpen(false);
               buttonRef.current?.focus();
-            } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              return;
+            }
+            const items = [
+              ...(menuRef.current?.querySelectorAll("button") ?? []),
+            ];
+            const index = items.indexOf(
+              document.activeElement as HTMLButtonElement,
+            );
+            const next = {
+              ArrowDown: index + 1,
+              ArrowUp: index - 1,
+              Home: 0,
+              End: -1,
+            }[event.key];
+            if (next !== undefined) {
               event.preventDefault();
-              const items = [
-                ...(menuRef.current?.querySelectorAll("button") ?? []),
-              ];
-              const index = items.indexOf(
-                document.activeElement as HTMLButtonElement,
-              );
-              const step = event.key === "ArrowDown" ? 1 : -1;
-              items[(index + step + items.length) % items.length]?.focus();
+              items[(next + items.length) % items.length]?.focus();
             }
           }}
           onFocusOut={(event) => {
@@ -140,6 +147,7 @@ function InsertMenu({
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             class="menu-item"
             onClick={() => pick("uuid")}
           >
@@ -148,6 +156,7 @@ function InsertMenu({
           <button
             type="button"
             role="menuitem"
+            tabIndex={-1}
             class="menu-item"
             onClick={() => pick("timestamp")}
           >

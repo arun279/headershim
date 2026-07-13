@@ -123,7 +123,11 @@ export function RuleEditor(props: RuleEditorProps) {
         }
         if (event.key === "Escape") {
           event.preventDefault();
-          props.onClose();
+          // A commit in flight can't be unwound by closing; Esc waits it out
+          // (success closes the editor itself, failure re-enables it).
+          if (!busyRef.current) {
+            props.onClose();
+          }
           return;
         }
         const target =

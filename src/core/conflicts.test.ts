@@ -8,7 +8,12 @@ function rule(
   overrides: Partial<
     Pick<
       Rule,
-      "direction" | "operation" | "header" | "enabled" | "resourceTypes"
+      | "direction"
+      | "operation"
+      | "header"
+      | "enabled"
+      | "resourceTypes"
+      | "initiators"
     >
   > = {},
 ): Rule {
@@ -262,6 +267,33 @@ describe("findOverriddenRules", () => {
           },
         ),
         rule("rule-2", { type: "all" }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
+  });
+
+  it("requires the earlier initiator set to cover the later one", () => {
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { initiators: ["app.acme.dev"] }),
+        rule("rule-2", { type: "all" }, { initiators: ["admin.acme.dev"] }),
+      ]),
+    ).toEqual([]);
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { initiators: ["app.acme.dev"] }),
+        rule("rule-2", { type: "all" }),
+      ]),
+    ).toEqual([]);
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }),
+        rule("rule-2", { type: "all" }, { initiators: ["app.acme.dev"] }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { initiators: ["acme.dev"] }),
+        rule("rule-2", { type: "all" }, { initiators: ["app.acme.dev"] }),
       ]),
     ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
   });
