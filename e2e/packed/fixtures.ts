@@ -90,40 +90,21 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect } from "@playwright/test";
 export { getDynamicRules, readEcho, seedState } from "../fixtures";
 
-// The force-installed extension's MV3 worker is lazy: it starts, registers its
-// listeners, and dies again in well under a second, so polling the live list
-// misses the window. Instead listen for the "serviceworker" event (which fires
-// the instant the worker is created) while continuously firing events the worker
-// subscribes to — the "verify" command hits commands.onCommand (a no-op handler)
-// and each navigation hits tabs.onUpdated, either of which restarts it. This also
-// rides out the brief window before the force-install completes.
+// The force-installed extension installs and enables (see the diagnostics), but
+// its lazy MV3 worker is not surfaced to Playwright on the runner: it starts,
+// registers listeners, and idles out again without the persistent context ever
+// reporting a "serviceworker" target. On the timeout, dump what Chrome saw so a
+// future run against real Chrome starts from evidence rather than a bare stall.
 async function acquireServiceWorker(context: BrowserContext): Promise<Worker> {
   const running = context.serviceWorkers()[0];
   if (running !== undefined) {
     return running;
   }
-  const started = context.waitForEvent("serviceworker", { timeout: 55_000 });
-  const page = await context.newPage();
-  let done = false;
-  const pump = (async () => {
-    while (!done) {
-      await page.bringToFront().catch(() => undefined);
-      await page.keyboard.press("Alt+Shift+V").catch(() => undefined);
-      await page
-        .goto(`data:text/html,<title>${Date.now()}</title>`)
-        .catch(() => undefined);
-      await page.waitForTimeout(300).catch(() => undefined);
-    }
-  })();
   try {
-    return await started;
+    return await context.waitForEvent("serviceworker", { timeout: 60_000 });
   } catch (error) {
     await dumpInstallDiagnostics(context);
     throw error;
-  } finally {
-    done = true;
-    await pump;
-    await page.close().catch(() => undefined);
   }
 }
 

@@ -45,9 +45,9 @@ later specs land.
 | Cached response behavior | A fresh response is modified, a cache hit exposes the server header, and the server request count stays at one | ⏸ self-skips without grant | The cache assertion requires the first response to prove real DNR modification, so it is not marked green when access cannot be granted. |
 | Network-managed content length | A rule value of `999` is accepted but the outgoing POST carries the body length selected by the network stack | ⏸ self-skips without grant | The accepted/readback rule is exercised before the grant attempt; the on-wire value is enforced only when access lands. |
 | Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 checklist | Native prompts are not scriptable (below); captured out of band. |
-| Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. Confirms the grant path that the unpacked run must skip. |
-| Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. |
-| Packed: `displayActionCountAsBadgeText` | The count badge paints on the packed CRX (only ever confirmed unpacked) | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. A divergence re-opens the count-badge design. |
+| Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The CRX force-installs and enables, but its lazy MV3 service worker is not surfaced to Playwright on the runner, so the specs cannot drive it. Verdict UNKNOWN until the real-Chrome verification phase. |
+| Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. Verdict UNKNOWN until the real-Chrome verification phase. |
+| Packed: `displayActionCountAsBadgeText` | The count badge paints on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. A divergence re-opens the count-badge design. Verdict UNKNOWN until the real-Chrome verification phase. |
 
 ## Grant automation
 
@@ -106,10 +106,23 @@ The pieces:
   deterministic stand-in for the grant the unpacked harness cannot script.
 
 This path installs machine policy and only works on the Linux CI runner, so the
-specs skip themselves off Linux and the gate runs in its own workflow
-(`.github/workflows/e2e-packed.yml`, on `workflow_dispatch` and when
-`e2e/packed/**` changes). It runs Google Chrome (`channel: 'chrome'`, the only
-build that reads that policy directory) headed under Xvfb.
+gate runs in its own workflow (`.github/workflows/e2e-packed.yml`, on
+`workflow_dispatch` and when `e2e/packed/**` changes). It runs Google Chrome
+(`channel: 'chrome'`, the only build that reads that policy directory) headed
+under Xvfb.
+
+On the runner the CRX force-installs and enables cleanly — Chrome reads the
+managed policy, fetches the update manifest and CRX from the local server, and
+`chrome://extensions-internals` reports the extension `ENABLED` with its
+listeners registered. What is missing is the handle: the extension's lazy MV3
+service worker starts, registers, and idles out again without the persistent
+context ever surfacing a `serviceworker` target to Playwright, so the specs have
+no worker to drive. The specs therefore skip with that reason recorded in code,
+and the three behaviours stay on the release packed checklist until the
+real-Chrome verification phase settles them. The harness (pack, update server,
+policy render, force-install, and an on-timeout diagnostic that dumps the read
+policy, the extension records, and Chrome's own updater/installer log) is kept
+intact for that phase.
 
 Locally you can exercise everything except the policy install and the Chrome run:
 
@@ -118,5 +131,6 @@ pnpm e2e:packed:pack        # build + pack the CRX
 pnpm e2e:packed:selfcheck   # pack, serve, and render the policy; assert their shape
 ```
 
-The three gate outcomes are marked *pending first CI run* in the table above
-until a real Linux run reports them.
+The three gate outcomes are marked *env-skip* in the table above: they are not
+CI-automatable in this environment and remain UNKNOWN until the real-Chrome
+verification phase records them.
