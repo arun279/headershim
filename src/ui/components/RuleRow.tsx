@@ -32,7 +32,7 @@ interface RuleRowProps extends RuleRowActions {
   temporary?: { host: string } | undefined;
   /**
    * A changing token when this row's rule was just auto-saved: pulses the
-   * transient "Saved" acknowledgement (verdict P0). Undefined the rest of the
+   * transient "Saved" acknowledgement. Undefined the rest of the
    * time; a new value re-triggers the pulse on a subsequent edit.
    */
   savedNonce?: number | undefined;
@@ -59,7 +59,7 @@ export function RuleRow(props: RuleRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  // The auto-save acknowledgement (verdict P0): a transient "Saved" that fades
+  // The auto-save acknowledgement: a transient "Saved" that fades
   // ~1.5s after a commit. Keyed on the nonce so a repeat edit re-pulses; the
   // affordance is decorative (aria-hidden) — closure for AT comes from focus
   // returning to the row, which re-announces the rule.
@@ -203,9 +203,9 @@ function lineTwo(
 }
 
 /**
- * SPEC §3.3's honest split, narrowed by verdict P2: the standing note is for a
- * rule whose requests are genuinely started by *other* pages — one that reaches
- * subresources but not top-level navigation. A normal direct-navigation rule
+ * The honest split: the standing note is for a rule whose requests are
+ * genuinely started by *other* pages — one that reaches subresources but
+ * not top-level navigation. A normal direct-navigation rule
  * (all types, so main_frame included) stays quiet rather than carrying a caveat
  * that reads as a standing alarm. Named initiators are a known dimension (loud
  * when missing), and an all-sites scope grants every initiator with it.

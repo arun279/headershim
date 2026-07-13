@@ -69,7 +69,7 @@ export function MiddleTruncate({
   // The full value shows on hover via `title` and to assistive tech via the
   // owning row's accessible description; when truncated it is also carried in a
   // hidden node the focused row reveals inline, so a sighted keyboard user gets
-  // the tooltip-style readout on focus too (DESIGN §1.2 / §4.1).
+  // the tooltip-style readout on focus too.
   return (
     <span ref={ref} class={className} title={value}>
       {truncated ? (

@@ -1,7 +1,7 @@
 /**
  * The single source of every user-facing string. Components never inline copy;
  * they read it from here so wording stays consistent and reviewable in one place.
- * Strings are verbatim from the product spec: the platform is named as the actor,
+ * Strings follow a consistent voice: the platform is named as the actor,
  * cause precedes impact precedes next step, and exact names are always shown.
  */
 
@@ -30,7 +30,7 @@ const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 export const copy = {
   app: {
     name: "HeaderShim",
-    // Identical wording ships on the trust page (SPEC §8.6).
+    // Identical wording ships on the trust page.
     tagline:
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
   },
@@ -226,21 +226,21 @@ export const copy = {
       // about reach — saying "revoked" there would claim access ended.
       revokedUnderAllSites: (domain: string) =>
         `${domain} grant removed — all-sites access still covers it`,
-      // The standing note (SPEC §3.3): shown while any enabled rule reaches
+      // The standing note: shown while any enabled rule reaches
       // subresources without naming the pages that start those requests.
       initiatorNote:
         "Requests started by other pages also need those pages granted.",
       allSites: {
         heading: "Allow on all sites",
-        // Verbatim SPEC §3.4, including Chrome's real warning string.
+        // Includes Chrome's real all-sites permission-warning string verbatim.
         body: "If you're constantly adding rules for new sites, you can grant HeaderShim access to every site at once. Chrome will show its strongest warning — \"Read and change all your data on all websites\" — and that warning is accurate: this is real, broad access, which is exactly why HeaderShim doesn't ask for it by default. Your rules still only apply where their scopes say; this only removes the per-site permission step. You can revoke it here at any time.",
         button: "Allow on all sites",
         on: "All-sites access is on",
         revoked: "All-sites access revoked",
       },
     },
-    // The trust page (SPEC §4.2): prose a security reviewer can paste into an
-    // approval request. Claim wording is bound by SPEC §1: "no install-time
+    // The trust page: prose a security reviewer can paste into an
+    // approval request. Claim wording says "no install-time
     // warning", never "no permission text anywhere"; the CWS caveat is stated,
     // never "verify the store build".
     about: {
@@ -301,7 +301,7 @@ export const copy = {
         heading: "What HeaderShim will never do",
         intro:
           "Every absence the manifest can express is enforced by an executable policy check in CI — checkable by reading the manifest, not claimed. The rest are standing commitments, in writing here and in the listing.",
-        // Verbatim SPEC §10.
+        // This exact wording is the standing commitment; mirrored in the listing.
         items: [
           {
             lead: "No telemetry/analytics ever",
@@ -409,7 +409,7 @@ export const copy = {
   toast: {
     activeOn: (host: string) => `Active on ${host}`,
     activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
-    // The grant→reload handoff when no single host can be named (annunciator /
+    // The grant-to-reload prompt when no single host can be named (annunciator /
     // Verify Grant): confirms access landed and pairs with a Reload-tab action.
     accessGranted: "Access granted",
     // "· Undo" is the toast's action button, not part of the message.
@@ -458,7 +458,7 @@ export const copy = {
     composerTitle: "New this-tab override",
     saveAsRule: "Save as rule…",
     remove: (header: string) => `Remove temporary override: ${header}`,
-    // Persistent honesty line under the section (SPEC §3.5); "Create a rule"
+    // Persistent honesty line under the section; "Create a rule"
     // is the action button between the two spans.
     standingBefore:
       "Calling a different API from this page? That needs a saved rule and a one-click site grant — ",
@@ -655,10 +655,10 @@ export const copy = {
   },
 
   verify: {
-    // Verbatim honest-limits footer (SPEC §5).
+    // The honest-limits footer.
     limits:
       'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug) — trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
-    // Verify leads with the most basic unmet precondition (SPEC §5, verdict P0),
+    // Verify leads with the most basic unmet precondition,
     // never the caching essay. blocked > no-request > matched, in that order.
     // A grant gap is the headline, with Grant surfaced in the panel itself.
     blockedHeadline: (
@@ -683,7 +683,7 @@ export const copy = {
     stillNothing:
       "Still nothing after a reload? A rule limited to certain resource types only fires on those requests, and requests another site starts need that site granted too — see Site access in options.",
     // The has-matches headline. Counts of matches, phrased so it never reads as
-    // a configuration score (verdict P2); the per-rule list carries the tallies.
+    // a configuration score; the per-rule list carries the tallies.
     matchedHeadline: (matched: number): Sentence => [
       "Last request: ",
       data(matched),
@@ -697,7 +697,7 @@ export const copy = {
     close: "Close verify",
     matchCount: (n: number) =>
       n === 0 ? "no matches" : n === 1 ? "1 match" : `${n} matches`,
-    // Per-rule hints: only the statically determinable causes (SPEC §5).
+    // Per-rule hints: only the statically determinable causes.
     hints: {
       disabled: "disabled",
       "scope-excludes": "scope excludes this site",

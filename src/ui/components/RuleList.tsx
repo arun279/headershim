@@ -113,8 +113,8 @@ export function RuleList(props: RuleListProps) {
   });
 
   // When the in-place editor closes and took keyboard focus down with it,
-  // focus returns to the row it stood in for (DESIGN: focus returns to the
-  // trigger). A focus the user moved elsewhere is left alone.
+  // focus returns to the row it stood in for. A focus the user moved
+  // elsewhere is left alone.
   const lastEditedRuleId = useRef(editing?.ruleId);
   useEffect(() => {
     const previous = lastEditedRuleId.current;

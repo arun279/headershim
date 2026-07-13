@@ -22,12 +22,11 @@ const text = copy.options.siteAccess;
 
 /**
  * Every origin headershim can touch, and every origin its enabled rules still
- * need — the actionable group first (SPEC §4.2, DESIGN §5.10). The list is a
- * projection of `permissions.getAll` and the rules' required origins, so a
- * grant or revocation from anywhere (this page, the popup, Chrome's own UI)
- * lands here through `permissions.onChanged` without a reload. The all-sites
- * card is the broad grant's only affordance and keeps its honest framing
- * (SPEC §3.4).
+ * need — the actionable group first. The list is a projection of
+ * `permissions.getAll` and the rules' required origins, so a grant or
+ * revocation from anywhere (this page, the popup, Chrome's own UI) lands
+ * here through `permissions.onChanged` without a reload. The all-sites
+ * card is the broad grant's only affordance and keeps its honest framing.
  */
 export function SiteAccessPage({
   doc,

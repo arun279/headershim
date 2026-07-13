@@ -251,7 +251,7 @@ describe("planBadge single-winner precedence across the input space", () => {
                 expect(plan.state.textColor).toBe(WHITE);
 
                 // Only the paused state names itself in the tooltip; every
-                // other winner clears back to the default title (SPEC §4.4).
+                // other winner clears back to the default title.
                 expect(plan.title).toBe(paused ? "HeaderShim — paused" : "");
               });
             }

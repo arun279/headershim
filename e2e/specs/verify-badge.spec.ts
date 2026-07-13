@@ -60,7 +60,7 @@ function needsAccessDoc(): StateDoc {
   ]);
 }
 
-// ── Badge state machine end-to-end (case 14) ────────────────────────────────
+// ── Badge state machine end-to-end ──────────────────────────────────────────
 
 test("count mode engages the Chrome-managed count badge", async ({
   context,
@@ -109,7 +109,7 @@ test("a This-tab override marks its tab with T when no profile is enabled", asyn
   await seedSessionAndWait(serviceWorker, [tabOverride(tabId, originHost)]);
 
   // Modified traffic is never invisible: the override tab carries a "T" while
-  // the global badge and every other tab stay empty (SPEC §4.4).
+  // the global badge and every other tab stay empty.
   await expect.poll(() => getBadgeText(serviceWorker, tabId)).toBe("T");
   expect(await getBadgeText(serviceWorker)).toBe("");
 });
@@ -190,14 +190,14 @@ test("getMatchedRules rejects without a gesture-granted activeTab", async ({
   expect(rejected).toBe(true);
 });
 
-test("the verify keyboard command grants activeTab for getMatchedRules (§4.5)", async () => {
+test("the verify keyboard command grants activeTab for getMatchedRules", async () => {
   test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
 });
 
-test("Verify per-rule tallies attribute correctly after an in-window edit (§5)", async () => {
+test("Verify per-rule tallies attribute correctly after an in-window edit", async () => {
   test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
 });
 
-test("21+ gesture-initiated Verify calls succeed under the quota exemption (§5)", async () => {
+test("21+ gesture-initiated Verify calls succeed under the quota exemption", async () => {
   test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
 });

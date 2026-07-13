@@ -39,12 +39,12 @@ interface RuleEditorProps {
   prefillDomain?: string | undefined;
   /**
    * A full draft to seed a new rule from — the This-tab "Save as rule…" path
-   * (SPEC §3.5) hands over the whole override. Ignored when editing a rule.
+   * hands over the whole override. Ignored when editing a rule.
    */
   prefill?: RuleDraft | undefined;
-  /** Live grant snapshot, so the grant moment (§3.1) fires only when needed. */
+  /** Live grant snapshot, so the grant moment fires only when needed. */
   grants: GrantSnapshot;
-  /** Origin of the tab the popup opened on: the inferred initiator (§3.3). */
+  /** Origin of the tab the popup opened on: the inferred initiator. */
   tabDomain?: string | undefined;
   onSave: (
     ruleId: string | undefined,
@@ -448,7 +448,7 @@ function keptHosts(
 /**
  * Whether a just-committed rule still needs a grant the popup can prompt for,
  * and the shape of the panel that collects it. All-sites scopes route through
- * the buried options flow (§3.4), never a popup prompt; a fully-granted rule
+ * the buried options flow, never a popup prompt; a fully-granted rule
  * needs no panel at all.
  */
 function planGrant(
@@ -525,7 +525,7 @@ function initiatorNeedsGrant(
 }
 
 /**
- * §3.3's honest split for a Domains rule reaching subresources: pre-check the
+ * The honest split for a Domains rule reaching subresources: pre-check the
  * tab's own origin when it differs from the target (the inferred initiator);
  * offer an explicit optional input when no page context could be captured;
  * ask nothing when the rule stays on navigations or the tab is the target.

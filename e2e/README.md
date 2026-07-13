@@ -22,7 +22,7 @@ cross-host fetches. Its JSON and cache endpoints expose CORS headers so specs ca
 inspect subresource requests and distinguish a cache hit from another server
 request.
 
-## What is automated vs. what stays a checklist
+## What is automated vs. what needs manual verification
 
 Some behaviour is genuinely not scriptable from Playwright and is recorded here
 honestly rather than faked. This table starts with the smoke case and grows as
@@ -44,80 +44,82 @@ later specs land.
 | Reconcile self-heal | Direct dynamic-rule corruption is detected, repaired from stored state, and settles to a no-op plan | ✅ headless | The corruption calls Chrome's update API directly, bypassing the extension write path, before a storage change triggers recovery. |
 | Cached response behavior | A fresh response is modified, a cache hit exposes the server header, and the server request count stays at one | ⏸ self-skips without grant | The cache assertion requires the first response to prove real DNR modification, so it is not marked green when access cannot be granted. |
 | Network-managed content length | A rule value of `999` is accepted but the outgoing POST carries the body length selected by the network stack | ⏸ self-skips without grant | The accepted/readback rule is exercised before the grant attempt; the on-wire value is enforced only when access lands. |
-| This-tab confinement (§3.5a) | A This-tab override compiles to a session rule whose condition names only that tab and its origin | ✅ headless | `getSessionRules` read-back is normalized-equal to `compileSession`; asserts `tabIds === [thisTab]`, `requestDomains === [origin]`, and `main_frame` in the resource set. Confinement is the rule's own condition, so the main frame + same-origin subresources are in scope while cross-origin subresources and every other tab are structurally excluded — independent of any grant. |
-| This-tab cross-tab isolation (§3.5a) | Opening a second same-origin tab and a cross-origin tab does not widen the override | ✅ headless | The session band still names only the tab the override was added to; the on-wire "other tabs unmodified even with all-sites granted" half is structurally implied and revalidated on the packed build. |
-| This-tab lifetime, cross-site ends (§3.5b) | A cross-site navigation deletes the override rows and an A→B→A round trip stays stopped; closing the tab ends it | ✅ headless | Cross-origin `tabs.onUpdated` and `tabs.onRemoved` drain the session band; returning to A does not resurrect the rows. |
-| This-tab lifetime, same-site continues (§3.5b) | A same-site navigation and an SPA route change keep the override | ⏭ env-skip | Telling a same-site hop from a cross-site one needs `tab.url` in `tabs.onUpdated`, exposed only while the activeTab grant is live. Headless, `url === undefined` on every navigation and the background prunes conservatively, so only the cross-site-ends half is observable. Explicit `test.skip`; moves to the packed/real-Chrome checklist. |
-| This-tab on-wire modification (§3.5a) | A granted This-tab override modifies a same-origin request | ⏸ self-skips without grant | Exact flow retained; seeding happens after navigation so no hop prunes the row. Skips when the activeTab grant cannot be scripted. |
-| Loud needs-access (case 3 UI half) | An ungranted rule lights the popup annunciator's `needs-access` state with its one-click recovery | ✅ headless | Opens `popup.html`, asserts `.annunciator[data-state="needs-access"]` and a grant-access button. (The `role` starts `alert` and settles to `status` after the alert-once announce, so it is not asserted.) |
-| Badge count mode (§4.4) | Count mode engages the Chrome-managed count badge | ✅ headless | Per-tab `getBadgeText` returns the `<<declarativeNetRequestActionCount>>` sentinel (proof `displayActionCountAsBadgeText === true`) with the focused profile's color; the live *number* needs matched traffic and is deferred to the packed/real-Chrome checklist. |
-| Badge initials + This-tab "T" (§4.4) | Initials mode paints the focused profile's text; with no profile enabled a This-tab override marks its tab "T" while the global badge stays empty | ✅ headless | Read back via `getBadgeText` global and per-tab. Modified traffic is never invisible. |
-| Badge precedence + no stale bleed (§4.4, case 14) | Paused (grey) and needs-access (amber) outrank content mode and sweep per-tab text | ✅ headless | Starting from a tab showing "T", entering each global tier clears that tab's text to empty (no bleed-through when switching to it) and paints the tier color (`#6E7B88` grey, `#B07B00` amber), asserted via `getBadgeText`/`getBadgeBackgroundColor`. |
-| Verify gesture premise (§5) | Without a gesture-granted activeTab (and with `declarativeNetRequestFeedback` barred by policy), `getMatchedRules({tabId})` rejects | ✅ headless | Confirms the reason Verify is a per-tab, on-demand, gesture-driven feature. Establishes the boundary the deferred rows below sit behind. |
-| Verify command gesture (§4.5) | Whether the `verify` keyboard command counts as an activeTab-granting gesture for `getMatchedRules` | ⏭ env-skip | The command, the action click, and `_execute_action` are all browser-level UI unscriptable by Playwright/CDP. Explicit `test.skip`; answered on the packed/real-Chrome checklist, which also decides whether the shortcut queries directly or opens the popup pre-triggered. |
-| Verify tallies + edit-window attribution (§5) | Per-rule tallies attribute correctly after an insert within the 5-minute window | ⏭ env-skip | Needs a gesture-granted `getMatchedRules`. Explicit `test.skip`; the stable-id attribution itself is unit-tested (`decodeMatches`). Moves to the packed/real-Chrome checklist. |
-| Verify quota (§5) | 21+ rapid gesture-initiated Verify calls succeed under the gesture exemption | ⏭ env-skip | Needs a real gesture per call. Explicit `test.skip`; moves to the packed/real-Chrome checklist. |
-| Broad-grant revocation survival (§3.4) | Whether individually granted sites survive revoking a broad all-sites grant | ⏭ env-skip | Staging it needs a real all-sites grant to then revoke, which the unpacked headless posture cannot obtain. Explicit `test.skip`; moves to the packed/real-Chrome checklist. |
-| Site-access UI half (case 8, §3.4) | The Site access options page lists granted and needed-but-not-granted origins matching the browser's real permission state | ✅ headless | The page is a projection of `permissions.getAll` + the rules' required origins. No host grant is obtainable in this posture (same reason the survival half above is deferred), so the browser's reality is "nothing granted": every enabled rule's origin sits under needed-but-not-granted, the granted group is empty, and the broad-grant offer (not the revoke card) stands. The spec asserts that projection and cross-checks the empty granted rows against a live `permissions.getAll`. Populating the granted group under a real grant, and the revoke-survival question, ride the packed/real-Chrome checklist. |
-| Import/export round-trip (case 15) | Export → wipe → import through the real options UI yields an equivalent state with the imported profiles off | ✅ headless | Drives the built options page: export downloads the golden envelope, the store is wiped to a fresh seed, the file re-imports through the summary screen, and the applied profiles are compared (ids and export timestamp normalized) — identical except every imported profile arrives disabled. |
-| ModHeader import warnings (case 15) | Every mapping warning class is itemized on the pre-apply summary | ✅ headless | A two-profile ModHeader fixture (`e2e/fixtures/modheader-all-warnings.json`) exercises all thirteen warning kinds, including a real RE2-invalid pattern rejected by Chrome's `isRegexSupported`; the summary renders one row per warning with each class's copy. |
-| Accessibility (case 17) | Zero axe violations (names/roles, contrast from the real tokens, ARIA) on the popup states and options surfaces, both themes | ✅ headless | `@axe-core/playwright` over `wcag2a/aa`, `wcag21a/aa`, `wcag22aa` — the statically-decidable AA slice. Popup: first-run, needs-access + rule list, paused, rule editor, This-tab composer, grant panel, Verify panel. Options: profiles, import & export, site access, about, and the import summary. Each `<html>` carries the asserted theme, and reduced motion is emulated so contrast is read in the resting state, not mid-transition. Logical focus order and keyboard operability are proven by the keyboard walk below, not by axe. |
-| Keyboard-model walk (case 17, §4.5 popup) | Every automatable in-popup binding operates through real key events | ✅ headless | `n`/`t`/`v` open their surfaces, `p` toggles pause, digit `1–9` switches profiles exclusively while `Shift+1–9` toggles without turning others off, list `↑/↓` move roving focus, row `Enter`/`Space`/`Delete` edit/toggle/delete, and the editor commits on `Enter`, commits + prompts on `Ctrl/Cmd+Enter`, and closes on `Esc` (a second `Esc` closes the popup). |
-| Global commands (§4.5) | `Alt+Shift+H/P/V/K` dispatch through the browser shortcut manager | 📋 checklist | The shortcut manager feeds `chrome.commands`, which neither Playwright nor CDP can synthesize; the popup behaviour each triggers is covered by its in-popup equivalent above. Explicit `test.skip`; the shortcuts themselves ride the per-release manual keyboard pass. |
-| Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 checklist | Native prompts are not scriptable (below); captured out of band. |
-| Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The CRX force-installs and enables, but its lazy MV3 service worker is not surfaced to Playwright on the runner, so the specs cannot drive it. Verdict UNKNOWN until the real-Chrome verification phase. |
-| Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. Verdict UNKNOWN until the real-Chrome verification phase. |
-| Packed: `displayActionCountAsBadgeText` | The count badge paints on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. A divergence re-opens the count-badge design. Verdict UNKNOWN until the real-Chrome verification phase. |
+| This-tab confinement | A This-tab override compiles to a session rule whose condition names only that tab and its origin | ✅ headless | `getSessionRules` read-back is normalized-equal to `compileSession`; asserts `tabIds === [thisTab]`, `requestDomains === [origin]`, and `main_frame` in the resource set. Confinement is the rule's own condition, so the main frame + same-origin subresources are in scope while cross-origin subresources and every other tab are structurally excluded — independent of any grant. |
+| This-tab cross-tab isolation | Opening a second same-origin tab and a cross-origin tab does not widen the override | ✅ headless | The session band still names only the tab the override was added to; the on-wire "other tabs unmodified even with all-sites granted" half is structurally implied and revalidated on the packed build. |
+| This-tab lifetime, cross-site ends | A cross-site navigation deletes the override rows and an A→B→A round trip stays stopped; closing the tab ends it | ✅ headless | Cross-origin `tabs.onUpdated` and `tabs.onRemoved` drain the session band; returning to A does not resurrect the rows. |
+| This-tab lifetime, same-site continues | A same-site navigation and an SPA route change keep the override | ⏭ env-skip | Telling a same-site hop from a cross-site one needs `tab.url` in `tabs.onUpdated`, exposed only while the activeTab grant is live. Headless, `url === undefined` on every navigation and the background prunes conservatively, so only the cross-site-ends half is observable. Explicit `test.skip`; verified manually against real Chrome before release. |
+| This-tab on-wire modification | A granted This-tab override modifies a same-origin request | ⏸ self-skips without grant | Exact flow retained; seeding happens after navigation so no hop prunes the row. Skips when the activeTab grant cannot be scripted. |
+| Loud needs-access (UI half) | An ungranted rule lights the popup annunciator's `needs-access` state with its one-click recovery | ✅ headless | Opens `popup.html`, asserts `.annunciator[data-state="needs-access"]` and a grant-access button. (The `role` starts `alert` and settles to `status` after the alert-once announce, so it is not asserted.) |
+| Badge count mode | Count mode engages the Chrome-managed count badge | ✅ headless | Per-tab `getBadgeText` returns the `<<declarativeNetRequestActionCount>>` sentinel (proof `displayActionCountAsBadgeText === true`) with the focused profile's color; the live *number* needs matched traffic and is verified manually against real Chrome before release. |
+| Badge initials + This-tab "T" | Initials mode paints the focused profile's text; with no profile enabled a This-tab override marks its tab "T" while the global badge stays empty | ✅ headless | Read back via `getBadgeText` global and per-tab. Modified traffic is never invisible. |
+| Badge precedence + no stale bleed | Paused (grey) and needs-access (amber) outrank content mode and sweep per-tab text | ✅ headless | Starting from a tab showing "T", entering each global tier clears that tab's text to empty (no bleed-through when switching to it) and paints the tier color (`#6E7B88` grey, `#B07B00` amber), asserted via `getBadgeText`/`getBadgeBackgroundColor`. |
+| Verify gesture premise | Without a gesture-granted activeTab (and with `declarativeNetRequestFeedback` barred by policy), `getMatchedRules({tabId})` rejects | ✅ headless | Confirms the reason Verify is a per-tab, on-demand, gesture-driven feature. Establishes the boundary the deferred rows below sit behind. |
+| Verify command gesture | Whether the `verify` keyboard command counts as an activeTab-granting gesture for `getMatchedRules` | ⏭ env-skip | The command, the action click, and `_execute_action` are all browser-level UI unscriptable by Playwright/CDP. Explicit `test.skip`; answered by manual verification against real Chrome, which also decides whether the shortcut queries directly or opens the popup pre-triggered. |
+| Verify tallies + edit-window attribution | Per-rule tallies attribute correctly after an insert within the 5-minute window | ⏭ env-skip | Needs a gesture-granted `getMatchedRules`. Explicit `test.skip`; the stable-id attribution itself is unit-tested (`decodeMatches`). Verified manually against real Chrome before release. |
+| Verify quota | 21+ rapid gesture-initiated Verify calls succeed under the gesture exemption | ⏭ env-skip | Needs a real gesture per call. Explicit `test.skip`; verified manually against real Chrome before release. |
+| Broad-grant revocation survival | Whether individually granted sites survive revoking a broad all-sites grant | ⏭ env-skip | Staging it needs a real all-sites grant to then revoke, which the unpacked headless posture cannot obtain. Explicit `test.skip`; verified manually against real Chrome before release. |
+| Site-access UI half | The Site access options page lists granted and needed-but-not-granted origins matching the browser's real permission state | ✅ headless | The page is a projection of `permissions.getAll` + the rules' required origins. No host grant is obtainable in this posture (same reason the survival half above is deferred), so the browser's reality is "nothing granted": every enabled rule's origin sits under needed-but-not-granted, the granted group is empty, and the broad-grant offer (not the revoke card) stands. The spec asserts that projection and cross-checks the empty granted rows against a live `permissions.getAll`. Populating the granted group under a real grant, and the revoke-survival question, are verified manually against real Chrome before release. |
+| Import/export round-trip | Export → wipe → import through the real options UI yields an equivalent state with the imported profiles off | ✅ headless | Drives the built options page: export downloads the golden envelope, the store is wiped to a fresh seed, the file re-imports through the summary screen, and the applied profiles are compared (ids and export timestamp normalized) — identical except every imported profile arrives disabled. |
+| ModHeader import warnings | Every mapping warning class is itemized on the pre-apply summary | ✅ headless | A two-profile ModHeader fixture (`e2e/fixtures/modheader-all-warnings.json`) exercises all thirteen warning kinds, including a real RE2-invalid pattern rejected by Chrome's `isRegexSupported`; the summary renders one row per warning with each class's copy. |
+| Accessibility | Zero axe violations (names/roles, contrast from the real tokens, ARIA) on the popup states and options surfaces, both themes | ✅ headless | `@axe-core/playwright` over `wcag2a/aa`, `wcag21a/aa`, `wcag22aa` — the statically-decidable AA slice. Popup: first-run, needs-access + rule list, paused, rule editor, This-tab composer, grant panel, Verify panel. Options: profiles, import & export, site access, about, and the import summary. Each `<html>` carries the asserted theme, and reduced motion is emulated so contrast is read in the resting state, not mid-transition. Logical focus order and keyboard operability are proven by the keyboard walk below, not by axe. |
+| Keyboard-model walk (popup) | Every automatable in-popup binding operates through real key events | ✅ headless | `n`/`t`/`v` open their surfaces, `p` toggles pause, digit `1–9` switches profiles exclusively while `Shift+1–9` toggles without turning others off, list `↑/↓` move roving focus, row `Enter`/`Space`/`Delete` edit/toggle/delete, and the editor commits on `Enter`, commits + prompts on `Ctrl/Cmd+Enter`, and closes on `Esc` (a second `Esc` closes the popup). |
+| Global commands | `Alt+Shift+H/P/V/K` dispatch through the browser shortcut manager | 📋 manual | The shortcut manager feeds `chrome.commands`, which neither Playwright nor CDP can synthesize; the popup behaviour each triggers is covered by its in-popup equivalent above. Explicit `test.skip`; the shortcuts themselves ride the per-release manual keyboard pass. |
+| Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 manual | Native prompts are not scriptable (below); captured out of band. |
+| Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏭ env-skip | Not CI-automatable in this environment; verified manually against real Chrome before each release. The CRX force-installs and enables, but its lazy MV3 service worker is not surfaced to Playwright on the runner, so the specs cannot drive it. Unconfirmed until that manual check runs. |
+| Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified manually against real Chrome before each release. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. Unconfirmed until that manual check runs. |
+| Packed: `displayActionCountAsBadgeText` | The count badge paints on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified manually against real Chrome before each release. A divergence re-opens the count-badge design. Unconfirmed until that manual check runs. |
 
-## [verify-in-e2e] gate outcomes
+## Status of behaviors deferred from headless CI
 
-Each behavior the spec flagged for confirmation, and where its answer stands
-after the headless gate suite. A structural outcome (the compiled rule's
-condition, read back from Chrome) settles the design; the on-wire confirmation
-that leans on a runtime grant is carried to the packed/real-Chrome checklist.
+Each behavior below is genuinely uncertain until confirmed by more than the
+headless suite, and where its answer stands today. A structural outcome (the
+compiled rule's condition, read back from Chrome) settles the design; the
+on-wire confirmation that leans on a runtime grant is verified manually
+against real Chrome before release.
 
-- **§3.4 — do individual grants survive broad-grant revocation.** The survival
+- **Do individual grants survive broad-grant revocation?** The survival
   question is not settled here: the unpacked headless posture cannot obtain the
-  all-sites grant to then revoke. Deferred to the packed/real-Chrome checklist;
-  the "Revoking returns previously-granted individual sites to whatever Chrome
-  preserved" copy stays gated until then. The Site-access **UI half** (case 8)
-  is settled: the page is a faithful projection of `permissions.getAll` + the
-  rules' required origins, verified against the browser's real (empty-grant)
-  state — needed origins listed, granted group empty, broad-grant offer
-  standing. It will reflect whatever the survival check preserves once that
-  check can run.
-- **§3.5a — the exact request set an activeTab session rule modifies.**
+  all-sites grant to then revoke. Verified manually against real Chrome before
+  release; the "Revoking returns previously-granted individual sites to
+  whatever Chrome preserved" copy stays unconfirmed until then. The Site-access
+  **UI half** is settled: the page is a faithful projection of
+  `permissions.getAll` + the rules' required origins, verified against the
+  browser's real (empty-grant) state — needed origins listed, granted group
+  empty, broad-grant offer standing. It will reflect whatever the survival
+  check preserves once that check can run.
+- **The exact request set an activeTab session rule modifies.**
   Structurally confirmed: the compiled session rule's condition is
   `tabIds: [thisTab]` + `requestDomains: [origin]` over all resource types
   including `main_frame`, so the reach is exactly the tab's own main frame and
   same-origin subresources — no wider, no narrower. This **holds** the copy
   ("Applies to example.com requests in this tab", the same-origin-only promise).
-  The remaining on-wire confirmation under a real activeTab grant is a packed
-  checklist item; nothing about the scope depends on it.
-- **§3.5b — This-tab lifetime across navigations.** Cross-site navigation ends
+  The remaining on-wire confirmation under a real activeTab grant is verified
+  manually against real Chrome before release; nothing about the scope depends
+  on it.
+- **This-tab lifetime across navigations.** Cross-site navigation ends
   the override, an A→B→A round trip stays stopped, and closing the tab ends it —
   all confirmed headless. The same-site/SPA *continues* half needs the activeTab
   `tab.url`, so it is deferred; the "Applies to this tab while it stays on
   example.com. Navigating the tab to a different site ends the override" copy is
-  confirmed for the ends direction and gated for the continues direction.
-- **§4.5 / §5 — does the verify command grant activeTab for `getMatchedRules`.**
+  confirmed for the ends direction and unconfirmed for the continues direction.
+- **Does the verify command grant activeTab for `getMatchedRules`?**
   Confirmed headless that `getMatchedRules` **rejects** without a gesture-granted
   activeTab (the feature's whole premise). Whether the custom command supplies
-  that gesture is unscriptable and deferred; until the checklist answers it, the
-  shortcut's fallback ("opens the popup with Verify pre-triggered — which does
-  grant it") remains the safe wording.
-- **§5 — Verify tallies, quota, count number.** All three need a gesture-granted
+  that gesture is unscriptable and deferred; until manual verification against
+  real Chrome answers it, the shortcut's fallback ("opens the popup with Verify
+  pre-triggered — which does grant it") remains the safe wording.
+- **Verify tallies, quota, count number.** All three need a gesture-granted
   `getMatchedRules` and are deferred. Stable-id attribution is independently
   unit-tested (`decodeMatches`); the count-badge *state machine* (mode
   exclusivity, per-tab sweep, precedence) is confirmed headless while the painted
   *number* is deferred.
 
-**Open question §12.1 (quick-override reach).** Part (a) — whether even the
+**Quick-override reach.** Part (a) — whether even the
 same-origin set holds — is answered *yes, structurally*: the session rule's own
 condition confines it to the tab's origin, so the zero-prompt This-tab surface
 does not need the real-per-site-grant fallback on scoping grounds. Part (b) —
 lifetime flakiness — the ends direction is deterministic here; the continues
-direction is deferred to the packed/real-Chrome checklist before the "no prompt"
+direction is verified manually against real Chrome before the "no prompt"
 promise freezes. No relabel is required on the evidence gathered so far.
 
 ## Grant automation
@@ -189,11 +191,11 @@ listeners registered. What is missing is the handle: the extension's lazy MV3
 service worker starts, registers, and idles out again without the persistent
 context ever surfacing a `serviceworker` target to Playwright, so the specs have
 no worker to drive. The specs therefore skip with that reason recorded in code,
-and the three behaviours stay on the release packed checklist until the
-real-Chrome verification phase settles them. The harness (pack, update server,
-policy render, force-install, and an on-timeout diagnostic that dumps the read
-policy, the extension records, and Chrome's own updater/installer log) is kept
-intact for that phase.
+and the three behaviours are verified manually against real Chrome before each
+release, until this harness can drive them directly. The harness (pack, update
+server, policy render, force-install, and an on-timeout diagnostic that dumps
+the read policy, the extension records, and Chrome's own updater/installer
+log) is kept intact for when that becomes possible.
 
 Locally you can exercise everything except the policy install and the Chrome run:
 
@@ -202,6 +204,24 @@ pnpm e2e:packed:pack        # build + pack the CRX
 pnpm e2e:packed:selfcheck   # pack, serve, and render the policy; assert their shape
 ```
 
-The three gate outcomes are marked *env-skip* in the table above: they are not
-CI-automatable in this environment and remain UNKNOWN until the real-Chrome
-verification phase records them.
+The three outcomes are marked *env-skip* in the table above: they are not
+CI-automatable in this environment and stay unconfirmed until a manual
+real-Chrome check records them before each release.
+
+## Manual verification before release
+
+A handful of behaviors above have no automated readout in this repo — either
+because they need OS-level input (native permission prompts, global keyboard
+shortcuts) or because the packed-build gate can't get a service worker handle
+in this environment yet. Before shipping a release, check them by hand:
+
+- Load the built extension unpacked (`.output/chrome-mv3`) or the packed CRX
+  (`pnpm e2e:packed:pack`) in real Chrome.
+- Trigger the behavior with a real user gesture: click the action, press the
+  `Alt+Shift+H/P/V/K` shortcuts, open the Grant panel to see the native
+  permission-prompt wording, or grant/revoke all-sites access from
+  `chrome://extensions`.
+- Confirm the expected result directly — the badge, the popup's Verify panel,
+  `chrome://extensions-internals`, or a network trace in DevTools.
+
+The table above names each behavior currently relying on this pass.

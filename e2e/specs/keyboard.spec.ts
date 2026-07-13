@@ -9,10 +9,10 @@ import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
 import { expect, seedState, test } from "../fixtures";
 
-// SPEC §4.5, the popup half: every in-popup binding driven through real key
+// The popup half: every in-popup binding driven through real key
 // events against the built popup. The global commands (Alt+Shift+…) are the
 // browser's own shortcut manager dispatching chrome.commands and cannot be
-// synthesized by Playwright or CDP; they are recorded as a checklist item at
+// synthesized by Playwright or CDP; they get a manual test at
 // the end of this file.
 
 function baseDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
@@ -262,9 +262,9 @@ test("editor commit keys commit, grant, and close", async ({
   await closed;
 });
 
-// SPEC §4.5 global commands are dispatched by the browser's shortcut manager
+// Global commands are dispatched by the browser's shortcut manager
 // into chrome.commands; neither Playwright nor CDP can synthesize that input,
 // so Alt+Shift+H/P/V/K stay on the per-release manual keyboard pass. The
 // popup-side behaviour each one triggers (open popup, pause, verify, switch
 // profile) is covered above through its in-popup equivalent.
-test.skip("global Alt+Shift shortcuts are a manual checklist item", () => {});
+test.skip("global Alt+Shift shortcuts need a manual per-release check", () => {});

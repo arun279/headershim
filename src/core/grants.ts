@@ -185,8 +185,8 @@ export function coversSubresourceTypes(rule: Rule): boolean {
 }
 
 /**
- * When the standing initiator note is worth showing on a healthy rule (verdict
- * P2): the rule reaches subresources but NOT top-level page navigations, so its
+ * When the standing initiator note is worth showing on a healthy rule:
+ * the rule reaches subresources but NOT top-level page navigations, so its
  * requests are genuinely started by some *other* page and that page needs
  * granting too. A default all-types rule includes main_frame — the common
  * direct-navigation case the user is not surprised by — so it stays quiet.

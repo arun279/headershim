@@ -36,7 +36,7 @@ async function analyze(
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
   // Transitions (editor expand, panel slide) blend colours mid-animation and
   // would let axe read a contrast that never settles; reduced motion removes
-  // them (DESIGN §1.4) so every surface is measured in its resting state.
+  // them so every surface is measured in its resting state.
   await page.emulateMedia({ reducedMotion: "reduce" });
   const { violations } = await new AxeBuilder({ page })
     .withTags(TAGS)

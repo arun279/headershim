@@ -86,7 +86,7 @@ describe("GrantPanel — single and multiple domains", () => {
   });
 });
 
-describe("GrantPanel — pre-checked initiator line (§3.3)", () => {
+describe("GrantPanel — pre-checked initiator line", () => {
   it("includes the tab origin by default and drops it when unchecked", () => {
     const ctx = mount({
       initiator: {
@@ -117,7 +117,7 @@ describe("GrantPanel — pre-checked initiator line (§3.3)", () => {
   });
 });
 
-describe("GrantPanel — pattern/regex two-chip variant (§3.2)", () => {
+describe("GrantPanel — pattern/regex two-chip variant", () => {
   it("collects target and initiator hosts as separate labeled inputs", () => {
     const ctx = mount({
       scopeType: "pattern",
@@ -178,7 +178,7 @@ describe("GrantPanel — pattern/regex two-chip variant (§3.2)", () => {
   });
 });
 
-describe("GrantPanel — no-context initiator input (§3.3)", () => {
+describe("GrantPanel — no-context initiator input", () => {
   it("shows the explicit optional pages input when no origin was inferred", () => {
     const ctx = mount({
       initiator: { kind: "chips", prefill: [] },

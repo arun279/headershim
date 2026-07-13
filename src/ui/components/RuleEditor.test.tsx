@@ -390,7 +390,7 @@ describe("RuleEditor advisories and value field", () => {
   });
 });
 
-describe("RuleEditor grant moment (§3.1–3.3)", () => {
+describe("RuleEditor grant moment", () => {
   it("opens the grant panel naming the site when it isn't granted, instead of closing", async () => {
     const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
     await fillAndCommit(ctx, "authorization");
@@ -455,7 +455,7 @@ describe("RuleEditor grant moment (§3.1–3.3)", () => {
       "*://*.api.example.com/*",
       "*://*.app.example.com/*",
     ]);
-    // The collected initiator is persisted onto the saved rule (§3.3), so a
+    // The collected initiator is persisted onto the saved rule, so a
     // later revoke can re-light the loud state.
     expect(ctx.onSave).toHaveBeenLastCalledWith(
       "r1",

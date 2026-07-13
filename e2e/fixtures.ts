@@ -101,7 +101,7 @@ export const DUAL_GRANT_TRANSITION_UNAVAILABLE =
 // command, and the custom verify command are all browser-level UI that neither
 // Playwright nor CDP can synthesize headless, so every match-tally, edit-window
 // attribution, quota, and count-badge *number* assertion self-skips here and
-// moves to the packed/real-Chrome checklist (see e2e/README.md).
+// is verified manually against real Chrome before release (see e2e/README.md).
 export const MATCHED_RULES_GESTURE_UNAVAILABLE =
   "getMatchedRules requires an activeTab-granting user gesture (action click / _execute_action / verify command) that is not scriptable in headless Chromium, and the declarativeNetRequestFeedback permission is barred by the manifest policy (see e2e/README.md).";
 
@@ -113,12 +113,12 @@ export const MATCHED_RULES_GESTURE_UNAVAILABLE =
 export const SAME_SITE_LIFETIME_GRANT_UNAVAILABLE =
   "The same-site/SPA continues half of the This-tab lifetime needs the activeTab grant that populates tab.url; without it the background prunes on every navigation, so only the cross-site-ends half runs headless (see e2e/README.md).";
 
-// Case §3.4 asks whether individually granted sites survive revoking a broad
-// all-sites grant. Staging it needs a real all-sites grant to revoke, which the
+// Whether individually granted sites survive revoking a broad all-sites
+// grant. Staging it needs a real all-sites grant to revoke, which the
 // unpacked headless posture cannot obtain (grantAllSitesViaDetails governs only
 // declared host patterns, and none are declared).
 export const BROAD_GRANT_REVOCATION_UNAVAILABLE =
-  "The §3.4 broad-grant revocation-survival question needs a real all-sites grant to then revoke; Chrome exposes none to the unpacked headless posture, so it stays a packed/real-Chrome checklist item (see e2e/README.md).";
+  "The broad-grant revocation-survival question needs a real all-sites grant to then revoke; Chrome exposes none to the unpacked headless posture, so it is verified manually against real Chrome before release (see e2e/README.md).";
 
 interface SessionSeed {
   nextNum: number;

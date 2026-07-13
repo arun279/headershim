@@ -32,12 +32,12 @@ export interface GrantPanelProps {
   /** Fired in the click gesture so the caller can request permissions in-gesture. */
   onAllow: (selection: GrantSelection) => void;
   onNotNow: () => void;
-  /** Pattern/regex escape hatch to the buried all-sites flow (§3.4). */
+  /** Pattern/regex escape hatch to the buried all-sites flow. */
   onAllSites: () => void;
 }
 
 /**
- * The grant moment (SPEC §3.1–3.3), inside the editor footer. It never grants
+ * The grant moment, inside the editor footer. It never grants
  * anything itself: it collects the sites Chrome needs named, then hands the
  * selection back so `permissions.request` runs in the same user gesture. A
  * decline leaves the rule saved and loud; only the returned selection is ever

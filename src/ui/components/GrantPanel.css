@@ -1,5 +1,5 @@
 /* The grant moment lives in the editor footer: a caution-tinted well the row
-   expands into (DESIGN §4.9). Top border marks it off from the fields above. */
+   expands into. Top border marks it off from the fields above. */
 .grant-panel {
   min-width: 0;
   margin: var(--sp-3) calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);

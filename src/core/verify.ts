@@ -31,7 +31,7 @@ export interface VerifyReadout {
 }
 
 export interface VerifyInput {
-  /** The enabled profiles whose rules Verify reports on (SPEC §5). */
+  /** The enabled profiles whose rules Verify reports on. */
   readonly profiles: readonly Profile[];
   /** Decoded matches for the tab; stable-id attribution from `decodeMatches`. */
   readonly matches: readonly DecodedMatch[];
@@ -99,8 +99,8 @@ function staticHint(
  * for a Domains scope against a known host; a pattern or regex scope is left
  * unproven (no honest static verdict without running Chrome's match engine),
  * and an unknown host (chrome://, store pages) proves nothing. Resource types
- * are deliberately not consulted: a resource-type mismatch is the non-static
- * cause SPEC §5 keeps out of per-rule verdicts.
+ * are deliberately not consulted: a resource-type mismatch is a non-static
+ * cause, and per-rule verdicts deliberately exclude those.
  */
 function scopeExcludes(scope: Scope, tabHost: string | undefined): boolean {
   if (tabHost === undefined || scope.type !== "domains") {

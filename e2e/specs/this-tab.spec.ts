@@ -28,7 +28,8 @@ function override(tabId: number, originHost: string, num = 1): TabOverride {
 // grant from a real gesture on the extension action; the confinement it carries
 // is a property of the compiled rule's own condition, which is observable
 // headless without any grant. These cases assert that condition directly and
-// leave the on-wire half to the packed/real-Chrome checklist.
+// leave the on-wire half to be verified manually against real Chrome before
+// release.
 
 test("a This-tab override compiles to a session rule confined to its tab and origin", async ({
   context,
@@ -49,7 +50,7 @@ test("a This-tab override compiles to a session rule confined to its tab and ori
   // tab's requests to its own origin match, so the main frame and same-origin
   // subresources are in scope while cross-origin subresources (a different
   // requestDomain) and every other tab (a different tabId) are structurally
-  // excluded — the §3.5a promise, before any grant enters the picture.
+  // excluded — the confinement promise, before any grant enters the picture.
   expect(rule?.condition.tabIds).toEqual([tabId]);
   expect(rule?.condition.requestDomains).toEqual([originHost]);
   expect(rule?.condition.resourceTypes).toContain("main_frame");
@@ -145,9 +146,9 @@ test("closing a tab ends its overrides", async ({
 // change must keep the override alive. Telling it apart from a cross-site hop
 // needs tab.url in tabs.onUpdated, which the browser only exposes while the
 // activeTab grant is live; headless, the background sees url === undefined and
-// prunes on every navigation, so this half moves to the packed/real-Chrome
-// checklist. The cross-site-ends half above runs green.
-test("a same-site navigation and an SPA route change keep the override (§3.5b)", async () => {
+// prunes on every navigation, so this half is verified manually against real
+// Chrome before release. The cross-site-ends half above runs green.
+test("a same-site navigation and an SPA route change keep the override", async () => {
   test.skip(true, SAME_SITE_LIFETIME_GRANT_UNAVAILABLE);
 });
 

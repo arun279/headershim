@@ -293,7 +293,7 @@ describe("setRuleEnabled", () => {
   });
 });
 
-// SEC1-1: header grammar and urlFilter grammar are re-checked whenever a stored
+// Header grammar and urlFilter grammar are re-checked whenever a stored
 // rule enters the enabled set. An imported (untrusted) rule can carry a CRLF
 // value, a pseudo-header name, or a urlFilter Chrome rejects — stored disabled
 // and structurally indistinguishable from a user-disabled one — so the enable
@@ -801,7 +801,7 @@ describe("profile operations", () => {
   });
 });
 
-describe("enable semantics (SPEC §2.1)", () => {
+describe("enable semantics", () => {
   it("activateProfile is the exclusive switch: target on, others off, focused", async () => {
     await seed([
       profile("p1"),

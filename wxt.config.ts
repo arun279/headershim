@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
 
-// The trust page displays the commit each build came from (SPEC §4.2); a
+// The trust page displays the commit each build came from; a
 // release build is always a git checkout, so the working tree is the source.
 function commitHash(): string {
   try {
@@ -29,7 +29,7 @@ export default defineConfig({
     ],
     optional_host_permissions: ["*://*/*"],
     // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
-    // while paused and clears back to this on exit (SPEC §4.4).
+    // while paused and clears back to this on exit.
     action: { default_title: "HeaderShim" },
     commands: {
       _execute_action: {
