@@ -55,10 +55,18 @@ test("validateUrlFilter gates exactly the urlFilter forms Chrome rejects", async
   expect(validateUrlFilter(ACCEPTED_PATTERN).ok).toBe(true);
   const rejection = await tryInstall(serviceWorker, ACCEPTED_PATTERN);
   expect(rejection).toBeNull();
-  const installed = await getDynamicRules(serviceWorker);
-  expect(
-    installed.some((rule) => rule.condition.urlFilter === ACCEPTED_PATTERN),
-  ).toBe(true);
+  // getDynamicRules is eventually consistent: the read-back can lag the resolved
+  // updateDynamicRules, so poll for the accepted rule to land instead of reading
+  // once.
+  await expect
+    .poll(
+      async () =>
+        (await getDynamicRules(serviceWorker)).some(
+          (rule) => rule.condition.urlFilter === ACCEPTED_PATTERN,
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 
   await serviceWorker.evaluate(
     (id) =>
