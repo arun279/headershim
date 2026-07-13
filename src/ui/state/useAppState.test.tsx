@@ -20,7 +20,7 @@ function Probe() {
   return (
     <output data-phase={app.phase}>
       {app.phase === "ready"
-        ? `${app.status.kind}:${app.overrideCount}`
+        ? `${app.status.kind}:${app.overrides.length}`
         : app.phase === "newer-store"
           ? String(app.foundVersion)
           : ""}

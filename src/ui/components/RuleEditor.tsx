@@ -16,14 +16,19 @@ import type {
 import type { Result } from "../../core/result";
 import { originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
+import {
+  headerErrorToFieldError,
+  headerValueEmptyErrors,
+} from "../state/header-errors";
 import type { MutationError } from "../state/mutations";
 import {
   GrantPanel,
   type GrantSelection,
   type InitiatorControl,
 } from "./GrantPanel";
-import { HeaderNameInput } from "./HeaderNameInput";
+import { HeaderFields } from "./HeaderFields";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
+import { useInlineCommit } from "./useInlineCommit";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
@@ -32,6 +37,11 @@ interface RuleEditorProps {
   rule?: Rule | undefined;
   /** Domain of the tab the popup opened on; pre-fills a new Domains scope. */
   prefillDomain?: string | undefined;
+  /**
+   * A full draft to seed a new rule from — the This-tab "Save as rule…" path
+   * (SPEC §3.5) hands over the whole override. Ignored when editing a rule.
+   */
+  prefill?: RuleDraft | undefined;
   /** Live grant snapshot, so the grant moment (§3.1) fires only when needed. */
   grants: GrantSnapshot;
   /** Origin of the tab the popup opened on: the inferred initiator (§3.3). */
@@ -86,30 +96,28 @@ interface FieldErrors {
  */
 export function RuleEditor(props: RuleEditorProps) {
   const id = useId();
-  const rootRef = useRef<HTMLFieldSetElement>(null);
-  const [draft, setDraftState] = useState(() =>
-    initialDraft(props.rule, props.prefillDomain),
-  );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
-  // Handlers that fire mid-gesture (chip blur, then the editor's focus-leave
-  // commit in the same event turn) must see each other's writes; state alone
-  // only lands on the next render.
-  const draftRef = useRef(draft);
-  const dirtyRef = useRef(false);
-  const busyRef = useRef(false);
   // The saved rule's id survives a new-rule commit so the grant step can persist
   // its collected sites onto that same rule rather than creating a second one.
   const savedIdRef = useRef(props.rule?.id);
   const grantOpenRef = useRef(false);
   grantOpenRef.current = grantStep !== undefined;
 
-  const update = (transform: (draft: Draft) => Draft) => {
-    dirtyRef.current = true;
-    draftRef.current = transform(draftRef.current);
-    setDraftState(draftRef.current);
-    setErrors({});
-  };
+  // Handlers that fire mid-gesture (chip blur, then the editor's focus-leave
+  // commit in the same event turn) must see each other's writes, so the draft
+  // and interaction flags live in refs; focus leaving an open grant step
+  // abandons it rather than committing.
+  const { draft, draftRef, busyRef, rootRef, update, onKeyDown, onFocusOut } =
+    useInlineCommit<Draft>(
+      () => initialDraft(props.rule, props.prefillDomain, props.prefill),
+      {
+        commit: (grantImmediately) => void commit(grantImmediately),
+        onClose: props.onClose,
+        clearErrors: () => setErrors({}),
+        abandon: () => grantOpenRef.current,
+      },
+    );
 
   const commit = async (grantImmediately = false) => {
     if (busyRef.current) {
@@ -209,122 +217,14 @@ export function RuleEditor(props: RuleEditorProps) {
 
   return (
     <fieldset
-      class="rule-editor"
+      class="rule-editor inline-editor-well"
       ref={rootRef}
-      onKeyDown={(event) => {
-        if (event.defaultPrevented) {
-          return;
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          // A commit in flight can't be unwound by closing; Esc waits it out
-          // (success closes the editor itself, failure re-enables it).
-          if (!busyRef.current) {
-            props.onClose();
-          }
-          return;
-        }
-        const target =
-          event.target instanceof HTMLElement ? event.target : null;
-        if (event.key === "Enter") {
-          // Enter on a button activates it; everywhere else it commits. The open
-          // grant panel owns its own Ctrl/Cmd+Enter (it grants with the sites as
-          // edited), so this only reaches the field editor before that step.
-          if (target?.tagName !== "BUTTON") {
-            event.preventDefault();
-            void commit(event.metaKey || event.ctrlKey);
-          }
-          return;
-        }
-        // The open editor owns its keys: single-letter popup commands must
-        // not fire from its buttons (segments, disclosure, chips, Insert).
-        if (target?.tagName === "BUTTON" && /^[a-zA-Z0-9]$/.test(event.key)) {
-          event.preventDefault();
-        }
-      }}
-      onFocusOut={(event) => {
-        const next = event.relatedTarget;
-        if (
-          !(next instanceof Node) ||
-          rootRef.current?.contains(next) === true
-        ) {
-          return;
-        }
-        // Focus leaving during the grant step abandons it: the rule is already
-        // saved and loud, and the annunciator's Grant access re-offers the prompt.
-        if (grantOpenRef.current) {
-          props.onClose();
-        } else if (dirtyRef.current) {
-          void commit();
-        } else {
-          props.onClose();
-        }
-      }}
+      onKeyDown={onKeyDown}
+      onFocusOut={onFocusOut}
     >
       <legend class="silk editor-title">{title}</legend>
 
-      <div class="editor-field">
-        <span class="editor-label" id={`${id}-dir`}>
-          {copy.editor.labels.direction}
-        </span>
-        <div
-          class="editor-control editor-radios"
-          role="radiogroup"
-          aria-labelledby={`${id}-dir`}
-        >
-          {(["request", "response"] as const).map((direction) => (
-            <label class="editor-radio" key={direction}>
-              <input
-                type="radio"
-                name={`${id}-dir`}
-                checked={draft.direction === direction}
-                onChange={() =>
-                  update((current) => ({ ...current, direction }))
-                }
-              />
-              {copy.editor.direction[direction]}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div class="editor-field">
-        <label class="editor-label" for={`${id}-op`}>
-          {copy.editor.labels.operation}
-        </label>
-        <div class="editor-control">
-          <select
-            id={`${id}-op`}
-            class="field editor-select"
-            value={draft.operation}
-            onChange={(event) => {
-              const { value } = event.currentTarget;
-              if (value === "set" || value === "append" || value === "remove") {
-                update((current) => ({ ...current, operation: value }));
-              }
-            }}
-          >
-            {(["set", "append", "remove"] as const).map((operation) => (
-              <option value={operation} key={operation}>
-                {copy.editor.operation[operation]}
-              </option>
-            ))}
-          </select>
-          {errors.operation !== undefined && (
-            <p class="editor-error" role="alert">
-              {errors.operation}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <HeaderNameInput
-        value={draft.header}
-        operation={draft.operation}
-        error={errors.name}
-        autoFocus
-        onInput={(header) => update((current) => ({ ...current, header }))}
-      />
+      <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
 
       {draft.operation !== "remove" && (
         <ValueField
@@ -398,8 +298,10 @@ export function RuleEditor(props: RuleEditorProps) {
 function initialDraft(
   rule: Rule | undefined,
   prefillDomain: string | undefined,
+  prefill: RuleDraft | undefined,
 ): Draft {
-  if (rule === undefined) {
+  const source = rule ?? prefill;
+  if (source === undefined) {
     return {
       direction: "request",
       operation: "set",
@@ -417,32 +319,26 @@ function initialDraft(
     };
   }
   return {
-    direction: rule.direction,
-    operation: rule.operation,
-    header: rule.header,
-    value: rule.value ?? "",
-    generated: rule.generated,
+    direction: source.direction,
+    operation: source.operation,
+    header: source.header,
+    value: source.value ?? "",
+    generated: source.generated,
     scope: {
-      type: rule.scope.type,
-      domains: rule.scope.type === "domains" ? [...rule.scope.domains] : [],
-      pattern: rule.scope.type === "pattern" ? rule.scope.pattern : "",
-      regex: rule.scope.type === "regex" ? rule.scope.regex : "",
+      type: source.scope.type,
+      domains: source.scope.type === "domains" ? [...source.scope.domains] : [],
+      pattern: source.scope.type === "pattern" ? source.scope.pattern : "",
+      regex: source.scope.type === "regex" ? source.scope.regex : "",
     },
     resourceTypes:
-      rule.resourceTypes === "all" ? "all" : [...rule.resourceTypes],
-    comment: rule.comment ?? "",
+      source.resourceTypes === "all" ? "all" : [...source.resourceTypes],
+    comment: source.comment ?? "",
   };
 }
 
 /** Required-field gaps get their message before the store is even asked. */
 function emptyErrors(draft: Draft): FieldErrors | undefined {
-  const errors: FieldErrors = {};
-  if (draft.header.trim() === "") {
-    errors.name = copy.errors.headerNameRequired;
-  }
-  if (draft.operation !== "remove" && draft.value === "") {
-    errors.value = copy.errors.valueRequired;
-  }
+  const errors: FieldErrors = { ...headerValueEmptyErrors(draft) };
   if (draft.scope.type === "domains" && draft.scope.domains.length === 0) {
     errors.scope = copy.errors.scopeEmpty.domains;
   } else if (
@@ -465,17 +361,12 @@ function mapError(
 ): FieldErrors | "close" {
   switch (error.kind) {
     case "name-required":
-      return { name: copy.errors.headerNameRequired };
     case "name-invalid":
-      return { name: copy.errors.headerNameInvalid };
     case "name-not-modifiable":
-      return { name: copy.errors.headerNotModifiable };
     case "value-required":
-      return { value: copy.errors.valueRequired };
     case "value-line-break":
-      return { value: copy.errors.valueLineBreak };
     case "request-append-not-allowed":
-      return { operation: copy.errors.appendDisallowed(error.header) };
+      return headerErrorToFieldError(error);
     case "regex-invalid":
       // Chrome's validator distinguishes an oversized compilation from a
       // dialect error; the fix directions differ.

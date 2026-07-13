@@ -4,7 +4,7 @@ import {
   type GrantSnapshot,
   type RuleGrantGap,
 } from "../../core/grants";
-import type { StateDoc } from "../../core/model";
+import type { StateDoc, TabOverride } from "../../core/model";
 import { migrate } from "../../core/schema";
 import { computeStatus, type SystemStatus } from "../../core/status";
 import {
@@ -30,7 +30,10 @@ export type AppState =
       readonly status: SystemStatus;
       readonly grants: GrantSnapshot;
       readonly grantGaps: readonly RuleGrantGap[];
-      readonly overrideCount: number;
+      /** The active tab's id; undefined on chrome:// and store pages. */
+      readonly tabId: number | undefined;
+      /** This-tab session overrides for the active tab, in insertion order. */
+      readonly overrides: readonly TabOverride[];
     };
 
 type DocSource = { readonly doc: StateDoc } | { readonly newerVersion: number };
@@ -121,6 +124,7 @@ export function useAppState(): AppState {
     status: computeStatus({ doc: docSource.doc, grantGaps, reconcileError }),
     grants,
     grantGaps,
-    overrideCount: tabId === undefined ? 0 : (session.tabs[tabId] ?? []).length,
+    tabId,
+    overrides: tabId === undefined ? [] : (session.tabs[tabId] ?? []),
   };
 }
