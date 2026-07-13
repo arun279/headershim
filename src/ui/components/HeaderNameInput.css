@@ -1,0 +1,38 @@
+.combobox {
+  position: relative;
+}
+
+/* Max 6 visible options; the rest scroll inside the popover. */
+.combo-list {
+  position: absolute;
+  top: calc(100% - var(--sp-1));
+  left: 0;
+  right: 0;
+  z-index: 2;
+  max-height: 168px;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+  box-shadow: var(--shadow-pop);
+}
+
+.combo-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 5px var(--sp-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.combo-option.active {
+  background: var(--panel-2);
+}
+
+.combo-hint {
+  font-size: 11px;
+  color: var(--ink-mute);
+}

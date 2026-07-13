@@ -1,0 +1,64 @@
+/*
+ * The This-tab section sits above the rule list. Temporary rows carry the same
+ * dotted left edge as a temporary row in the main list (dotted ≠ the dashed
+ * caution mark), so ephemerality reads as a pattern, not a hue.
+ */
+.this-tab {
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.this-tab-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  padding: var(--sp-3) 12px var(--sp-2);
+  font-size: 11px;
+  color: var(--ink-mute);
+}
+
+.this-tab-head .mono {
+  font-size: 11px;
+}
+
+.this-tab-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.this-tab-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 5px 12px 5px 10px;
+  border-left: 2px dotted var(--ink-mute);
+  background: var(--panel-1);
+}
+
+.this-tab-row + .this-tab-row {
+  border-top: var(--hairline) solid var(--bezel);
+}
+
+.this-tab-row .save-as-rule {
+  display: inline-block;
+  margin-top: var(--sp-1);
+}
+
+.this-tab-remove {
+  align-self: center;
+}
+
+.this-tab-note {
+  padding: var(--sp-2) 12px var(--sp-3);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-mute);
+}
+
+.this-tab-note .link-btn {
+  padding: 0;
+}
+
+/* The composer expands into the shared .inline-editor-well (tokens.css). */

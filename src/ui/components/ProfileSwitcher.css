@@ -1,0 +1,60 @@
+/* Chip row: the one permitted horizontal scroll region in the popup. */
+.profiles {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 12px 6px;
+  background: var(--panel-0);
+  border-bottom: var(--hairline) solid var(--bezel);
+  overflow-x: auto;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  min-height: 32px;
+  padding: 5px 9px 5px 6px;
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+  background: var(--panel-1);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chip[aria-current="true"] {
+  border-color: var(--trace);
+  box-shadow: inset 0 -2px 0 var(--trace);
+}
+
+.chip.off {
+  color: var(--ink-mute);
+}
+
+.chip-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-inner);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+
+.chip.off .chip-badge {
+  background: none;
+  border: 1.5px solid var(--bezel-strong);
+  color: var(--ink-mute);
+}
+
+.offtag {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}

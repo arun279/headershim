@@ -21,13 +21,23 @@ export function requiredOrigins(rule: Rule): string[] {
     }
   })();
 
-  if (!hasSubresourceType(rule)) {
+  if (!coversSubresourceTypes(rule)) {
     return [...new Set(targets)];
   }
 
   return [
     ...new Set([...targets, ...rule.initiators.map(originPatternForDomain)]),
   ];
+}
+
+export function originGranted(domain: string, granted: GrantSnapshot): boolean {
+  if (granted.allSites) {
+    return true;
+  }
+  const required = originPatternForDomain(domain);
+  return granted.origins.some((origin) =>
+    originPatternContains(origin, required),
+  );
 }
 
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
@@ -65,7 +75,12 @@ export function docMissingGrants(
   );
 }
 
-function hasSubresourceType(rule: Rule): boolean {
+/**
+ * Whether the rule reaches beyond navigations. Only then does the platform
+ * require the initiating page granted too, so only then can an unnamed
+ * initiator be a silent gap worth a standing note.
+ */
+export function coversSubresourceTypes(rule: Rule): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",
@@ -85,7 +100,7 @@ function originPatternContains(granted: string, required: string): boolean {
   return requiredDomain?.endsWith(`.${grantedDomain}`) ?? false;
 }
 
-function domainFromOriginPattern(pattern: string): string | undefined {
+export function domainFromOriginPattern(pattern: string): string | undefined {
   const match = /^\*:\/\/\*\.([^/]+)\/\*$/.exec(pattern);
   return match?.[1];
 }

@@ -24,8 +24,16 @@ export function write(state: SessionState): Promise<void> {
 }
 
 export function subscribe(callback: () => void): () => void {
+  return subscribeKey(SESSION_KEY, callback);
+}
+
+export function subscribeReconcileError(callback: () => void): () => void {
+  return subscribeKey(RECONCILE_ERROR_KEY, callback);
+}
+
+function subscribeKey(key: string, callback: () => void): () => void {
   const listener = (changes: Record<string, Browser.storage.StorageChange>) => {
-    if (SESSION_KEY in changes) {
+    if (key in changes) {
       callback();
     }
   };

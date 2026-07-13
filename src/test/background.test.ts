@@ -8,11 +8,8 @@ import {
   createRule,
   type RuleDraft,
   type StateDoc,
-  type TabOverride,
 } from "../core/model";
 import { createV1Seed } from "../core/schema";
-import type { UpdateRulesOptions } from "../platform/dnr";
-import { FakeDnr } from "../platform/dnr.fake";
 import {
   getReconcileError,
   read as readSessionState,
@@ -23,22 +20,12 @@ import {
   read as readState,
   write as writeState,
 } from "../platform/store";
-
-function installDnr() {
-  const fake = new FakeDnr();
-  const handlers = {
-    getDynamicRules: vi.fn(() => fake.getDynamicRules()),
-    updateDynamicRules: vi.fn((options: UpdateRulesOptions) =>
-      fake.updateDynamicRules(options),
-    ),
-    getSessionRules: vi.fn(() => fake.getSessionRules()),
-    updateSessionRules: vi.fn((options: UpdateRulesOptions) =>
-      fake.updateSessionRules(options),
-    ),
-  };
-  Object.assign(fakeBrowser.declarativeNetRequest, handlers);
-  return { fake, ...handlers };
-}
+import {
+  installDnr,
+  settle,
+  tabInfo as tabInfoAt,
+  tabOverride,
+} from "./dnr-harness";
 
 let dnr: ReturnType<typeof installDnr>;
 
@@ -49,8 +36,6 @@ beforeEach(() => {
 function start() {
   background.main();
 }
-
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const baseDraft: RuleDraft = {
   direction: "request",
@@ -73,34 +58,10 @@ function withRule(doc: StateDoc, header: string): StateDoc {
   };
 }
 
-function override(tabId: number, originHost: string): TabOverride {
-  return {
-    num: 1,
-    tabId,
-    originHost,
-    direction: "request",
-    operation: "set",
-    header: "x-tab",
-    value: "on",
-  };
-}
+const override = (tabId: number, originHost: string) =>
+  tabOverride({ tabId, originHost });
 
-type FakeTab = Parameters<typeof fakeBrowser.tabs.onUpdated.trigger>[2];
-
-function tabInfo(url?: string): FakeTab {
-  return {
-    id: 5,
-    index: 0,
-    windowId: 1,
-    highlighted: true,
-    active: true,
-    pinned: false,
-    incognito: false,
-    discarded: false,
-    autoDiscardable: true,
-    ...(url === undefined ? {} : { url }),
-  };
-}
+const tabInfo = (url?: string) => tabInfoAt(5, url);
 
 function triggerCommand(command: string): Promise<unknown> {
   const event = fakeBrowser.commands.onCommand as unknown as {

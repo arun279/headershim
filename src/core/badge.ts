@@ -1,4 +1,5 @@
 import type { BadgeColor, StateDoc } from "./model";
+import type { SystemStatus } from "./status";
 
 export interface TabBadgeText {
   readonly tabId: number;
@@ -21,8 +22,7 @@ export interface BadgePlan {
 
 export interface BadgeInput {
   readonly doc: StateDoc;
-  readonly needsAccess: boolean;
-  readonly reconcileError: boolean;
+  readonly status: SystemStatus;
   readonly overrideTabIds: readonly number[];
 }
 
@@ -44,17 +44,17 @@ const NEUTRAL_FILL = "#6E7B88";
 
 export function planBadge({
   doc,
-  needsAccess,
-  reconcileError,
+  status,
   overrideTabIds,
 }: BadgeInput): BadgePlan {
-  if (doc.settings.paused) {
+  if (status.kind === "paused") {
     return globalBadge(PAUSED_FILL);
   }
   // A missing grant and a failed reconcile are both can't-run states: rules the
   // user believes are live are not. The amber badge outranks either content
-  // mode so no count or initials bleeds through (SPEC §4.4 precedence).
-  if (reconcileError || needsAccess) {
+  // mode so no count or initials bleeds through (SPEC §4.4 precedence). The
+  // annunciator reads the same status selector, so the surfaces cannot disagree.
+  if (status.kind === "out-of-sync" || status.kind === "needs-access") {
     return globalBadge(CANT_RUN_FILL);
   }
 

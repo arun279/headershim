@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BADGE_PALETTE, type BadgeInput, planBadge } from "./badge";
 import type { Profile, Settings, StateDoc } from "./model";
+import { computeStatus } from "./status";
 
 const PAUSED_GREY = "#6E7B88";
 const CANT_RUN_AMBER = "#B07B00";
@@ -30,12 +31,37 @@ function doc(overrides: Partial<StateDoc> = {}): StateDoc {
   };
 }
 
-function input(overrides: Partial<BadgeInput> & { doc: StateDoc }): BadgeInput {
+interface InputOptions {
+  doc: StateDoc;
+  needsAccess?: boolean;
+  reconcileError?: boolean;
+  overrideTabIds?: number[];
+}
+
+// Badge input flows through the shared status selector, exactly as the
+// background composes it, so precedence is tested end to end.
+function input({
+  doc: stateDoc,
+  needsAccess = false,
+  reconcileError = false,
+  overrideTabIds = [],
+}: InputOptions): BadgeInput {
   return {
-    needsAccess: false,
-    reconcileError: false,
-    overrideTabIds: [],
-    ...overrides,
+    doc: stateDoc,
+    status: computeStatus({
+      doc: stateDoc,
+      reconcileError,
+      grantGaps: needsAccess
+        ? [
+            {
+              profileId: "profile-1",
+              ruleId: "rule-1",
+              missing: ["*://*.api.example.com/*"],
+            },
+          ]
+        : [],
+    }),
+    overrideTabIds,
   };
 }
 

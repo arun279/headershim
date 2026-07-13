@@ -1,0 +1,31 @@
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.value-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.insert {
+  position: relative;
+  flex: none;
+}
+
+.insert-btn {
+  min-height: 24px;
+  padding: 2px var(--sp-3);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--panel-0);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-inner);
+}
+
+.insert-menu {
+  right: 0;
+  top: calc(100% + var(--sp-1));
+  min-width: 168px;
+}

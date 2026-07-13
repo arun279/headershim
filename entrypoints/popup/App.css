@@ -1,0 +1,70 @@
+/* 400px wide; height content-driven up to 560, only the body region scrolls. */
+.popup {
+  position: relative;
+  width: 400px;
+  max-height: 560px;
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Pause is felt, not only read: the working area desaturates while the
+   switcher, annunciator, and footer stay in color so Resume stays vivid. */
+.popup-body.paused {
+  filter: grayscale(1);
+  transition: filter var(--t-med) var(--ease);
+}
+
+.first-run {
+  padding: 96px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  text-align: center;
+}
+
+.first-run-tagline {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.first-run-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.first-run-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 9px 12px;
+  border-top: var(--hairline) solid var(--bezel);
+  background: var(--panel-1);
+}
+
+/* Focus-return anchors for the new-rule editor and verify panel; the wrapper
+   holds the ref without becoming a layout box of its own. */
+.foot-new-rule,
+.foot-verify {
+  display: contents;
+}
+
+.pause {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-mute);
+}
