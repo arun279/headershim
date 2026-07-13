@@ -80,7 +80,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect } from "@playwright/test";
 
 export function seedState(worker: Worker, doc: StateDoc): Promise<void> {
-  return worker.evaluate((d) => chrome.storage.local.set({ state: d }), doc);
+  // Take the same "state" lock the background holds around its recovery and
+  // migration writes; a bare set can otherwise interleave with an in-flight
+  // recovery on a fresh profile and get clobbered by the reseeded default.
+  return worker.evaluate(
+    (d) =>
+      navigator.locks.request("state", () =>
+        chrome.storage.local.set({ state: d }),
+      ),
+    doc,
+  );
 }
 
 export async function getDynamicRules(worker: Worker): Promise<DnrRule[]> {

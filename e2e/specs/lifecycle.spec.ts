@@ -51,8 +51,18 @@ test("seeded rule reconciles into DNR and reads back normalized-equal", async ({
   const readback = await getDynamicRules(serviceWorker);
   expect(planReconcile(desired, readback)).toBeNull();
 
-  // A second reconcile pass must be a no-op: re-seeding the same document
-  // leaves the live rule set byte-identical (no churn).
+  // Drive an observable reconcile round-trip: pausing clears the dynamic rules
+  // and unpausing must restore a set that normalize-equals the first readback.
+  // The intermediate empty state proves a fresh reconcile actually ran, unlike
+  // re-seeding a byte-identical document (which storage.onChanged may swallow).
+  await seedState(serviceWorker, {
+    ...doc,
+    settings: { ...doc.settings, paused: true },
+  });
+  await expect
+    .poll(() => getDynamicRules(serviceWorker).then((rules) => rules.length))
+    .toBe(0);
+
   await seedState(serviceWorker, doc);
   await expect
     .poll(() => getDynamicRules(serviceWorker).then((rules) => rules.length))
