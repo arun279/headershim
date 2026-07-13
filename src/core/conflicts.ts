@@ -1,5 +1,6 @@
 import { normalizeHeaderName } from "./headers";
 import type { Rule, Scope } from "./model";
+import { expandResourceTypes } from "./scope";
 
 export interface OverriddenRule {
   readonly ruleId: string;
@@ -8,10 +9,11 @@ export interface OverriddenRule {
 
 export function findOverriddenRules(rules: readonly Rule[]): OverriddenRule[] {
   const overridden: OverriddenRule[] = [];
+  const overriddenIds = new Set<string>();
   const earlierByHeader = new Map<string, Rule[]>();
 
   for (const rule of rules) {
-    if (!rule.enabled || rule.operation === "append") {
+    if (!rule.enabled) {
       continue;
     }
 
@@ -19,20 +21,41 @@ export function findOverriddenRules(rules: readonly Rule[]): OverriddenRule[] {
     const earlierRules = earlierByHeader.get(header) ?? [];
     const shadowingRule = earlierRules.find(
       (candidate) =>
-        candidate.direction === rule.direction &&
-        scopeContains(candidate.scope, rule.scope),
+        !overriddenIds.has(candidate.id) && shadows(candidate, rule),
     );
     if (shadowingRule !== undefined) {
       overridden.push({
         ruleId: rule.id,
         shadowedByRuleId: shadowingRule.id,
       });
+      overriddenIds.add(rule.id);
     }
     earlierRules.push(rule);
     earlierByHeader.set(header, earlierRules);
   }
 
   return overridden;
+}
+
+function shadows(earlier: Rule, later: Rule): boolean {
+  if (later.operation === "append" && earlier.operation !== "remove") {
+    return false;
+  }
+  return (
+    earlier.direction === later.direction &&
+    resourceTypesContain(earlier.resourceTypes, later.resourceTypes) &&
+    scopeContains(earlier.scope, later.scope)
+  );
+}
+
+function resourceTypesContain(
+  earlier: Rule["resourceTypes"],
+  later: Rule["resourceTypes"],
+): boolean {
+  const earlierTypes = new Set(expandResourceTypes(earlier));
+  return expandResourceTypes(later).every((resourceType) =>
+    earlierTypes.has(resourceType),
+  );
 }
 
 function scopeContains(earlier: Scope, later: Scope): boolean {

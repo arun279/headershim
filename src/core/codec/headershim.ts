@@ -392,21 +392,16 @@ function isHeadershimEnvelope(value: unknown): value is HeadershimEnvelope {
   return (
     app === "headershim" &&
     schemaVersion === CURRENT_SCHEMA_VERSION &&
-    isIsoTimestamp(exportedAt) &&
+    isTimestamp(exportedAt) &&
     Array.isArray(profiles) &&
     profiles.every(isExportedProfile)
   );
 }
 
-function isIsoTimestamp(value: unknown): value is string {
-  if (typeof value !== "string") {
-    return false;
-  }
-  const milliseconds = Date.parse(value);
-  return (
-    !Number.isNaN(milliseconds) &&
-    new Date(milliseconds).toISOString() === value
-  );
+// Permissive by design: exports live in git and get hand-edited in review, so
+// any parseable timestamp is acceptable metadata.
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
 function isExportedProfile(value: unknown): value is ExportedProfile {

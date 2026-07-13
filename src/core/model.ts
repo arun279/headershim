@@ -1,5 +1,3 @@
-import { truncateForBadge } from "./truncate-for-badge";
-
 export type Direction = "request" | "response";
 export type HeaderOp = "set" | "append" | "remove";
 
@@ -163,8 +161,14 @@ export function isProfileNameAvailable(
   );
 }
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, {
+  granularity: "grapheme",
+});
+
 export function normalizeBadgeText(text: string): string {
-  return truncateForBadge(text, 2);
+  return Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
+    .slice(0, 2)
+    .join("");
 }
 
 function copyScope(scope: Scope): Scope {

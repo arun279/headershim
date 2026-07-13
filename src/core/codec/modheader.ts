@@ -1,11 +1,12 @@
 import { classifyHeaderName, normalizeHeaderName } from "../headers";
-import type {
-  BadgeColor,
-  HeaderOp,
-  Profile,
-  ResourceGroup,
-  RuleDraft,
-  Scope,
+import {
+  type BadgeColor,
+  type HeaderOp,
+  normalizeBadgeText,
+  type Profile,
+  type ResourceGroup,
+  type RuleDraft,
+  type Scope,
 } from "../model";
 import { err, ok, type Result } from "../result";
 import { BADGE_COLORS, isRecord } from "../validation";
@@ -311,7 +312,7 @@ async function mapProfile(
   return ok({
     profile: {
       name,
-      badgeText: truncateBadgeText(source.shortTitle ?? source.title),
+      badgeText: normalizeBadgeText(source.shortTitle ?? source.title),
       color: nearestBadgeColor(source.backgroundColor),
       enabled: false,
       rules: mappings.map(({ rule }) =>
@@ -629,15 +630,6 @@ function isOptionalRecordArray(
 
 function normalizeProfileName(title: string): string {
   return title.trim().slice(0, 48).trimEnd();
-}
-
-function truncateBadgeText(text: string): string {
-  return Array.from(
-    new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text),
-    ({ segment }) => segment,
-  )
-    .slice(0, 2)
-    .join("");
 }
 
 function describeRow(row: Record<string, unknown>): string {

@@ -363,6 +363,17 @@ describe("headershim import", () => {
     });
   });
 
+  it("accepts hand-edited envelopes with second-precision timestamps", () => {
+    const envelope = {
+      ...createHeadershimEnvelope(profileSet()),
+      exportedAt: "2026-07-12T14:03:00Z",
+    };
+
+    expect(importHeadershim(JSON.stringify(envelope), [])).toMatchObject({
+      ok: true,
+    });
+  });
+
   it("rejects malformed recognized envelopes without throwing", () => {
     const valid = createHeadershimEnvelope(
       profileSet(),
@@ -379,7 +390,7 @@ describe("headershim import", () => {
       { ...valid, schemaVersion: 0 },
       { ...valid, schemaVersion: 1.5 },
       { ...valid, exportedAt: "today" },
-      { ...valid, exportedAt: "2026-07-12" },
+      { ...valid, exportedAt: 1_752_340_560_000 },
       { ...valid, profiles: null },
       { ...valid, profiles: [null] },
       { ...valid, profiles: [{ ...profile, name: "" }] },

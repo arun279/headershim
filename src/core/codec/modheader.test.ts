@@ -216,6 +216,84 @@ describe("ModHeader import", () => {
     ]);
   });
 
+  it("defaults to the all scope when no URL filter is enabled", async () => {
+    const raw = JSON.stringify([
+      {
+        title: "Unscoped",
+        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+        urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
+      },
+    ]);
+    const result = await importModHeader(raw, [], acceptRegex);
+    if (!result.ok) {
+      throw new Error(`fixture import failed: ${result.error.kind}`);
+    }
+
+    expect(onlyProfile(result.value).rules).toMatchObject([
+      {
+        header: "x-debug",
+        scope: { type: "all" },
+        resourceTypes: "all",
+        enabled: true,
+      },
+    ]);
+    expect(result.value.warnings).toEqual([]);
+  });
+
+  it("combines multiple URL filters into one alternation and validates it", async () => {
+    const profile = (urlFilters: { enabled: boolean; urlRegex: string }[]) =>
+      JSON.stringify([
+        {
+          title: "Combined",
+          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+          urlFilters,
+        },
+      ]);
+    const combined = "(?:^https://a\\.example/)|(?:^https://b\\.example/)";
+
+    const validateRegex = vi.fn<RegexValidator>(async () => ok(undefined));
+    const accepted = await importModHeader(
+      profile([
+        { enabled: true, urlRegex: "^https://a\\.example/" },
+        { enabled: true, urlRegex: "^https://b\\.example/" },
+        { enabled: true, urlRegex: "^https://a\\.example/" },
+      ]),
+      [],
+      validateRegex,
+    );
+    if (!accepted.ok) {
+      throw new Error(`fixture import failed: ${accepted.error.kind}`);
+    }
+
+    expect(onlyProfile(accepted.value).rules).toMatchObject([
+      { scope: { type: "regex", regex: combined, hosts: [] }, enabled: true },
+    ]);
+    expect(validateRegex).toHaveBeenCalledWith(combined);
+
+    const rejectCombined: RegexValidator = async (pattern) =>
+      pattern === combined ? err({ kind: "unsupported-regex" }) : ok(undefined);
+    const rejected = await importModHeader(
+      profile([
+        { enabled: true, urlRegex: "^https://a\\.example/" },
+        { enabled: true, urlRegex: "^https://b\\.example/" },
+      ]),
+      [],
+      rejectCombined,
+    );
+    if (!rejected.ok) {
+      throw new Error(`fixture import failed: ${rejected.error.kind}`);
+    }
+
+    expect(onlyProfile(rejected.value).rules).toMatchObject([
+      { enabled: false },
+    ]);
+    expect(rejected.value.warnings).toContainEqual({
+      kind: "invalid-regex",
+      ruleName: "x-debug",
+      pattern: combined,
+    });
+  });
+
   it("maps resource filters to portable resource groups", async () => {
     const plan = await importFixture();
 

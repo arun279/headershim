@@ -6,7 +6,10 @@ function rule(
   id: string,
   scope: Scope,
   overrides: Partial<
-    Pick<Rule, "direction" | "operation" | "header" | "enabled">
+    Pick<
+      Rule,
+      "direction" | "operation" | "header" | "enabled" | "resourceTypes"
+    >
   > = {},
 ): Rule {
   return {
@@ -176,8 +179,8 @@ describe("findOverriddenRules", () => {
     }
   });
 
-  it("does not mark later appends as overridden", () => {
-    for (const earlierOperation of ["set", "append", "remove"] as const) {
+  it("lets appends stack after an earlier set or append", () => {
+    for (const earlierOperation of ["set", "append"] as const) {
       expect(
         findOverriddenRules([
           rule("rule-1", { type: "all" }, { operation: earlierOperation }),
@@ -187,19 +190,17 @@ describe("findOverriddenRules", () => {
     }
   });
 
-  it("does not let an earlier append override a later set or remove", () => {
-    for (const laterOperation of ["set", "remove"] as const) {
-      expect(
-        findOverriddenRules([
-          rule("rule-1", { type: "all" }, { operation: "append" }),
-          rule("rule-2", { type: "all" }, { operation: laterOperation }),
-        ]),
-      ).toEqual([]);
-    }
+  it("marks a later append after an earlier remove as overridden", () => {
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { operation: "remove" }),
+        rule("rule-2", { type: "all" }, { operation: "append" }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
   });
 
-  it("lets an earlier set or remove override a later set or remove", () => {
-    for (const earlierOperation of ["set", "remove"] as const) {
+  it("lets any earlier operation override a later set or remove", () => {
+    for (const earlierOperation of ["set", "append", "remove"] as const) {
       for (const laterOperation of ["set", "remove"] as const) {
         expect(
           findOverriddenRules([
@@ -209,6 +210,60 @@ describe("findOverriddenRules", () => {
         ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
       }
     }
+  });
+
+  it("does not let an overridden rule shadow the rules below it", () => {
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { operation: "set" }),
+        rule("rule-2", { type: "all" }, { operation: "remove" }),
+        rule("rule-3", { type: "all" }, { operation: "append" }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
+  });
+
+  it("requires the earlier resource-type set to cover the later one", () => {
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { resourceTypes: ["pages"] }),
+        rule("rule-2", { type: "all" }, { resourceTypes: ["xhr"] }),
+      ]),
+    ).toEqual([]);
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { resourceTypes: ["xhr"] }),
+        rule("rule-2", { type: "all" }, { resourceTypes: ["pages", "xhr"] }),
+      ]),
+    ).toEqual([]);
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { resourceTypes: ["pages", "xhr"] }),
+        rule("rule-2", { type: "all" }, { resourceTypes: ["xhr"] }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
+    expect(
+      findOverriddenRules([
+        rule(
+          "rule-1",
+          { type: "all" },
+          {
+            resourceTypes: [
+              "pages",
+              "subframes",
+              "xhr",
+              "scripts",
+              "stylesheets",
+              "images",
+              "fonts",
+              "media",
+              "websockets",
+              "other",
+            ],
+          },
+        ),
+        rule("rule-2", { type: "all" }),
+      ]),
+    ).toEqual([{ ruleId: "rule-2", shadowedByRuleId: "rule-1" }]);
   });
 
   it("matches normalized header names while keeping directions separate", () => {

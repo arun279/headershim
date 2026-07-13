@@ -10,7 +10,6 @@ import {
   type Profile,
   type RuleDraft,
   type StateDoc,
-  type TabOverride,
 } from "./model";
 
 function emptyDoc(nextRuleNum = 1): StateDoc {
@@ -121,7 +120,7 @@ describe("profile invariants", () => {
     expect(isProfileNameAvailable(profiles, "DEFAULT", "one")).toBe(true);
   });
 
-  it("uses grapheme-safe badge truncation when constructing a profile", () => {
+  it("truncates badge text to two graphemes when constructing a profile", () => {
     const created = createProfile({
       name: "Production",
       badgeText: "👩🏽‍💻AB",
@@ -131,29 +130,10 @@ describe("profile invariants", () => {
 
     expect(normalizeBadgeText("")).toBe("");
     expect(normalizeBadgeText("AB")).toBe("AB");
-    expect(normalizeBadgeText("ABC")).toBe("A…");
-    expect(created.badgeText).toBe("👩🏽‍💻…");
+    expect(normalizeBadgeText("ABC")).toBe("AB");
+    expect(normalizeBadgeText("🇺🇸USA")).toBe("🇺🇸U");
+    expect(created.badgeText).toBe("👩🏽‍💻A");
     expect(created.rules).toEqual([]);
     expect(created.id).not.toBe("");
-  });
-});
-
-describe("TabOverride", () => {
-  it("keeps the tab and pinned origin in the persisted row", () => {
-    const override: TabOverride = {
-      num: 7,
-      tabId: 23,
-      originHost: "example.com",
-      direction: "request",
-      operation: "set",
-      header: "x-debug",
-      value: "on",
-    };
-
-    expect(override).toMatchObject({
-      num: 7,
-      tabId: 23,
-      originHost: "example.com",
-    });
   });
 });
