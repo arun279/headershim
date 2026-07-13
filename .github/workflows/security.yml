@@ -1,17 +1,26 @@
 name: Security
 
 on:
-  schedule:
-    - cron: '17 3 * * 1'
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
+  schedule:
+    - cron: '17 3 * * 1'
 
 permissions:
   contents: read
 
 jobs:
+  # CodeQL reports through GitHub code scanning, which requires GitHub Advanced
+  # Security. That is free on public repositories but unavailable on free private
+  # ones, where the analyze step fails with a configuration error. The job is
+  # therefore gated to public visibility and activates automatically at publish;
+  # no change is needed then.
   codeql:
+    if: github.event.repository.visibility == 'public'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,17 +33,29 @@ jobs:
       - uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
       - uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
 
+  # Runs osv-scanner directly instead of the reusable workflow so it does not
+  # upload SARIF to code scanning (which needs GHAS). The job fails on any
+  # dependency vulnerability except the dev-only findings documented in
+  # osv-scanner.toml, and keeps working on private repositories.
   osv-scanner:
+    runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
-      security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --config=osv-scanner.toml
+            --recursive
+            ./
 
   gitleaks:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Lets gitleaks read the pull request's commits on pull_request runs.
+      pull-requests: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

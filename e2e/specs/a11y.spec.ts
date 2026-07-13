@@ -105,6 +105,41 @@ function ruleDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
   };
 }
 
+// A page that never links the token stylesheet collapses to unstyled default
+// HTML: every var() resolves to nothing and the surface paints black-on-white,
+// which still clears axe's contrast bar — so axe alone can't see a dropped
+// stylesheet. Assert the tokens actually resolve on :root for every extension
+// surface, so a missing import on any entrypoint fails deterministically here.
+const SURFACES = ["popup.html", "options.html"];
+
+test("design tokens load on every extension surface", async ({
+  context,
+  extensionId,
+}) => {
+  for (const surface of SURFACES) {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/${surface}`);
+
+    const panel0 = await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--panel-0")
+        .trim(),
+    );
+    expect(panel0, `${surface}: --panel-0 must resolve on :root`).not.toBe("");
+
+    // The token has to actually paint, not just be declared: an unstyled body
+    // reads back the transparent default rather than the panel fill.
+    const background = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(background, `${surface}: body must paint --panel-0`).not.toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+
+    await page.close();
+  }
+});
+
 test("every popup state passes axe in both themes", async ({
   context,
   extensionId,

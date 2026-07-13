@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to upload to the Chrome Web Store
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  e2e:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+
+  build-and-release:
+    if: github.event_name == 'push'
+    needs: [check, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Build release archive
+        run: pnpm exec wxt zip
+      - name: Enforce release manifest policy
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/manifest-policy.mjs --release
+      - name: Compute checksums
+        run: |
+          cd .output
+          sha256sum *.zip > SHA256SUMS
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: '.output/*.zip'
+      - name: Create draft release
+        env:
+          BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --draft \
+            --title "$RELEASE_TAG" \
+            --notes "Verify the downloaded archive with gh attestation verify <zip> --owner ${{ github.repository_owner }}." \
+            .output/*.zip \
+            .output/SHA256SUMS \
+            "$BUNDLE_PATH"
+
+  publish-cws:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Skip unconfigured Chrome Web Store upload
+        if: >-
+          env.CWS_CLIENT_ID == '' ||
+          env.CWS_CLIENT_SECRET == '' ||
+          env.CWS_REFRESH_TOKEN == '' ||
+          env.CWS_EXTENSION_ID == ''
+        run: echo "CWS publish secrets are not configured; skipping upload. Configure CWS_CLIENT_ID/CWS_CLIENT_SECRET/CWS_REFRESH_TOKEN/CWS_EXTENSION_ID to enable this step."
+      # Uploads a draft version only; publishing remains a manual CWS dashboard action.
+      - name: Upload to the Chrome Web Store
+        if: >-
+          env.CWS_CLIENT_ID != '' &&
+          env.CWS_CLIENT_SECRET != '' &&
+          env.CWS_REFRESH_TOKEN != '' &&
+          env.CWS_EXTENSION_ID != ''
+        run: |
+          mkdir release-assets
+          gh release download "$RELEASE_TAG" --pattern '*.zip' --dir release-assets
+          zip_paths=(release-assets/*.zip)
+          if [[ ${#zip_paths[@]} -ne 1 || ! -f "${zip_paths[0]}" ]]; then
+            echo "Expected exactly one zip release asset." >&2
+            exit 1
+          fi
+          npx --yes chrome-webstore-upload-cli@3.3.0 upload \
+            --source "${zip_paths[0]}" \
+            --extension-id "$CWS_EXTENSION_ID" \
+            --client-id "$CWS_CLIENT_ID" \
+            --client-secret "$CWS_CLIENT_SECRET" \
+            --refresh-token "$CWS_REFRESH_TOKEN"
