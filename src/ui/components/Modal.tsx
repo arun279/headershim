@@ -7,7 +7,7 @@ interface ModalProps {
   title: string;
   children: ComponentChildren;
   onClose: () => void;
-  /** Focus target on open (Cancel first for destructive dialogs, per §4.12). */
+  /** Focus target on open (Cancel first for destructive dialogs). */
   initialFocus?: RefObject<HTMLElement | null>;
 }
 

@@ -2,7 +2,7 @@ import { useRef, useState } from "preact/hooks";
 
 /**
  * The inline commit model shared by the rule editor and the This-tab composer
- * (SPEC §2.2: no save ceremony). Enter or focus-leave commits when the fields
+ * (no save ceremony). Enter or focus-leave commits when the fields
  * hold up, Ctrl/Cmd+Enter commits and asks for a grant in the same gesture, Esc
  * reverts, and single-letter popup shortcuts never fire from the editor's own
  * buttons. The hook owns the draft, the interaction refs, and the fieldset key

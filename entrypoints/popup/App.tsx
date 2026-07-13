@@ -79,7 +79,7 @@ interface PendingUndo {
 interface Editing {
   profileId: string;
   ruleId?: string;
-  /** A full draft to seed a new rule from (This-tab "Save as rule…", §3.5). */
+  /** A full draft to seed a new rule from (This-tab "Save as rule…"). */
   prefill?: RuleDraft;
   /** The temporary row this new rule promotes; removed once the rule saves. */
   promote?: { tabId: number; num: number };
@@ -104,7 +104,7 @@ function Ready({
     setToast(undo === true ? { message, undo } : { message });
     announce(message);
   };
-  // The permission→reload handoff (verdict P1): a grant lands, the change is
+  // The permission-to-reload transition: a grant lands, the change is
   // live, but the open page still holds its pre-grant response. The toast
   // hands over a single Reload-tab action rather than reloading unbidden.
   const showReloadToast = (message: string) => {
@@ -113,7 +113,7 @@ function Ready({
   };
   const reloadTab = () => {
     // The click is a fresh gesture, so activeTab covers the reload with no new
-    // permission (SPEC §4.3).
+    // permission.
     void browser.tabs.reload();
     setToast(undefined);
   };
@@ -124,12 +124,12 @@ function Ready({
   const [composing, setComposing] = useState(false);
   const [verify, setVerify] = useState<VerifyReadout | undefined>(undefined);
   // The just-saved rule and a changing token, to pulse that row's transient
-  // "Saved" acknowledgement (verdict P0). Cleared whenever an editor opens so a
+  // "Saved" acknowledgement. Cleared whenever an editor opens so a
   // later revert can't resurrect a stale pulse.
   const [savedPulse, setSavedPulse] = useState<
     { ruleId: string; nonce: number } | undefined
   >(undefined);
-  // Focus returns here when the verify panel closes (SPEC §9).
+  // Focus returns here when the verify panel closes.
   const verifyTrigger = useRef<HTMLSpanElement>(null);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
   const [tabResolved, setTabResolved] = useState(false);
@@ -139,7 +139,7 @@ function Ready({
       setTabResolved(true);
     });
   }, []);
-  // Fallback lifetime enforcement (SPEC §3.5): the background prunes a tab's
+  // Fallback lifetime enforcement: the background prunes a tab's
   // overrides on cross-origin navigation, but a navigation it slept through
   // leaves stale rows the popup must not surface as live — so prune once on
   // open against where the tab actually sits now.
@@ -207,7 +207,7 @@ function Ready({
     setEditing(undefined);
     setComposing(true);
   };
-  // Promote a temporary row into a real rule in the focused profile (§3.5):
+  // Promote a temporary row into a real rule in the focused profile:
   // open the editor pre-filled and enter the normal grant flow; the row is
   // retired once the rule commits (saveEditing), not on open, so an Esc keeps
   // the temporary override intact.
@@ -317,7 +317,7 @@ function Ready({
     });
   };
 
-  // Verify is on-demand and per-tab (SPEC §5): the click/`v` gesture grants
+  // Verify is on-demand and per-tab: the click/`v` gesture grants
   // activeTab, so the active tab is resolved and its matched-rules record
   // fetched with the tab id explicit. Tallies come from decodeMatches for
   // stable-id attribution; the hints Verify may name stay statically
@@ -327,7 +327,7 @@ function Ready({
     () => new Set(grantGaps.map((gap) => gap.ruleId)),
     [grantGaps],
   );
-  // Verify leads with the most basic unmet precondition (verdict P0): a grant
+  // Verify leads with the most basic unmet precondition: a grant
   // gap outranks the caching essay, and its recovery (Grant) is surfaced in the
   // panel so the user never has to dismiss it to reach the banner it covers.
   const blockedHosts = useMemo(() => {
@@ -402,7 +402,7 @@ function Ready({
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
     // permissions.onChanged event refreshes every surface at once. The reload
-    // handoff (verdict P1) follows the grant's outcome for the annunciator and
+    // prompt follows the grant's outcome for the annunciator and
     // Verify Grant paths, which name no single site.
     void requestPermissions([
       ...new Set(grantGaps.flatMap((gap) => gap.missing)),
@@ -440,7 +440,7 @@ function Ready({
         class={status.kind === "paused" ? "popup-body paused" : "popup-body"}
         // The verify panel slides up opaque over the footer and rule region;
         // marking them inert keeps Shift+Tab from landing on controls hidden
-        // behind it (WCAG 2.4.11) without trapping focus (SPEC §5/§9).
+        // behind it (WCAG 2.4.11) without trapping focus.
         inert={verify !== undefined}
       >
         <ThisTab
@@ -536,8 +536,8 @@ function Ready({
       </div>
       <footer class="foot" inert={verify !== undefined}>
         {/* While empty, the first-run hero owns the single primary "Create a
-            rule"; the footer's + New rule would be a redundant second one
-            (verdict P1), so it collapses until the first rule exists. */}
+            rule"; the footer's + New rule would be a redundant second one,
+            so it collapses until the first rule exists. */}
         {!firstRun && (
           <span class="foot-new-rule" ref={newRuleTrigger}>
             <Button kind="primary" onClick={openNewRule}>
@@ -606,7 +606,7 @@ function Ready({
 }
 
 /**
- * First run is onboarding with one obvious act (verdict P1): the wordmark and
+ * First run is onboarding with one obvious act: the wordmark and
  * trust sentence, a single primary "Create a rule" that focus lands on, and two
  * ranked-below routes — "Try it" (with its temporary/persistent tell) and
  * Import — as quiet secondaries.

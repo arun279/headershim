@@ -19,7 +19,7 @@ interface ProfileRulesPanelProps {
 }
 
 /**
- * The open profile's rules with the bulk toolbar (SPEC §4.2): select rows, then
+ * The open profile's rules with the bulk toolbar: select rows, then
  * enable, disable, move, or delete the selection in one action. Selection is
  * local to the panel and resets when the open profile or its membership changes.
  */

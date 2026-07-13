@@ -41,7 +41,7 @@ describe("MiddleTruncate", () => {
     const span = root.querySelector("span") as HTMLSpanElement;
     expect(span.getAttribute("title")).toBe(value);
     // The visible clip is truncated; the row-revealed full node carries the
-    // whole value for the keyboard-focus readout (DESIGN §1.2).
+    // whole value for the keyboard-focus readout.
     const clip = span.querySelector(".mt-clip");
     expect(clip?.textContent).toContain("…");
     expect(clip?.textContent?.length).toBeLessThanOrEqual(20);

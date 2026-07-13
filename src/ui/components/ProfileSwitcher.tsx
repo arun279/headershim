@@ -11,7 +11,7 @@ interface ProfileSwitcherProps {
   onActivate: (profileId: string) => void;
   /** Toggle only this profile (Shift+click / Shift+Enter). */
   onToggle: (profileId: string) => void;
-  /** Focus the focused chip on mount (popup-open focus target, SPEC §9). */
+  /** Focus the focused chip on mount (popup-open focus target). */
   autoFocus?: boolean;
 }
 

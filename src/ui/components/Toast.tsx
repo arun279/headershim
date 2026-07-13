@@ -7,7 +7,7 @@ interface ToastProps {
   actionLabel?: string | undefined;
   onAction?: (() => void) | undefined;
   onDismiss: () => void;
-  /** Auto-dismiss delay; the action itself is never timing-locked (SPEC §9). */
+  /** Auto-dismiss delay; the action itself is never timing-locked. */
   duration?: number;
   /**
    * Hold the toast open with no auto-dismiss while it carries an operable action

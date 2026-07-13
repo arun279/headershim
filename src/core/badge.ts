@@ -18,8 +18,8 @@ export type BadgeState =
 export interface BadgePlan {
   readonly state: BadgeState;
   readonly tabBadges: readonly TabBadgeText[];
-  // The toolbar button's tooltip. Only the paused state names itself (SPEC
-  // §4.4); every other state clears back to the manifest default_title. Lives
+  // The toolbar button's tooltip. Only the paused state names itself;
+  // every other state clears back to the manifest default_title. Lives
   // here beside the badge glyphs, not in copy.ts, so the service worker never
   // has to import the whole copy module (it blows the background size budget).
   readonly title: string;
@@ -46,7 +46,7 @@ const WHITE = "#FFFFFF";
 const PAUSED_FILL = "#6E7B88";
 const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
-// SPEC §4.4 verbatim paused tooltip; the only state that names itself.
+// The paused-state toolbar tooltip; the only state that names itself.
 const PAUSED_TITLE = "HeaderShim — paused";
 
 export function planBadge(input: BadgeInput): BadgePlan {
@@ -66,8 +66,8 @@ function planFace({
   }
   // A missing grant and a failed reconcile are both can't-run states: rules the
   // user believes are live are not. The amber badge outranks either content
-  // mode so no count or initials bleeds through (SPEC §4.4 precedence). The
-  // annunciator reads the same status selector, so the surfaces cannot disagree.
+  // mode so no count or initials bleeds through. The annunciator reads the
+  // same status selector, so the surfaces cannot disagree.
   if (status.kind === "out-of-sync" || status.kind === "needs-access") {
     return globalBadge(CANT_RUN_FILL);
   }
@@ -90,7 +90,7 @@ function planFace({
   if (focused === undefined) {
     // No enabled profile: the badge is empty and neutral, except tabs holding a
     // This-tab override carry a temporary "T" so modified traffic is never
-    // invisible (SPEC §4.4).
+    // invisible.
     return {
       state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
       tabBadges: overrideTabIds.map((tabId) => ({ tabId, text: "T" })),

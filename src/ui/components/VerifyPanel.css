@@ -106,7 +106,7 @@
   border-top: var(--hairline) solid var(--bezel);
 }
 
-/* The in-panel recovery row (verdict P0): Grant for a blocked rule, or the
+/* The in-panel recovery row: Grant for a blocked rule, or the
    reload-to-test hint paired with a Reload-tab button. */
 .verify-recover {
   display: flex;

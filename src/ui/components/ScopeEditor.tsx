@@ -16,7 +16,7 @@ export interface ScopeDraft {
 interface ScopeEditorProps {
   scope: ScopeDraft;
   resourceTypes: ResourceGroup[] | "all";
-  /** Blocking commit error for the active scope field (SPEC §8.1, empty scope). */
+  /** Blocking commit error for the active scope field (e.g. empty scope). */
   error?: string | undefined;
   typesError?: string | undefined;
   onScope: (scope: ScopeDraft) => void;

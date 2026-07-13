@@ -304,7 +304,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    // Bulk actions from the options Profiles page (SPEC §4.2). Each is one
+    // Bulk actions from the options Profiles page. Each is one
     // commit under the shared lock, so the enabled-set cap, regex re-validation,
     // and byte budget in guardCommit gate the whole batch atomically rather than
     // rule by rule.
@@ -476,7 +476,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
         const next: StateDoc = {
           ...doc,
           profiles: [...doc.profiles, profile],
-          // Enabling a profile focuses it (SPEC §2.1); creating one enabled is
+          // Enabling a profile focuses it; creating one enabled is
           // the same gesture.
           ...(input.enabled ? { focusedProfileId: profile.id } : {}),
         };
@@ -551,7 +551,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
           (profile) => profile.id !== profileId,
         );
         // The product never has zero profiles: deleting the last one
-        // immediately recreates an empty Default (SPEC §2.1).
+        // immediately recreates an empty Default.
         const profiles =
           remaining.length > 0
             ? remaining
@@ -627,7 +627,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
           ...candidate,
           enabled,
         }));
-        // Focus follows enablement (SPEC §2.1): enabling focuses the profile;
+        // Focus follows enablement: enabling focuses the profile;
         // disabling the focused one moves focus to the topmost enabled
         // profile, or the topmost profile when none is enabled.
         const focusedProfileId = enabled
@@ -733,8 +733,8 @@ async function sanitizeDraft(
   if (!resourceTypes.ok) {
     return resourceTypes;
   }
-  // Regex scopes are validated before save regardless of the enabled flag
-  // (SPEC §2.3); the commit guard only re-checks rules entering the enabled set.
+  // Regex scopes are validated before save regardless of the enabled flag;
+  // the commit guard only re-checks rules entering the enabled set.
   if (scope.value.type === "regex") {
     const supported = await validateRegex(scope.value.regex);
     if (!supported.ok) {
@@ -806,7 +806,7 @@ function normalizeResourceTypes(
     return ok("all");
   }
   const groups = [...new Set(resourceTypes)];
-  // The resource-type set is a scope dimension (SPEC §2.3); a rule that
+  // The resource-type set is a scope dimension; a rule that
   // applies to no resource type has an empty scope.
   return groups.length === 0
     ? err({ kind: "scope-empty" } as const)

@@ -147,7 +147,7 @@ describe("copy", () => {
     ).toBe("api.example.com grant removed — all-sites access still covers it");
   });
 
-  // A global guard on the SPEC §8 voice rules and the naming rule (line 27), so
+  // A global guard on the copy voice rules and the naming denylist below, so
   // a new string can't ship an exclamation, emoji, apology-as-decoration, or a
   // competitor/vendor/incident name without a test going red. Function-valued
   // copy is resolved with sample args of every shape to reach its branches.
@@ -197,7 +197,7 @@ describe("copy", () => {
 
     // A representative, not exhaustive, denylist of header-extension
     // competitors and notable extension incidents. "ModHeader" is the sole
-    // sanctioned name (SPEC line 27) and is checked separately below.
+    // sanctioned name and is checked separately below.
     const denylist = [
       "requestly",
       "header editor",
@@ -227,7 +227,7 @@ describe("copy", () => {
           `competitor/incident name "${name}" in: ${text}`,
         ).not.toContain(name);
       }
-      // ModHeader is allowed only as an import/export format label (§7.2).
+      // ModHeader is allowed only as an import/export format label.
       if (lower.includes("modheader")) {
         expect(lower, `ModHeader outside import context: ${text}`).toMatch(
           /import|export/,

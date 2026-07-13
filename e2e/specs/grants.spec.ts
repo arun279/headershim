@@ -157,7 +157,7 @@ test("a cached response bypasses response-header modification", async ({
   expect(stats.requestCount).toBe(1);
 });
 
-// Case 3, UI half: an ungranted rule must light the loud needs-access state in
+// UI half: an ungranted rule must light the loud needs-access state in
 // the popup, not fail silently. The network half (destination-only → initiator)
 // lives above; this asserts the surface that tells the user access is missing.
 test("an ungranted rule lights the loud needs-access state in the popup", async ({
@@ -189,7 +189,7 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
   await expect(annunciator.getByRole("button")).toBeVisible();
 });
 
-// Case 8, Site-access UI half: the Site access page is a projection of the
+// Site-access UI half: the Site access page is a projection of the
 // browser's live permissions plus the rules' required origins. In the unpacked
 // headless posture no host grant is obtainable (grants.spec's revocation-
 // survival half is deferred for the same reason), so the browser's reality is
@@ -255,10 +255,10 @@ test("the site-access page mirrors the browser's granted and needed origins", as
   expect(live).toEqual([]);
 });
 
-// Case 8 network half, §3.4: whether individually granted sites survive
-// revoking a broad all-sites grant. Staging it needs a real all-sites grant to
-// then revoke, which the unpacked headless posture cannot obtain; it rides the
-// packed/real-Chrome checklist.
+// Whether individually granted sites survive revoking a broad all-sites
+// grant. Staging it needs a real all-sites grant to then revoke, which the
+// unpacked headless posture cannot obtain; verified manually against real
+// Chrome before release.
 test("individual grants survive broad-grant revocation", async () => {
   test.skip(true, BROAD_GRANT_REVOCATION_UNAVAILABLE);
 });

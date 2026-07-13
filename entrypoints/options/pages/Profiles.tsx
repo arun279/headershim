@@ -64,8 +64,8 @@ export function ProfilesPage({
     return null;
   }
 
-  // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap
-  // (SPEC §2 limits); the count mirrors the enabled set the cap governs.
+  // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap;
+  // the count mirrors the enabled set the cap governs.
   const enabledRuleCount = doc.profiles
     .filter((profile) => profile.enabled)
     .reduce(
@@ -266,7 +266,7 @@ export function ProfilesPage({
           onDismiss={() => setToast(undefined)}
           // While an undo is live the toast holds open (no 6s timer), so the
           // Undo control stays reachable until the next mutation retires it —
-          // the options page's persistent-undo affordance (SPEC §9, WCAG 2.2.1).
+          // the options page's persistent-undo affordance (WCAG 2.2.1).
           persist={undo !== undefined}
           actionLabel={undo !== undefined ? copy.actions.undo : undefined}
           onAction={undo !== undefined ? runUndo : undefined}

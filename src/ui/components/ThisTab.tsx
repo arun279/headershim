@@ -32,21 +32,21 @@ interface ThisTabProps {
   overrides: readonly TabOverride[];
   /** Whether the composer is open (a fresh empty row awaiting input). */
   composing: boolean;
-  /** Promotes a temporary row into a real rule (pre-fills the editor, §3.5). */
+  /** Promotes a temporary row into a real rule (pre-fills the editor). */
   onSaveAsRule: (override: TabOverride) => void;
-  /** The standing honesty line's "Create a rule" action (§3.5). */
+  /** The standing honesty line's "Create a rule" action. */
   onCreateRule: () => void;
   /** Closes the composer without adding (Esc, or an empty focus-leave). */
   onCloseComposer: () => void;
 }
 
 /**
- * The This-tab section (SPEC §3.5). Rows apply immediately with no permission
+ * The This-tab section. Rows apply immediately with no permission
  * prompt — opening the popup is the activeTab consent gesture — and are marked
  * Temporary: they cover this tab's own origin only, end when the tab navigates
  * away or closes, and are suspended by global pause. Writes land in the session
  * store's metadata only; the background scheduler is the sole DNR writer. The
- * section stays hidden until it has a row or the composer is open (SPEC §4.1).
+ * section stays hidden until it has a row or the composer is open.
  */
 export function ThisTab(props: ThisTabProps) {
   const { tabId, host, overrides, composing } = props;
@@ -270,7 +270,7 @@ function mapError(error: SessionMutationError): Errors {
     : headerErrorToFieldError(error);
 }
 
-/** The rule draft a promoted temporary row seeds the editor with (SPEC §3.5). */
+/** The rule draft a promoted temporary row seeds the editor with. */
 export function overrideToRuleDraft(
   override: TabOverride,
   host: string,

@@ -10,9 +10,9 @@ const text = copy.options.about;
 const SHORTCUTS_URL = "chrome://extensions/shortcuts";
 
 /**
- * Appearance settings and the trust page (SPEC §4.2): the permission
- * justification table, the never-list, and the build-verification procedure —
- * prose a security reviewer can paste into an approval request.
+ * Appearance settings and the trust page: the permission justification
+ * table, the never-list, and the build-verification procedure — prose a
+ * security reviewer can paste into an approval request.
  */
 export function AboutPage({
   doc,

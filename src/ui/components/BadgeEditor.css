@@ -41,7 +41,7 @@
   cursor: pointer;
 }
 
-/* The hit target fills the ≥24px swatch (DESIGN §1.3); the transparent radio
+/* The hit target fills the ≥24px swatch; the transparent radio
    carries the pointer and focus without covering the colour. */
 .badge-swatch-input {
   position: absolute;

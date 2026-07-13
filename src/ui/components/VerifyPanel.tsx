@@ -29,8 +29,8 @@ interface VerifyPanelProps {
 }
 
 /**
- * The proof-of-fire readout (SPEC §5), sliding over the footer. It leads with
- * the most basic unmet precondition, not the caching essay (verdict P0): a grant
+ * The proof-of-fire readout, sliding over the footer. It leads with
+ * the most basic unmet precondition, not the caching essay: a grant
  * gap first — with Grant surfaced here so the user need not dismiss the panel to
  * reach the banner it covers — then "nothing requested yet, reload to test",
  * then the matched tallies. The headline never reads as a configuration score.

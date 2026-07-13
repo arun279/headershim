@@ -73,7 +73,7 @@ describe("focus-indicator token contrast", () => {
     focus,
   }) => {
     const source = block(selector);
-    // The a11y-design-2-1 checked-segment ring is --trace-ink over the --trace
+    // The checked-segment ring is --trace-ink over the --trace
     // fill; --focus is --trace over the --panel-0 surface.
     const ringOnFill = contrast(hex(source, "trace"), hex(source, "trace-ink"));
     const ringOnSurface = contrast(

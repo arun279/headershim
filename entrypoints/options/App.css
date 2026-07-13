@@ -89,7 +89,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Sections are panel-1 cards (DESIGN §4.13: hairline, 6px radius). The profile
+/* Sections are panel-1 cards (hairline, 6px radius). The profile
    list keeps its rows edge-to-edge for hairline separators; the rules panel
    takes the standard 16px padding. */
 .page > .profile-list {

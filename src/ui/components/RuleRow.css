@@ -35,7 +35,7 @@
 }
 
 /* Focusing a row reveals a truncated value in full, wrapping in place — the
-   tooltip-style readout DESIGN §1.2 promises on keyboard focus, not just hover. */
+   tooltip-style readout promised on keyboard focus, not just hover. */
 .rule-row:focus .rule-value {
   white-space: normal;
   word-break: break-all;
