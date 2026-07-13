@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -23,6 +23,10 @@ interface TestFixtures {
   serviceWorker: Worker;
   extensionId: string;
 }
+
+// Chrome writes its own install/updater diagnostics here; the failure-path dump
+// reads it back to explain why the force-installed extension never appeared.
+const chromeLogPath = path.join(tmpdir(), "headershim-packed-chrome.log");
 
 // The gate runs against Google Chrome (channel:'chrome'), which is the only
 // build that reads /etc/opt/chrome/policies/managed. The extension is not loaded
@@ -59,7 +63,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         "--disable-background-networking",
         "--disable-component-update",
       ],
-      args: ["--ignore-certificate-errors"],
+      args: [
+        "--ignore-certificate-errors",
+        // Log Chrome's extension updater/installer so a failed force-install is
+        // diagnosable from the log file instead of an opaque timeout.
+        "--enable-logging",
+        `--log-file=${chromeLogPath}`,
+        "--vmodule=extension_downloader=2,extension_updater=2,crx_installer=2,sandboxed_unpacker=2",
+      ],
     });
     await use(context);
     await context.close();
@@ -90,10 +101,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect } from "@playwright/test";
 export { getDynamicRules, readEcho, seedState } from "../fixtures";
 
-// When the service worker never appears the extension did not install. Dump what
-// Chrome itself saw — the managed policy it read and its extension records with
-// any install error — so the next failure explains itself instead of only timing
-// out. Everything here is best-effort and only runs on the failure path.
+// When the service worker never appears the extension did not install. Enumerate
+// the extension records Chrome holds and replay its updater/installer log so the
+// next failure explains itself instead of only timing out. Best-effort and only
+// runs on the failure path.
 async function dumpInstallDiagnostics(context: BrowserContext): Promise<void> {
   const section = (label: string, body: string) =>
     console.error(`\n===== ${label} =====\n${body}\n`);
@@ -111,36 +122,37 @@ async function dumpInstallDiagnostics(context: BrowserContext): Promise<void> {
     ),
   );
 
-  for (const url of ["chrome://policy", "chrome://extensions-internals"]) {
-    const page = await context.newPage();
-    try {
-      await page.goto(url, { waitUntil: "load", timeout: 15_000 });
-      await page.waitForTimeout(1_000);
-      // chrome:// pages render inside nested shadow roots, so pierce them to
-      // collect the policy values and extension records as plain text.
-      const text = await page.evaluate(() => {
-        const chunks: string[] = [];
-        const visit = (root: ParentNode): void => {
-          for (const element of Array.from(
-            root.querySelectorAll<HTMLElement>("*"),
-          )) {
-            const shadow = element.shadowRoot;
-            if (shadow !== null) {
-              chunks.push(shadow.textContent ?? "");
-              visit(shadow);
-            }
-          }
-        };
-        visit(document);
-        chunks.push(document.body?.innerText ?? "");
-        return chunks.filter(Boolean).join("\n");
-      });
-      section(url, text.trim() || "(no text extracted)");
-    } catch (error) {
-      section(url, `failed to capture: ${(error as Error).message}`);
-    } finally {
-      await page.close();
-    }
+  const page = await context.newPage();
+  try {
+    await page.goto("chrome://extensions-internals", {
+      waitUntil: "load",
+      timeout: 15_000,
+    });
+    await page.waitForTimeout(1_000);
+    const records = await page.evaluate(() => document.body?.innerText ?? "");
+    section("chrome://extensions-internals", records.trim() || "(no records)");
+  } catch (error) {
+    section(
+      "chrome://extensions-internals",
+      `failed: ${(error as Error).message}`,
+    );
+  } finally {
+    await page.close();
+  }
+
+  try {
+    const log = await readFile(chromeLogPath, "utf8");
+    const lines = log
+      .split("\n")
+      .filter((line) => /extension|crx|updat|download|install|8730/i.test(line))
+      .slice(-60)
+      .join("\n");
+    section("chrome log (install/updater)", lines || "(no matching lines)");
+  } catch (error) {
+    section(
+      "chrome log (install/updater)",
+      `unreadable: ${(error as Error).message}`,
+    );
   }
 }
 

@@ -25,12 +25,16 @@ export function startUpdateServer({ port = updatePort } = {}) {
   ).version;
 
   const server = createServer((req, res) => {
-    if (req.url === "/updates.xml") {
+    // Chrome's Omaha updater appends a query string (?x=id%3D…) to the update
+    // URL, so match on the path alone or the update check 404s and the CRX is
+    // never fetched.
+    const { pathname } = new URL(req.url, `http://${updateHost}:${port}`);
+    if (pathname === "/updates.xml") {
       res.writeHead(200, { "content-type": "application/xml" });
       res.end(updateManifest(extensionId, version));
       return;
     }
-    if (req.url === "/headershim.crx") {
+    if (pathname === "/headershim.crx") {
       res.writeHead(200, {
         "content-type": "application/x-chrome-extension",
         "content-length": crx.length,
