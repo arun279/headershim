@@ -27,6 +27,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.5.3",
     "@playwright/test": "1.61.1",
     "@size-limit/file": "^12.1.0",

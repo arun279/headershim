@@ -64,7 +64,7 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
             style={{ background: `var(--badge-${swatch})` }}
           >
             <input
-              class="sr-only"
+              class="badge-swatch-input"
               type="radio"
               name={groupName}
               value={swatch}

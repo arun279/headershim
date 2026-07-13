@@ -58,6 +58,12 @@ later specs land.
 | Verify tallies + edit-window attribution (§5) | Per-rule tallies attribute correctly after an insert within the 5-minute window | ⏭ env-skip | Needs a gesture-granted `getMatchedRules`. Explicit `test.skip`; the stable-id attribution itself is unit-tested (`decodeMatches`). Moves to the packed/real-Chrome checklist. |
 | Verify quota (§5) | 21+ rapid gesture-initiated Verify calls succeed under the gesture exemption | ⏭ env-skip | Needs a real gesture per call. Explicit `test.skip`; moves to the packed/real-Chrome checklist. |
 | Broad-grant revocation survival (§3.4) | Whether individually granted sites survive revoking a broad all-sites grant | ⏭ env-skip | Staging it needs a real all-sites grant to then revoke, which the unpacked headless posture cannot obtain. Explicit `test.skip`; moves to the packed/real-Chrome checklist. |
+| Site-access UI half (case 8, §3.4) | The Site access options page lists granted and needed-but-not-granted origins matching the browser's real permission state | ✅ headless | The page is a projection of `permissions.getAll` + the rules' required origins. No host grant is obtainable in this posture (same reason the survival half above is deferred), so the browser's reality is "nothing granted": every enabled rule's origin sits under needed-but-not-granted, the granted group is empty, and the broad-grant offer (not the revoke card) stands. The spec asserts that projection and cross-checks the empty granted rows against a live `permissions.getAll`. Populating the granted group under a real grant, and the revoke-survival question, ride the packed/real-Chrome checklist. |
+| Import/export round-trip (case 15) | Export → wipe → import through the real options UI yields an equivalent state with the imported profiles off | ✅ headless | Drives the built options page: export downloads the golden envelope, the store is wiped to a fresh seed, the file re-imports through the summary screen, and the applied profiles are compared (ids and export timestamp normalized) — identical except every imported profile arrives disabled. |
+| ModHeader import warnings (case 15) | Every mapping warning class is itemized on the pre-apply summary | ✅ headless | A two-profile ModHeader fixture (`e2e/fixtures/modheader-all-warnings.json`) exercises all thirteen warning kinds, including a real RE2-invalid pattern rejected by Chrome's `isRegexSupported`; the summary renders one row per warning with each class's copy. |
+| Accessibility (case 17) | Zero axe violations (names/roles, contrast from the real tokens, ARIA) on the popup states and options surfaces, both themes | ✅ headless | `@axe-core/playwright` over `wcag2a/aa`, `wcag21a/aa`, `wcag22aa` — the statically-decidable AA slice. Popup: first-run, needs-access + rule list, paused, rule editor, This-tab composer, grant panel, Verify panel. Options: profiles, import & export, site access, about, and the import summary. Each `<html>` carries the asserted theme, and reduced motion is emulated so contrast is read in the resting state, not mid-transition. Logical focus order and keyboard operability are proven by the keyboard walk below, not by axe. |
+| Keyboard-model walk (case 17, §4.5 popup) | Every automatable in-popup binding operates through real key events | ✅ headless | `n`/`t`/`v` open their surfaces, `p` toggles pause, digit `1–9` switches profiles exclusively while `Shift+1–9` toggles without turning others off, list `↑/↓` move roving focus, row `Enter`/`Space`/`Delete` edit/toggle/delete, and the editor commits on `Enter`, commits + prompts on `Ctrl/Cmd+Enter`, and closes on `Esc` (a second `Esc` closes the popup). |
+| Global commands (§4.5) | `Alt+Shift+H/P/V/K` dispatch through the browser shortcut manager | 📋 checklist | The shortcut manager feeds `chrome.commands`, which neither Playwright nor CDP can synthesize; the popup behaviour each triggers is covered by its in-popup equivalent above. Explicit `test.skip`; the shortcuts themselves ride the per-release manual keyboard pass. |
 | Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 checklist | Native prompts are not scriptable (below); captured out of band. |
 | Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The CRX force-installs and enables, but its lazy MV3 service worker is not surfaced to Playwright on the runner, so the specs cannot drive it. Verdict UNKNOWN until the real-Chrome verification phase. |
 | Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified per release via the packed checklist. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. Verdict UNKNOWN until the real-Chrome verification phase. |
@@ -70,11 +76,16 @@ after the headless gate suite. A structural outcome (the compiled rule's
 condition, read back from Chrome) settles the design; the on-wire confirmation
 that leans on a runtime grant is carried to the packed/real-Chrome checklist.
 
-- **§3.4 — do individual grants survive broad-grant revocation.** Not settled
-  here: the unpacked headless posture cannot obtain the all-sites grant to then
-  revoke. Deferred to the packed/real-Chrome checklist; the "Revoking returns
-  previously-granted individual sites to whatever Chrome preserved" copy stays
-  gated until then.
+- **§3.4 — do individual grants survive broad-grant revocation.** The survival
+  question is not settled here: the unpacked headless posture cannot obtain the
+  all-sites grant to then revoke. Deferred to the packed/real-Chrome checklist;
+  the "Revoking returns previously-granted individual sites to whatever Chrome
+  preserved" copy stays gated until then. The Site-access **UI half** (case 8)
+  is settled: the page is a faithful projection of `permissions.getAll` + the
+  rules' required origins, verified against the browser's real (empty-grant)
+  state — needed origins listed, granted group empty, broad-grant offer
+  standing. It will reflect whatever the survival check preserves once that
+  check can run.
 - **§3.5a — the exact request set an activeTab session rule modifies.**
   Structurally confirmed: the compiled session rule's condition is
   `tabIds: [thisTab]` + `requestDomains: [origin]` over all resource types

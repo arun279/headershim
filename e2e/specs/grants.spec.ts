@@ -1,4 +1,5 @@
 import { planReconcile } from "../../src/core/reconcile";
+import { copy } from "../../src/ui/copy";
 import {
   BROAD_GRANT_REVOCATION_UNAVAILABLE,
   DUAL_GRANT_TRANSITION_UNAVAILABLE,
@@ -185,9 +186,76 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
   await expect(annunciator.getByRole("button")).toBeVisible();
 });
 
-// Case 8, §3.4: whether individually granted sites survive revoking a broad
-// all-sites grant. Staging it needs a real all-sites grant to then revoke,
-// which the unpacked headless posture cannot obtain.
+// Case 8, Site-access UI half: the Site access page is a projection of the
+// browser's live permissions plus the rules' required origins. In the unpacked
+// headless posture no host grant is obtainable (grants.spec's revocation-
+// survival half is deferred for the same reason), so the browser's reality is
+// "nothing granted": every enabled rule's origin sits under needed-but-not-
+// granted, the granted group is empty, and the broad-grant offer stands. The
+// page must match that reality exactly.
+test("the site-access page mirrors the browser's granted and needed origins", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedState(
+    serviceWorker,
+    stateWithRules([
+      {
+        direction: "request",
+        operation: "set",
+        header: "x-a",
+        value: "1",
+        scope: { type: "domains", domains: ["example.com"] },
+        resourceTypes: ["xhr"],
+        initiators: [],
+        enabled: true,
+      },
+      {
+        direction: "request",
+        operation: "set",
+        header: "x-b",
+        value: "1",
+        scope: { type: "domains", domains: ["api.example.com"] },
+        resourceTypes: ["xhr"],
+        initiators: [],
+        enabled: true,
+      },
+    ]),
+  );
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html#site-access`);
+  await expect(page.locator(".page-title")).toBeVisible();
+
+  const text = copy.options.siteAccess;
+  const needed = page.getByRole("list", { name: text.neededHeading });
+  await expect(needed.locator(".sa-domain")).toHaveText([
+    "api.example.com",
+    "example.com",
+  ]);
+
+  // No grant is obtainable here, so the granted group is absent and the broad
+  // grant is offered (not the revoke-all card) — the post-revoke reality.
+  await expect(
+    page.getByRole("heading", { name: text.grantedHeading, exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".sa-all-sites")).toBeVisible();
+  await expect(page.locator(".sa-all-on")).toHaveCount(0);
+
+  // The page is a faithful mirror: its granted rows equal the browser's live
+  // origins (both empty), so nothing is claimed that permissions.getAll denies.
+  const live = await serviceWorker.evaluate(async () => {
+    const all = await chrome.permissions.getAll();
+    return (all.origins ?? []).filter((origin) => origin !== "*://*/*");
+  });
+  expect(live).toEqual([]);
+});
+
+// Case 8 network half, §3.4: whether individually granted sites survive
+// revoking a broad all-sites grant. Staging it needs a real all-sites grant to
+// then revoke, which the unpacked headless posture cannot obtain; it rides the
+// packed/real-Chrome checklist.
 test("individual grants survive broad-grant revocation", async () => {
   test.skip(true, BROAD_GRANT_REVOCATION_UNAVAILABLE);
 });
