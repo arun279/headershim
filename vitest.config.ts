@@ -2,13 +2,17 @@ import { defineConfig } from "vitest/config";
 import { WxtVitest } from "wxt/testing";
 
 export default defineConfig({
-  plugins: [WxtVitest()],
+  plugins: [WxtVitest({ dev: { server: { port: 3_000, strictPort: true } } })],
   test: {
-    setupFiles: ["./src/test/setup.ts"],
+    setupFiles: ["./src/platform/test-setup.ts"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["**/*.test.{ts,tsx}", "src/test/**"],
+      exclude: [
+        "**/*.test.{ts,tsx}",
+        "src/platform/test-setup.ts",
+        "src/test/**",
+      ],
       thresholds: {
         "src/core/**": {
           statements: 90,

@@ -24,6 +24,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.9
         version: 4.1.10(vitest@4.1.10)
+      '@webext-core/fake-browser':
+        specifier: ^1.5.2
+        version: 1.5.2
       jscpd:
         specifier: ^5.0.11
         version: 5.0.12
