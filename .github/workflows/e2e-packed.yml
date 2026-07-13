@@ -1,0 +1,51 @@
+name: E2E Packed
+
+# The packed-build gate installs a machine policy and force-installs a signed
+# CRX, so it only runs on the Linux runner and only when the packed harness
+# changes or someone dispatches it. It never runs on developer machines.
+on:
+  pull_request:
+    paths:
+      - 'e2e/packed/**'
+      - 'playwright.packed.config.ts'
+      - '.github/workflows/e2e-packed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-packed-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # chromium packs the CRX; chrome is the only channel that reads the
+      # /etc/opt/chrome managed-policy directory the gate installs into.
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium chrome
+      - name: Build and pack the CRX
+        run: xvfb-run -a pnpm run e2e:packed:pack
+      - name: Install force-install policy
+        run: |
+          sudo mkdir -p /etc/opt/chrome/policies/managed
+          sudo chmod 777 /etc/opt/chrome/policies/managed
+          node e2e/packed/policy.mjs
+      - name: Run packed gate
+        run: xvfb-run -a pnpm run e2e:packed

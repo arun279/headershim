@@ -30,6 +30,9 @@ later specs land.
 | HTTP/2 negotiation | The h2 echo server negotiates HTTP/2 | ✅ headless | Asserted via `performance` navigation timing `nextHopProtocol === 'h2'`; also exercises the self-signed cert + `--ignore-certificate-errors` path. |
 | On-wire header modification | A granted rule sets a header on a real request | ⏸ deferred | See "Grant automation" below. The assertion is written and runs, but skips when no host grant is obtainable; the deterministic grant lives in the packed-build policy path. |
 | Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 checklist | Native prompts are not scriptable (below); captured out of band. |
+| Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. Confirms the grant path that the unpacked run must skip. |
+| Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. |
+| Packed: `displayActionCountAsBadgeText` | The count badge paints on the packed CRX (only ever confirmed unpacked) | ⏳ pending first CI run | `e2e/packed/`, Linux CI only. A divergence re-opens the count-badge design. |
 
 ## Grant automation
 
@@ -62,3 +65,39 @@ The on-wire smoke assertion is kept in `lifecycle.spec.ts` and runs its grant
 attempt every time; it self-skips with a recorded reason when the grant does not
 land, and enforces the header the moment a run *can* grant (headed with OS input,
 a future Chromium affordance, or the policy path). It is never silently dropped.
+
+## Packed-build gate (`e2e/packed/`)
+
+Verify (getMatchedRules) and the count badge (displayActionCountAsBadgeText)
+were only ever confirmed against an *unpacked* extension. This gate re-checks
+them, plus one on-wire header modification, against a **policy-installed packed
+CRX** before either feature is built — a divergence re-opens their designs.
+
+The pieces:
+
+- `pack.mjs` packs `.output/chrome-mv3` into a signed CRX using the Chromium that
+  Playwright already downloads (`--pack-extension`). The signing key is generated
+  once into `.artifacts/` (git-ignored, never committed) and the extension id is
+  derived from it, so the policy and the update manifest agree on one id.
+- `update-server.mjs` serves the Omaha update manifest and the CRX that Chrome's
+  force-install policy fetches. Reused by the later store-approximation rerun.
+- `policy/managed-policy.json` + `policy.mjs` render the `ExtensionSettings`
+  force-install policy into `/etc/opt/chrome/policies/managed/`.
+  `runtime_allowed_hosts` grants host access without the runtime prompt — the
+  deterministic stand-in for the grant the unpacked harness cannot script.
+
+This path installs machine policy and only works on the Linux CI runner, so the
+specs skip themselves off Linux and the gate runs in its own workflow
+(`.github/workflows/e2e-packed.yml`, on `workflow_dispatch` and when
+`e2e/packed/**` changes). It runs Google Chrome (`channel: 'chrome'`, the only
+build that reads that policy directory) headed under Xvfb.
+
+Locally you can exercise everything except the policy install and the Chrome run:
+
+```
+pnpm e2e:packed:pack        # build + pack the CRX
+pnpm e2e:packed:selfcheck   # pack, serve, and render the policy; assert their shape
+```
+
+The three gate outcomes are marked *pending first CI run* in the table above
+until a real Linux run reports them.

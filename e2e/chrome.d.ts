@@ -9,6 +9,10 @@ interface ChromePermissionsQuery {
   permissions?: string[];
 }
 
+interface ChromeMatchedRule {
+  rule: { ruleId: number };
+}
+
 declare const chrome: {
   storage: {
     local: {
@@ -18,6 +22,21 @@ declare const chrome: {
   };
   declarativeNetRequest: {
     getDynamicRules(): Promise<unknown[]>;
+    getMatchedRules(filter: {
+      tabId: number;
+    }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;
+    setExtensionActionOptions(options: {
+      displayActionCountAsBadgeText: boolean;
+    }): Promise<void>;
+  };
+  action: {
+    getBadgeText(details: { tabId?: number }): Promise<string>;
+  };
+  tabs: {
+    query(query: {
+      active?: boolean;
+      lastFocusedWindow?: boolean;
+    }): Promise<{ id?: number }[]>;
   };
   permissions: {
     getAll(): Promise<{ origins: string[]; permissions: string[] }>;
