@@ -163,13 +163,15 @@ export default defineBackground(() => {
     if (!outcome.ok) {
       return;
     }
-    const [granted, session] = await Promise.all([
+    const [granted, session, reconcileError] = await Promise.all([
       grantSnapshot(),
       readSession(),
+      getReconcileError(),
     ]);
     const { state, tabBadges } = planBadge({
       doc: outcome.value,
       needsAccess: docMissingGrants(outcome.value, granted).length > 0,
+      reconcileError,
       overrideTabIds: overrideTabIds(session),
     });
     await applyBadge(state, tabBadges);

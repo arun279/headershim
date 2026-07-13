@@ -22,6 +22,7 @@ export interface BadgePlan {
 export interface BadgeInput {
   readonly doc: StateDoc;
   readonly needsAccess: boolean;
+  readonly reconcileError: boolean;
   readonly overrideTabIds: readonly number[];
 }
 
@@ -38,19 +39,23 @@ export const BADGE_PALETTE = {
 
 const WHITE = "#FFFFFF";
 const PAUSED_FILL = "#6E7B88";
-const NEEDS_ACCESS_FILL = "#B07B00";
+const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
 
 export function planBadge({
   doc,
   needsAccess,
+  reconcileError,
   overrideTabIds,
 }: BadgeInput): BadgePlan {
   if (doc.settings.paused) {
     return globalBadge(PAUSED_FILL);
   }
-  if (needsAccess) {
-    return globalBadge(NEEDS_ACCESS_FILL);
+  // A missing grant and a failed reconcile are both can't-run states: rules the
+  // user believes are live are not. The amber badge outranks either content
+  // mode so no count or initials bleeds through (SPEC §4.4 precedence).
+  if (reconcileError || needsAccess) {
+    return globalBadge(CANT_RUN_FILL);
   }
 
   const focused = doc.profiles.some((profile) => profile.enabled)
@@ -58,20 +63,33 @@ export function planBadge({
     : undefined;
   const backgroundColor =
     focused === undefined ? NEUTRAL_FILL : BADGE_PALETTE[focused.color];
+
   if (doc.settings.badgeMode === "count") {
+    // Count is Chrome-managed per tab: an enabled profile paints its matches
+    // everywhere, and with none enabled only This-tab overrides increment it.
     return {
       state: { kind: "count", backgroundColor, textColor: WHITE },
       tabBadges: [],
     };
   }
+
+  if (focused === undefined) {
+    // No enabled profile: the badge is empty and neutral, except tabs holding a
+    // This-tab override carry a temporary "T" so modified traffic is never
+    // invisible (SPEC §4.4).
+    return {
+      state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
+      tabBadges: overrideTabIds.map((tabId) => ({ tabId, text: "T" })),
+    };
+  }
   return {
     state: {
       kind: "manual",
-      text: focused?.badgeText ?? "",
+      text: focused.badgeText,
       backgroundColor,
       textColor: WHITE,
     },
-    tabBadges: overrideTabIds.map((tabId) => ({ tabId, text: "T" })),
+    tabBadges: [],
   };
 }
 

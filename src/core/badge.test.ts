@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { BADGE_PALETTE, planBadge } from "./badge";
-import type { Profile, StateDoc } from "./model";
+import { BADGE_PALETTE, type BadgeInput, planBadge } from "./badge";
+import type { Profile, Settings, StateDoc } from "./model";
+
+const PAUSED_GREY = "#6E7B88";
+const CANT_RUN_AMBER = "#B07B00";
+const NEUTRAL_GREY = "#6E7B88";
+const WHITE = "#FFFFFF";
 
 function profile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -25,82 +30,199 @@ function doc(overrides: Partial<StateDoc> = {}): StateDoc {
   };
 }
 
-function input(
-  stateDoc: StateDoc,
-  needsAccess = false,
-  overrideTabIds: number[] = [],
-) {
-  return { doc: stateDoc, needsAccess, overrideTabIds };
+function input(overrides: Partial<BadgeInput> & { doc: StateDoc }): BadgeInput {
+  return {
+    needsAccess: false,
+    reconcileError: false,
+    overrideTabIds: [],
+    ...overrides,
+  };
 }
 
-describe("planBadge", () => {
-  it("paints paused grey over every other state, with no text anywhere", () => {
-    const paused = doc({
-      settings: { paused: true, theme: "system", badgeMode: "initials" },
-    });
+function settings(overrides: Partial<Settings>): Settings {
+  return { paused: false, theme: "system", badgeMode: "count", ...overrides };
+}
 
-    expect(planBadge(input(paused, true, [7]))).toEqual({
+describe("planBadge precedence", () => {
+  it("paints paused grey over every other state, with no text anywhere", () => {
+    const paused = doc({ settings: settings({ paused: true }) });
+
+    expect(
+      planBadge(
+        input({
+          doc: paused,
+          needsAccess: true,
+          reconcileError: true,
+          overrideTabIds: [7],
+        }),
+      ),
+    ).toEqual({
       state: {
         kind: "manual",
         text: "",
-        backgroundColor: "#6E7B88",
-        textColor: "#FFFFFF",
+        backgroundColor: PAUSED_GREY,
+        textColor: WHITE,
       },
       tabBadges: [],
     });
   });
 
-  it("paints needs-access amber when not paused", () => {
-    const plan = planBadge(input(doc(), true, [7]));
+  it("paints the amber can't-run badge when reconcile has failed, even with access and count mode", () => {
+    expect(planBadge(input({ doc: doc(), reconcileError: true }))).toEqual({
+      state: {
+        kind: "manual",
+        text: "",
+        backgroundColor: CANT_RUN_AMBER,
+        textColor: WHITE,
+      },
+      tabBadges: [],
+    });
+  });
 
-    expect(plan.state).toMatchObject({
+  it("paints amber for a missing grant and does not double up when reconcile also failed", () => {
+    const needs = planBadge(input({ doc: doc(), needsAccess: true }));
+    const both = planBadge(
+      input({ doc: doc(), needsAccess: true, reconcileError: true }),
+    );
+
+    expect(needs.state).toMatchObject({
       kind: "manual",
       text: "",
-      backgroundColor: "#B07B00",
+      backgroundColor: CANT_RUN_AMBER,
     });
-    expect(plan.tabBadges).toEqual([]);
+    expect(both).toEqual(needs);
   });
 
   it("uses Chrome-managed count text on the focused profile color in count mode", () => {
-    expect(planBadge(input(doc())).state).toEqual({
+    expect(planBadge(input({ doc: doc() })).state).toEqual({
       kind: "count",
       backgroundColor: BADGE_PALETTE.indigo,
-      textColor: "#FFFFFF",
+      textColor: WHITE,
     });
   });
 
-  it("paints the focused profile initials in initials mode and marks override tabs", () => {
-    const initials = doc({
-      settings: { paused: false, theme: "system", badgeMode: "initials" },
-    });
+  it("paints the focused profile initials in initials mode without per-tab markers", () => {
+    const initials = doc({ settings: settings({ badgeMode: "initials" }) });
 
-    expect(planBadge(input(initials, false, [4, 9]))).toEqual({
-      state: {
-        kind: "manual",
-        text: "DE",
-        backgroundColor: BADGE_PALETTE.indigo,
-        textColor: "#FFFFFF",
+    expect(planBadge(input({ doc: initials, overrideTabIds: [4, 9] }))).toEqual(
+      {
+        state: {
+          kind: "manual",
+          text: "DE",
+          backgroundColor: BADGE_PALETTE.indigo,
+          textColor: WHITE,
+        },
+        tabBadges: [],
       },
-      tabBadges: [
-        { tabId: 4, text: "T" },
-        { tabId: 9, text: "T" },
-      ],
-    });
+    );
   });
 
-  it("shows an empty neutral badge when no profile is enabled", () => {
+  it("shows an empty neutral badge with a per-tab T marker on override tabs when no profile is enabled", () => {
     const disabled = doc({
       profiles: [profile({ enabled: false })],
-      settings: { paused: false, theme: "system", badgeMode: "initials" },
+      settings: settings({ badgeMode: "initials" }),
     });
 
-    const plan = planBadge(input(disabled, false, [4]));
-
-    expect(plan.state).toMatchObject({
-      kind: "manual",
-      text: "",
-      backgroundColor: "#6E7B88",
-    });
-    expect(plan.tabBadges).toEqual([{ tabId: 4, text: "T" }]);
+    expect(planBadge(input({ doc: disabled, overrideTabIds: [4, 9] }))).toEqual(
+      {
+        state: {
+          kind: "manual",
+          text: "",
+          backgroundColor: NEUTRAL_GREY,
+          textColor: WHITE,
+        },
+        tabBadges: [
+          { tabId: 4, text: "T" },
+          { tabId: 9, text: "T" },
+        ],
+      },
+    );
   });
+
+  it("leaves the count to Chrome on a neutral background when no profile is enabled", () => {
+    const disabled = doc({ profiles: [profile({ enabled: false })] });
+
+    expect(planBadge(input({ doc: disabled, overrideTabIds: [4] }))).toEqual({
+      state: { kind: "count", backgroundColor: NEUTRAL_GREY, textColor: WHITE },
+      tabBadges: [],
+    });
+  });
+});
+
+describe("planBadge single-winner precedence across the input space", () => {
+  const bits = [false, true];
+  const modes = ["count", "initials"] as const;
+
+  for (const paused of bits) {
+    for (const needsAccess of bits) {
+      for (const reconcileError of bits) {
+        for (const badgeMode of modes) {
+          for (const enabled of bits) {
+            for (const withOverrides of bits) {
+              const overrideTabIds = withOverrides ? [4, 9] : [];
+              const label = `paused=${paused} needs=${needsAccess} reconcile=${reconcileError} mode=${badgeMode} enabled=${enabled} overrides=${withOverrides}`;
+              const cantRun = needsAccess || reconcileError;
+
+              it(`resolves a single winner: ${label}`, () => {
+                const plan = planBadge(
+                  input({
+                    doc: doc({
+                      profiles: [profile({ enabled })],
+                      settings: settings({ paused, badgeMode }),
+                    }),
+                    needsAccess,
+                    reconcileError,
+                    overrideTabIds,
+                  }),
+                );
+
+                // The Chrome-managed count is the only source of a count kind,
+                // and only when no higher-priority state has taken over.
+                expect(plan.state.kind === "count").toBe(
+                  !paused && !cantRun && badgeMode === "count",
+                );
+
+                // Manual initials text belongs to an enabled profile in
+                // initials mode alone; it never bleeds under a global state.
+                if (plan.state.kind === "manual") {
+                  expect(plan.state.text).toBe(
+                    !paused && !cantRun && badgeMode === "initials" && enabled
+                      ? "DE"
+                      : "",
+                  );
+                }
+
+                // Per-tab "T" markers ride only a neutral initials badge, so a
+                // stale "T" can never sit on a paused or amber background.
+                expect(plan.tabBadges).toEqual(
+                  !paused &&
+                    !cantRun &&
+                    badgeMode === "initials" &&
+                    !enabled &&
+                    withOverrides
+                    ? [
+                        { tabId: 4, text: "T" },
+                        { tabId: 9, text: "T" },
+                      ]
+                    : [],
+                );
+
+                // One background wins the whole precedence ladder.
+                expect(plan.state.backgroundColor).toBe(
+                  paused
+                    ? PAUSED_GREY
+                    : cantRun
+                      ? CANT_RUN_AMBER
+                      : enabled
+                        ? BADGE_PALETTE.indigo
+                        : NEUTRAL_GREY,
+                );
+                expect(plan.state.textColor).toBe(WHITE);
+              });
+            }
+          }
+        }
+      }
+    }
+  }
 });

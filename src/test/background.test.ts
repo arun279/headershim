@@ -327,6 +327,38 @@ describe("background lifecycle", () => {
     expect(await getReconcileError()).toBe(false);
   });
 
+  it("paints the amber can't-run badge from the health flag alone, then restores color on convergence", async () => {
+    start();
+    await fakeBrowser.permissions.request({ origins: ["*://*.example.com/*"] });
+    const doc = withRule(createV1Seed(), "x-one");
+    dnr.updateDynamicRules.mockRejectedValue(new Error("rejected"));
+    const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+    const setOptions = vi.spyOn(
+      browser.declarativeNetRequest,
+      "setExtensionActionOptions",
+    );
+
+    await writeState(doc);
+    await settle();
+
+    // Access is granted, so only the failed reconcile can turn the badge amber.
+    expect(await getReconcileError()).toBe(true);
+    expect(setBackground).toHaveBeenLastCalledWith({ color: "#B07B00" });
+    expect(setOptions).toHaveBeenLastCalledWith({
+      displayActionCountAsBadgeText: false,
+    });
+    expect(await browser.action.getBadgeText({})).toBe("");
+
+    dnr.updateDynamicRules.mockImplementation((options) =>
+      dnr.fake.updateDynamicRules(options),
+    );
+    await fakeBrowser.runtime.onStartup.trigger();
+    await settle();
+
+    expect(await getReconcileError()).toBe(false);
+    expect(setBackground).toHaveBeenLastCalledWith({ color: "#4F5BC4" });
+  });
+
   it("registers every listener before any init promise resolves", () => {
     vi.spyOn(fakeBrowser.storage.local, "get").mockImplementation(
       () => new Promise(() => {}),
@@ -576,6 +608,42 @@ describe("background lifecycle", () => {
 
     expect(setBackground).toHaveBeenCalledWith({ color: "#B07B00" });
     expect(await browser.action.getBadgeText({})).toBe("");
+  });
+
+  it("clears This-tab markers when a global state takes over and repaints them on exit", async () => {
+    start();
+    const { id: tabId } = await fakeBrowser.tabs.create({});
+    if (tabId === undefined) {
+      throw new Error("fake tab has no id");
+    }
+    const seed = createV1Seed();
+    const neutral: StateDoc = {
+      ...seed,
+      profiles: seed.profiles.map((profile) => ({
+        ...profile,
+        enabled: false,
+      })),
+      settings: { ...seed.settings, badgeMode: "initials" },
+    };
+
+    await writeState(neutral);
+    await writeSession({
+      nextNum: 2,
+      tabs: { [tabId]: [override(tabId, "app.example")] },
+    });
+    await settle();
+    expect(await browser.action.getBadgeText({ tabId })).toBe("T");
+
+    await writeState({
+      ...neutral,
+      settings: { ...neutral.settings, paused: true },
+    });
+    await settle();
+    expect(await browser.action.getBadgeText({ tabId })).toBe("");
+
+    await writeState(neutral);
+    await settle();
+    expect(await browser.action.getBadgeText({ tabId })).toBe("T");
   });
 
   it("switches to the next profile exclusively on command", async () => {
