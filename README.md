@@ -8,6 +8,7 @@ headershim is a free, MIT-licensed Chrome extension that modifies HTTP request a
 pnpm install
 pnpm dev
 pnpm build
-pnpm lint
-pnpm format
+pnpm check
 ```
+
+`pnpm install` configures git hooks: staged files are linted on commit, and the full check suite runs before every push. `pnpm check` runs the same suite on demand.
