@@ -69,7 +69,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // diagnosable from the log file instead of an opaque timeout.
         "--enable-logging",
         `--log-file=${chromeLogPath}`,
-        "--vmodule=extension_downloader=2,extension_updater=2,crx_installer=2,sandboxed_unpacker=2",
+        "--vmodule=extension_downloader=2,extension_updater=2,crx_installer=2,sandboxed_unpacker=2,service_worker_task_queue=2",
       ],
     });
     await use(context);
@@ -90,39 +90,40 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 export { expect } from "@playwright/test";
 export { getDynamicRules, readEcho, seedState } from "../fixtures";
 
-// The force-installed extension's MV3 worker is lazy: it starts once to fire
-// onInstalled and idles out before this fixture attaches, and the "serviceworker"
-// event for that first start races the fixture and is missed. Poll the live
-// worker list while repeatedly firing events the worker subscribes to: the
-// "verify" command hits commands.onCommand (a no-op handler) and each navigation
-// hits tabs.onUpdated, either of which restarts the worker. This also rides out
-// the brief window before the force-install completes.
+// The force-installed extension's MV3 worker is lazy: it starts, registers its
+// listeners, and dies again in well under a second, so polling the live list
+// misses the window. Instead listen for the "serviceworker" event (which fires
+// the instant the worker is created) while continuously firing events the worker
+// subscribes to — the "verify" command hits commands.onCommand (a no-op handler)
+// and each navigation hits tabs.onUpdated, either of which restarts it. This also
+// rides out the brief window before the force-install completes.
 async function acquireServiceWorker(context: BrowserContext): Promise<Worker> {
   const running = context.serviceWorkers()[0];
   if (running !== undefined) {
     return running;
   }
+  const started = context.waitForEvent("serviceworker", { timeout: 55_000 });
   const page = await context.newPage();
-  try {
-    const deadline = Date.now() + 55_000;
-    while (Date.now() < deadline) {
-      await page.bringToFront();
-      await page.keyboard.press("Alt+Shift+V");
+  let done = false;
+  const pump = (async () => {
+    while (!done) {
+      await page.bringToFront().catch(() => undefined);
+      await page.keyboard.press("Alt+Shift+V").catch(() => undefined);
       await page
         .goto(`data:text/html,<title>${Date.now()}</title>`)
         .catch(() => undefined);
-      const worker = context.serviceWorkers()[0];
-      if (worker !== undefined) {
-        return worker;
-      }
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300).catch(() => undefined);
     }
+  })();
+  try {
+    return await started;
+  } catch (error) {
     await dumpInstallDiagnostics(context);
-    throw new Error(
-      "packed extension service worker never started after wake attempts",
-    );
+    throw error;
   } finally {
-    await page.close();
+    done = true;
+    await pump;
+    await page.close().catch(() => undefined);
   }
 }
 
