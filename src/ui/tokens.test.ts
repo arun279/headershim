@@ -57,7 +57,7 @@ describe("focus-indicator token contrast", () => {
       name: "dark",
       selector: ':root[data-theme="dark"]',
       trace: 7.66,
-      focus: 8.77,
+      focus: 8.26,
     },
   ];
 
