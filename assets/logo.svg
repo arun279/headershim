@@ -2,7 +2,7 @@
   <title>headershim</title>
   <rect width="128" height="128" rx="28" fill="#12161B"/>
   <polygon points="16,20 112,20 112,64 16,48" fill="#E7EDF3"/>
-  <polygon points="16,108 16,80 112,64 112,108" fill="#E7EDF3"/>
+  <polygon points="16,108 16,80 112,64 112,108" fill="#C9D3DC"/>
   <polygon points="16,48 112,64 16,80" fill="#45C4D8"/>
   <rect x="2" y="2" width="124" height="124" rx="26" stroke="#E7EDF3" stroke-opacity="0.14"/>
 </svg>
