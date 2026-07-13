@@ -50,8 +50,8 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/Toast-*.js",
-      "limit": "20 kB"
+      "path": ".output/chrome-mv3/chunks/glyphs-*.js",
+      "limit": "21 kB"
     },
     {
       "name": "Popup",
@@ -61,7 +61,7 @@
     {
       "name": "Options",
       "path": ".output/chrome-mv3/chunks/options-*.js",
-      "limit": "6 kB"
+      "limit": "7.5 kB"
     }
   ],
   "pnpm": {

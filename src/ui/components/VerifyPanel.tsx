@@ -7,6 +7,7 @@ import type {
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { Button } from "./Button";
+import { CheckGlyph, TriangleGlyph } from "./glyphs";
 import "./VerifyPanel.css";
 
 interface VerifyPanelProps {
@@ -118,29 +119,6 @@ function Hint({ row }: { row: VerifyUnmatchedRule }) {
 
 function hintText(hint: VerifyHint): string {
   return copy.verify.hints[hint];
-}
-
-function CheckGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-      <path
-        d="M2.5 6.5 5 9l4.5-5.5"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TriangleGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M6 1 11.2 10.5H0.8Z" fill="currentColor" />
-    </svg>
-  );
 }
 
 function CloseGlyph() {

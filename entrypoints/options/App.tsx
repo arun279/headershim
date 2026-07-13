@@ -8,8 +8,10 @@ import { EmptyState } from "../../src/ui/components/EmptyState";
 import { copy } from "../../src/ui/copy";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
+import { AboutPage } from "./pages/About";
 import { ImportExportPage } from "./pages/ImportExport";
 import { ProfilesPage } from "./pages/Profiles";
+import { SiteAccessPage } from "./pages/SiteAccess";
 import "./App.css";
 
 const mutations = createMutations({ validateRegex: isRegexSupported });
@@ -58,12 +60,10 @@ export function App() {
               <ProfilesPage doc={app.doc} mutations={mutations} />
             ) : section === "import-export" ? (
               <ImportExportPage doc={app.doc} mutations={mutations} />
+            ) : section === "site-access" ? (
+              <SiteAccessPage doc={app.doc} grants={app.grants} />
             ) : (
-              <section class="page" aria-labelledby="page-title">
-                <h1 class="page-title" id="page-title">
-                  {SECTIONS.find((entry) => entry.id === section)?.label}
-                </h1>
-              </section>
+              <AboutPage doc={app.doc} mutations={mutations} />
             )}
           </main>
         </div>

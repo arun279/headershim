@@ -206,6 +206,177 @@ export const copy = {
           "Dropped — headershim changes headers only, never redirects.",
       },
     },
+    siteAccess: {
+      title: "Site access",
+      neededHeading: "Needed but not granted",
+      grantedHeading: "Granted",
+      usedBy: (count: number) => `used by ${count} ${rules(count)}`,
+      ruleCount: (count: number) => `${count} ${rules(count)}`,
+      grant: "Grant",
+      grantLabel: (domain: string) => `Grant access to ${domain}`,
+      revoke: "Revoke",
+      revokeLabel: (domain: string) => `Revoke access to ${domain}`,
+      revoked: (domain: string) => `Access to ${domain} revoked`,
+      // The standing note (SPEC §3.3): shown while any enabled rule reaches
+      // subresources without naming the pages that start those requests.
+      initiatorNote:
+        "Requests started by other pages also need those pages granted.",
+      allSites: {
+        heading: "Allow on all sites",
+        // Verbatim SPEC §3.4, including Chrome's real warning string.
+        body: "If you're constantly adding rules for new sites, you can grant headershim access to every site at once. Chrome will show its strongest warning — \"Read and change all your data on all websites\" — and that warning is accurate: this is real, broad access, which is exactly why headershim doesn't ask for it by default. Your rules still only apply where their scopes say; this only removes the per-site permission step. You can revoke it here at any time.",
+        button: "Allow on all sites",
+        on: "All-sites access is on",
+        revoked: "All-sites access revoked",
+      },
+    },
+    // The trust page (SPEC §4.2): prose a security reviewer can paste into an
+    // approval request. Claim wording is bound by SPEC §1: "no install-time
+    // warning", never "no permission text anywhere"; the CWS caveat is stated,
+    // never "verify the store build".
+    about: {
+      appearanceHeading: "Appearance",
+      theme: {
+        label: "Theme",
+        options: { system: "System", light: "Light", dark: "Dark" },
+      },
+      badgeMode: {
+        label: "Badge shows",
+        options: { count: "Matched-rule count", initials: "Profile initials" },
+      },
+      shortcuts: "Keyboard shortcuts — manage in Chrome",
+      trustHeading: "About & trust",
+      build: (version: string, commit: string): Sentence => [
+        "headershim v",
+        data(version),
+        " · commit ",
+        data(commit),
+      ],
+      permissions: {
+        heading: "Permissions, justified",
+        intro:
+          'headershim installs with no install-time warning — it requests no host access and no warning-bearing permission at install. Chrome\'s details page shows its generic site-access line ("This extension can read and change your data on sites. You can control which sites the extension can access."), and that line is accurate: site access is granted per site, by you, when a rule needs it, and revoked in one click.',
+        columns: {
+          permission: "Permission",
+          why: "Why it's needed",
+          when: "When",
+        },
+        rows: [
+          {
+            permission: "declarativeNetRequestWithHostAccess",
+            why: "Applies your header rules through Chrome's declarative rule engine, which only acts on sites you've granted.",
+            when: "At install — no warning dialog.",
+          },
+          {
+            permission: "storage",
+            why: "Saves your profiles, rules, and settings on this device — nothing else, nowhere else.",
+            when: "At install — no warning dialog.",
+          },
+          {
+            permission: "activeTab",
+            why: "Lets This-tab overrides and Verify act on the tab where you clicked, with no site grant.",
+            when: "Only when you click — the click is the consent.",
+          },
+          {
+            permission: "Site access (optional)",
+            why: "Lets rules change headers on the sites you name — Chrome asks with its own prompt, scoped to exactly those sites.",
+            when: "When a rule first needs a site — revocable any time in Site access.",
+          },
+        ],
+      },
+      storage: {
+        heading: "What's stored",
+        body: "headershim stores exactly what you typed: rule definitions and UI preferences, locally, and nothing else. It never records traffic, headers it observed, hostnames you visited, or history of any kind. You can export the entire store at any time to a human-readable file and inspect it byte for byte — the export is the inspection surface. Your rules can contain secrets (tokens, keys); they live on your device unencrypted, like any local config file, and an export deserves the same care as a .env file.",
+      },
+      neverList: {
+        heading: "What headershim will never do",
+        intro:
+          "Each absence is structural, enforced by an executable manifest policy in CI — checkable by reading the manifest, not claimed.",
+        // Verbatim SPEC §10.
+        items: [
+          {
+            lead: "No telemetry/analytics ever",
+            detail:
+              "the exfiltration vector; also nothing to disclose in the store data panel.",
+          },
+          {
+            lead: "No accounts, no cloud sync, no vendor server",
+            detail:
+              "a vendor server is a dependency today and a monetization ratchet tomorrow; sharing = files.",
+          },
+          {
+            lead: "No remote config of any kind",
+            detail:
+              'remote data, however "legal", is the mechanism by which a trusted extension changes behavior after review; all behavior local and bundled.',
+          },
+          {
+            lead: "No content scripts, no scripting permission, no web-accessible resources, no webRequest",
+            detail:
+              'the ad-injection vector; with no code path into pages, "could this inject ads" is answerable by reading the manifest.',
+          },
+          {
+            lead: "No header history / traffic log",
+            detail:
+              "a log of observed headers is a store of tokens and credentials waiting to leak; headershim stores rule definitions, never observed traffic. If a debug log is ever added: in-memory, off by default.",
+          },
+          {
+            lead: "No request-time dynamic values",
+            detail:
+              'impossible under the platform; promising it recreates the "didn\'t work" review cycle.',
+          },
+          {
+            lead: "No response-body modification",
+            detail:
+              "requires the debugger API; out of scope, stated explicitly to preempt the recurring ask.",
+          },
+          {
+            lead: "No monetization, no sale, no ownership transfer",
+            detail:
+              "stated in README and listing; ownership change is the top predictor of a trusted extension going bad.",
+          },
+          {
+            lead: "Zero runtime dependencies",
+            detail:
+              "enforced in CI; nothing in the shipped artifact that wasn't written or vendored deliberately.",
+          },
+          {
+            lead: "No URL redirect/rewrite",
+            detail:
+              "adjacent scope creep; breaks the single stated purpose that keeps store review clean.",
+          },
+          {
+            lead: "No notifications permission",
+            detail: "status lives on the badge and in the popup.",
+          },
+        ],
+      },
+      verifyBuild: {
+        heading: "Verify this build",
+        intro:
+          "Every release zip is built by public CI from a tagged commit. The GitHub release carries the zip, a SHA256SUMS file, and a signed provenance attestation binding the artifact to the exact commit and workflow run.",
+        steps: [
+          [
+            "Check the zip you downloaded against the published hashes: ",
+            data("sha256sum -c SHA256SUMS"),
+          ],
+          [
+            "Check that the zip was built from the tagged commit by the public workflow: ",
+            data("gh attestation verify <zip> --repo arun279/headershim"),
+          ],
+        ] as readonly Sentence[],
+        caveat:
+          "The Chrome Web Store re-packages and signs what we upload, so the installed extension can't be byte-compared against our zip. What you can verify: the files inside your installed extension match the attested release files, and the attestation chains to the public source.",
+      },
+      links: {
+        license: "MIT license",
+        repository: "Repository",
+        repositoryUrl: "https://github.com/arun279/headershim",
+        issues: "Issues",
+        issuesUrl: "https://github.com/arun279/headershim/issues",
+        changelog: "Changelog",
+        changelogUrl: "https://github.com/arun279/headershim/releases",
+      },
+    },
   },
 
   actions: {

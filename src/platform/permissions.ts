@@ -1,7 +1,5 @@
 import { browser } from "wxt/browser";
-import { ALL_SITES_ORIGIN, type GrantSnapshot } from "../core/grants";
-
-const ALL_URL_PATTERNS = new Set([ALL_SITES_ORIGIN, "<all_urls>"]);
+import { type GrantSnapshot, isAllSitesOrigin } from "../core/grants";
 
 export interface HostAccessRequest {
   documentId?: string;
@@ -15,7 +13,7 @@ export async function snapshot(): Promise<GrantSnapshot> {
   return {
     origins,
     // Broad grants need an explicit flag because core containment is domain-based.
-    allSites: origins.some((origin) => ALL_URL_PATTERNS.has(origin)),
+    allSites: origins.some(isAllSitesOrigin),
   };
 }
 

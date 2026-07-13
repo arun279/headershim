@@ -8,7 +8,7 @@ import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
-import { fire, render, settle } from "../ui/test/render";
+import { findButton, fire, render, settle } from "../ui/test/render";
 
 const MODHEADER = JSON.stringify(modheaderFixture);
 
@@ -32,16 +32,6 @@ async function mount(): Promise<HTMLElement> {
   const root = render(<App />);
   await settle();
   return root;
-}
-
-function findButton(root: ParentNode, label: string): HTMLButtonElement {
-  const button = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
-    (candidate) => candidate.textContent === label,
-  );
-  if (button === undefined) {
-    throw new Error(`no button labeled "${label}"`);
-  }
-  return button;
 }
 
 async function pick(root: HTMLElement, contents: string): Promise<void> {

@@ -92,14 +92,18 @@
 }
 
 .rules-panel,
-.ie-block {
+.ie-block,
+.sa-card,
+.about-card {
   padding: var(--sp-5);
   background: var(--panel-1);
   border: var(--hairline) solid var(--bezel);
   border-radius: var(--radius-outer);
 }
 
-.ie-block {
+.ie-block,
+.sa-card,
+.about-card {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
