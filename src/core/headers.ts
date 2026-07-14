@@ -147,6 +147,112 @@ export function classifyHeaderName(header: string): HeaderClassification {
   };
 }
 
+// The two sensitive-header classes, alongside classifyHeaderName's capability
+// advisories (network-managed, host). Unlike those — which say "this rule may do
+// nothing" — these say "this rule has a real, security-relevant effect": it
+// disarms a protection the site sent, or attaches a secret to outgoing requests.
+// The recognition is name-based; whether the effect actually applies is gated on
+// direction and operation by headerSensitivity below.
+export type SensitiveHeaderClass = "security-response" | "credential-request";
+
+// Response headers a site sends to protect itself. Removing or overriding any of
+// these weakens the user's own security: clickjacking (XFO / CSP frame-ancestors),
+// MIME-sniffing (XCTO), transport downgrade (HSTS), cross-origin read/embed
+// (COOP/COEP/CORP and the Access-Control-* CORS set), referrer/permissions
+// leakage, and cookie flags (Set-Cookie). Sourced from the WHATWG Fetch and W3C
+// webappsec specs plus the audit.
+const SECURITY_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "content-security-policy",
+  "content-security-policy-report-only",
+  "strict-transport-security",
+  "x-frame-options",
+  "x-content-type-options",
+  "referrer-policy",
+  "permissions-policy",
+  "cross-origin-opener-policy",
+  "cross-origin-embedder-policy",
+  "cross-origin-resource-policy",
+  "x-permitted-cross-domain-policies",
+  "access-control-allow-origin",
+  "access-control-allow-credentials",
+  "access-control-allow-methods",
+  "access-control-allow-headers",
+  "access-control-expose-headers",
+  "set-cookie",
+]);
+
+// Request headers whose value is a credential. authorization / proxy-authorization
+// / cookie are the standards-named three; the pattern catches the common
+// API-key / token shapes (x-api-key, x-auth-token, *-secret, …). Warn-not-block,
+// so a rare benign match only adds an informational caution.
+const CREDENTIAL_REQUEST_HEADERS: ReadonlySet<string> = new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+]);
+const CREDENTIAL_HEADER_PATTERN =
+  /(?:^|[-_])(?:api[-_]?key|api[-_]?token|auth[-_]?token|access[-_]?token|session[-_]?token|csrf[-_]?token|xsrf[-_]?token|client[-_]?secret|apikey|secret)$/;
+
+// Set-Cookie flags that keep a cookie protected; a value carrying none of them
+// replaces the server's cookie with a weaker one.
+const COOKIE_PROTECTION_ATTRIBUTES = ["secure", "httponly", "samesite"];
+
+function isCredentialHeaderName(header: string): boolean {
+  return (
+    CREDENTIAL_REQUEST_HEADERS.has(header) ||
+    CREDENTIAL_HEADER_PATTERN.test(header)
+  );
+}
+
+export interface SensitiveHeaderInput {
+  readonly direction: Direction;
+  readonly operation: HeaderOp;
+  readonly header: string;
+}
+
+/**
+ * The sensitive-header advisory that applies to a rule in this direction and
+ * operation, if any — the shared primitive behind the editor advisory, the
+ * import review, the all-sites caution, and the credential-rule initiator
+ * default in compile. Direction-gated on purpose: a protection header only
+ * weakens when a *response* rule removes or overrides it (append can only tighten
+ * a policy), and a credential only leaks when a *request* rule attaches a value
+ * (remove sends nothing).
+ */
+export function headerSensitivity(
+  input: SensitiveHeaderInput,
+): SensitiveHeaderClass | undefined {
+  const header = normalizeHeaderName(input.header);
+  if (
+    input.direction === "response" &&
+    input.operation !== "append" &&
+    SECURITY_RESPONSE_HEADERS.has(header)
+  ) {
+    return "security-response";
+  }
+  if (
+    input.direction === "request" &&
+    input.operation !== "remove" &&
+    isCredentialHeaderName(header)
+  ) {
+    return "credential-request";
+  }
+  return undefined;
+}
+
+/** A Set-Cookie value carrying none of Secure / HttpOnly / SameSite. */
+export function setCookieAttributesStripped(
+  value: string | undefined,
+): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const lower = value.toLowerCase();
+  return !COOKIE_PROTECTION_ATTRIBUTES.some((attribute) =>
+    lower.includes(attribute),
+  );
+}
+
 export function validateHeader(
   input: HeaderInput,
 ): Result<ValidatedHeader, HeaderValidationError> {

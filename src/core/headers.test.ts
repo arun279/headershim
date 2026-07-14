@@ -3,8 +3,10 @@ import {
   classifyHeaderName,
   HEADER_ADVISORY_COPY_IDS,
   HEADER_ERROR_COPY_IDS,
+  headerSensitivity,
   normalizeHeaderName,
   REQUEST_APPEND_HEADERS,
+  setCookieAttributesStripped,
   validateHeader,
 } from "./headers";
 import type { Direction, HeaderOp } from "./model";
@@ -281,5 +283,131 @@ describe("header advisories", () => {
     expect(new Set([...errorCopyIds, ...advisoryCopyIds]).size).toBe(
       errorCopyIds.length + advisoryCopyIds.length,
     );
+  });
+});
+
+describe("sensitive-header classification", () => {
+  const SECURITY_HEADERS = [
+    "content-security-policy",
+    "content-security-policy-report-only",
+    "strict-transport-security",
+    "x-frame-options",
+    "x-content-type-options",
+    "referrer-policy",
+    "permissions-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-embedder-policy",
+    "cross-origin-resource-policy",
+    "x-permitted-cross-domain-policies",
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "access-control-allow-methods",
+    "access-control-allow-headers",
+    "access-control-expose-headers",
+    "set-cookie",
+  ];
+
+  const CREDENTIAL_HEADERS = [
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "x-api-key",
+    "x-auth-token",
+    "x-access-token",
+    "x-session-token",
+    "x-csrf-token",
+    "acme-api-key",
+    "x-client-secret",
+    "apikey",
+  ];
+
+  it("flags a security response header only when a response rule drops or overrides it", () => {
+    for (const header of SECURITY_HEADERS) {
+      expect(
+        headerSensitivity({
+          direction: "response",
+          operation: "remove",
+          header,
+        }),
+      ).toBe("security-response");
+      expect(
+        headerSensitivity({ direction: "response", operation: "set", header }),
+      ).toBe("security-response");
+      // Append can only tighten a policy, so it is not flagged.
+      expect(
+        headerSensitivity({
+          direction: "response",
+          operation: "append",
+          header,
+        }),
+      ).toBeUndefined();
+      // Mixed case and padding still classify (normalized internally).
+      expect(
+        headerSensitivity({
+          direction: "response",
+          operation: "remove",
+          header: ` ${header.toUpperCase()} `,
+        }),
+      ).toBe("security-response");
+      // A request rule on the same name is not a site-protection concern.
+      expect(
+        headerSensitivity({ direction: "request", operation: "set", header }),
+      ).toBeUndefined();
+    }
+  });
+
+  it("flags a credential request header only when a request rule attaches a value", () => {
+    for (const header of CREDENTIAL_HEADERS) {
+      expect(
+        headerSensitivity({ direction: "request", operation: "set", header }),
+      ).toBe("credential-request");
+      expect(
+        headerSensitivity({
+          direction: "request",
+          operation: "append",
+          header,
+        }),
+      ).toBe("credential-request");
+      // Remove sends nothing, so it is not a credential leak.
+      expect(
+        headerSensitivity({
+          direction: "request",
+          operation: "remove",
+          header,
+        }),
+      ).toBeUndefined();
+      // A response rule on the same name is not a request-credential concern.
+      expect(
+        headerSensitivity({ direction: "response", operation: "set", header }),
+      ).toBeUndefined();
+    }
+  });
+
+  it("leaves ordinary headers unclassified", () => {
+    for (const header of [
+      "x-request-id",
+      "content-type",
+      "accept",
+      "user-agent",
+    ]) {
+      for (const direction of ["request", "response"] as const) {
+        for (const operation of ["set", "append", "remove"] as const) {
+          expect(
+            headerSensitivity({ direction, operation, header }),
+          ).toBeUndefined();
+        }
+      }
+    }
+  });
+
+  it("detects a Set-Cookie value carrying none of Secure / HttpOnly / SameSite", () => {
+    expect(setCookieAttributesStripped("session=abc")).toBe(true);
+    expect(setCookieAttributesStripped("session=abc; Path=/")).toBe(true);
+    expect(setCookieAttributesStripped("session=abc; Secure")).toBe(false);
+    expect(setCookieAttributesStripped("session=abc; HttpOnly")).toBe(false);
+    expect(setCookieAttributesStripped("session=abc; SameSite=Lax")).toBe(
+      false,
+    );
+    expect(setCookieAttributesStripped(undefined)).toBe(false);
   });
 });

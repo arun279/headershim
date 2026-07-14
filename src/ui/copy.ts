@@ -178,6 +178,10 @@ export const copy = {
         data(ruleCount),
         ` ${rules(ruleCount)}.`,
       ],
+      // The payload reveal: every imported rule and what it does, so confirming
+      // is an informed choice rather than a bare count. Sensitive rules carry
+      // the caution treatment; the rest are listed plainly.
+      payloadHeading: "What each rule does",
       needAttention: (count: number) =>
         count === 1
           ? "1 item needs attention:"
@@ -239,6 +243,11 @@ export const copy = {
         button: "Allow on all sites",
         on: "All-sites access is on",
         revoked: "All-sites access revoked",
+        // Shown on the all-sites card only when enabled rules carry a credential
+        // or strip a site's security header — the C2 amplifier. Names the reach,
+        // points to the narrower fix, does not block.
+        sensitiveCaution:
+          "Some enabled rules send a credential or remove a site's security header. With all-sites access, those rules can act on every site you visit — including pages that make a request without your involvement. Scope those rules to the exact hosts that need them, or grant per site instead.",
       },
     },
     // The trust page: prose a security reviewer can paste into an
@@ -627,6 +636,8 @@ export const copy = {
       "Chrome gives an extension limited local storage, and this change would pass HeaderShim's safe budget of 4 MB. Shorten long header values, or delete rules you're not using.",
     sessionCap:
       "Chrome caps temporary tab rules, and this would pass HeaderShim's limit of 1,000. Remove a temporary override you're done with, or save this one as a rule instead.",
+    importTooLarge: (limitMb: number) =>
+      `This file is larger than ${limitMb} MB, so nothing was read and nothing was changed. A real HeaderShim or ModHeader export is far smaller; a file this size would only slow this tab down.`,
     importParse:
       "This file isn't valid JSON, so nothing was imported and nothing was changed. If it came from ModHeader, export it again with Profile → Export → JSON.",
     importNewer: (fileVersion: number, supportedVersion: number) =>
@@ -657,12 +668,32 @@ export const copy = {
     managedHeader:
       "Chrome's network stack manages this header itself; a rule here usually has no effect.",
     host: "Chrome can't change the authority on HTTP/2 connections, which most sites use — this rule usually has no effect.",
+    // Removing or overriding a site-protection response header disables a
+    // safeguard the site set. Named consequence, no alarm; the un-frame /
+    // relax-CORS use is legitimate, so this informs rather than blocks.
+    securityHeader:
+      "This is a security header the site sends to protect itself — removing or overriding it turns that protection off wherever this rule applies.",
+    securityHeaderBroad:
+      "This is a security header the site sends to protect itself. Scoped to all sites, this rule turns that protection off everywhere it matches — narrow the scope unless you mean to.",
+    // A set-cookie value with no Secure/HttpOnly/SameSite replaces the server's
+    // properly-flagged cookie with a weaker one.
+    setCookieAttributes:
+      "This cookie has no Secure, HttpOnly, or SameSite flag, so it replaces the site's cookie with a less-protected one.",
+    // A credential header's value is sent on every request this rule matches.
+    // The subdomain reach is the specific footgun the C2 finding named.
+    credentialHeader:
+      "This header carries a credential — its value is sent to every host this rule matches, including their subdomains. Scope it to the exact host that needs it.",
+    credentialHeaderBroad:
+      "This header carries a credential. Scoped to all sites, its value is sent on every matching request — including ones other pages start. Scope it to the exact host that needs it.",
   },
 
   verify: {
-    // The honest-limits footer.
+    // The honest-limits footer. The co-installed-extension clause keeps a match
+    // from over-promising the final on-wire header: Chrome lets a more recently
+    // installed extension set or remove the same header after HeaderShim does,
+    // and HeaderShim can't observe that.
     limits:
-      'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug) — trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
+      "Chrome only reports rule matches from the last 5 minutes on this tab. A match means HeaderShim's rule fired, not that its value is what the server finally saw — another extension installed after HeaderShim can change the same header afterwards, and HeaderShim can't see that. DevTools' Network panel will not show header changes made by extensions (a known Chrome bug) — trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check \"Disable cache\", then reload.",
     // Verify leads with the most basic unmet precondition,
     // never the caching essay. blocked > no-request > matched, in that order.
     // A grant gap is the headline, with Grant surfaced in the panel itself.

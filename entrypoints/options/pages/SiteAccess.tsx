@@ -7,6 +7,7 @@ import {
   type SiteAccessEntry,
   siteAccessView,
 } from "../../../src/core/grants";
+import { headerSensitivity } from "../../../src/core/headers";
 import type { StateDoc } from "../../../src/core/model";
 import {
   remove as removePermissions,
@@ -38,6 +39,16 @@ export function SiteAccessPage({
   const announce = useAnnounce();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const view = siteAccessView(doc, grants);
+  // The C2 amplifier: an enabled rule that sends a credential or strips a site's
+  // security header is far more consequential granted on all sites, so the
+  // all-sites card names that specifically when such a rule exists.
+  const hasSensitiveRules = doc.profiles.some(
+    (profile) =>
+      profile.enabled &&
+      profile.rules.some(
+        (rule) => rule.enabled && headerSensitivity(rule) !== undefined,
+      ),
+  );
 
   // A grant or revocation reparents the row to the other group, unmounting the
   // button that was clicked; land focus on the stable page heading rather than
@@ -95,15 +106,25 @@ export function SiteAccessPage({
 
       {grants.allSites && (
         <div class="sa-card sa-all-on">
-          <p class="sa-all-on-line">
-            <span class="sa-glyph granted">
-              <CheckGlyph />
-            </span>
-            {text.allSites.on}
-          </p>
-          <Button kind="quiet" onClick={revokeAllSites}>
-            {text.revoke}
-          </Button>
+          <div class="sa-all-on-head">
+            <p class="sa-all-on-line">
+              <span class="sa-glyph granted">
+                <CheckGlyph />
+              </span>
+              {text.allSites.on}
+            </p>
+            <Button kind="quiet" onClick={revokeAllSites}>
+              {text.revoke}
+            </Button>
+          </div>
+          {hasSensitiveRules && (
+            <p class="sa-sensitive-caution">
+              <span class="sa-glyph needed">
+                <TriangleGlyph />
+              </span>
+              {text.allSites.sensitiveCaution}
+            </p>
+          )}
         </div>
       )}
 
@@ -148,6 +169,14 @@ export function SiteAccessPage({
         <div class="sa-card sa-all-sites">
           <h2 class="sa-all-heading">{text.allSites.heading}</h2>
           <p class="sa-all-body">{text.allSites.body}</p>
+          {hasSensitiveRules && (
+            <p class="sa-sensitive-caution">
+              <span class="sa-glyph needed">
+                <TriangleGlyph />
+              </span>
+              {text.allSites.sensitiveCaution}
+            </p>
+          )}
           <div>
             <Button kind="quiet" onClick={grantAllSites}>
               {text.allSites.button}

@@ -305,6 +305,79 @@ describe("dynamic rule compilation", () => {
     expect(rules[0]?.initiators).toEqual(["app.example.com"]);
   });
 
+  it("defaults a credential request rule's initiators to its own scoped domains", () => {
+    const [rule] = compileDynamic(
+      state([
+        profile("cred", [
+          storedRule(1, {
+            header: "authorization",
+            value: "Bearer x",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+        ]),
+      ]),
+    );
+    // The secret only rides requests its own domain starts (confused-deputy fix).
+    expect(rule?.condition.initiatorDomains).toEqual(["api.example.com"]);
+  });
+
+  it("keeps user-named initiators (they widen a credential rule) over the default", () => {
+    const [rule] = compileDynamic(
+      state([
+        profile("cred", [
+          storedRule(1, {
+            header: "authorization",
+            value: "Bearer x",
+            scope: { type: "domains", domains: ["api.example.com"] },
+            initiators: ["app.example.com"],
+          }),
+        ]),
+      ]),
+    );
+    expect(rule?.condition.initiatorDomains).toEqual(["app.example.com"]);
+  });
+
+  it("does not pin initiators for a non-credential rule, a remove, or a broad scope", () => {
+    const rules = compileDynamic(
+      state([
+        profile("mixed", [
+          // Non-credential header: platform default (match on request URL alone).
+          storedRule(1, {
+            header: "x-debug",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          // Removing a credential sends nothing, so no pinning.
+          storedRule(2, {
+            header: "authorization",
+            operation: "remove",
+            value: undefined,
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          // A credential on a pattern scope: scope.hosts is grant bookkeeping,
+          // never a DNR condition, so no initiatorDomains here either.
+          storedRule(3, {
+            header: "authorization",
+            value: "Bearer x",
+            scope: {
+              type: "pattern",
+              pattern: "||api.example.com^",
+              hosts: ["api.example.com"],
+            },
+          }),
+          // A credential on all-sites has no host to pin to.
+          storedRule(4, {
+            header: "authorization",
+            value: "Bearer x",
+            scope: { type: "all" },
+          }),
+        ]),
+      ]),
+    );
+    for (const rule of rules) {
+      expect(rule.condition.initiatorDomains).toBeUndefined();
+    }
+  });
+
   it("compiles paused, disabled-profile, and disabled-rule inputs to no rules", () => {
     expect(
       compileDynamic(state([profile("paused", [storedRule(1)])], true)),

@@ -7,20 +7,36 @@ import { press, render, typeInto } from "../test/render";
 import { HeaderNameInput } from "./HeaderNameInput";
 
 function Harness({
+  direction = "request",
   operation = "set",
+  broadScope = false,
 }: {
+  direction?: "request" | "response";
   operation?: "set" | "append" | "remove";
+  broadScope?: boolean;
 }) {
   const [value, setValue] = useState("");
   return (
     <LiveRegionProvider>
-      <HeaderNameInput value={value} operation={operation} onInput={setValue} />
+      <HeaderNameInput
+        value={value}
+        direction={direction}
+        operation={operation}
+        broadScope={broadScope}
+        onInput={setValue}
+      />
     </LiveRegionProvider>
   );
 }
 
-function mount(operation: "set" | "append" | "remove" = "set") {
-  const root = render(<Harness operation={operation} />);
+function mount(
+  options: {
+    direction?: "request" | "response";
+    operation?: "set" | "append" | "remove";
+    broadScope?: boolean;
+  } = {},
+) {
+  const root = render(<Harness {...options} />);
   return {
     root,
     input: () => root.querySelector('[role="combobox"]') as HTMLInputElement,
@@ -117,5 +133,67 @@ describe("HeaderNameInput combobox contract", () => {
     // The advisory participates in the field's accessible description.
     const advisoryId = ctx.root.querySelector(".editor-advisory")?.id;
     expect(ctx.input().getAttribute("aria-describedby")).toContain(advisoryId);
+  });
+});
+
+describe("HeaderNameInput sensitive-header advisory", () => {
+  const sensitive = (root: HTMLElement) =>
+    root.querySelector(".editor-advisory.sensitive");
+
+  it("warns that a response rule dropping a security header weakens protection", () => {
+    const ctx = mount({ direction: "response", operation: "remove" });
+    typeInto(ctx.input(), "content-security-policy");
+    expect(sensitive(ctx.root)?.textContent).toBe(
+      copy.advisories.securityHeader,
+    );
+    // It joins the field's accessible description.
+    const id = sensitive(ctx.root)?.id;
+    expect(ctx.input().getAttribute("aria-describedby")).toContain(id);
+  });
+
+  it("escalates the security-header advisory when the scope is all sites", () => {
+    const ctx = mount({
+      direction: "response",
+      operation: "set",
+      broadScope: true,
+    });
+    typeInto(ctx.input(), "x-frame-options");
+    expect(sensitive(ctx.root)?.textContent).toBe(
+      copy.advisories.securityHeaderBroad,
+    );
+  });
+
+  it("stays silent on an append to a security header and on the request side", () => {
+    const append = mount({ direction: "response", operation: "append" });
+    typeInto(append.input(), "content-security-policy");
+    expect(sensitive(append.root)).toBeNull();
+
+    const request = mount({ direction: "request", operation: "set" });
+    typeInto(request.input(), "content-security-policy");
+    expect(sensitive(request.root)).toBeNull();
+  });
+
+  it("warns that a credential request header is sent to every matched host", () => {
+    const ctx = mount({ direction: "request", operation: "set" });
+    typeInto(ctx.input(), "authorization");
+    expect(sensitive(ctx.root)?.textContent).toBe(
+      copy.advisories.credentialHeader,
+    );
+
+    const broad = mount({
+      direction: "request",
+      operation: "set",
+      broadScope: true,
+    });
+    typeInto(broad.input(), "authorization");
+    expect(sensitive(broad.root)?.textContent).toBe(
+      copy.advisories.credentialHeaderBroad,
+    );
+  });
+
+  it("stays silent when a request rule only removes a credential header", () => {
+    const ctx = mount({ direction: "request", operation: "remove" });
+    typeInto(ctx.input(), "authorization");
+    expect(sensitive(ctx.root)).toBeNull();
   });
 });

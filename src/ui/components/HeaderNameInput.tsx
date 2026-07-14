@@ -6,18 +6,28 @@ import {
   useState,
 } from "preact/hooks";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
-import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
-import type { HeaderOp } from "../../core/model";
+import {
+  classifyHeaderName,
+  headerSensitivity,
+  normalizeHeaderName,
+} from "../../core/headers";
+import type { Direction, HeaderOp } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
+import { sensitiveAdvisoryText } from "./ruleSummary";
 import { sentence } from "./sentence";
 import "./HeaderNameInput.css";
 
 interface HeaderNameInputProps {
   /** Raw text as typed; the editor echoes it and the store lowercases it. */
   value: string;
+  /** Gates the sensitive-header advisory: a credential reads for requests, a
+   * security header for responses. */
+  direction: Direction;
   /** Append makes a hop-by-hop advisory prominent the moment it's selected. */
   operation: HeaderOp;
+  /** Scope reaches every site: escalates the sensitive-header advisory copy. */
+  broadScope?: boolean | undefined;
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
@@ -48,6 +58,11 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
       ? undefined
       : Math.min(activeIndex, matches.length - 1);
   const classification = classifyHeaderName(props.value);
+  const sensitive = headerSensitivity({
+    direction: props.direction,
+    operation: props.operation,
+    header: props.value,
+  });
 
   // Mount-time gesture: focus moves into the editor when it opens, never again.
   // Synchronous with the commit that mounts the editor, not a post-paint effect:
@@ -78,9 +93,11 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   const caseId = `${id}-case`;
   const showCase =
     props.value.trim() !== "" && props.value.trim() !== normalized;
+  const sensitiveId = `${id}-sensitive`;
   const describedBy = [
     ...(showCase ? [caseId] : []),
     ...classification.advisories.map((advisory) => `${id}-${advisory.kind}`),
+    ...(sensitive === undefined ? [] : [sensitiveId]),
     ...(props.error === undefined ? [] : [errorId]),
   ].join(" ");
 
@@ -201,6 +218,11 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
               : copy.advisories.host}
           </p>
         ))}
+        {sensitive !== undefined && (
+          <p class="editor-advisory sensitive" id={sensitiveId}>
+            {sensitiveAdvisoryText(sensitive, props.broadScope === true)}
+          </p>
+        )}
         {props.error !== undefined && (
           <p class="editor-error" role="alert" id={errorId}>
             {props.error}

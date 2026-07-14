@@ -19,11 +19,14 @@ export function HeaderFields<D extends HeaderDraft>({
   idBase,
   draft,
   errors,
+  broadScope,
   update,
 }: {
   idBase: string;
   draft: D;
   errors: { name?: string; operation?: string };
+  /** The rule's scope reaches every site: escalates the sensitive-header advisory. */
+  broadScope?: boolean | undefined;
   update: (transform: (draft: D) => D) => void;
 }) {
   return (
@@ -85,7 +88,9 @@ export function HeaderFields<D extends HeaderDraft>({
 
       <HeaderNameInput
         value={draft.header}
+        direction={draft.direction}
         operation={draft.operation}
+        broadScope={broadScope}
         error={errors.name}
         autoFocus
         onInput={(value) =>

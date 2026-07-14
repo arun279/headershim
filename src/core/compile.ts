@@ -1,4 +1,4 @@
-import { HTTP_TOKEN, normalizeHeaderName } from "./headers";
+import { HTTP_TOKEN, headerSensitivity, normalizeHeaderName } from "./headers";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -132,12 +132,34 @@ export function compileDynamic(state: StateDoc): DnrRule[] {
     action: headerAction(rule),
     condition: {
       ...scopeCondition(rule.scope),
-      ...(rule.initiators.length === 0
-        ? {}
-        : { initiatorDomains: [...rule.initiators] }),
+      ...initiatorCondition(rule),
       resourceTypes: expandResourceTypes(rule.resourceTypes),
     },
   }));
+}
+
+// A named initiator always wins — the grant flow records it, and it is how the
+// user deliberately widens a rule to a cross-origin caller. When none is named,
+// a credential request header on a Domains scope defaults its initiators to those
+// same domains so the secret only rides requests started by that intended
+// context, not any page that happens to trigger a request to the host (the
+// confused-deputy path in the C2 finding). Only Domains scope pins a default: a
+// pattern/regex scope's hosts list is grant bookkeeping, not a DNR condition (and
+// must stay out of one), and an all-sites scope has no host to pin to — those
+// carry their broad reach in the editor and all-sites advisories instead. Non-
+// credential rules keep the platform default of matching on request URL alone.
+function initiatorCondition(rule: Rule): { initiatorDomains?: string[] } {
+  if (rule.initiators.length > 0) {
+    return { initiatorDomains: [...rule.initiators] };
+  }
+  if (
+    headerSensitivity(rule) === "credential-request" &&
+    rule.scope.type === "domains" &&
+    rule.scope.domains.length > 0
+  ) {
+    return { initiatorDomains: [...rule.scope.domains] };
+  }
+  return {};
 }
 
 export function compileSession(

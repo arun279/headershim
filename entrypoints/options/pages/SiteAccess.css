@@ -1,9 +1,11 @@
 /* .sa-card takes the shared options card recipe (App.css). */
 
-.sa-all-on {
+.sa-all-on-head {
+  display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  gap: var(--sp-3);
 }
 
 .sa-all-on-line {
@@ -11,6 +13,19 @@
   align-items: center;
   gap: var(--sp-3);
   font-weight: 500;
+}
+
+/* The credential/security caution on the all-sites card: the shared caution
+   surface (matching the import-warning well), never an error red. */
+.sa-sensitive-caution {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--caution-bg);
+  border: var(--hairline) solid var(--caution-edge);
+  border-radius: var(--radius-inner);
+  color: var(--caution);
 }
 
 .sa-group:not(:first-child) {
@@ -45,6 +60,12 @@
 
 .sa-glyph.needed {
   color: var(--caution-lamp);
+}
+
+/* Nudge the caution triangle onto the first text line of the caution block.
+   After the base .sa-glyph so specificity ascends with source order. */
+.sa-sensitive-caution .sa-glyph {
+  margin-top: 2px;
 }
 
 .sa-domain {

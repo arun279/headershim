@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import modheaderFixture from "../core/codec/__fixtures__/modheader-profile.json";
 import { exportHeadershim } from "../core/codec/headershim";
+import { MAX_IMPORT_BYTES } from "../core/limits";
 import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
@@ -34,19 +35,23 @@ async function mount(): Promise<HTMLElement> {
   return root;
 }
 
-async function pick(root: HTMLElement, contents: string): Promise<void> {
+function dispatchFile(root: HTMLElement, file: File): void {
   const input = root.querySelector<HTMLInputElement>('input[type="file"]');
   if (input === null) {
     throw new Error("no file input");
   }
-  const file = new File([contents], "import.json", {
-    type: "application/json",
-  });
   Object.defineProperty(input, "files", {
     configurable: true,
     value: { 0: file, length: 1, item: () => file },
   });
   fire(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+async function pick(root: HTMLElement, contents: string): Promise<void> {
+  dispatchFile(
+    root,
+    new File([contents], "import.json", { type: "application/json" }),
+  );
   // Decoding is async (the ModHeader codec loads on demand), so wait for the
   // plan summary or a failure message to land rather than a fixed tick count.
   for (let round = 0; round < 12; round += 1) {
@@ -55,6 +60,18 @@ async function pick(root: HTMLElement, contents: string): Promise<void> {
       return;
     }
   }
+}
+
+async function pickOversized(root: HTMLElement): Promise<void> {
+  const file = new File(["{}"], "big.json", { type: "application/json" });
+  // Overstate the size so the byte cap trips before any read, without allocating
+  // hundreds of MB in the test.
+  Object.defineProperty(file, "size", {
+    configurable: true,
+    value: MAX_IMPORT_BYTES + 1,
+  });
+  dispatchFile(root, file);
+  await settle();
 }
 
 function summary(root: HTMLElement): HTMLElement | null {
@@ -209,6 +226,37 @@ describe("import summary and apply", () => {
       name: "Staging auth",
       enabled: false,
     });
+  });
+
+  it("reveals each imported rule and flags the credential rule", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    await pick(root, HEADERSHIM);
+
+    const items = [...root.querySelectorAll(".import-rule")];
+    expect(items).toHaveLength(1);
+    // The payload is shown, not hidden behind a bare count: the header is visible.
+    expect(items[0]?.textContent).toContain("authorization");
+    // The credential rule carries the caution treatment and its advisory.
+    const flagged = root.querySelector(".import-rule.sensitive");
+    expect(flagged).not.toBeNull();
+    expect(
+      flagged?.querySelector(".import-rule-caution")?.textContent,
+    ).toContain(copy.advisories.credentialHeader);
+  });
+
+  it("rejects an oversized import file before reading it", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    await pickOversized(root);
+
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      copy.errors.importTooLarge(8),
+    );
+    expect(summary(root)).toBeNull();
+    expect((await read()).profiles).toHaveLength(1);
   });
 
   it("cancels a pending import, leaving the store untouched", async () => {

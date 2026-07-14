@@ -5,6 +5,11 @@ export const MAX_ENABLED_RULES = 4_500;
 export const MAX_REGEX_RULES = 1_000;
 export const MAX_SESSION_OVERRIDES = 1_000;
 export const MAX_DOC_BYTES = 4 * 1024 * 1024;
+// A picked import file is read whole into a string and parsed before anything is
+// validated, so an unbounded file can freeze the options tab (CWE-400/789). Cap
+// the raw read above the 4 MB stored-doc budget with headroom for pretty-printed
+// or verbose (ModHeader) envelopes; a real export never approaches this.
+export const MAX_IMPORT_BYTES = 8 * 1024 * 1024;
 export const RULE_COUNT_WARNING_THRESHOLD = 4_000;
 
 export type LimitError =

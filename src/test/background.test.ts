@@ -205,6 +205,33 @@ describe("background lifecycle", () => {
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
   });
 
+  it("reconciles resident rules to the live grants on grant, revoke, and re-grant", async () => {
+    start();
+    const doc = withRule(createV1Seed(), "x-one");
+    await writeState(doc);
+    await settle();
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+
+    // A grant add leaves the (already-resident) rule in place: a zero-write pass.
+    dnr.updateDynamicRules.mockClear();
+    await fakeBrowser.permissions.request({ origins: ["*://*.example.com/*"] });
+    await settle();
+    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+
+    // Revoking the grant drops the now-orphaned rule from DNR; the stored doc is
+    // untouched, so the rule survives on disk.
+    await fakeBrowser.permissions.remove({ origins: ["*://*.example.com/*"] });
+    await settle();
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect((await readState()).profiles[0]?.rules).toHaveLength(1);
+
+    // Re-granting re-adds it live.
+    await fakeBrowser.permissions.request({ origins: ["*://*.example.com/*"] });
+    await settle();
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+  });
+
   it("serializes overlapping triggers onto the newest stored revision", async () => {
     start();
     const docA = withRule(createV1Seed(), "x-a");

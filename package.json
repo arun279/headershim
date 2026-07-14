@@ -51,12 +51,12 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "5.25 kB"
+      "limit": "5.5 kB"
     },
     {
       "name": "Shared UI runtime",
       "path": ".output/chrome-mv3/chunks/glyphs-*.js",
-      "limit": "21 kB"
+      "limit": "22 kB"
     },
     {
       "name": "Popup",

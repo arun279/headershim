@@ -145,9 +145,20 @@ function targetDoc(): StateDoc {
   };
 }
 
+// The codecs take an already-parsed value (the page parses once); the export
+// serializer still round-trips through JSON so the parse boundary stays tested.
+function parseExport(
+  source: Parameters<typeof exportHeadershim>[0],
+  at?: Date,
+) {
+  return JSON.parse(
+    at === undefined ? exportHeadershim(source) : exportHeadershim(source, at),
+  ) as unknown;
+}
+
 function importExported(doc = profileSet(), target = targetDoc()) {
   const result = importHeadershim(
-    exportHeadershim(doc, new Date("2026-07-12T19:03:00.000Z")),
+    parseExport(doc, new Date("2026-07-12T19:03:00.000Z")),
     target.profiles,
   );
   if (!result.ok) {
@@ -273,10 +284,7 @@ describe("headershim import", () => {
   it("keeps the source document and plan immutable while retaining target settings", () => {
     const target = targetDoc();
     const snapshot = structuredClone(target);
-    const result = importHeadershim(
-      exportHeadershim(profileSet()),
-      target.profiles,
-    );
+    const result = importHeadershim(parseExport(profileSet()), target.profiles);
     if (!result.ok) {
       throw new Error(`fixture import failed: ${result.error.kind}`);
     }
@@ -308,7 +316,7 @@ describe("headershim import", () => {
       { ...existingProfile, name: "DEFAULT" },
       { ...existingProfile, id: "profile-two", name: "Default 2" },
     ];
-    const result = importHeadershim(exportHeadershim(doc), existing);
+    const result = importHeadershim(parseExport(doc), existing);
 
     expect(result).toMatchObject({
       ok: true,
@@ -331,7 +339,7 @@ describe("headershim import", () => {
       throw new Error("fixture must contain a profile");
     }
     const existing = [{ ...existingProfile, name }];
-    const result = importHeadershim(exportHeadershim(selected), existing);
+    const result = importHeadershim(parseExport(selected), existing);
 
     expect(result).toMatchObject({
       ok: true,
@@ -339,12 +347,9 @@ describe("headershim import", () => {
     });
   });
 
-  it("returns typed failures for newer, non-JSON, and unknown input", () => {
+  it("returns typed failures for newer and unknown input", () => {
     expect(
-      importHeadershim(
-        JSON.stringify({ app: "headershim", schemaVersion: 2 }),
-        [],
-      ),
+      importHeadershim({ app: "headershim", schemaVersion: 2 }, []),
     ).toEqual({
       ok: false,
       error: {
@@ -353,11 +358,13 @@ describe("headershim import", () => {
         supportedVersion: 1,
       },
     });
+    // The page parses once before calling the codec, so a non-record value is
+    // simply unrecognized here; invalid JSON is rejected upstream.
     expect(importHeadershim("{not json", [])).toEqual({
       ok: false,
-      error: { kind: "parse-failure" },
+      error: { kind: "unrecognized-format" },
     });
-    expect(importHeadershim(JSON.stringify({ profiles: [] }), [])).toEqual({
+    expect(importHeadershim({ profiles: [] }, [])).toEqual({
       ok: false,
       error: { kind: "unrecognized-format" },
     });
@@ -369,7 +376,7 @@ describe("headershim import", () => {
       exportedAt: "2026-07-12T14:03:00Z",
     };
 
-    expect(importHeadershim(JSON.stringify(envelope), [])).toMatchObject({
+    expect(importHeadershim(envelope, [])).toMatchObject({
       ok: true,
     });
   });
@@ -421,9 +428,10 @@ describe("headershim import", () => {
     ];
 
     for (const envelope of malformed) {
-      const raw = JSON.stringify(envelope);
-      expect(() => importHeadershim(raw, [])).not.toThrow();
-      expect(importHeadershim(raw, [])).toEqual({
+      // Round-trip through JSON so the values match what the page would parse.
+      const parsed = JSON.parse(JSON.stringify(envelope)) as unknown;
+      expect(() => importHeadershim(parsed, [])).not.toThrow();
+      expect(importHeadershim(parsed, [])).toEqual({
         ok: false,
         error: { kind: "invalid-export" },
       });

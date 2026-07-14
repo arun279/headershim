@@ -124,16 +124,9 @@ export function exportHeadershim(
 }
 
 export function importHeadershim(
-  raw: string,
+  parsed: unknown,
   existingProfiles: readonly Profile[],
 ): Result<ImportPlan, ImportError> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return err({ kind: "parse-failure" });
-  }
-
   if (detectImportFormat(parsed) !== "headershim") {
     return err({ kind: "unrecognized-format" });
   }

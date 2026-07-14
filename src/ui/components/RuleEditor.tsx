@@ -224,7 +224,13 @@ export function RuleEditor(props: RuleEditorProps) {
     >
       <legend class="silk editor-title">{title}</legend>
 
-      <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
+      <HeaderFields
+        idBase={id}
+        draft={draft}
+        errors={errors}
+        broadScope={draft.scope.type === "all"}
+        update={update}
+      />
 
       {draft.operation !== "remove" && (
         <ValueField

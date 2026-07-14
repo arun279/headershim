@@ -79,6 +79,13 @@
   color: var(--ink);
 }
 
+/* A real security-relevant effect (disarms a protection / attaches a credential):
+   the caution voice, distinct from the mute capability advisories above. */
+.editor-advisory.sensitive {
+  font-weight: 600;
+  color: var(--caution);
+}
+
 .editor-error {
   margin-top: var(--sp-1);
   font-size: 11px;

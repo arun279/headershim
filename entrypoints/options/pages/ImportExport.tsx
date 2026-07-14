@@ -8,6 +8,7 @@ import {
   importHeadershim,
 } from "../../../src/core/codec/headershim";
 import type { ModHeaderImportWarning } from "../../../src/core/codec/modheader";
+import { MAX_IMPORT_BYTES } from "../../../src/core/limits";
 import type { RuleDraft, StateDoc } from "../../../src/core/model";
 import { err, ok, type Result } from "../../../src/core/result";
 import { isRegexSupported } from "../../../src/platform/dnr";
@@ -58,6 +59,12 @@ export function ImportExportPage({
       return;
     }
     clear();
+    // Bound the read before it happens: `accept` is a UI hint only, so a
+    // several-hundred-MB file would otherwise freeze this tab on read + parse.
+    if (file.size > MAX_IMPORT_BYTES) {
+      setImportError(copy.errors.importTooLarge(importLimitMb()));
+      return;
+    }
     const built = await buildPlan(await file.text(), doc);
     if (built.ok) {
       setPlan(built.value);
@@ -171,6 +178,8 @@ async function buildPlan(
   raw: string,
   doc: StateDoc,
 ): Promise<Result<Plan, ImportError>> {
+  // Parse exactly once here and hand the parsed value to the codecs; they used to
+  // re-parse the same string, doubling the transient parse-tree cost on import.
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -180,7 +189,7 @@ async function buildPlan(
 
   switch (detectImportFormat(parsed)) {
     case "headershim": {
-      const result = importHeadershim(raw, doc.profiles);
+      const result = importHeadershim(parsed, doc.profiles);
       return result.ok
         ? ok({ profiles: result.value.profiles, warnings: [] })
         : result;
@@ -191,11 +200,16 @@ async function buildPlan(
       const { importModHeader } = await import(
         "../../../src/core/codec/modheader"
       );
-      return importModHeader(raw, doc.profiles, isRegexSupported);
+      return importModHeader(parsed, doc.profiles, isRegexSupported);
     }
     case "unknown":
       return err({ kind: "unrecognized-format" });
   }
+}
+
+// The import byte cap in whole megabytes, for the too-large error copy.
+function importLimitMb(): number {
+  return Math.floor(MAX_IMPORT_BYTES / (1024 * 1024));
 }
 
 function importErrorCopy(error: ImportError): string {

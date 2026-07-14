@@ -125,17 +125,10 @@ export type ModHeaderImportWarning =
 export type RegexValidator = (regex: string) => Promise<Result<void, unknown>>;
 
 export async function importModHeader(
-  raw: string,
+  parsed: unknown,
   existingProfiles: readonly Profile[],
   validateRegex: RegexValidator,
 ): Promise<Result<ImportPlan<ModHeaderImportWarning>, ImportError>> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return err({ kind: "parse-failure" });
-  }
-
   if (detectImportFormat(parsed) !== "modheader") {
     return err({ kind: "unrecognized-format" });
   }

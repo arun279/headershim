@@ -204,6 +204,42 @@ describe("options site access", () => {
     expect(root.textContent).toContain(text.allSites.on);
   });
 
+  it("cautions on the all-sites card when an enabled rule is credential- or security-sensitive", async () => {
+    const root = await mount([
+      profile("p1", {
+        rules: [
+          rule({
+            direction: "request",
+            operation: "set",
+            header: "authorization",
+            value: "Bearer x",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+        ],
+      }),
+    ]);
+
+    // The grant card carries the specific caution before the grant is made.
+    expect(root.querySelector(".sa-sensitive-caution")?.textContent).toContain(
+      text.allSites.sensitiveCaution,
+    );
+
+    // And it persists on the "all-sites on" card after granting.
+    fire(() => findButton(root, text.allSites.button).click());
+    await settle();
+    expect(root.querySelector(".sa-sensitive-caution")?.textContent).toContain(
+      text.allSites.sensitiveCaution,
+    );
+  });
+
+  it("shows no all-sites caution when no enabled rule is sensitive", async () => {
+    const root = await mount([
+      profile("p1", { rules: [rule({ header: "x-a" })] }),
+    ]);
+
+    expect(root.querySelector(".sa-sensitive-caution")).toBeNull();
+  });
+
   it("drives the standing initiator note from resource types", async () => {
     const withNote = await mount([
       profile("p1", {

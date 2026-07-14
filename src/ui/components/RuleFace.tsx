@@ -14,7 +14,9 @@ export function RuleFace({
   rule,
   secondLine,
 }: {
-  rule: Rule;
+  // Only the four fields the face draws, so an import-plan draft (no id/num) can
+  // reuse the same grammar as a stored rule.
+  rule: Pick<Rule, "direction" | "operation" | "header" | "value">;
   secondLine: ComponentChildren;
 }) {
   return (

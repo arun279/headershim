@@ -218,7 +218,7 @@ test("a ModHeader import surfaces every warning class on the summary", async ({
   const raw = await readFile(ALL_WARNINGS_FIXTURE, "utf8");
   const rejectLookaround: RegexValidator = async (pattern) =>
     /\(\?[=!<]/.test(pattern) ? err(undefined) : ok(undefined);
-  const decoded = await importModHeader(raw, [], rejectLookaround);
+  const decoded = await importModHeader(JSON.parse(raw), [], rejectLookaround);
   if (!decoded.ok) {
     throw new Error(`fixture failed to decode: ${decoded.error.kind}`);
   }

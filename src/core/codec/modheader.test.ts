@@ -28,7 +28,7 @@ async function importFixture(
   existingProfiles: readonly Profile[] = [],
 ): Promise<ImportPlan<ModHeaderImportWarning>> {
   const result = await importModHeader(
-    readFileSync(fixture, "utf8"),
+    JSON.parse(readFileSync(fixture, "utf8")),
     existingProfiles,
     validateRegex,
   );
@@ -219,14 +219,14 @@ describe("ModHeader import", () => {
   });
 
   it("defaults to the all scope when no URL filter is enabled", async () => {
-    const raw = JSON.stringify([
+    const source = [
       {
         title: "Unscoped",
         headers: [{ enabled: true, name: "X-Debug", value: "on" }],
         urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
       },
-    ]);
-    const result = await importModHeader(raw, [], acceptRegex);
+    ];
+    const result = await importModHeader(source, [], acceptRegex);
     if (!result.ok) {
       throw new Error(`fixture import failed: ${result.error.kind}`);
     }
@@ -243,14 +243,13 @@ describe("ModHeader import", () => {
   });
 
   it("combines multiple URL filters into one alternation and validates it", async () => {
-    const profile = (urlFilters: { enabled: boolean; urlRegex: string }[]) =>
-      JSON.stringify([
-        {
-          title: "Combined",
-          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
-          urlFilters,
-        },
-      ]);
+    const profile = (urlFilters: { enabled: boolean; urlRegex: string }[]) => [
+      {
+        title: "Combined",
+        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+        urlFilters,
+      },
+    ];
     const combined = "(?:^https://a\\.example/)|(?:^https://b\\.example/)";
 
     const validateRegex = vi.fn<RegexValidator>(async () => ok(undefined));
@@ -418,23 +417,21 @@ describe("ModHeader import", () => {
   it("detects the format and returns typed errors without partial plans", async () => {
     const parsed: unknown = JSON.parse(readFileSync(PROFILE_URL, "utf8"));
     expect(detectImportFormat(parsed)).toBe("modheader");
+    // The page parses once before calling the codec, so a non-array value is
+    // simply unrecognized here; invalid JSON is rejected upstream.
     await expect(importModHeader("{bad", [], acceptRegex)).resolves.toEqual({
       ok: false,
-      error: { kind: "parse-failure" },
+      error: { kind: "unrecognized-format" },
     });
     await expect(
-      importModHeader(
-        JSON.stringify({ title: "single object" }),
-        [],
-        acceptRegex,
-      ),
+      importModHeader({ title: "single object" }, [], acceptRegex),
     ).resolves.toEqual({
       ok: false,
       error: { kind: "unrecognized-format" },
     });
     await expect(
       importModHeader(
-        JSON.stringify([{ title: "Malformed", headers: [null] }]),
+        [{ title: "Malformed", headers: [null] }],
         [],
         acceptRegex,
       ),

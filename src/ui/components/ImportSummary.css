@@ -13,6 +13,54 @@
   color: var(--ink);
 }
 
+.import-payload-heading {
+  color: var(--ink-mute);
+}
+
+/* Every imported rule, itemized so the confirm step sees the real payload. */
+.import-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  list-style: none;
+}
+
+.import-rule {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--radius-inner);
+}
+
+/* A credential or security-header rule gets the shared caution surface, so it
+   reads at a glance among plainer rows. */
+.import-rule.sensitive {
+  background: var(--caution-bg);
+  border-color: var(--caution-edge);
+}
+
+.import-rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Lays RuleFace's direction glyph beside its two text lines. */
+.import-rule-face {
+  display: flex;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.import-rule-caution {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--caution);
+}
+
 .import-attention {
   color: var(--ink-mute);
 }
@@ -41,6 +89,12 @@
   margin-top: 5px;
   border-inline: 5px solid transparent;
   border-bottom: 9px solid var(--caution-lamp);
+}
+
+/* The same lamp on an itemized rule sits a touch lower, onto the rule's first
+   line. After the base rule so specificity ascends with source order. */
+.import-rule .import-warning-lamp {
+  margin-top: 7px;
 }
 
 .import-warning-body {
