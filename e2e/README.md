@@ -54,7 +54,7 @@ later specs land.
 | Badge initials + This-tab "T" | Initials mode paints the focused profile's text; with no profile enabled a This-tab override marks its tab "T" while the global badge stays empty | ✅ headless | Read back via `getBadgeText` global and per-tab. Modified traffic is never invisible. |
 | Badge precedence + no stale bleed | Paused (grey) and needs-access (amber) outrank content mode and sweep per-tab text | ✅ headless | Starting from a tab showing "T", entering each global tier clears that tab's text to empty (no bleed-through when switching to it) and paints the tier color (`#6E7B88` grey, `#B07B00` amber), asserted via `getBadgeText`/`getBadgeBackgroundColor`. |
 | Verify gesture premise | Without a gesture-granted activeTab (and with `declarativeNetRequestFeedback` barred by policy), `getMatchedRules({tabId})` rejects | ✅ headless | Confirms the reason Verify is a per-tab, on-demand, gesture-driven feature. Establishes the boundary the deferred rows below sit behind. |
-| Verify command gesture | Whether the `verify` keyboard command counts as an activeTab-granting gesture for `getMatchedRules` | ⏭ env-skip | The command, the action click, and `_execute_action` are all browser-level UI unscriptable by Playwright/CDP. Explicit `test.skip`; answered by manual verification against real Chrome, which also decides whether the shortcut queries directly or opens the popup pre-triggered. |
+| Verify popup gesture | Whether the popup's Verify button, under the activeTab grant from the action click / `_execute_action`, counts as an activeTab-granting gesture for `getMatchedRules` | ⏭ env-skip | The action click and `_execute_action` are browser-level UI unscriptable by Playwright/CDP. Explicit `test.skip`; answered by manual verification against real Chrome. |
 | Verify tallies + edit-window attribution | Per-rule tallies attribute correctly after an insert within the 5-minute window | ⏭ env-skip | Needs a gesture-granted `getMatchedRules`. Explicit `test.skip`; the stable-id attribution itself is unit-tested (`decodeMatches`). Verified manually against real Chrome before release. |
 | Verify quota | 21+ rapid gesture-initiated Verify calls succeed under the gesture exemption | ⏭ env-skip | Needs a real gesture per call. Explicit `test.skip`; verified manually against real Chrome before release. |
 | Broad-grant revocation survival | Whether individually granted sites survive revoking a broad all-sites grant | ⏭ env-skip | Staging it needs a real all-sites grant to then revoke, which the unpacked headless posture cannot obtain. Explicit `test.skip`; verified manually against real Chrome before release. |
@@ -63,7 +63,7 @@ later specs land.
 | ModHeader import warnings | Every mapping warning class is itemized on the pre-apply summary | ✅ headless | A two-profile ModHeader fixture (`e2e/fixtures/modheader-all-warnings.json`) exercises all thirteen warning kinds, including a real RE2-invalid pattern rejected by Chrome's `isRegexSupported`; the summary renders one row per warning with each class's copy. |
 | Accessibility | Zero axe violations (names/roles, contrast from the real tokens, ARIA) on the popup states and options surfaces, both themes | ✅ headless | `@axe-core/playwright` over `wcag2a/aa`, `wcag21a/aa`, `wcag22aa` — the statically-decidable AA slice. Popup: first-run, needs-access + rule list, paused, rule editor, This-tab composer, grant panel, Verify panel. Options: profiles, import & export, site access, about, and the import summary. Each `<html>` carries the asserted theme, and reduced motion is emulated so contrast is read in the resting state, not mid-transition. Logical focus order and keyboard operability are proven by the keyboard walk below, not by axe. |
 | Keyboard-model walk (popup) | Every automatable in-popup binding operates through real key events | ✅ headless | `n`/`t`/`v` open their surfaces, `p` toggles pause, digit `1–9` switches profiles exclusively while `Shift+1–9` toggles without turning others off, list `↑/↓` move roving focus, row `Enter`/`Space`/`Delete` edit/toggle/delete, and the editor commits on `Enter`, commits + prompts on `Ctrl/Cmd+Enter`, and closes on `Esc` (a second `Esc` closes the popup). |
-| Global commands | `Alt+Shift+H/P/V/K` dispatch through the browser shortcut manager | 📋 manual | The shortcut manager feeds `chrome.commands`, which neither Playwright nor CDP can synthesize; the popup behaviour each triggers is covered by its in-popup equivalent above. Explicit `test.skip`; the shortcuts themselves ride the per-release manual keyboard pass. |
+| Global commands | `Alt+Shift+H/P/K` dispatch through the browser shortcut manager | 📋 manual | The shortcut manager feeds `chrome.commands`, which neither Playwright nor CDP can synthesize; the popup behaviour each triggers is covered by its in-popup equivalent above. Explicit `test.skip`; the shortcuts themselves ride the per-release manual keyboard pass. |
 | Grant-dialog verbatims / multi-origin prompt wording | Native permission-prompt copy | 📋 manual | Native prompts are not scriptable (below); captured out of band. |
 | Packed: on-wire header modification | A compiled rule sets a header under a policy-installed CRX with a `runtime_allowed_hosts` grant | ⏭ env-skip | Not CI-automatable in this environment; verified manually against real Chrome before each release. The CRX force-installs and enables, but its lazy MV3 service worker is not surfaced to Playwright on the runner, so the specs cannot drive it. Unconfirmed until that manual check runs. |
 | Packed: `getMatchedRules({tabId})` | Matched rules return under an `activeTab` gesture on the packed CRX (only ever confirmed unpacked) | ⏭ env-skip | Not CI-automatable in this environment; verified manually against real Chrome before each release. The gesture is the `_execute_action` command; a divergence re-opens the Verify design. Unconfirmed until that manual check runs. |
@@ -102,12 +102,11 @@ against real Chrome before release.
   `tab.url`, so it is deferred; the "Applies to this tab while it stays on
   example.com. Navigating the tab to a different site ends the override" copy is
   confirmed for the ends direction and unconfirmed for the continues direction.
-- **Does the verify command grant activeTab for `getMatchedRules`?**
+- **Does the popup Verify button grant activeTab for `getMatchedRules`?**
   Confirmed headless that `getMatchedRules` **rejects** without a gesture-granted
-  activeTab (the feature's whole premise). Whether the custom command supplies
-  that gesture is unscriptable and deferred; until manual verification against
-  real Chrome answers it, the shortcut's fallback ("opens the popup with Verify
-  pre-triggered — which does grant it") remains the safe wording.
+  activeTab (the feature's whole premise). Whether the action click that opens
+  the popup supplies that gesture to the Verify button is unscriptable and
+  deferred until manual verification against real Chrome answers it.
 - **Verify tallies, quota, count number.** All three need a gesture-granted
   `getMatchedRules` and are deferred. Stable-id attribution is independently
   unit-tested (`decodeMatches`); the count-badge *state machine* (mode
@@ -218,7 +217,7 @@ in this environment yet. Before shipping a release, check them by hand:
 - Load the built extension unpacked (`.output/chrome-mv3`) or the packed CRX
   (`pnpm e2e:packed:pack`) in real Chrome.
 - Trigger the behavior with a real user gesture: click the action, press the
-  `Alt+Shift+H/P/V/K` shortcuts, open the Grant panel to see the native
+  `Alt+Shift+H/P/K` shortcuts, open the Grant panel to see the native
   permission-prompt wording, or grant/revoke all-sites access from
   `chrome://extensions`.
 - Confirm the expected result directly — the badge, the popup's Verify panel,

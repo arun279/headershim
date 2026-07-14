@@ -14,6 +14,8 @@ export const DNR_RESOURCE_TYPES = [
   "csp_report",
   "media",
   "websocket",
+  "webtransport",
+  "webbundle",
   "other",
 ] as const;
 
@@ -29,7 +31,7 @@ export const RESOURCE_TYPES_BY_GROUP = {
   fonts: ["font"],
   media: ["media"],
   websockets: ["websocket"],
-  other: ["object", "ping", "csp_report", "other"],
+  other: ["object", "ping", "csp_report", "webtransport", "webbundle", "other"],
 } as const satisfies Readonly<
   Record<ResourceGroup, readonly DnrResourceType[]>
 >;

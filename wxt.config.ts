@@ -26,6 +26,13 @@ export default defineConfig({
     // The single display name (chrome://extensions, the install prompt, the
     // store card); without it WXT falls back to the lowercase package id.
     name: BRAND_NAME,
+    // The highest-versioned API the extension actually calls is
+    // action.setBadgeTextColor (Chrome 110); every other version-gated API it
+    // uses lands earlier (requestDomains/initiatorDomains 101, storage.session
+    // 102, displayActionCountAsBadgeText 88, isRegexSupported 87, modifyHeaders
+    // 86). The larger session-rule cap and storage.session quota are platform
+    // values HeaderShim stays well under, so they don't raise the floor.
+    minimum_chrome_version: "110",
     permissions: [
       "declarativeNetRequestWithHostAccess",
       "storage",
@@ -43,10 +50,6 @@ export default defineConfig({
       "toggle-pause": {
         suggested_key: { default: "Alt+Shift+P" },
         description: "Toggle global pause",
-      },
-      verify: {
-        suggested_key: { default: "Alt+Shift+V" },
-        description: "Run Verify on the current tab",
       },
       "next-profile": {
         suggested_key: { default: "Alt+Shift+K" },

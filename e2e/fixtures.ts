@@ -97,13 +97,13 @@ export const DUAL_GRANT_TRANSITION_UNAVAILABLE =
 
 // getMatchedRules needs either the declarativeNetRequestFeedback permission
 // (barred by the manifest policy) or an activeTab grant from a real user
-// gesture on the extension action. Chrome's action click, the _execute_action
-// command, and the custom verify command are all browser-level UI that neither
-// Playwright nor CDP can synthesize headless, so every match-tally, edit-window
+// gesture on the extension action. Chrome's action click and the
+// _execute_action command are both browser-level UI that neither Playwright nor
+// CDP can synthesize headless, so every match-tally, edit-window
 // attribution, quota, and count-badge *number* assertion self-skips here and
 // is verified manually against real Chrome before release (see e2e/README.md).
 export const MATCHED_RULES_GESTURE_UNAVAILABLE =
-  "getMatchedRules requires an activeTab-granting user gesture (action click / _execute_action / verify command) that is not scriptable in headless Chromium, and the declarativeNetRequestFeedback permission is barred by the manifest policy (see e2e/README.md).";
+  "getMatchedRules requires an activeTab-granting user gesture (action click / _execute_action) that is not scriptable in headless Chromium, and the declarativeNetRequestFeedback permission is barred by the manifest policy (see e2e/README.md).";
 
 // Distinguishing a same-site or SPA navigation (override continues) from a
 // cross-site one (override ends) relies on tab.url in tabs.onUpdated, which the

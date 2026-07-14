@@ -88,12 +88,7 @@ if (manifest.content_security_policy !== undefined) {
   }
 }
 
-const allowedCommands = [
-  "_execute_action",
-  "toggle-pause",
-  "verify",
-  "next-profile",
-];
+const allowedCommands = ["_execute_action", "toggle-pause", "next-profile"];
 const unexpectedCommands = Object.keys(manifest.commands ?? {}).filter(
   (command) => !allowedCommands.includes(command),
 );
