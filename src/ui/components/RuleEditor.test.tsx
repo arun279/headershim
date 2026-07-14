@@ -6,8 +6,8 @@ import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
 import {
+  blurToOutside,
   fire,
-  focusOut,
   press,
   render,
   settle,
@@ -192,23 +192,27 @@ describe("RuleEditor commit model", () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
     typeInto(ctx.valueInput(), "v1");
-    focusOut(ctx.editor, document.body);
+    blurToOutside();
     await settle();
     expect(ctx.onSave).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
-  it("abandons an untouched editor quietly when focus leaves", () => {
+  it("abandons an untouched editor quietly when focus leaves", async () => {
     const ctx = mount();
-    focusOut(ctx.editor, document.body);
+    blurToOutside();
+    await settle();
     expect(ctx.onSave).not.toHaveBeenCalled();
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
-  it("stays open when focus moves within the editor", () => {
+  it("stays open when focus moves within the editor", async () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
-    focusOut(ctx.nameInput(), ctx.valueInput());
+    // Real focus move to another field inside the editor — the Bug A scenario:
+    // clicking a control must never tear the inline editor down.
+    fire(() => ctx.valueInput().focus());
+    await settle();
     expect(ctx.onSave).not.toHaveBeenCalled();
     expect(ctx.onClose).not.toHaveBeenCalled();
   });

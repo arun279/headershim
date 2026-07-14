@@ -57,12 +57,30 @@ export function focusOut(from: HTMLElement, to: EventTarget | null): void {
 }
 
 /**
- * Flushes a few macrotask rounds under act, letting storage events, lock
- * queues, and subscription reloads land before assertions.
+ * Moves real focus to a throwaway element outside any mounted component, the way
+ * clicking or tabbing away from an inline editor does. Focus-leave logic that
+ * keys off where focus actually settles (document.activeElement) needs the
+ * departure to be real, not a synthetic focusout event.
+ */
+export function blurToOutside(): void {
+  const sink = document.createElement("button");
+  document.body.appendChild(sink);
+  act(() => {
+    sink.focus();
+  });
+}
+
+/**
+ * Flushes a few macrotask rounds (plus an animation frame) under act, letting
+ * storage events, lock queues, subscription reloads, and deferred focus-settle
+ * checks land before assertions.
  */
 export async function settle(): Promise<void> {
   await act(async () => {
     for (let round = 0; round < 3; round += 1) {
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => resolve(null)),
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
   });

@@ -63,18 +63,27 @@ export function useInlineCommit<D>(
     }
   };
 
-  const onFocusOut = (event: FocusEvent) => {
-    const next = event.relatedTarget;
-    if (!(next instanceof Node) || rootRef.current?.contains(next) === true) {
-      return;
-    }
-    if (options.abandon?.() === true) {
-      options.onClose();
-    } else if (dirtyRef.current) {
-      options.commit(false);
-    } else {
-      options.onClose();
-    }
+  const onFocusOut = () => {
+    // Focus is often mid-flight at focusout time: clicking a <label> (a radio,
+    // a segment, a checkbox) blurs the active field *before* the click lands
+    // focus on the control the label wraps, and a re-render can briefly detach
+    // the focused node. Reading relatedTarget in that window mis-reads an
+    // ordinary control click as "focus left the editor" and tears the editor
+    // down. Wait a frame for focus to come to rest, then act only if it truly
+    // settled outside the editor.
+    requestAnimationFrame(() => {
+      const root = rootRef.current;
+      if (root === null || root.contains(document.activeElement)) {
+        return;
+      }
+      if (options.abandon?.() === true) {
+        options.onClose();
+      } else if (dirtyRef.current) {
+        options.commit(false);
+      } else {
+        options.onClose();
+      }
+    });
   };
 
   return {

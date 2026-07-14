@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The options surface is a full-width, two-column management page. Open it
+         in a real browser tab; Chrome's default embedded dialog crushes the
+         layout into an unusable ~500px column. (WXT reads this meta tag; a
+         wxt.config manifest.options_ui key is ignored.) -->
+    <meta name="manifest.open_in_tab" content="true" />
     <title>HeaderShim</title>
   </head>
   <body>
