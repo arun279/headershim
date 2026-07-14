@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { Rule } from "../../core/model";
 import { copy } from "../copy";
-import { MiddleTruncate } from "./MiddleTruncate";
+import { Truncate } from "./Truncate";
 import "./RuleFace.css";
 
 /**
@@ -27,11 +27,11 @@ export function RuleFace({
       </span>
       <div class="rule-lines">
         <p class="rule-line1">
-          <span class="rule-name">{rule.header}</span>
+          <Truncate value={rule.header} class="rule-name" />
           {rule.operation !== "remove" && rule.value !== undefined && (
             <>
               <span class="colon">: </span>
-              <MiddleTruncate value={rule.value} class="rule-value" />
+              <Truncate mode="middle" value={rule.value} class="rule-value" />
             </>
           )}
         </p>

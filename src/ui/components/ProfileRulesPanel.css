@@ -28,6 +28,7 @@
 .bulk-actions,
 .bulk-move-targets {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-2);
   margin-inline-start: auto;
 }

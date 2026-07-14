@@ -2,6 +2,7 @@ import type { JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Profile } from "../../core/model";
 import { copy } from "../copy";
+import { Truncate } from "./Truncate";
 import "./ProfileSwitcher.css";
 
 interface ProfileSwitcherProps {
@@ -96,7 +97,7 @@ export function ProfileSwitcher({
           >
             {profile.badgeText}
           </span>
-          {profile.name}
+          <Truncate value={profile.name} class="chip-name" />
           {!profile.enabled && (
             <span class="silk" aria-hidden="true">
               {copy.profiles.offTag}

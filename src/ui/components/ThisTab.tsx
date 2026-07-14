@@ -18,8 +18,8 @@ import {
   type SessionMutationError,
 } from "../state/session-mutations";
 import { HeaderFields } from "./HeaderFields";
-import { MiddleTruncate } from "./MiddleTruncate";
 import { sentence } from "./sentence";
+import { Truncate } from "./Truncate";
 import { useInlineCommit } from "./useInlineCommit";
 import "./ThisTab.css";
 
@@ -115,11 +115,15 @@ function OverrideRow({
       </span>
       <div class="rule-lines">
         <p class="rule-line1">
-          <span class="rule-name">{override.header}</span>
+          <Truncate value={override.header} class="rule-name" />
           {override.operation !== "remove" && override.value !== undefined && (
             <>
               <span class="colon">: </span>
-              <MiddleTruncate value={override.value} class="rule-value" />
+              <Truncate
+                mode="middle"
+                value={override.value}
+                class="rule-value"
+              />
             </>
           )}
         </p>

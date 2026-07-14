@@ -1,5 +1,0 @@
-/* The full value is a keyboard-focus readout: hidden until the
-   owning row reveals it on focus. */
-.mt-full {
-  display: none;
-}

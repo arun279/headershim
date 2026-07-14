@@ -5,6 +5,8 @@
  * cause precedes impact precedes next step, and exact names are always shown.
  */
 
+import { BRAND_NAME } from "../brand";
+
 /**
  * Annunciator sentences are segment lists so the wire-facing tokens inside
  * them (hostnames, counts) can render in the data face while every word still
@@ -29,7 +31,7 @@ const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 
 export const copy = {
   app: {
-    name: "HeaderShim",
+    name: BRAND_NAME,
     // Identical wording ships on the trust page.
     tagline:
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
@@ -440,6 +442,8 @@ export const copy = {
       " requests in this tab",
     ],
     invalidRegex: "Invalid regex — edit the scope to enable",
+    // Announced after the ⋯ menu copies a (possibly truncated) value in full.
+    valueCopied: "Value copied",
     overridden: "overridden by a rule above",
     initiatorNote:
       "requests started by other pages also need those pages granted",
@@ -470,6 +474,7 @@ export const copy = {
 
   menu: {
     edit: "Edit",
+    copyValue: "Copy value",
     duplicate: "Duplicate",
     moveToProfile: "Move to profile",
     regenerateValue: "Regenerate value",

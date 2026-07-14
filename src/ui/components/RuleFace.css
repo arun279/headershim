@@ -25,20 +25,31 @@
   line-height: 1.45;
 }
 
+/* Shrinkable so a long name ellipsises (end-truncate) instead of hard-clipping;
+   the value still keeps its middle-truncated tail on the same one line. */
 .rule-name {
   font-weight: 600;
+  flex: 0 1 auto;
+}
+
+.colon {
   flex: none;
 }
 
 .rule-value {
-  min-width: 0;
-  white-space: nowrap;
+  flex: 1 1 auto;
 }
 
+/* One clamped line: scope · types · comment · notes can never wrap the row
+   taller, and the leading domain keeps its registrable tail (middle-truncated). */
 .rule-line2 {
+  min-width: 0;
+  overflow: hidden;
   font-size: 11px;
   line-height: 1.4;
   color: var(--ink-mute);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rule-line2 .mono {

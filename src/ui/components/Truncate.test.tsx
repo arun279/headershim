@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { render } from "../test/render";
-import { MiddleTruncate, truncateMiddle } from "./MiddleTruncate";
+import { Truncate, truncateMiddle } from "./Truncate";
 
 describe("truncateMiddle", () => {
   it("keeps both ends and cuts the middle", () => {
@@ -34,22 +34,53 @@ describe("truncateMiddle", () => {
   });
 });
 
-describe("MiddleTruncate", () => {
-  it("carries the full value in title and truncates the display", () => {
-    const value = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6J9.sflKx";
-    const root = render(<MiddleTruncate value={value} maxChars={20} />);
-    const span = root.querySelector("span") as HTMLSpanElement;
+describe("Truncate end mode", () => {
+  it("renders one titled span that keeps the full string for AT and clips via CSS", () => {
+    const value = "x-corp-internal-request-tracing-identifier";
+    const root = render(<Truncate value={value} class="rule-name" />);
+    const spans = root.querySelectorAll("span");
+    expect(spans).toHaveLength(1);
+    const span = spans[0] as HTMLSpanElement;
+    // The full string stays in the DOM (ellipsis is presentational only) and the
+    // pointer readout is carried in title.
+    expect(span.textContent).toBe(value);
     expect(span.getAttribute("title")).toBe(value);
-    // The visible clip is truncated; the row-revealed full node carries the
-    // whole value for the keyboard-focus readout.
-    const clip = span.querySelector(".mt-clip");
-    expect(clip?.textContent).toContain("…");
-    expect(clip?.textContent?.length).toBeLessThanOrEqual(20);
-    expect(span.querySelector(".mt-full")?.textContent).toBe(value);
+    // The shared class carries the one-line + min-width:0 + ellipsis discipline.
+    expect(span.classList.contains("truncate")).toBe(true);
+    expect(span.classList.contains("truncate-end")).toBe(true);
+    expect(span.classList.contains("rule-name")).toBe(true);
+  });
+
+  it("defaults to end mode when none is given", () => {
+    const root = render(<Truncate value="Profile" />);
+    expect(
+      (root.querySelector("span") as HTMLSpanElement).classList.contains(
+        "truncate-end",
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("Truncate middle mode", () => {
+  it("carries the full value in title and shows a middle-cut display", () => {
+    const value = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6J9.sflKx";
+    const root = render(
+      <Truncate mode="middle" value={value} maxChars={20} class="rule-value" />,
+    );
+    const spans = root.querySelectorAll("span");
+    // One node only: the deleted focus-reveal never reintroduces a hidden clone.
+    expect(spans).toHaveLength(1);
+    const span = spans[0] as HTMLSpanElement;
+    expect(span.getAttribute("title")).toBe(value);
+    expect(span.textContent).toContain("…");
+    expect(span.textContent?.length).toBeLessThanOrEqual(20);
+    expect(span.classList.contains("truncate")).toBe(true);
+    // No end-mode ellipsis in middle mode: the string is split by hand.
+    expect(span.classList.contains("truncate-end")).toBe(false);
   });
 
   it("shows the whole value when it fits the budget", () => {
-    const root = render(<MiddleTruncate value="short" maxChars={20} />);
+    const root = render(<Truncate mode="middle" value="short" maxChars={20} />);
     expect((root.querySelector("span") as HTMLSpanElement).textContent).toBe(
       "short",
     );
@@ -67,8 +98,8 @@ describe("MiddleTruncate", () => {
       .mockReturnValue(105);
 
     const value = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const root = render(<MiddleTruncate value={value} />);
-    const text = root.querySelector(".mt-clip")?.textContent;
+    const root = render(<Truncate mode="middle" value={value} />);
+    const text = root.querySelector(".truncate")?.textContent;
 
     // 105px / 7px per char = 15 characters of budget.
     expect(text).toContain("…");
