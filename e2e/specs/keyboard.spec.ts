@@ -264,7 +264,7 @@ test("editor commit keys commit, grant, and close", async ({
 
 // Global commands are dispatched by the browser's shortcut manager
 // into chrome.commands; neither Playwright nor CDP can synthesize that input,
-// so Alt+Shift+H/P/V/K stay on the per-release manual keyboard pass. The
-// popup-side behaviour each one triggers (open popup, pause, verify, switch
-// profile) is covered above through its in-popup equivalent.
+// so Alt+Shift+H/P/K stay on the per-release manual keyboard pass. The
+// popup-side behaviour each one triggers (open popup, pause, switch profile) is
+// covered above through its in-popup equivalent.
 test.skip("global Alt+Shift shortcuts need a manual per-release check", () => {});

@@ -169,7 +169,7 @@ test("needs-access outranks content mode with the amber can't-run badge and no s
 // (and with the declarativeNetRequestFeedback permission barred by policy),
 // getMatchedRules rejects. This is why Verify is a per-tab, on-demand,
 // gesture-driven feature rather than a live console — and why the tally, quota,
-// and command-gesture halves below can only run behind a real gesture.
+// and popup-gesture halves below can only run behind a real gesture.
 test("getMatchedRules rejects without a gesture-granted activeTab", async ({
   context,
   echoServers,
@@ -190,7 +190,7 @@ test("getMatchedRules rejects without a gesture-granted activeTab", async ({
   expect(rejected).toBe(true);
 });
 
-test("the verify keyboard command grants activeTab for getMatchedRules", async () => {
+test("the popup Verify button grants activeTab for getMatchedRules", async () => {
   test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
 });
 
