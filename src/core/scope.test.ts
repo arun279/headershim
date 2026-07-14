@@ -15,8 +15,10 @@ describe("resource type expansion", () => {
 
     expect(expanded).toEqual(DNR_RESOURCE_TYPES);
     expect(expanded).toContain("main_frame");
-    expect(expanded).not.toContain("webtransport");
-    expect(expanded).not.toContain("webbundle");
+    // webtransport and webbundle are cross-browser DNR types (Chrome ~107,
+    // Firefox supported), so the portable "all" expansion must cover them too.
+    expect(expanded).toContain("webtransport");
+    expect(expanded).toContain("webbundle");
   });
 
   it("maps every resource group and removes duplicate enum members", () => {
@@ -46,6 +48,8 @@ describe("resource type expansion", () => {
       "object",
       "ping",
       "csp_report",
+      "webtransport",
+      "webbundle",
       "other",
     ]);
     expect(new Set(expandResourceTypes(groups))).toEqual(
@@ -55,6 +59,8 @@ describe("resource type expansion", () => {
       "object",
       "ping",
       "csp_report",
+      "webtransport",
+      "webbundle",
       "other",
     ]);
     expect(expandResourceTypes([])).toEqual([]);
