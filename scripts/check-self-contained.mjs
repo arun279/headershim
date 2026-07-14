@@ -14,7 +14,11 @@ const SELF_PATH = "scripts/check-self-contained.mjs";
 // Files this check does not scan: the lockfile's base64 hashes coincidentally
 // contain lookalike substrings, and this file's own pattern literals would
 // otherwise flag themselves.
-const EXCLUDED_FILES = new Set(["pnpm-lock.yaml", SELF_PATH]);
+const EXCLUDED_FILES = new Set([
+  "pnpm-lock.yaml",
+  ".github/publish/pnpm-lock.yaml",
+  SELF_PATH,
+]);
 
 // Extensions (and a few exact names) worth scanning: source, styles, docs,
 // tests, config, and CI. Lockfiles, binaries, and generated fixtures with

@@ -21,6 +21,15 @@ export default defineConfig({
     define: {
       __COMMIT__: JSON.stringify(commitHash()),
     },
+    build: {
+      // Vite's default module-preload polyfill ships a `fetch()` that warms
+      // dynamically imported chunks. It only ever touches the extension's own
+      // packaged files, but it is the sole network primitive in the bundle and
+      // makes the no-egress gate carve out an exception. Native dynamic import
+      // loads the chunk without it, so drop the polyfill and keep the bundle
+      // provably fetch-free.
+      modulePreload: { polyfill: false },
+    },
   }),
   manifest: {
     // The single display name (chrome://extensions, the install prompt, the

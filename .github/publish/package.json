@@ -1,0 +1,9 @@
+{
+  "name": "headershim-publish-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated, integrity-pinned install of the Chrome Web Store upload CLI for the credential-bearing publish job. Kept out of the root project so the extension's dependency tree and dependencies:{} guarantee are untouched. Regenerate the lockfile with `pnpm install --lockfile-only` in this directory.",
+  "dependencies": {
+    "chrome-webstore-upload-cli": "3.3.0"
+  }
+}

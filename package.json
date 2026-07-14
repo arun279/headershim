@@ -16,11 +16,12 @@
     "check:dup": "jscpd",
     "check:size": "pnpm build && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
+    "check:no-egress": "pnpm build && node scripts/check-no-egress.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:verify": "if grep -R -n -E 'getMatchedRules\\(\\s*\\)' src entrypoints; then echo 'Verify must always pass an explicit tabId to getMatchedRules.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:self-contained": "node scripts/check-self-contained.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:verify && pnpm check:self-contained",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-egress.mjs && size-limit && pnpm check:platform && pnpm check:verify && pnpm check:self-contained",
     "e2e": "pnpm build && playwright test",
     "e2e:packed:pack": "pnpm build && node e2e/packed/pack.mjs",
     "e2e:packed:selfcheck": "node e2e/packed/selfcheck.mjs",
@@ -71,8 +72,7 @@
   ],
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
-      "spawn-sync"
+      "esbuild"
     ],
     "overrides": {
       "shell-quote": ">=1.8.4",
