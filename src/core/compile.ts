@@ -148,6 +148,11 @@ export function compileDynamic(state: StateDoc): DnrRule[] {
 // must stay out of one), and an all-sites scope has no host to pin to — those
 // carry their broad reach in the editor and all-sites advisories instead. Non-
 // credential rules keep the platform default of matching on request URL alone.
+// Deliberate trade-off: initiatorDomains matches the domain and its subdomains,
+// so a same-site subresource call still gets the credential, while a truly
+// cross-site initiator is excluded — and a top-level navigation typed directly to
+// the host (a main_frame request has no initiator) is not matched either, which
+// is the intended confused-deputy mitigation, not a regression.
 function initiatorCondition(rule: Rule): { initiatorDomains?: string[] } {
   if (rule.initiators.length > 0) {
     return { initiatorDomains: [...rule.initiators] };

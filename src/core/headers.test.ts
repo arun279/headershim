@@ -410,4 +410,20 @@ describe("sensitive-header classification", () => {
     );
     expect(setCookieAttributesStripped(undefined)).toBe(false);
   });
+
+  it("parses attribute names, so a cookie name or value containing the words does not count as protected", () => {
+    // The cookie NAME contains "secure" but no real Secure attribute is present.
+    expect(setCookieAttributesStripped("secure_session=abc; Path=/")).toBe(
+      true,
+    );
+    // The word appears only in the cookie VALUE (data), not as an attribute.
+    expect(setCookieAttributesStripped("sid=has-samesite-inside; Path=/")).toBe(
+      true,
+    );
+    // Real attributes, regardless of surrounding case and spacing.
+    expect(setCookieAttributesStripped("sid=abc; Secure; HttpOnly")).toBe(
+      false,
+    );
+    expect(setCookieAttributesStripped("sid=abc; SameSite=Lax")).toBe(false);
+  });
 });

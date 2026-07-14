@@ -4,9 +4,8 @@ import {
   compileSession,
   dropUncompilable,
 } from "../src/core/compile";
-import { docMissingGrants, missingGrants } from "../src/core/grants";
+import { docMissingGrants } from "../src/core/grants";
 import {
-  type Rule,
   type StateDoc,
   switchToNextProfile,
   type TabOverride,
@@ -55,16 +54,15 @@ export default defineBackground(() => {
   browser.runtime.onStartup.addListener(() => reconcile());
   subscribeState(() => void reconcile());
   subscribeSession(() => void reconcile());
-  // Grants are not a *storage-reconcile* input: that path stays grant-agnostic
-  // (rules compile the same whether or not they're granted), which keeps the
-  // resident set a pure function of the stored doc. But a grant change gets its
-  // own light pass: it repaints the badge and reconciles residency against the
-  // live grants, so a revoke drops the rules it orphaned (closing the window
-  // where a revoked rule lingers resident, dormant only by Chrome's match-time
-  // check) and a re-grant re-adds them. It reads the store, never seeds it, and
-  // stays a zero-write no-op when a grant add changes nothing resident.
-  // Fire-and-forget: rejections are swallowed, matching runUntilSettled.
-  onGrantsChanged(() => onGrantsChangedInternal().catch(noop));
+  // Grants are not a compile input: Chrome enforces host access at match time,
+  // so a grant change only moves the badge and needs-access surfaces, never the
+  // resident rule set. Keeping the resident set a pure function of the stored doc
+  // is deliberate — it lets the single-flight reconcile stay race-free and
+  // deterministic. Accepted residual: a rule whose grant is revoked stays
+  // resident in DNR but is inert, because Chrome declines to fire it at match
+  // time; it clears on the next stored-doc reconcile. Fire-and-forget: a rejected
+  // refresh is swallowed rather than left unhandled, matching runUntilSettled.
+  onGrantsChanged(() => refreshBadge().catch(noop));
   browser.tabs.onRemoved.addListener((tabId) =>
     endOverrides(tabId).catch(noop),
   );
@@ -103,53 +101,6 @@ export default defineBackground(() => {
       // than escape unhandled and leave state silently unreconciled.
       await flagReconcileError(true).catch(noop);
       await refreshBadge().catch(noop);
-    }
-  }
-
-  // Repaint the badge for the new grant set, then reconcile residency. Ordered
-  // so the badge (the loud surface) updates first.
-  async function onGrantsChangedInternal(): Promise<void> {
-    await refreshBadge();
-    await reconcileGrantResidency();
-  }
-
-  // Defense in depth for host-permission changes. Desired here is the ordinary
-  // compiled set filtered to the rules whose required origins are all granted, so
-  // planReconcile drops a revoked rule from DNR (closing the window where it
-  // lingers resident, dormant only by Chrome's match-time check) and re-adds one
-  // on a re-grant. The store is read, never written or seeded: an absent,
-  // unreadable, or over-limit doc simply leaves the resident set untouched, and
-  // pause/limit transitions stay the storage reconcile's job.
-  async function reconcileGrantResidency(): Promise<void> {
-    const outcome = migrate(await readRaw());
-    if (!outcome.ok) {
-      return;
-    }
-    const doc = outcome.value;
-    const granted = await grantSnapshot();
-    const enabled = new Map<number, Rule>();
-    for (const profile of doc.profiles) {
-      if (profile.enabled) {
-        for (const rule of profile.rules) {
-          if (rule.enabled) {
-            enabled.set(rule.num, rule);
-          }
-        }
-      }
-    }
-    let compiled: ReturnType<typeof compileDynamic>;
-    try {
-      compiled = compileDynamic(await compilableDoc(doc));
-    } catch {
-      return;
-    }
-    const desired = compiled.filter((dnrRule) => {
-      const rule = enabled.get(dnrRule.id);
-      return rule !== undefined && missingGrants(rule, granted).length === 0;
-    });
-    const plan = planReconcile(desired, await getDynamicRules());
-    if (plan !== null) {
-      await updateDynamicRules(plan).catch(noop);
     }
   }
 

@@ -195,7 +195,11 @@ const CREDENTIAL_HEADER_PATTERN =
 
 // Set-Cookie flags that keep a cookie protected; a value carrying none of them
 // replaces the server's cookie with a weaker one.
-const COOKIE_PROTECTION_ATTRIBUTES = ["secure", "httponly", "samesite"];
+const COOKIE_PROTECTION_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "secure",
+  "httponly",
+  "samesite",
+]);
 
 function isCredentialHeaderName(header: string): boolean {
   return (
@@ -247,10 +251,19 @@ export function setCookieAttributesStripped(
   if (value === undefined) {
     return false;
   }
-  const lower = value.toLowerCase();
-  return !COOKIE_PROTECTION_ATTRIBUTES.some((attribute) =>
-    lower.includes(attribute),
-  );
+  // Parse the attributes rather than substring-match the whole value: split on
+  // ";", drop the leading name=value pair, and read each remaining segment's
+  // attribute name (the part before any "="). A substring check would be fooled
+  // by a cookie name or value that merely contains "secure"/"httponly"/
+  // "samesite" (e.g. `secure_session=abc`).
+  const hasProtection = value
+    .split(";")
+    .slice(1)
+    .some((segment) => {
+      const name = segment.split("=", 1)[0]?.trim().toLowerCase();
+      return name !== undefined && COOKIE_PROTECTION_ATTRIBUTES.has(name);
+    });
+  return !hasProtection;
 }
 
 export function validateHeader(

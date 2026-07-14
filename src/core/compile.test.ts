@@ -321,6 +321,31 @@ describe("dynamic rule compilation", () => {
     expect(rule?.condition.initiatorDomains).toEqual(["api.example.com"]);
   });
 
+  it("scopes a credential rule's initiator to its own site: same-site and subdomains match, cross-site is excluded", () => {
+    const [rule] = compileDynamic(
+      state([
+        profile("cred", [
+          storedRule(1, {
+            header: "authorization",
+            value: "Bearer x",
+            scope: { type: "domains", domains: ["example.com"] },
+          }),
+        ]),
+      ]),
+    );
+    const initiators = rule?.condition.initiatorDomains ?? [];
+    expect(initiators).toEqual(["example.com"]);
+    // Chrome matches initiatorDomains against the domain and its subdomains, so
+    // the rule's own pages match while a cross-site initiator is excluded.
+    const matchesInitiator = (host: string) =>
+      initiators.some(
+        (domain) => host === domain || host.endsWith(`.${domain}`),
+      );
+    expect(matchesInitiator("example.com")).toBe(true);
+    expect(matchesInitiator("app.example.com")).toBe(true);
+    expect(matchesInitiator("evil.com")).toBe(false);
+  });
+
   it("keeps user-named initiators (they widen a credential rule) over the default", () => {
     const [rule] = compileDynamic(
       state([
