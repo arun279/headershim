@@ -166,10 +166,12 @@ button {
   color: var(--ink-mute);
 }
 
-/* Shared two-character profile badge glyph; the hue is set inline per profile. */
+/* Shared two-character profile badge glyph; the hue is set inline per profile.
+   overflow:hidden keeps a stray over-long badge inside its fixed square. */
 .badge-glyph {
   display: grid;
   place-items: center;
+  overflow: hidden;
   border-radius: var(--radius-inner);
   font-family: var(--font-data);
   font-weight: 700;

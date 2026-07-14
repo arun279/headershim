@@ -34,21 +34,6 @@
   color: var(--ink-mute);
 }
 
-/* Focusing a row reveals a truncated value in full, wrapping in place — the
-   tooltip-style readout promised on keyboard focus, not just hover. */
-.rule-row:focus .rule-value {
-  white-space: normal;
-  word-break: break-all;
-}
-
-.rule-row:focus .mt-clip {
-  display: none;
-}
-
-.rule-row:focus .mt-full {
-  display: inline;
-}
-
 .rule-status {
   color: var(--caution);
   font-weight: 600;

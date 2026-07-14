@@ -32,6 +32,13 @@
   color: var(--ink-mute);
 }
 
+/* A pathological profile name ellipsises inside the pill instead of stretching
+   it into a giant chip that shoves its siblings off-screen (full name in AT and
+   the options rename field). */
+.chip-name {
+  max-width: 22ch;
+}
+
 .chip-badge {
   width: 20px;
   height: 20px;

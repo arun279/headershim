@@ -9,6 +9,7 @@ import { copy, type Sentence, sentenceText } from "../copy";
 import { Button } from "./Button";
 import { CheckGlyph, TriangleGlyph } from "./glyphs";
 import { sentence } from "./sentence";
+import { Truncate } from "./Truncate";
 import "./VerifyPanel.css";
 
 interface VerifyBlocked {
@@ -110,7 +111,7 @@ export function VerifyPanel({
               <span class="verify-lamp fired" aria-hidden="true">
                 <CheckGlyph />
               </span>
-              <span class="verify-name mono">{row.rule.header}</span>
+              <Truncate value={row.rule.header} class="verify-name mono" />
               <span
                 class="verify-tally mono"
                 role="img"
@@ -132,7 +133,7 @@ export function VerifyPanel({
                 <span class="verify-lamp missed" aria-hidden="true">
                   <TriangleGlyph />
                 </span>
-                <span class="verify-name mono">{row.rule.header}</span>
+                <Truncate value={row.rule.header} class="verify-name mono" />
                 <Hint row={row} />
                 <span
                   class="verify-tally mono"

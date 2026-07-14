@@ -3,7 +3,12 @@ import type { Scope } from "../../core/model";
 import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { Button } from "./Button";
+import { Truncate } from "./Truncate";
 import "./GrantPanel.css";
+
+// Host chips wrap freely; a runaway host middle-truncates (its registrable tail
+// is the security-relevant part) rather than stretching the panel.
+const HOST_MAX = 40;
 
 export interface GrantSelection {
   readonly targetHosts: string[];
@@ -144,9 +149,13 @@ export function GrantPanel(props: GrantPanelProps) {
                 {copy.grantPanel.multiple(props.targetHosts.length)}
                 <span class="grant-hosts">
                   {props.targetHosts.map((host) => (
-                    <span class="mono" key={host}>
-                      {host}
-                    </span>
+                    <Truncate
+                      key={host}
+                      mode="middle"
+                      value={host}
+                      maxChars={HOST_MAX}
+                      class="mono"
+                    />
                   ))}
                 </span>
               </>
@@ -243,7 +252,12 @@ function ChipField({ id, label, inputLabel, hosts, onChange }: ChipFieldProps) {
       <div class="grant-chips">
         {hosts.map((host) => (
           <span class="grant-chip" key={host}>
-            <span class="mono">{host}</span>
+            <Truncate
+              mode="middle"
+              value={host}
+              maxChars={HOST_MAX}
+              class="mono"
+            />
             <button
               type="button"
               class="grant-chip-x"

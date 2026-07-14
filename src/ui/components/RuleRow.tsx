@@ -2,6 +2,7 @@ import type { ComponentChildren, RefObject } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { subresourceScopedRule } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
+import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { CheckGlyph } from "./glyphs";
 import { RuleFace } from "./RuleFace";
@@ -243,8 +244,18 @@ interface MenuItem {
 
 function RowMenu(props: RowMenuProps) {
   const { rule, onClose } = props;
+  const announce = useAnnounce();
   const [view, setView] = useState<"root" | "move">("root");
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Deliberate full-fidelity readout of a (possibly middle-truncated) value: the
+  // click is the user gesture the clipboard write needs; a "Value copied"
+  // announcement closes the loop for assistive tech.
+  const copyValue = () => {
+    if (rule.value === undefined) return;
+    void navigator.clipboard?.writeText(rule.value);
+    announce(copy.rules.valueCopied);
+  };
 
   const items: MenuItem[] =
     view === "move"
@@ -255,7 +266,7 @@ function RowMenu(props: RowMenuProps) {
             return "close";
           },
         }))
-      : rootItems(props, () => setView("move"));
+      : rootItems(props, () => setView("move"), copyValue);
 
   // Focus enters the menu on open and on the move-targets drill-in.
   useEffect(() => {
@@ -339,13 +350,20 @@ function RowMenu(props: RowMenuProps) {
   );
 }
 
-function rootItems(props: RowMenuProps, descend: () => void): MenuItem[] {
+function rootItems(
+  props: RowMenuProps,
+  descend: () => void,
+  copyValue: () => void,
+): MenuItem[] {
   const close = (act: () => void) => () => {
     act();
     return "close" as const;
   };
   return [
     { label: copy.menu.edit, act: close(props.onEdit) },
+    ...(props.rule.value !== undefined
+      ? [{ label: copy.menu.copyValue, act: close(copyValue) }]
+      : []),
     { label: copy.menu.duplicate, act: close(props.onDuplicate) },
     ...(props.moveTargets.length > 0
       ? [

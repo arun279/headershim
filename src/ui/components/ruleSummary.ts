@@ -1,5 +1,10 @@
 import type { Rule } from "../../core/model";
 import { copy, type Sentence } from "../copy";
+import { truncateMiddle } from "./Truncate";
+
+// The clamped line 2 (nowrap + ellipsis) would end-clip a pathologically long
+// domain and lose its registrable tail; middle-truncating first keeps the tail.
+const SCOPE_DOMAIN_MAX = 44;
 
 /** The scope line's leading token: the domain (with a +N tail), or its kind. */
 export function scopeSummary(rule: Rule): Sentence {
@@ -8,7 +13,10 @@ export function scopeSummary(rule: Rule): Sentence {
       const [first] = rule.scope.domains;
       return first === undefined
         ? []
-        : copy.scopeSummary.domains(first, rule.scope.domains.length - 1);
+        : copy.scopeSummary.domains(
+            truncateMiddle(first, SCOPE_DOMAIN_MAX),
+            rule.scope.domains.length - 1,
+          );
     }
     case "pattern":
       return [copy.scopeSummary.pattern];

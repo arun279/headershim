@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
+import { BRAND_NAME } from "./src/brand";
 
 // The trust page displays the commit each build came from; a
 // release build is always a git checkout, so the working tree is the source.
@@ -22,6 +23,9 @@ export default defineConfig({
     },
   }),
   manifest: {
+    // The single display name (chrome://extensions, the install prompt, the
+    // store card); without it WXT falls back to the lowercase package id.
+    name: BRAND_NAME,
     permissions: [
       "declarativeNetRequestWithHostAccess",
       "storage",
@@ -30,7 +34,7 @@ export default defineConfig({
     optional_host_permissions: ["*://*/*"],
     // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
     // while paused and clears back to this on exit.
-    action: { default_title: "HeaderShim" },
+    action: { default_title: BRAND_NAME },
     commands: {
       _execute_action: {
         suggested_key: { default: "Alt+Shift+H" },

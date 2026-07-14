@@ -1,0 +1,16 @@
+/*
+ * The truncation primitive's floor: one line, clipped, and shrinkable below its
+ * content so an ancestor flex/grid cell can cut it off instead of overflowing.
+ * No :hover / :focus state ever changes these, so a row's shape is fixed
+ * regardless of value length.
+ */
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* End mode: a CSS ellipsis on the tail (middle mode splits the string itself). */
+.truncate-end {
+  text-overflow: ellipsis;
+}

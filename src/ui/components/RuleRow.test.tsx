@@ -156,6 +156,33 @@ describe("RuleRow states", () => {
     expect(row.getAttribute("aria-description")).toBeNull();
   });
 
+  it("renders the value as a single-line Truncate that focus never reflows", () => {
+    const { row } = mount();
+    const value = row.querySelector(".rule-value") as HTMLElement;
+    expect(value.classList.contains("truncate")).toBe(true);
+    // The old focus-reveal escape hatch is gone: no hidden full-value clone
+    // that focus could swap in and wrap the row taller.
+    expect(row.querySelector(".mt-full")).toBeNull();
+    const before = row.querySelectorAll(".rule-line1 *").length;
+    fire(() => row.focus());
+    expect(row.querySelectorAll(".rule-line1 *").length).toBe(before);
+    expect(
+      row.querySelector(".rule-value")?.classList.contains("truncate"),
+    ).toBe(true);
+  });
+
+  it("ellipsis-truncates a long header name instead of hard-clipping it", () => {
+    const { row } = mount({
+      rule: rule({ header: "x-corp-internal-request-tracing-identifier" }),
+    });
+    const name = row.querySelector(".rule-name") as HTMLElement;
+    expect(name.classList.contains("truncate-end")).toBe(true);
+    // The full name stays reachable (title + DOM text); CSS clips it visually.
+    expect(name.getAttribute("title")).toBe(
+      "x-corp-internal-request-tracing-identifier",
+    );
+  });
+
   it("exposes position and the full value to AT", () => {
     const { row } = mount();
     expect(row.getAttribute("aria-posinset")).toBe("3");
@@ -264,10 +291,32 @@ describe("RuleRow overflow menu", () => {
     expect(menuButton().getAttribute("aria-expanded")).toBe("true");
     expect(menuLabels()).toEqual([
       "Edit",
+      "Copy value",
       "Duplicate",
       "Move to profile ▸",
       "Delete",
     ]);
+  });
+
+  it("copies the full value from the menu and drops Copy value when there is none", () => {
+    const writeText = vi.fn();
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    try {
+      const { menuButton, root } = mount();
+      fire(() => menuButton().click());
+      const copyItem = [...root.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent === "Copy value",
+      ) as HTMLButtonElement;
+      fire(() => copyItem.click());
+      expect(writeText).toHaveBeenCalledWith(rule().value);
+
+      const { value: _, ...removeRule } = rule({ operation: "remove" });
+      const removed = mount({ rule: removeRule });
+      fire(() => removed.menuButton().click());
+      expect(removed.menuLabels()).not.toContain("Copy value");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("adds Regenerate value only when the value was generated", () => {

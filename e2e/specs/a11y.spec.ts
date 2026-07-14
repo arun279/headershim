@@ -49,6 +49,16 @@ async function analyze(
   ).toEqual([]);
 }
 
+// The popup places its open-focus on the active profile chip one tick after the
+// rows mount (a one-shot mount effect). Taking a row before that placement lands
+// lets it steal the row's focus back to the chip, so a following keystroke acts
+// on the chip instead of the row. Waiting for the placement to settle on the
+// active chip first spends it, so the row focus then holds — the same guarantee
+// keyboard.spec gets by gating its row focus behind a settled render.
+async function openFocusSettled(page: Page): Promise<void> {
+  await expect(page.locator('.chip[aria-current="true"]')).toBeFocused();
+}
+
 function withTheme(doc: StateDoc, theme: (typeof THEMES)[number]): StateDoc {
   return { ...doc, settings: { ...doc.settings, theme } };
 }
@@ -189,6 +199,7 @@ test("every popup state passes axe in both themes", async ({
     // The grant panel: committing an ungranted rule with Enter opens it without
     // firing the (unscriptable) permission prompt.
     const grant = await open(ruleDoc(), theme);
+    await openFocusSettled(grant);
     await grant.locator(".rule-row").first().focus();
     await grant.keyboard.press("Enter");
     await expect(grant.locator(".rule-editor")).toBeVisible();
