@@ -108,7 +108,7 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --draft \
             --title "$RELEASE_TAG" \
-            --notes "Verify the downloaded archive with gh attestation verify <zip> --owner ${{ github.repository_owner }}." \
+            --notes "Verify the downloaded archive with gh attestation verify <zip> --repo ${{ github.repository }}." \
             .output/*.zip \
             .output/SHA256SUMS \
             "$BUNDLE_PATH"
@@ -167,11 +167,15 @@ jobs:
             exit 1
           fi
           zip="${zip_paths[0]}"
-          # Fail closed unless the downloaded zip matches the build-provenance
-          # attestation minted by build-and-release. The draft release asset is
-          # mutable between build and this manual publish; this blocks a swapped
-          # or tampered artifact from reaching the store.
-          gh attestation verify "$zip" --owner "${{ github.repository_owner }}"
+          # Fail closed unless the downloaded zip matches a build-provenance
+          # attestation minted by THIS repo's release workflow. Binding to
+          # --repo and --signer-workflow (not just --owner) rejects an older
+          # HeaderShim build or any artifact from another repo the owner
+          # controls. The draft release asset is mutable between build and this
+          # manual publish; this blocks a swapped or tampered artifact.
+          gh attestation verify "$zip" \
+            --repo "${{ github.repository }}" \
+            --signer-workflow "${{ github.repository }}/.github/workflows/release.yml"
           .github/publish/node_modules/.bin/chrome-webstore-upload upload \
             --source "$zip" \
             --extension-id "$CWS_EXTENSION_ID" \

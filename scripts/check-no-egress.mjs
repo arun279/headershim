@@ -7,29 +7,61 @@ import path from "node:path";
 // out of the browser. Today that is a property of the source, not an enforced
 // invariant — a future maintainer (or a hostile PR, the ModHeader-v2 takeover
 // pattern) could add a `fetch()` and nothing would object. This gate turns the
-// invariant into a build failure: any network-egress primitive in shipped code
-// or in the built bundle stops the release.
+// invariant into a build failure.
 //
 // Two surfaces are scanned, both raw:
-//   - src/ + entrypoints/ (authored, shipped code; tests excluded), so an
-//     egress call is caught in review at the source line that introduced it.
-//   - .output/chrome-mv3/**/*.js (the built bundle) — the artifact that
-//     actually ships. This is the strongest signal: it includes everything
-//     bundled from dependencies, after tree-shaking and minification.
+//   - src/ + entrypoints/ (authored, shipped code; tests excluded), so a leak
+//     is caught in review at the source line that introduced it.
+//   - .output/chrome-mv3/**/{.js,.css,.html} (the built artifact that ships) —
+//     the strongest signal: it includes everything bundled from dependencies,
+//     after tree-shaking and minification.
 //
-// The patterns are call/`new`/URL-shaped so that identifiers that merely
-// *mention* these words in prose or copy — a `sec-fetch-dest` header name, a
-// `"XHR/fetch"` label, a `websockets: "WebSockets"` entry — never match; only a
-// real call site does. The scan is deliberately raw and fail-safe: it errs
-// toward flagging (a benign string that happened to contain, say, `fetch(`
-// would break the build visibly and is trivially reworded) rather than toward
-// parsing cleverness that could let an obfuscated call slip through. Computed
-// or string-built access (`globalThis["fet"+"ch"]`) is out of scope for a
-// static gate; the point is that the *direct, readable* way to add egress
-// cannot land without ripping out this check.
+// The invariant has two halves:
+//   1. No script-driven egress: fetch/XHR/WebSocket/EventSource/sendBeacon/
+//      importScripts/new Image()/createElement('script'). These call-shaped
+//      patterns also catch egress to a *variable* URL that a literal scan
+//      can't see. Identifiers that merely mention these words in prose or copy
+//      (a `sec-fetch-dest` header name, a `"XHR/fetch"` label) don't match;
+//      only a real call site does.
+//   2. No auto-loaded remote resource: an `<img src>`, `<link href>`, remote
+//      font, CSS `url()`, or remote `import()` reaches the network under MV3's
+//      default CSP even though it isn't a scripted call. Rather than enumerate
+//      every resource context, the gate flags *every* remote URL literal in
+//      shipped code and allows only an explicit few (see ALLOWED_REMOTE_URLS).
+//      User-clickable repo links (the About page's `<a href>`) are on that
+//      list; a shipped resource that auto-loads from anywhere else is not.
+//
+// The scan is deliberately raw and fail-safe: it errs toward flagging (a benign
+// string that happened to contain `fetch(`, or a new remote URL, breaks the
+// build visibly and is trivially triaged) rather than toward parsing cleverness
+// that could let an obfuscated leak slip through. Computed/string-built access
+// (`globalThis["fet"+"ch"]`, a URL assembled at runtime) is out of scope for a
+// static gate; the point is that the direct, readable way to add egress cannot
+// land without ripping out this check.
 
 const root = path.resolve(import.meta.dirname, "..");
 const BUNDLE_DIR = path.join(root, ".output/chrome-mv3");
+
+// The only remote URLs any shipped file is allowed to contain. These are the
+// About page's repository links (defined in src/ui/copy.ts and rendered as
+// user-clickable `<a href>` anchors, never auto-loaded). Matched in full, so a
+// secret appended as a path or query (`.../releases?leak=…`) is a different
+// token and still fails.
+const ALLOWED_REMOTE_URLS = new Set([
+  "https://github.com/arun279/headershim",
+  "https://github.com/arun279/headershim/issues",
+  "https://github.com/arun279/headershim/releases",
+]);
+
+function isAllowedRemoteUrl(url) {
+  // W3C XML namespace URIs (SVG/MathML/XHTML) are identifiers the renderer
+  // never fetches; Preact emits them via createElementNS in the bundle.
+  return url.startsWith("http://www.w3.org/") || ALLOWED_REMOTE_URLS.has(url);
+}
+
+// A remote URL literal: from the scheme up to the first delimiter that ends a
+// string, attribute, CSS value, or JSX expression.
+const REMOTE_URL = /https?:\/\/[^\s"'`)<>\]}]+/g;
 
 const RULES = [
   { name: "fetch", pattern: /\bfetch\s*\(/g, hint: "fetch() network call" },
@@ -64,30 +96,22 @@ const RULES = [
     hint: "new Image() — image-beacon exfiltration primitive",
   },
   {
-    name: "remote-import",
-    pattern: /\bimport\s*\(\s*[`'"]\s*https?:\/\//gi,
-    hint: "dynamic import() of a remote URL",
-  },
-  {
-    name: "remote-src",
-    pattern: /\.src\s*=\s*[`'"]?\s*https?:\/\//gi,
-    hint: "assignment of a remote URL to an element .src (script/img beacon)",
-  },
-  {
-    name: "remote-setattribute",
-    pattern: /setAttribute\s*\(\s*[`'"]src[`'"]\s*,\s*[`'"]?\s*https?:\/\//gi,
-    hint: "setAttribute('src', <remote URL>) injection",
-  },
-  {
     name: "script-element",
     pattern: /createElement\s*\(\s*[`'"]script[`'"]/gi,
     hint: "createElement('script') — remote-code injection vector",
+  },
+  {
+    // Protocol-relative resource URL (`url(//host…)`, `src="//host…"`).
+    // Restricted to a quote/paren context so JS `//` comments never match.
+    name: "protocol-relative-url",
+    pattern: /url\(\s*['"]?\/\/[a-z0-9-]+\.|['"]\/\/[a-z0-9-]+\.[a-z]/gi,
+    hint: "protocol-relative remote resource URL",
   },
 ];
 
 function scan(label, filePath, text) {
   const lines = text.split("\n");
-  return RULES.flatMap((rule) =>
+  const ruleHits = RULES.flatMap((rule) =>
     lines.flatMap((line, index) => {
       rule.pattern.lastIndex = 0;
       const found = rule.pattern.exec(line)?.[0]?.trim();
@@ -96,7 +120,19 @@ function scan(label, filePath, text) {
         : `${label} ${filePath}:${index + 1}: [${rule.name}] "${found}" — ${rule.hint}`;
     }),
   );
+  const urlHits = lines.flatMap((line, index) =>
+    [...line.matchAll(REMOTE_URL)]
+      .map((match) => match[0])
+      .filter((url) => !isAllowedRemoteUrl(url))
+      .map(
+        (url) =>
+          `${label} ${filePath}:${index + 1}: [remote-url] "${url}" — remote URL in shipped code auto-loads over the network; only the About-page repository links are allowed`,
+      ),
+  );
+  return [...ruleHits, ...urlHits];
 }
+
+const SCANNED_EXTENSIONS = /\.(?:ts|tsx|js|mjs|css|html)$/;
 
 function sourceFiles() {
   return execFileSync("git", ["ls-files", "src", "entrypoints"], {
@@ -104,7 +140,7 @@ function sourceFiles() {
     encoding: "utf8",
   })
     .split("\n")
-    .filter((file) => /\.(?:ts|tsx|js|mjs)$/.test(file))
+    .filter((file) => SCANNED_EXTENSIONS.test(file))
     .filter((file) => !/\.(?:test|spec)\.[tj]sx?$/.test(file));
 }
 
@@ -114,7 +150,9 @@ function bundleFiles(dir) {
     if (entry.isDirectory()) {
       return bundleFiles(full);
     }
-    return entry.isFile() && entry.name.endsWith(".js") ? [full] : [];
+    return entry.isFile() && /\.(?:js|css|html)$/.test(entry.name)
+      ? [full]
+      : [];
   });
 }
 
