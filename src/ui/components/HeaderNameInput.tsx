@@ -165,7 +165,10 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
                 return;
             }
           }}
-          onBlur={() => setOpen(false)}
+          onBlur={() => {
+            setOpen(false);
+            setActiveIndex(undefined);
+          }}
         />
         {open && (
           <div

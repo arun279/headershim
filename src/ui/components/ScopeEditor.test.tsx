@@ -107,6 +107,13 @@ describe("ScopeEditor domain chips", () => {
     expect(ctx.chips()).toEqual(["api.example.com", "cdn.example.com"]);
   });
 
+  it("shows the Enter hint beside the chip input", () => {
+    const ctx = mount();
+    const hint = ctx.root.querySelector(".chip-field-hint") as HTMLElement;
+    expect(hint.textContent).toBe(copy.editor.addChipHint);
+    expect(ctx.chipInput().getAttribute("aria-describedby")).toContain(hint.id);
+  });
+
   it("commits pending text when the field blurs", () => {
     const ctx = mount();
     typeInto(ctx.chipInput(), "cdn.example.com");

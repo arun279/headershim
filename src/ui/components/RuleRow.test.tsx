@@ -94,6 +94,7 @@ describe("RuleRow states", () => {
     expect(toggle().closest(".rule-row")?.classList.contains("blocked")).toBe(
       true,
     );
+    expect(toggle().classList.contains("sw-blocked")).toBe(true);
     expect(line2().querySelector("svg")).not.toBeNull();
     expect(line2().textContent).toContain("Needs access · app.acme.dev +1");
     expect(row.getAttribute("aria-description")).toContain("needs access");

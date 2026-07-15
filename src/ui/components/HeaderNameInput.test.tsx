@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
 import { LiveRegionProvider } from "../a11y/LiveRegion";
 import { copy } from "../copy";
-import { press, render, typeInto } from "../test/render";
+import { fire, press, render, typeInto } from "../test/render";
 import { HeaderNameInput } from "./HeaderNameInput";
 
 function Harness() {
@@ -72,6 +72,20 @@ describe("HeaderNameInput combobox contract", () => {
     press(ctx.input(), "ArrowDown");
     press(ctx.input(), "Enter");
     expect(ctx.input().value).toBe("authorization");
+    expect(ctx.listbox()).toBeNull();
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("closes the suggestion list when focus leaves the field", () => {
+    const ctx = mount();
+    const next = document.createElement("input");
+    ctx.root.appendChild(next);
+    fire(() => ctx.input().focus());
+    typeInto(ctx.input(), "auth");
+    expect(ctx.listbox()).not.toBeNull();
+
+    fire(() => next.focus());
+
     expect(ctx.listbox()).toBeNull();
     expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
   });

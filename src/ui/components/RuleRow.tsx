@@ -130,6 +130,7 @@ export function RuleRow(props: RuleRowProps) {
         checked={rule.enabled}
         label={copy.rules.switchLabel(rule.header, rule.enabled)}
         ariaDisabled={invalid}
+        tone={needsAccess ? "blocked" : undefined}
         {...(props.tabIndex === undefined ? {} : { tabIndex: -1 })}
         onChange={(enabled) => {
           // An invalid rule cannot be enabled; activation points at the reason.

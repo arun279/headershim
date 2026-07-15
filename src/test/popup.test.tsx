@@ -145,6 +145,23 @@ describe("popup App", () => {
     expect(annunciator().textContent).toBe("Live. 1 of 1 rule enabled");
   });
 
+  it("shows an ungranted pattern rule as blocked on both status surfaces", async () => {
+    const patternRule = rule({
+      scope: { type: "pattern", pattern: "||api.example.com^", hosts: [] },
+    });
+    const { root, annunciator } = await mount(seededDoc([patternRule]));
+
+    expect(annunciator().getAttribute("data-state")).toBe("needs-access");
+    expect(annunciator().textContent).toContain(
+      "1 rule can't run. HeaderShim doesn't have access to all sites.",
+    );
+    expect(root.querySelector(".rule-row.blocked .sw")).not.toBeNull();
+    expect(root.querySelector(".rule-row.running")).toBeNull();
+    expect(root.querySelector(".rule-status")?.textContent).toContain(
+      "Needs access · all sites",
+    );
+  });
+
   it("hands off a single Reload-tab action after granting from the annunciator", async () => {
     const { root, annunciator } = await mount(seededDoc([rule()]));
     const grant = [...annunciator().querySelectorAll("button")].find(

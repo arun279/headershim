@@ -48,7 +48,7 @@
 }
 
 /* Amber hatching says the requested on-state is held pending site access. */
-.rule-row.blocked .sw[aria-checked="true"]::before {
+.sw.sw-blocked[aria-checked="true"]::before {
   background: repeating-linear-gradient(
     -45deg,
     var(--caution-lamp) 0,

@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { focusOnRemoval } from "../a11y/focus";
+import { copy } from "../copy";
 import { Truncate } from "./Truncate";
 import "./ChipField.css";
 
@@ -19,6 +20,11 @@ interface ChipFieldProps {
 /** Shared host-chip input with one keyboard and focus-removal contract. */
 export function ChipField(props: ChipFieldProps) {
   const [pending, setPending] = useState("");
+  const hintId = `${props.id}-hint`;
+  const describedBy = [
+    ...(props.label === undefined ? [] : [`${props.id}-label`]),
+    hintId,
+  ].join(" ");
 
   const commit = (raw: string) => {
     const value = raw.trim().toLowerCase();
@@ -60,9 +66,7 @@ export function ChipField(props: ChipFieldProps) {
           }`}
           type="text"
           aria-label={props.inputLabel}
-          aria-describedby={
-            props.label === undefined ? undefined : `${props.id}-label`
-          }
+          aria-describedby={describedBy}
           aria-invalid={props.invalid === true ? true : undefined}
           placeholder={props.placeholder}
           value={pending}
@@ -97,6 +101,9 @@ export function ChipField(props: ChipFieldProps) {
           }}
           onBlur={() => commit(pending)}
         />
+        <span class="chip-field-hint" id={hintId}>
+          {copy.editor.addChipHint}
+        </span>
       </div>
     </div>
   );

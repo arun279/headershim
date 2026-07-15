@@ -135,6 +135,20 @@ describe("RuleList grouping", () => {
     expect(rows()[0]?.classList.contains("blocked")).toBe(true);
   });
 
+  it("maps a pattern rule's broad grant gap to a blocked all-sites row", () => {
+    const pattern = rule("pattern", {
+      scope: { type: "pattern", pattern: "||api.acme.dev^", hosts: [] },
+    });
+    const { rows } = mount({
+      profiles: [profile("staging", "Staging auth", [pattern])],
+      missingByRule: new Map([["pattern", ["*://*/*"]]]),
+    });
+
+    expect(rows()[0]?.classList.contains("blocked")).toBe(true);
+    expect(rows()[0]?.classList.contains("running")).toBe(false);
+    expect(rows()[0]?.textContent).toContain("Needs access · all sites");
+  });
+
   it("hands a blocked row's Grant action the exact missing origins", () => {
     const { rows, onGrant } = mount({
       missingByRule: new Map([["a", ["*://*.api.acme.dev/*"]]]),

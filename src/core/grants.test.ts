@@ -107,6 +107,13 @@ describe("requiredOrigins", () => {
 describe("missingGrants", () => {
   const none: GrantSnapshot = { origins: [], allSites: false };
 
+  it.each<Scope>([
+    { type: "pattern", pattern: "||example.com^", hosts: [] },
+    { type: "regex", regex: "^https://x/", hosts: [] },
+  ])("reports broad access for an ungranted $type rule with no named sites", (scope) => {
+    expect(missingGrants(rule(scope, "all"), none)).toEqual([ALL_SITES_ORIGIN]);
+  });
+
   it("reports an ungranted domain target", () => {
     expect(
       missingGrants(

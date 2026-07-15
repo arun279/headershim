@@ -183,7 +183,13 @@ describe("options about", () => {
     ].filter((link) => link.href === text.security.linkUrl);
 
     expect(security).toHaveLength(1);
+    expect(text.security.body).toBe(
+      "How to report a security issue is in the security policy.",
+    );
     expect(root.textContent).toContain(text.security.body);
+    expect(text.neverList.groups[1]?.items[2]?.detail).toBe(
+      "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover.",
+    );
   });
 
   it("links the repository, issues, and changelog", async () => {

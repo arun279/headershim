@@ -369,7 +369,7 @@ export const copy = {
               {
                 lead: "No sale, no silent ownership transfer",
                 detail:
-                  "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover. The security policy has the detail.",
+                  "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover.",
               },
             ],
           },
@@ -397,7 +397,7 @@ export const copy = {
       },
       security: {
         heading: "Security and disclosure",
-        body: "The full threat model, the risks HeaderShim accepts, and how to report a vulnerability are in the security policy.",
+        body: "How to report a security issue is in the security policy.",
         linkLabel: "Read the security policy",
         linkUrl: "https://github.com/arun279/headershim/blob/main/SECURITY.md",
       },
@@ -600,6 +600,7 @@ export const copy = {
     requestTarget:
       "Runs on requests to these hosts, which may differ from the page you are viewing.",
     addDomain: "+ add",
+    addChipHint: "Press Enter to add",
     domainInputLabel: "Add domain",
     removeDomain: (domain: string) => `Remove ${domain}`,
     patternHint: [
@@ -608,7 +609,8 @@ export const copy = {
       data("||example.com/api/"),
       " narrows it to /api/ paths",
     ] as Sentence,
-    grantNote: "This rule only takes effect on sites you've granted access to.",
+    grantNote:
+      "This rule needs all-sites access to run everywhere it could match. You can grant specific sites in Site access instead.",
     allTypes: "All types",
     includesPages: "Includes top-level pages",
     insert: "Insert",
