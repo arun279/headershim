@@ -1,7 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { Rule } from "../../core/model";
 import { copy } from "../copy";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./RuleFace.css";
 
 /**
@@ -29,12 +29,28 @@ export function RuleFace({
         <span class="rule-op">{copy.rules.operation[rule.operation]}</span>
       </span>
       <div class="rule-lines">
-        <p class="rule-line1">
-          <Truncate value={rule.header} class="rule-name" />
+        <p
+          class={
+            rule.operation !== "remove" && value !== undefined
+              ? "rule-line1 has-value"
+              : "rule-line1"
+          }
+        >
+          <Truncate
+            mode="middle"
+            value={rule.header}
+            maxChars={TRUNCATION_LIMITS.header}
+            class="rule-name"
+          />
           {rule.operation !== "remove" && value !== undefined && (
             <span class="rule-value-preview">
               <span class="colon">: </span>
-              <Truncate mode="middle" value={value} class="rule-value" />
+              <Truncate
+                mode="middle"
+                value={value}
+                maxChars={TRUNCATION_LIMITS.value}
+                class="rule-value"
+              />
             </span>
           )}
         </p>

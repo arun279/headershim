@@ -27,18 +27,17 @@ describe("EmptyState", () => {
     );
   });
 
-  it("renders reassurance and can focus the primary action", () => {
+  it("renders reassurance without forcing resting focus", () => {
     const root = render(
       <EmptyState
         message={copy.emptyState.profile("Staging")}
         detail={copy.emptyState.otherProfilesUnchanged}
         actions={<button type="button">Create a rule</button>}
-        autoFocusAction
       />,
     );
     expect(root.querySelector(".empty-detail")?.textContent).toBe(
       "Your other profiles are unchanged.",
     );
-    expect(document.activeElement).toBe(root.querySelector("button"));
+    expect(document.activeElement).not.toBe(root.querySelector("button"));
   });
 });

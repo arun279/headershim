@@ -30,6 +30,7 @@
   --sw-off: #6E7B88; /* switch off-track: 3.93:1 vs panel-0 */
   --sw-on: var(--advisory); /* switch on-track */
   --sw-paused: var(--caution-lamp); /* checked pause track */
+  --sw-held: #8B7355; /* checked but not running */
   --focus: var(--trace); /* 2px ring, offset 2px, never removed */
 
   /* profile badge palette (fixed 8; same hex in both themes; white 2-char text) */
@@ -92,6 +93,7 @@
     --advisory: #4CC38A; /* 7.72:1 on panel-0 */
 
     --sw-off: #626F7C; /* 3.33:1 vs panel-0 */
+    --sw-held: #8E8172;
 
     /* badges keep their light hexes: lightening for dark was the worst AA fail. */
 
@@ -123,6 +125,7 @@
   --advisory: #4CC38A;
 
   --sw-off: #626F7C;
+  --sw-held: #8E8172;
 
   --shadow-pop: 0 10px 32px rgba(0, 0, 0, 0.5);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);

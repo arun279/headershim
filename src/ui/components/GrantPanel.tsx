@@ -4,12 +4,8 @@ import { originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import { Button } from "./Button";
 import { ChipField } from "./ChipField";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./GrantPanel.css";
-
-// Host chips wrap freely; a runaway host middle-truncates (its registrable tail
-// is the security-relevant part) rather than stretching the panel.
-const HOST_MAX = 40;
 
 export interface GrantSelection {
   readonly targetHosts: string[];
@@ -168,9 +164,9 @@ export function GrantPanel(props: GrantPanelProps) {
                   {props.targetHosts.map((host) => (
                     <Truncate
                       key={host}
-                      mode="middle"
+                      mode="end"
                       value={host}
-                      maxChars={HOST_MAX}
+                      maxChars={TRUNCATION_LIMITS.domain}
                       class="mono"
                     />
                   ))}

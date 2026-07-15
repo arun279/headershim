@@ -59,11 +59,11 @@ function seededDoc(rules: Rule[]): StateDoc {
 }
 
 describe("popup App", () => {
-  it("renders first run as onboarding with focus on the first action", async () => {
-    const { root, annunciator } = await mount(createV1Seed());
+  it("renders first run as centered onboarding without active chrome", async () => {
+    const { root } = await mount(createV1Seed());
 
     expect(root.textContent).toContain(
-      "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
+      "Add, change, and remove HTTP headers on the sites you choose.",
     );
     const actions = [...root.querySelectorAll(".first-run-actions button")];
     expect(actions.map((button) => button.textContent)).toEqual([
@@ -72,11 +72,13 @@ describe("popup App", () => {
       "Import from a file",
     ]);
     expect(actions[0]?.classList.contains("primary")).toBe(true);
-    expect(document.activeElement).toBe(actions[0]);
+    expect(document.activeElement).not.toBe(actions[0]);
     expect(root.textContent).toContain(
       "temporary, this tab only, gone on close",
     );
-    expect(annunciator().textContent).toBe("Live. No rules yet.");
+    expect(root.querySelector(".profiles")).toBeNull();
+    expect(root.querySelector(".annunciator")).toBeNull();
+    expect(root.querySelector(".popup")?.classList).toContain("first-run-mode");
     expect(root.querySelector(".foot")).toBeNull();
     const theme = root.querySelector('.popup-head [aria-label="Theme"]');
     const options = root.querySelector('.popup-head [aria-label="Options"]');
@@ -306,7 +308,7 @@ describe("popup App", () => {
 
     expect(root.textContent).toContain("Staging has no rules yet.");
     expect(root.textContent).toContain("Your other profiles are unchanged.");
-    expect(document.activeElement?.textContent).toBe("Create a rule");
+    expect(document.activeElement?.textContent).not.toBe("Create a rule");
     expect(annunciator().textContent).toBe("Live. No rules yet.");
     expect(root.querySelector(".foot")).toBeNull();
   });

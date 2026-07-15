@@ -47,28 +47,14 @@
   transform: translateX(16px);
 }
 
-/* Amber hatching says the requested on-state is held pending site access. */
+/* A solid neutral track says the requested on-state is held, not running. */
 .sw.sw-blocked[aria-checked="true"]::before {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--caution-lamp) 0,
-    var(--caution-lamp) 4px,
-    var(--caution-bg) 4px,
-    var(--caution-bg) 7px
-  );
-  border: var(--hairline) solid var(--caution);
+  background: var(--sw-held);
 }
 
 /* A configured-on rule in an off profile is held, never painted as running. */
 .rule-row.inactive .sw[aria-checked="true"]::before {
-  background: repeating-linear-gradient(
-    -45deg,
-    var(--bezel-strong) 0,
-    var(--bezel-strong) 4px,
-    var(--panel-2) 4px,
-    var(--panel-2) 7px
-  );
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--sw-held);
 }
 
 .sw:disabled {

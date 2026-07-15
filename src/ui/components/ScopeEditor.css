@@ -26,7 +26,7 @@
 
 /* The radio is visually hidden; its focus ring lands on the segment skin. The
    ring is inset (offset -2px) because .segments clips overflow. */
-.segment:focus-within {
+.segment:has(:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
 }
@@ -35,7 +35,7 @@
    would vanish. Switch to --trace-ink, the token proven >=3:1 against --trace in
    both themes (it is the segment's own text color) so the ring stays visible
    while the radiogroup keeps focus on the checked segment (WCAG 2.4.7). */
-.segment.checked:focus-within {
+.segment.checked:has(:focus-visible) {
   outline-color: var(--trace-ink);
 }
 

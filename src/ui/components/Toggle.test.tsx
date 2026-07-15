@@ -31,6 +31,18 @@ describe("Toggle", () => {
     expect(getSwitch(root).classList.contains("sw-paused")).toBe(true);
   });
 
+  it("marks a blocked checked switch for the solid held-state color", () => {
+    const root = render(
+      <Toggle
+        checked
+        label="Rule on: x-test"
+        tone="blocked"
+        onChange={() => {}}
+      />,
+    );
+    expect(getSwitch(root).classList.contains("sw-blocked")).toBe(true);
+  });
+
   it("reports the flipped value on activation", () => {
     const onChange = vi.fn();
     const root = render(

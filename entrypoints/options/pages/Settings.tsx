@@ -21,7 +21,7 @@ export function SettingsPage({
 }) {
   const shortcutsUrl = shortcutManagerUrl(browser.runtime);
   return (
-    <section class="page" aria-labelledby="settings-title">
+    <section class="page settings-page" aria-labelledby="settings-title">
       <h1 class="page-title" id="settings-title" tabIndex={-1}>
         {text.title}
       </h1>

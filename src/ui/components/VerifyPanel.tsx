@@ -10,7 +10,7 @@ import { Button } from "./Button";
 import { CheckGlyph, TriangleGlyph } from "./glyphs";
 import { Sheet } from "./Sheet";
 import { sentence } from "./sentence";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./VerifyPanel.css";
 
 interface VerifyBlocked {
@@ -117,7 +117,12 @@ export function VerifyPanel({
                 <span class="verify-lamp fired" aria-hidden="true">
                   <CheckGlyph />
                 </span>
-                <Truncate value={row.rule.header} class="verify-name mono" />
+                <Truncate
+                  mode="middle"
+                  value={row.rule.header}
+                  maxChars={TRUNCATION_LIMITS.header}
+                  class="verify-name mono"
+                />
                 <span
                   class="verify-tally mono"
                   role="img"
@@ -139,7 +144,12 @@ export function VerifyPanel({
                   <span class="verify-lamp missed" aria-hidden="true">
                     <TriangleGlyph />
                   </span>
-                  <Truncate value={row.rule.header} class="verify-name mono" />
+                  <Truncate
+                    mode="middle"
+                    value={row.rule.header}
+                    maxChars={TRUNCATION_LIMITS.header}
+                    class="verify-name mono"
+                  />
                   <Hint row={row} />
                   <span
                     class="verify-tally mono"

@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./ChipField.css";
 
 interface ChipFieldProps {
@@ -46,7 +46,12 @@ export function ChipField(props: ChipFieldProps) {
       <div class={`chip-field ${props.variant}-chips`}>
         {props.values.map((value) => (
           <span class={`chip-field-chip ${props.variant}-chip`} key={value}>
-            <Truncate mode="middle" value={value} maxChars={40} class="mono" />
+            <Truncate
+              mode="end"
+              value={value}
+              maxChars={TRUNCATION_LIMITS.domain}
+              class="mono"
+            />
             <button
               type="button"
               class={`chip-field-x ${props.variant}-chip-x`}

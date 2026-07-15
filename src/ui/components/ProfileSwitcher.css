@@ -11,6 +11,7 @@
   display: flex;
   flex: none;
   align-items: stretch;
+  max-width: 100%;
   min-height: 44px;
   overflow: hidden;
   border: var(--hairline) solid var(--bezel);
@@ -19,15 +20,17 @@
 }
 
 .profile-chip.current {
-  border-color: var(--trace);
-  box-shadow: inset 0 -2px 0 var(--trace);
+  border-color: var(--bezel-strong);
+  background: var(--panel-2);
 }
 
 .chip {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
+  overflow: hidden;
   padding: 5px 6px;
   font-size: 12px;
   font-weight: 500;
@@ -38,7 +41,13 @@
 }
 
 .chip-name {
-  max-width: 18ch;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 22ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .chip-badge {
@@ -54,6 +63,7 @@
 }
 
 .profile-menu-trigger {
+  flex: none;
   width: 44px;
   border-left: var(--hairline) solid var(--bezel);
   color: var(--ink-mute);

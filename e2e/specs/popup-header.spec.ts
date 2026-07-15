@@ -1,5 +1,5 @@
 import type { Worker } from "@playwright/test";
-import type { StateDoc } from "../../src/core/model";
+import { createRule, type StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
 import { expect, seedState, test } from "../fixtures";
@@ -16,7 +16,25 @@ test("a popup-created profile becomes active without reloading", async ({
   extensionId,
   serviceWorker,
 }) => {
-  await seedState(serviceWorker, createV1Seed());
+  const seed = createV1Seed();
+  const [firstRule, next] = createRule(seed, {
+    direction: "request",
+    operation: "set",
+    header: "x-environment",
+    value: "staging",
+    scope: { type: "domains", domains: ["example.com"] },
+    resourceTypes: "all",
+    initiators: [],
+    enabled: true,
+  });
+  const firstProfile = next.profiles[0];
+  if (firstProfile === undefined) {
+    throw new Error("seed has no profile");
+  }
+  await seedState(serviceWorker, {
+    ...next,
+    profiles: [{ ...firstProfile, rules: [firstRule] }],
+  });
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   const marker = await page.evaluate(() => {

@@ -1,5 +1,5 @@
 /**
- * The single source of every user-facing string. Components never inline copy;
+ * The single source of every user-facing string. Components do not inline copy;
  * they read it from here so wording stays consistent and reviewable in one place.
  * Strings follow a consistent voice: the platform is named as the actor,
  * cause precedes impact precedes next step, and exact names are always shown.
@@ -32,9 +32,7 @@ const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 export const copy = {
   app: {
     name: BRAND_NAME,
-    // Identical wording ships on the trust page.
-    tagline:
-      "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
+    tagline: "Add, change, and remove HTTP headers on the sites you choose.",
   },
 
   annunciator: {
@@ -44,8 +42,8 @@ export const copy = {
     outOfSync: [
       "Out of sync. Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
     ] as Sentence,
-    // "N of M rules enabled" names the enabled/configured signal so it never
-    // reads as a match score; the badge and Verify speak of matches instead.
+    // "N of M rules enabled" names the enabled/configured signal so it does not
+    // read as a match score; the badge and Verify speak of matches instead.
     live: (
       enabledCount: number,
       totalCount: number,
@@ -219,8 +217,7 @@ export const copy = {
         droppedInitiatorDomain:
           "Dropped. HeaderShim has no initiator scoping in this version.",
         droppedTab: "Dropped. Use This-tab overrides for per-tab needs.",
-        droppedUrlReplacement:
-          "Dropped. HeaderShim changes headers only, never redirects.",
+        droppedUrlReplacement: "Dropped. HeaderShim changes headers only.",
       },
     },
     siteAccess: {
@@ -267,163 +264,28 @@ export const copy = {
       },
       shortcuts: "Keyboard shortcuts",
     },
-    // The trust page, written for the person who installed HeaderShim:
-    // falsifiable claims, each with a way to check it. The reviewer-grade threat
-    // model lives in SECURITY.md, linked once. The install claim is always "no
-    // install-time warning", never "no permission text anywhere"; the CWS caveat
-    // is stated, never "verify the store build".
     about: {
-      trustHeading: "About & trust",
       build: (version: string, commit: string): Sentence => [
         "HeaderShim v",
         data(version),
         " · commit ",
         data(commit),
       ],
-      summary: {
-        heading: "Three facts you can check",
-        facts: [
-          "HeaderShim is open source. The full source, its MIT license, and every release are linked below.",
-          "No code in HeaderShim can send your data anywhere. It ships no content scripts, no scripting permission, and no webRequest, and it takes no host access at install. Its only capability is Chrome's declarative header engine, which cannot read page contents or make network calls. The manifest shows this.",
-          "HeaderShim has no telemetry or analytics. A policy check in CI fails the build if any network or tracking capability is added.",
-        ],
-      },
-      permissions: {
-        heading: "Permissions, justified",
-        intro:
-          'HeaderShim installs with no install-time warning. It requests no host access and no warning-bearing permission at install. Chrome\'s details page shows its generic site-access line ("This extension can read and change your data on sites. You can control which sites the extension can access."), and that line is accurate: you grant site access per site, when a rule needs it, and revoke it in one click.',
-        columns: {
-          permission: "Permission",
-          why: "Why it's needed",
-          when: "When",
-        },
-        rows: [
-          {
-            permission: "declarativeNetRequestWithHostAccess",
-            why: "Applies your header rules through Chrome's declarative rule engine, which only acts on sites you've granted.",
-            when: "At install. No warning dialog.",
-          },
-          {
-            permission: "storage",
-            why: "Saves your profiles, rules, and settings on this device, and nothing else.",
-            when: "At install. No warning dialog.",
-          },
-          {
-            permission: "activeTab",
-            why: "Lets This-tab overrides and Verify act on the tab where you clicked, with no site grant.",
-            when: "Only on your gesture. The click or keyboard shortcut is the consent.",
-          },
-          {
-            permission: "Site access (optional)",
-            why: "Lets rules change headers on the sites you name. Chrome asks with its own prompt, scoped to exactly those sites.",
-            when: "When a rule first needs a site. Revocable any time in Site access.",
-          },
-        ],
-      },
-      storage: {
-        heading: "What's stored",
-        body: "HeaderShim stores exactly what you typed: rule definitions and UI preferences, on this device, and nothing else. It never records your traffic, the headers on it, the sites you visit, or history of any kind. You can export the whole store to a readable file at any time and check it byte for byte. That export is the inspection surface. A rule can hold a live secret you typed, such as an Authorization token or a Cookie value, stored unencrypted on disk like any local config file. Treat an export like a file of passwords.",
-      },
-      neverList: {
-        heading: "What HeaderShim will never do",
-        intro:
-          "Some of these you can check in the manifest, some are standing commitments, and some are limits Chrome places on every extension.",
-        // The lead claims are the signature. Each detail is one plain user-facing
-        // consequence. The groups mirror what the listing states.
-        groups: [
-          {
-            heading: "Checkable in the manifest",
-            items: [
-              {
-                lead: "No content scripts, no scripting, no web-accessible resources, no webRequest",
-                detail:
-                  "HeaderShim has no code path into the pages you open, so it can't read them or inject into them.",
-              },
-              {
-                lead: "No telemetry or analytics",
-                detail:
-                  "No network code ships to send it, and CI fails the build if any is added.",
-              },
-              {
-                lead: "No remote config",
-                detail:
-                  "Every behavior is bundled in the build you installed. Nothing is fetched to change it after review.",
-              },
-            ],
-          },
-          {
-            heading: "Standing commitments",
-            items: [
-              {
-                lead: "No accounts, no cloud sync, no server",
-                detail:
-                  "There is no HeaderShim server, and none is planned. To share a profile, export a file.",
-              },
-              {
-                lead: "No traffic or header history",
-                detail:
-                  "HeaderShim saves the rules you write, never the requests you make. Any future debug log would be in-memory and off by default.",
-              },
-              {
-                lead: "No sale, no silent ownership transfer",
-                detail:
-                  "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover.",
-              },
-            ],
-          },
-          {
-            heading: "Limits HeaderShim doesn't work around",
-            items: [
-              {
-                lead: "No request-time dynamic values",
-                detail:
-                  "Chrome doesn't let an extension compute a header value per request, and HeaderShim doesn't try to. Generated values are frozen when you save the rule.",
-              },
-              {
-                lead: "No response-body changes",
-                detail:
-                  "Chrome's header engine can't touch the page you receive, only its headers. It can't rewrite the page.",
-              },
-              {
-                lead: "No redirects or URL rewriting",
-                detail:
-                  "HeaderShim changes headers only. It can't send you to another site.",
-              },
-            ],
-          },
-        ],
-      },
-      security: {
-        heading: "Security and disclosure",
-        body: "How to report a security issue is in the security policy.",
-        linkLabel: "Read the security policy",
-        linkUrl: "https://github.com/arun279/headershim/blob/main/SECURITY.md",
-      },
-      verifyBuild: {
-        heading: "Verify this build",
-        intro:
-          "Every release zip is built by public CI from a tagged commit. The GitHub release carries the zip, a SHA256SUMS file, and a signed provenance attestation binding the artifact to the exact commit and workflow run.",
-        steps: [
-          [
-            "Check the zip you downloaded against the published hashes: ",
-            data("sha256sum -c SHA256SUMS"),
-          ],
-          [
-            "Check that the zip was built from the tagged commit by the public workflow: ",
-            data("gh attestation verify <zip> --repo arun279/headershim"),
-          ],
-        ] as readonly Sentence[],
-        caveat:
-          "The Chrome Web Store re-packages and signs what we upload, so the installed extension can't be byte-compared against our zip. What you can verify: the files inside your installed extension match the attested release files, and the attestation chains to the public source.",
-      },
+      description: [
+        "HeaderShim adds, changes, and removes HTTP headers on the sites you choose. Write a rule, scope it to specific domains or a URL pattern, and it runs only where you say.",
+        "Group rules into profiles and switch between them when you need a different setup. Temporary overrides apply to a single tab and clear when you close it. Rules import and export as plain JSON, and HeaderShim reads ModHeader exports too.",
+      ],
+      license:
+        "HeaderShim is open source under the MIT license, and comes with no warranty or guarantees.",
       links: {
-        license: "MIT license",
         repository: "Repository",
         repositoryUrl: "https://github.com/arun279/headershim",
+        license: "MIT license",
+        licenseUrl: "https://github.com/arun279/headershim/blob/main/LICENSE",
         issues: "Issues",
         issuesUrl: "https://github.com/arun279/headershim/issues",
-        changelog: "Changelog",
-        changelogUrl: "https://github.com/arun279/headershim/releases",
+        releases: "Releases",
+        releasesUrl: "https://github.com/arun279/headershim/releases",
       },
     },
   },
@@ -436,7 +298,7 @@ export const copy = {
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands and in Verify's
-    // no-request state; never an automatic reload (locus of control).
+    // no-request state; there is no automatic reload (locus of control).
     reloadTab: "Reload tab",
     grantLater: "Grant later",
     discardRule: "Discard rule",
@@ -678,7 +540,7 @@ export const copy = {
     patternInvalid:
       "Chrome's rule engine can't use this URL pattern. A pattern can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
     grantDeclined: (host: string) =>
-      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access whenever you're ready. The rule starts working immediately.`,
+      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready. The rule starts working immediately.`,
     appendDisallowed: (name: string) =>
       `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
     ruleCap:
@@ -727,8 +589,8 @@ export const copy = {
     // The honest-limits footer.
     limits:
       "Chrome only reports rule matches from the last 5 minutes on this tab. DevTools' Network panel will not show header changes made by extensions (a known Chrome bug), so trust this panel or your server logs, not DevTools. Chrome's HTTP cache still passes through header rules. A site's service worker may bypass them when it generates a response or serves CacheStorage.",
-    // Verify leads with the most basic unmet precondition,
-    // never the caching essay. blocked > no-request > matched, in that order.
+    // Verify leads with the most basic unmet precondition instead of the
+    // caching essay. blocked > no-request > matched, in that order.
     // A grant gap is the headline, with Grant surfaced in the panel itself.
     blockedHeadline: (
       ruleCount: number,
@@ -751,7 +613,7 @@ export const copy = {
     // lives in `limits`, so this names only what that footer does not.
     stillNothing:
       "Still nothing after a reload? A rule limited to certain resource types only fires on those requests, and requests another site starts need that site granted too. See Site access in options.",
-    // The has-matches headline. Counts of matches, phrased so it never reads as
+    // The has-matches headline. Counts of matches, phrased so it does not read as
     // a configuration score; the per-rule list carries the tallies.
     matchedHeadline: (matched: number): Sentence => [
       "Last request: ",

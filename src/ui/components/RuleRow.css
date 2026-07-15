@@ -33,7 +33,11 @@
   border-left-color: var(--trace);
 }
 
-.rule-row.blocked,
+.rule-row.blocked {
+  border-left-color: var(--caution-lamp);
+  background: var(--panel-1);
+}
+
 .rule-row.invalid {
   border-left-color: var(--caution-lamp);
   background: var(--caution-bg);
@@ -58,6 +62,11 @@
   font-weight: 600;
 }
 
+.rule-row.blocked .rule-status {
+  color: var(--ink-mute);
+  font-weight: 500;
+}
+
 .rule-status svg {
   vertical-align: -1px;
 }
@@ -70,13 +79,17 @@
 
 .rule-grant {
   min-height: 24px;
-  margin-left: var(--sp-3);
-  padding: 1px var(--sp-2);
-  border: var(--hairline) solid var(--caution);
-  border-radius: var(--radius-inner);
+  margin-left: var(--sp-2);
+  padding: 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--caution);
+}
+
+.rule-grant::before {
+  content: "·";
+  margin-right: var(--sp-2);
+  color: var(--ink-mute);
 }
 
 .rule-menu {

@@ -162,6 +162,7 @@ function Ready({
     applyTheme(theme);
   }, [theme]);
   const firstRun = doc.profiles.every((profile) => profile.rules.length === 0);
+  const showFirstRun = firstRun && overrides.length === 0 && !composing;
   const focused = doc.profiles.find(
     (profile) => profile.id === doc.focusedProfileId,
   );
@@ -449,6 +450,16 @@ function Ready({
     closePopup: () => window.close(),
   });
 
+  // Popup-wide commands stay available before the user places focus. Row,
+  // menu, and editor handlers consume their own keys before they reach here.
+  useEffect(() => {
+    if (activeEditing !== undefined || verify !== undefined) {
+      return;
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [activeEditing, verify, onKeyDown]);
+
   // A grant from the editor's panel lands; the loud surfaces clear themselves
   // when the refreshed snapshot empties the gaps. The toast (a polite live
   // region) states the outcome.
@@ -505,7 +516,7 @@ function Ready({
         [],
       )}
       theme={theme}
-      autoFocusProfiles={!firstRun && !showEmptyProfile && verify === undefined}
+      showProfiles={!showFirstRun}
       onActivateProfile={(id) => run(mutations.activateProfile(id))}
       onCreateProfile={createProfile}
       onRenameProfile={(id, name) =>
@@ -524,15 +535,7 @@ function Ready({
     // tabIndex -1 (not a tab stop) lets removing the last This-tab override,
     // which unmounts its whole section, land focus on the popup landmark rather
     // than <body> (WCAG 2.4.3).
-    <main
-      class="popup"
-      tabIndex={-1}
-      onKeyDown={
-        activeEditing === undefined && verify === undefined
-          ? onKeyDown
-          : undefined
-      }
-    >
+    <main class={showFirstRun ? "popup first-run-mode" : "popup"} tabIndex={-1}>
       {activeEditing !== undefined && editingProfile !== undefined ? (
         <RuleEditor
           key={activeEditing.ruleId ?? "new-rule"}
@@ -591,13 +594,15 @@ function Ready({
       ) : (
         <>
           {popupHeader}
-          <Annunciator
-            status={status}
-            temporaryCount={overrides.length}
-            activeProfileCount={enabledProfiles.length}
-            onResume={() => run(mutations.setPaused(false))}
-            onGrantAccess={grantAccess}
-          />
+          {!showFirstRun && (
+            <Annunciator
+              status={status}
+              temporaryCount={overrides.length}
+              activeProfileCount={enabledProfiles.length}
+              onResume={() => run(mutations.setPaused(false))}
+              onGrantAccess={grantAccess}
+            />
+          )}
           <div
             class={
               status.kind === "paused" ? "popup-body paused" : "popup-body"
@@ -613,17 +618,16 @@ function Ready({
               onCloseComposer={() => setComposing(false)}
             />
             {firstRun ? (
-              overrides.length > 0 || composing ? null : (
+              showFirstRun ? (
                 <FirstRun
                   onCreateRule={openNewRule}
                   onTryThisTab={openThisTabComposer}
                 />
-              )
+              ) : null
             ) : showEmptyProfile && focused !== undefined ? (
               <EmptyState
                 message={copy.emptyState.profile(focused.name)}
                 detail={copy.emptyState.otherProfilesUnchanged}
-                autoFocusAction
                 actions={
                   <Button kind="primary" onClick={openNewRule}>
                     {copy.actions.createRule}
@@ -719,8 +723,8 @@ function Ready({
 }
 
 /**
- * First run is onboarding with one obvious act: the wordmark and
- * trust sentence, one focused primary action, and two quieter routes.
+ * First run is onboarding with one obvious act: the wordmark, a factual
+ * sentence, one primary action, and two quieter routes.
  */
 function FirstRun({
   onCreateRule,
@@ -729,13 +733,8 @@ function FirstRun({
   onCreateRule: () => void;
   onTryThisTab: () => void;
 }) {
-  const first = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    first.current?.querySelector("button")?.focus();
-  }, []);
-
   return (
-    <div class="first-run" ref={first}>
+    <div class="first-run">
       <span class="first-run-wordmark mono">{copy.app.name}</span>
       <p class="first-run-tagline">{copy.app.tagline}</p>
       <div class="first-run-actions">

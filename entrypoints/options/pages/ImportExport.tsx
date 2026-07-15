@@ -92,7 +92,10 @@ export function ImportExportPage({
   };
 
   return (
-    <section class="page" aria-labelledby="import-export-title">
+    <section
+      class="page import-export-page"
+      aria-labelledby="import-export-title"
+    >
       <h1 class="page-title" id="import-export-title" tabIndex={-1}>
         {text.title}
       </h1>

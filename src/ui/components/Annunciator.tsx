@@ -4,13 +4,8 @@ import type { SystemStatus } from "../../core/status";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy, type Sentence, type SentencePart, sentenceText } from "../copy";
 import { Button } from "./Button";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./Annunciator.css";
-
-// The strip may grow to two lines, but a single very long host still gets capped
-// (its tail preserved) rather than reflowing the copy indefinitely; "+N more
-// sites" summarization already keeps the host count itself in check.
-const HOST_MAX = 34;
 
 interface AnnunciatorProps {
   status: SystemStatus;
@@ -150,9 +145,9 @@ function renderParts(parts: readonly SentencePart[]): ComponentChildren {
       part
     ) : (
       <Truncate
-        mode="middle"
+        mode="end"
         value={part.data}
-        maxChars={HOST_MAX}
+        maxChars={TRUNCATION_LIMITS.domain}
         class="mono"
       />
     ),

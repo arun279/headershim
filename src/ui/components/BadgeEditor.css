@@ -53,11 +53,24 @@
   cursor: pointer;
 }
 
-/* The checked swatch reads as selected without relying on hue alone. */
+/* The check stays visible on every palette color, including teal. */
 .badge-swatch:has(input:checked) {
   box-shadow:
     0 0 0 2px var(--panel-1),
-    0 0 0 4px var(--trace);
+    0 0 0 3px var(--ink);
+}
+
+.badge-swatch:has(input:checked)::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .badge-swatch:has(input:focus-visible) {

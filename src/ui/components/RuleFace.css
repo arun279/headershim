@@ -33,6 +33,10 @@
   max-width: 100%;
 }
 
+.rule-line1.has-value .rule-name {
+  flex: 0 1 45%;
+}
+
 .rule-value-preview {
   display: flex;
   flex: 1 1 auto;
@@ -48,8 +52,8 @@
   flex: 1 1 auto;
 }
 
-/* One clamped line: scope · types · comment · notes can never wrap the row
-   taller, and the leading domain keeps its registrable tail (middle-truncated). */
+/* One clamped line: scope · types · comment · notes stay on one row, and the
+   leading domain uses the shared trailing-ellipsis treatment. */
 .rule-line2 {
   min-width: 0;
   overflow: hidden;

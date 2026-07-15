@@ -169,13 +169,14 @@ describe("RuleRow states", () => {
     ).toBe(true);
   });
 
-  it("ellipsis-truncates a long header name instead of hard-clipping it", () => {
+  it("middle-truncates a long header name with the shared limit", () => {
     const { row } = mount({
       rule: rule({ header: "x-corp-internal-request-tracing-identifier" }),
     });
     const name = row.querySelector(".rule-name") as HTMLElement;
-    expect(name.classList.contains("truncate-end")).toBe(true);
-    // The full name stays reachable (title + DOM text); CSS clips it visually.
+    expect(name.classList.contains("truncate-end")).toBe(false);
+    expect(name.textContent).toContain("…");
+    // The full name stays reachable in title while the display is compact.
     expect(name.getAttribute("title")).toBe(
       "x-corp-internal-request-tracing-identifier",
     );

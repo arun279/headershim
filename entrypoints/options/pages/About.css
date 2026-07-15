@@ -1,61 +1,17 @@
-/* .about-card takes the shared options card recipe (App.css). */
-
-.about-group {
-  margin-top: var(--sp-4);
-}
-
 .about-build {
-  font-weight: 500;
-}
-
-.about-table-scroll {
-  overflow-x: auto;
-}
-
-.about-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.about-table th,
-.about-table td {
-  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: var(--hairline) solid var(--bezel);
-}
-
-.about-table thead th {
-  color: var(--ink-mute);
+  font-size: 14px;
   font-weight: 600;
 }
 
-.about-table tbody th {
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
-
-.about-facts,
-.about-never,
-.about-steps {
+.about-description {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding-left: var(--sp-5);
-}
-
-.about-never-group {
-  margin-top: var(--sp-4);
-}
-
-.about-never-heading {
-  margin-bottom: var(--sp-3);
-  color: var(--ink-mute);
-  font-weight: 600;
 }
 
 .about-links {
-  margin-top: var(--sp-4);
+  padding-top: var(--sp-2);
+  border-top: var(--hairline) solid var(--bezel);
   color: var(--ink-mute);
 }
 

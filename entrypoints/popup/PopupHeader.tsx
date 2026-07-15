@@ -14,7 +14,6 @@ interface PopupHeaderProps {
   focusedProfileId: string;
   newProfileName: string;
   theme: Theme;
-  autoFocusProfiles?: boolean;
   onActivateProfile: (profileId: string) => void;
   onCreateProfile: (
     name: string,
@@ -28,26 +27,32 @@ interface PopupHeaderProps {
   onManageProfiles: () => void;
   onThemeChange: (theme: Theme) => void;
   onOpenOptions: () => void;
+  showProfiles?: boolean;
 }
 
 export function PopupHeader(props: PopupHeaderProps) {
   return (
-    <header class="popup-head">
-      <div class="popup-profile-region">
-        <ProfileSwitcher
-          profiles={props.profiles}
-          focusedProfileId={props.focusedProfileId}
-          newProfileName={props.newProfileName}
-          onActivate={props.onActivateProfile}
-          onCreate={props.onCreateProfile}
-          onRename={props.onRenameProfile}
-          onEnable={props.onEnableProfile}
-          onManageProfiles={props.onManageProfiles}
-          {...(props.autoFocusProfiles === undefined
-            ? {}
-            : { autoFocus: props.autoFocusProfiles })}
-        />
-      </div>
+    <header
+      class={
+        props.showProfiles === false
+          ? "popup-head profiles-hidden"
+          : "popup-head"
+      }
+    >
+      {props.showProfiles !== false && (
+        <div class="popup-profile-region">
+          <ProfileSwitcher
+            profiles={props.profiles}
+            focusedProfileId={props.focusedProfileId}
+            newProfileName={props.newProfileName}
+            onActivate={props.onActivateProfile}
+            onCreate={props.onCreateProfile}
+            onRename={props.onRenameProfile}
+            onEnable={props.onEnableProfile}
+            onManageProfiles={props.onManageProfiles}
+          />
+        </div>
+      )}
       <div class="popup-head-actions">
         <ThemeControl theme={props.theme} onChange={props.onThemeChange} />
         <Button

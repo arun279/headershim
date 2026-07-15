@@ -316,7 +316,7 @@ export function ProfilesPage({
   };
 
   return (
-    <section class="page" aria-labelledby="profiles-title">
+    <section class="page profiles-page" aria-labelledby="profiles-title">
       <div class="page-head">
         <div>
           <h1

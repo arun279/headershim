@@ -15,6 +15,10 @@ import {
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { CheckGlyph, TriangleGlyph } from "../../../src/ui/components/glyphs";
+import {
+  TRUNCATION_LIMITS,
+  Truncate,
+} from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
 import "./SiteAccess.css";
 
@@ -85,7 +89,7 @@ export function SiteAccessPage({
     );
 
   return (
-    <section class="page" aria-labelledby="site-access-title">
+    <section class="page site-access-page" aria-labelledby="site-access-title">
       <h1
         class="page-title"
         id="site-access-title"
@@ -200,7 +204,12 @@ function SiteGroup({
         {entries.map((entry) => (
           <li key={entry.origin} class="sa-row">
             {glyph}
-            <span class="mono sa-domain">{entry.domain}</span>
+            <Truncate
+              mode="end"
+              value={entry.domain}
+              maxChars={TRUNCATION_LIMITS.domain}
+              class="mono sa-domain"
+            />
             <span class="sa-count">{count(entry.ruleCount)}</span>
             <Button
               kind="quiet"

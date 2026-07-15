@@ -21,7 +21,7 @@ import { Button } from "./Button";
 import { handleEditorCommitKey } from "./editorKeys";
 import { HeaderFields } from "./HeaderFields";
 import { sentence } from "./sentence";
-import { Truncate } from "./Truncate";
+import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import { useDraftState } from "./useDraftState";
 import "./ThisTab.css";
 
@@ -116,17 +116,29 @@ function OverrideRow({
         <span class="rule-op">{copy.rules.operation[override.operation]}</span>
       </span>
       <div class="rule-lines">
-        <p class="rule-line1">
-          <Truncate value={override.header} class="rule-name" />
+        <p
+          class={
+            override.operation !== "remove" && override.value !== undefined
+              ? "rule-line1 has-value"
+              : "rule-line1"
+          }
+        >
+          <Truncate
+            mode="middle"
+            value={override.header}
+            maxChars={TRUNCATION_LIMITS.header}
+            class="rule-name"
+          />
           {override.operation !== "remove" && override.value !== undefined && (
-            <>
+            <span class="rule-value-preview">
               <span class="colon">: </span>
               <Truncate
                 mode="middle"
                 value={override.value}
+                maxChars={TRUNCATION_LIMITS.value}
                 class="rule-value"
               />
-            </>
+            </span>
           )}
         </p>
         <p class="rule-line2">

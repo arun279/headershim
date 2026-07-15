@@ -6,7 +6,7 @@ import { copy } from "../copy";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
 import { Toggle } from "./Toggle";
-import { Truncate } from "./Truncate";
+import { ProfileName } from "./Truncate";
 import "./ProfileList.css";
 
 interface ProfileListProps {
@@ -223,7 +223,7 @@ function ProfileCard(props: ProfileCardProps) {
             >
               {profile.badgeText}
             </span>
-            <Truncate value={profile.name} class="profile-name" />
+            <ProfileName value={profile.name} class="profile-name" />
           </button>
         )}
         <span class="profile-rulecount">

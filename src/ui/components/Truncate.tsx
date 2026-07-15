@@ -1,6 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import "./Truncate.css";
 
+export const TRUNCATION_LIMITS = {
+  header: 32,
+  value: 36,
+  domain: 34,
+  profile: 22,
+} as const;
+
 /**
  * Splits in the middle so both ends stay visible ("Bearer eyJhbGci…J9.sflKx") —
  * the tail is what tells one secret, token, or registrable domain from another.
@@ -16,20 +23,52 @@ export function truncateMiddle(text: string, max: number): string {
     : `${text.slice(0, head)}…`;
 }
 
+/** Keeps the leading portion and marks a clipped tail. */
+export function truncateEnd(text: string, max: number): string {
+  if (max <= 1 || text.length <= max) return text;
+  return `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** Prefers a whole-word boundary for human-readable names. */
+export function truncateWords(text: string, max: number): string {
+  if (max <= 1 || text.length <= max) return text;
+  const budget = max - 1;
+  const prefix = text.slice(0, budget);
+  const boundary = prefix.lastIndexOf(" ");
+  return boundary >= Math.floor(budget / 2)
+    ? `${prefix.slice(0, boundary).trimEnd()}…`
+    : truncateEnd(text, max);
+}
+
 interface TruncateProps {
   value: string;
   /**
-   * "end" (default) clips the tail with a CSS ellipsis — for names and labels
-   * whose head carries the meaning. "middle" keeps both ends — for secrets,
-   * tokens, and domains where the tail disambiguates.
+   * "end" (default) keeps the leading portion. "middle" keeps both ends for
+   * machine identifiers and values. "word" keeps profile names on a word
+   * boundary when one fits.
    */
-  mode?: "end" | "middle";
+  mode?: "end" | "middle" | "word";
   /**
-   * Middle mode only: a fixed character budget for inline contexts that cannot
-   * be measured. Omit inside a sized flex/grid cell to track its width live.
+   * A shared character ceiling for the data type. Middle mode also measures
+   * its live container and uses the smaller of that width and this ceiling.
    */
   maxChars?: number;
   class?: string;
+}
+
+/** Human-readable profile names share one word-boundary treatment. */
+export function ProfileName({
+  value,
+  class: className,
+}: Pick<TruncateProps, "value" | "class">) {
+  return (
+    <Truncate
+      mode="word"
+      value={value}
+      maxChars={TRUNCATION_LIMITS.profile}
+      {...(className === undefined ? {} : { class: className })}
+    />
+  );
 }
 
 /**
@@ -52,12 +91,18 @@ export function Truncate({
       <MiddleTruncate value={value} maxChars={maxChars} class={className} />
     );
   }
+  const display =
+    maxChars === undefined
+      ? value
+      : mode === "word"
+        ? truncateWords(value, maxChars)
+        : truncateEnd(value, maxChars);
   return (
     <span
       class={className === undefined ? END_CLASS : `${END_CLASS} ${className}`}
       title={value}
     >
-      {value}
+      {display}
     </span>
   );
 }
@@ -87,18 +132,20 @@ function MiddleTruncate({
   const [fit, setFit] = useState<number | undefined>(maxChars);
 
   useLayoutEffect(() => {
-    if (maxChars !== undefined) {
-      setFit(maxChars);
-      return;
-    }
     const el = ref.current;
     if (el === null) return;
     const measure = () => {
       const cw = charWidth(el);
-      setFit(
+      const measured =
         cw > 0 && el.clientWidth > 0
           ? Math.floor(el.clientWidth / cw)
-          : undefined,
+          : undefined;
+      setFit(
+        measured === undefined
+          ? maxChars
+          : maxChars === undefined
+            ? measured
+            : Math.min(measured, maxChars),
       );
     };
     measure();

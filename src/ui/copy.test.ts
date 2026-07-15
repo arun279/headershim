@@ -97,7 +97,7 @@ describe("copy", () => {
       "Out of sync. Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
     );
     expect(copy.app.tagline).toBe(
-      "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
+      "Add, change, and remove HTTP headers on the sites you choose.",
     );
     expect(copy.errors.headerNotModifiable).toMatch(
       /^Header names starting with ':'/,
@@ -118,9 +118,7 @@ describe("copy", () => {
     expect(copy.verify.limits).toContain("CacheStorage");
   });
 
-  it("keeps the trust-page claims inside their honest wording bounds", () => {
-    // The all-sites card quotes Chrome's real warning string and keeps the
-    // revocation promise.
+  it("keeps About factual and site-access wording precise", () => {
     expect(copy.options.siteAccess.allSites.warning).toContain(
       '"Read and change all your data on all websites"',
     );
@@ -129,17 +127,8 @@ describe("copy", () => {
     );
     expect(copy.options.about).not.toHaveProperty("theme");
     expect(copy.options.settings.theme.label).toBe("Theme");
-    // The install claim is always "no install-time warning" — never a broader
-    // "no permission text anywhere" — and the build claim never says the store
-    // build itself is verifiable.
-    expect(copy.options.about.permissions.intro).toContain(
-      "no install-time warning",
-    );
-    expect(copy.options.about.verifyBuild.caveat).toContain(
-      "re-packages and signs",
-    );
-    expect(JSON.stringify(copy.options.about)).not.toMatch(
-      /verify the store build/i,
+    expect(Object.keys(copy.options.about).sort()).toEqual(
+      ["build", "description", "license", "links"].sort(),
     );
     expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
     expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");

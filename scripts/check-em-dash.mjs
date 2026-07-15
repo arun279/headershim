@@ -5,14 +5,14 @@ import path from "node:path";
 // Enforces the no-em-dash rule on user-facing copy by construction: an em-dash
 // (or an en-dash used as one) in shipped copy fails the build. House voice uses
 // periods, commas, colons, or a restructure instead. Code comments are exempt,
-// so TSX comments are stripped before the scan; copy.ts and the committed trust
-// docs are scanned whole, since every character in them ships as prose.
+// so TSX comments are stripped before the scan; copy.ts is scanned whole since
+// every character in it ships as prose.
 
 const root = path.resolve(import.meta.dirname, "..");
 
-// Whole-file scans: the single copy source and the committed trust docs are
-// prose end to end, comments included.
-const PROSE_FILES = new Set(["src/ui/copy.ts", "SECURITY.md"]);
+// Whole-file scans: the single copy source is prose end to end, comments
+// included.
+const PROSE_FILES = new Set(["src/ui/copy.ts"]);
 
 // TSX carrying inline copy: scanned with comments removed so only the strings a
 // user reads are checked.

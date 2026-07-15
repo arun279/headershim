@@ -98,6 +98,26 @@ describe("ProfileSwitcher", () => {
     expect(onActivate).toHaveBeenCalledWith("qa");
   });
 
+  it("gives every clipped chip the same menu affordance and word-safe name", () => {
+    const { root, menus } = mount({
+      profiles: [
+        profile("staging", { name: "Staging environment overrides" }),
+        profile("production", { name: "Production environment overrides" }),
+      ],
+    });
+    const containers = root.querySelectorAll(".profile-chip");
+    expect(containers).toHaveLength(2);
+    expect(menus).toHaveLength(2);
+    expect(
+      [...root.querySelectorAll(".chip-name")].map((name) => name.textContent),
+    ).toEqual(["Staging environment…", "Production…"]);
+    expect(
+      [...containers].every(
+        (chip) => chip.querySelector(".chip-name") !== null,
+      ),
+    ).toBe(true);
+  });
+
   it("roves the profile-chip tab stop with arrow keys", () => {
     const { chips } = mount();
     expect(chips.map((chip) => chip.tabIndex)).toEqual([0, -1, -1]);

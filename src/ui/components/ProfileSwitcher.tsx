@@ -7,7 +7,7 @@ import {
   openPositionedPopover,
   trapPopoverFocus,
 } from "./popover";
-import { Truncate } from "./Truncate";
+import { ProfileName } from "./Truncate";
 import { usePopoverDismiss } from "./usePopoverDismiss";
 import "./ProfileSwitcher.css";
 
@@ -136,7 +136,7 @@ export function ProfileSwitcher({
             >
               {profile.badgeText}
             </span>
-            <Truncate value={profile.name} class="chip-name" />
+            <ProfileName value={profile.name} class="chip-name" />
             {!profile.enabled && (
               <span class="silk" aria-hidden="true">
                 {copy.profiles.offTag}

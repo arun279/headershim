@@ -115,84 +115,41 @@ describe("options about", () => {
     resetFixtures();
   });
 
-  it("keeps appearance controls out of the trust page", async () => {
+  it("keeps appearance controls out of the identity card", async () => {
     const root = await mount();
     expect(root.querySelector(".settings-card")).toBeNull();
     expect(root.querySelector('input[name="badge-mode"]')).toBeNull();
     expect(root.textContent).not.toContain(settings.shortcuts);
   });
 
-  it("shows the version, commit, and first-run tagline verbatim", async () => {
+  it("shows the build identity and only the two factual descriptions", async () => {
     const root = await mount();
     expect(root.textContent).toContain(
       sentenceText(text.build("1.0.0", "test")),
     );
-    expect(root.textContent).toContain(copy.app.tagline);
-  });
-
-  it("leads with the three checkable facts", async () => {
-    const root = await mount();
-    const facts = [
-      ...root.querySelectorAll<HTMLElement>(".about-facts li"),
-    ].map((item) => item.textContent);
-    expect(facts).toEqual(text.summary.facts);
-  });
-
-  it("justifies every manifest permission plus optional site access", async () => {
-    const root = await mount();
-    const rows = [
-      ...root.querySelectorAll<HTMLElement>(".about-table tbody th"),
-    ].map((cell) => cell.textContent);
-
-    expect(rows).toEqual([
-      "declarativeNetRequestWithHostAccess",
-      "storage",
-      "activeTab",
-      "Site access (optional)",
-    ]);
-    expect(root.textContent).toContain(text.permissions.intro);
-  });
-
-  it("renders the grouped never-list and the build-verification procedure", async () => {
-    const root = await mount();
-
-    const groupHeadings = [
-      ...root.querySelectorAll<HTMLElement>(".about-never-heading"),
-    ].map((heading) => heading.textContent);
-    expect(groupHeadings).toEqual(
-      text.neverList.groups.map((group) => group.heading),
-    );
-
-    const leads = [
-      ...root.querySelectorAll<HTMLElement>(".about-never li strong"),
-    ].map((strong) => strong.textContent);
-    expect(leads).toEqual(
-      text.neverList.groups.flatMap((group) =>
-        group.items.map((item) => `${item.lead}.`),
+    expect(
+      [...root.querySelectorAll(".about-description p")].map(
+        (paragraph) => paragraph.textContent,
       ),
-    );
-
-    expect(root.textContent).toContain(text.verifyBuild.caveat);
-    expect(root.textContent).toContain("sha256sum -c SHA256SUMS");
+    ).toEqual(text.description);
+    expect(root.textContent).toContain(text.license);
+    expect(root.textContent).not.toContain(copy.app.tagline);
+    expect(
+      root.querySelectorAll(".about-card h2, .about-card h3"),
+    ).toHaveLength(0);
   });
 
-  it("carries a single link to the committed security policy", async () => {
-    const root = await mount();
-    const security = [
-      ...root.querySelectorAll<HTMLAnchorElement>("a.about-link"),
-    ].filter((link) => link.href === text.security.linkUrl);
-
-    expect(security).toHaveLength(1);
-    expect(text.security.body).toBe(
-      "How to report a security issue is in the security policy.",
-    );
-    expect(root.textContent).toContain(text.security.body);
-    expect(text.neverList.groups[1]?.items[2]?.detail).toBe(
-      "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover.",
-    );
+  it("contains none of the removed manifesto sections", () => {
+    expect(text).not.toHaveProperty("trustHeading");
+    expect(text).not.toHaveProperty("summary");
+    expect(text).not.toHaveProperty("permissions");
+    expect(text).not.toHaveProperty("storage");
+    expect(text).not.toHaveProperty("neverList");
+    expect(text).not.toHaveProperty("security");
+    expect(text).not.toHaveProperty("verifyBuild");
   });
 
-  it("links the repository, issues, and changelog", async () => {
+  it("links the repository, license, issues, and releases", async () => {
     const root = await mount();
     const links = [
       ...root.querySelectorAll<HTMLAnchorElement>(".about-links a.about-link"),
@@ -200,8 +157,15 @@ describe("options about", () => {
 
     expect(links.map((link) => link.href)).toEqual([
       text.links.repositoryUrl,
+      text.links.licenseUrl,
       text.links.issuesUrl,
-      text.links.changelogUrl,
+      text.links.releasesUrl,
+    ]);
+    expect(links.map((link) => link.textContent?.replace(" ↗", ""))).toEqual([
+      text.links.repository,
+      text.links.license,
+      text.links.issues,
+      text.links.releases,
     ]);
   });
 });
