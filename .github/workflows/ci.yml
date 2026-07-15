@@ -27,7 +27,10 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm audit --audit-level=high
+      # Dependency vulnerabilities are gated by the osv-scanner job in
+      # security.yml (fail-on-vuln, recursive, with a documented allowlist).
+      # The npm registry retired the legacy audit endpoint pnpm audit used, so
+      # it is not run here.
 
   build:
     runs-on: ubuntu-latest

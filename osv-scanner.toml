@@ -1,8 +1,7 @@
 # osv-scanner accepted findings.
 # Every other advisory still fails the Security workflow's osv-scanner job.
 # Both entries below are transitive dev-only dependencies that never ship in the
-# extension bundle, mirror the risk already accepted by `pnpm audit --audit-level=high`
-# in ci.yml, and have no non-breaking upstream fix.
+# extension bundle and have no non-breaking upstream fix.
 
 [[IgnoredVulns]]
 id = "GHSA-w5hq-g745-h8pq"
