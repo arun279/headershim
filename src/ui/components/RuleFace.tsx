@@ -19,6 +19,7 @@ export function RuleFace({
   secondLine: ComponentChildren;
   secondLineTitle?: string | undefined;
 }) {
+  const value = ruleValueSummary(rule);
   return (
     <>
       <span class="rule-dir">
@@ -30,10 +31,10 @@ export function RuleFace({
       <div class="rule-lines">
         <p class="rule-line1">
           <Truncate value={rule.header} class="rule-name" />
-          {rule.operation !== "remove" && rule.value !== undefined && (
+          {rule.operation !== "remove" && value !== undefined && (
             <>
               <span class="colon">: </span>
-              <Truncate mode="middle" value={rule.value} class="rule-value" />
+              <Truncate mode="middle" value={value} class="rule-value" />
             </>
           )}
         </p>
@@ -43,4 +44,27 @@ export function RuleFace({
       </div>
     </>
   );
+}
+
+const SECRET_HEADERS = new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+  "api-key",
+  "x-api-key",
+]);
+
+/** Rule-list summaries never expose credential-bearing header values. */
+export function ruleValueSummary(rule: Rule): string | undefined {
+  if (
+    rule.value === undefined ||
+    !SECRET_HEADERS.has(rule.header.toLowerCase())
+  ) {
+    return rule.value;
+  }
+  const scheme = /^(basic|bearer|digest|negotiate)\s+/i.exec(rule.value)?.[1];
+  return scheme === undefined
+    ? copy.rules.redacted
+    : `${scheme} ${copy.rules.redacted}`;
 }

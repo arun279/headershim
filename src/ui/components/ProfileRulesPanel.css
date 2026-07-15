@@ -5,7 +5,15 @@
 }
 
 .rules-panel-label {
-  font-size: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rules-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
 }
 
 .bulk-bar {
@@ -43,18 +51,4 @@
   border: var(--hairline) solid var(--bezel);
   border-radius: var(--radius-outer);
   overflow: hidden;
-}
-
-.selectable-rule {
-  display: grid;
-  grid-template-columns: auto auto 34px minmax(0, 1fr);
-  column-gap: 10px;
-  align-items: center;
-  min-height: 44px;
-  padding: 5px 12px;
-  background: var(--panel-1);
-}
-
-.selectable-rule + .selectable-rule {
-  border-top: var(--hairline) solid var(--bezel);
 }

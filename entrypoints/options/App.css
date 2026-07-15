@@ -60,7 +60,7 @@
 
 .options-content {
   min-width: 0;
-  max-width: 720px;
+  max-width: 1120px;
 }
 
 .page {
@@ -92,13 +92,6 @@
 /* Sections are panel-1 cards (hairline, 6px radius). The profile
    list keeps its rows edge-to-edge for hairline separators; the rules panel
    takes the standard 16px padding. */
-.page > .profile-list {
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
-  border-radius: var(--radius-outer);
-  overflow: hidden;
-}
-
 .rules-panel,
 .ie-block,
 .sa-card,

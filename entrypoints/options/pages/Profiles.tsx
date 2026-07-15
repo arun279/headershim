@@ -1,5 +1,9 @@
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
+import {
+  domainFromOriginPattern,
+  type GrantSnapshot,
+} from "../../../src/core/grants";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
   BADGE_COLORS,
@@ -8,6 +12,8 @@ import {
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
+import { isRegexSupported } from "../../../src/platform/dnr";
+import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
@@ -17,6 +23,8 @@ import { Toast } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
+import { useInvalidRules } from "../../../src/ui/state/useInvalidRules";
+import "./Profiles.css";
 
 type Undo =
   | { kind: "profile"; profile: Profile; index: number }
@@ -33,12 +41,21 @@ type Undo =
  */
 export function ProfilesPage({
   doc,
+  grants,
   mutations,
 }: {
   doc: StateDoc;
+  grants: GrantSnapshot;
   mutations: Mutations;
 }) {
   const [openId, setOpenId] = useState(doc.focusedProfileId);
+  const [editing, setEditing] = useState<
+    { profileId: string; ruleId: string | undefined } | undefined
+  >(undefined);
+  const [Editor, setEditor] =
+    useState<
+      typeof import("../../../src/ui/components/RuleEditor").RuleEditor
+    >();
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
@@ -47,6 +64,12 @@ export function ProfilesPage({
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const announce = useAnnounce();
+  const invalidRuleIds = useInvalidRules(doc.profiles, isRegexSupported);
+  useEffect(() => {
+    void import("../../../src/ui/components/RuleEditor").then((module) =>
+      setEditor(() => module.RuleEditor),
+    );
+  }, []);
   // A freshly mounted role=status toast is not reliably re-announced, so every
   // toast also speaks through the persistent polite region.
   const showToast = (message: string) => {
@@ -79,6 +102,30 @@ export function ProfilesPage({
     if (message !== undefined) {
       showToast(message);
     }
+  };
+
+  const showGrantToast = (sites: readonly string[]) => {
+    showToast(
+      sites.length === 1
+        ? copy.toast.activeOn(sites[0] as string)
+        : copy.toast.activeOnSites(sites.length),
+    );
+  };
+
+  const openEditor = (ruleId: string | undefined) => {
+    setEditing({ profileId: open.id, ruleId });
+  };
+
+  const grant = (origins: readonly string[]) => {
+    const granted = requestPermissions([...origins]);
+    void granted.then((allowed) => {
+      if (!allowed) {
+        return;
+      }
+      showGrantToast(
+        origins.map((origin) => domainFromOriginPattern(origin) ?? origin),
+      );
+    });
   };
 
   // A successful commit retires any pending undo; a blocked one surfaces its
@@ -159,6 +206,21 @@ export function ProfilesPage({
     });
   };
 
+  const discardEditingRule = async (ruleId: string): Promise<void> => {
+    const outcome = await mutations.deleteRule(open.id, ruleId);
+    if (!outcome.ok) {
+      flash(outcome.error);
+    }
+  };
+
+  const editingRule =
+    editing?.profileId === open.id && editing.ruleId !== undefined
+      ? open.rules.find((rule) => rule.id === editing.ruleId)
+      : undefined;
+  const editorOpen =
+    editing?.profileId === open.id &&
+    (editing.ruleId === undefined || editingRule !== undefined);
+
   const runUndo = () => {
     if (undo === undefined) {
       return;
@@ -196,43 +258,99 @@ export function ProfilesPage({
             </p>
           )}
         </div>
-        <Button kind="primary" onClick={create}>
-          {copy.options.profiles.new}
-        </Button>
       </div>
 
-      <ProfileList
-        profiles={doc.profiles}
-        openProfileId={open.id}
-        onOpen={setOpenId}
-        onToggle={(id, enabled) =>
-          run(mutations.setProfileEnabled(id, enabled))
-        }
-        onReorder={(id, toIndex) => run(mutations.reorderProfile(id, toIndex))}
-        onRename={(id, name) => run(mutations.renameProfile(id, name))}
-        onClone={clone}
-        onDelete={(id) => {
-          const profile = doc.profiles.find((candidate) => candidate.id === id);
-          if (profile !== undefined) {
-            setConfirmDelete(profile);
-          }
-        }}
-        onBadgeChange={(id, badgeText, color) =>
-          run(mutations.setProfileBadge(id, { badgeText, color }))
-        }
-      />
+      <div class="profiles-workspace">
+        <aside
+          class="profile-master"
+          aria-label={copy.options.profiles.listLabel}
+        >
+          <div class="profile-master-head">
+            <span class="silk">{copy.options.profiles.listLabel}</span>
+            <button
+              type="button"
+              class="profile-add"
+              aria-label={copy.options.profiles.new}
+              title={copy.options.profiles.new}
+              onClick={create}
+            >
+              ＋
+            </button>
+          </div>
+          <ProfileList
+            profiles={doc.profiles}
+            openProfileId={open.id}
+            onOpen={(profileId) => {
+              setEditing(undefined);
+              setOpenId(profileId);
+            }}
+            onToggle={(id, enabled) =>
+              run(mutations.setProfileEnabled(id, enabled))
+            }
+            onReorder={(id, toIndex) =>
+              run(mutations.reorderProfile(id, toIndex))
+            }
+            onRename={(id, name) => run(mutations.renameProfile(id, name))}
+            onClone={clone}
+            onDelete={(id) => {
+              const profile = doc.profiles.find(
+                (candidate) => candidate.id === id,
+              );
+              if (profile !== undefined) {
+                setConfirmDelete(profile);
+              }
+            }}
+            onBadgeChange={(id, badgeText, color) =>
+              run(mutations.setProfileBadge(id, { badgeText, color }))
+            }
+          />
+        </aside>
 
-      <ProfileRulesPanel
-        profile={open}
-        moveTargets={doc.profiles.filter((profile) => profile.id !== open.id)}
-        onSetEnabled={(ruleIds, enabled) =>
-          run(mutations.setRulesEnabled(open.id, ruleIds, enabled))
-        }
-        onDelete={deleteRules}
-        onMove={(ruleIds, toProfileId) =>
-          run(mutations.moveRulesToProfile(open.id, ruleIds, toProfileId))
-        }
-      />
+        <div class="profile-detail-pane">
+          {editorOpen && Editor !== undefined ? (
+            <Editor
+              key={`${open.id}:${editing?.ruleId ?? "new"}`}
+              profileName={open.name}
+              rule={editingRule}
+              grants={grants}
+              modal={false}
+              onSave={(ruleId, draft) =>
+                mutations.saveRule(open.id, ruleId, draft)
+              }
+              onRequestGrant={requestPermissions}
+              onGranted={showGrantToast}
+              onCommitted={(kind) =>
+                showToast(
+                  kind === "create"
+                    ? copy.toast.ruleCreated
+                    : copy.toast.changesSaved,
+                )
+              }
+              onDiscardRule={discardEditingRule}
+              onClose={() => setEditing(undefined)}
+            />
+          ) : (
+            <ProfileRulesPanel
+              profile={open}
+              grants={grants}
+              invalidRuleIds={invalidRuleIds}
+              moveTargets={doc.profiles.filter(
+                (profile) => profile.id !== open.id,
+              )}
+              onSetEnabled={(ruleIds, enabled) =>
+                run(mutations.setRulesEnabled(open.id, ruleIds, enabled))
+              }
+              onDelete={deleteRules}
+              onMove={(ruleIds, toProfileId) =>
+                run(mutations.moveRulesToProfile(open.id, ruleIds, toProfileId))
+              }
+              onCreate={() => openEditor(undefined)}
+              onEdit={openEditor}
+              onGrant={grant}
+            />
+          )}
+        </div>
+      </div>
 
       {confirmDelete !== undefined && (
         <Modal

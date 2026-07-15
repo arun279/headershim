@@ -71,3 +71,23 @@
 .sa-all-body {
   color: var(--ink-mute);
 }
+
+.sa-disclosure {
+  align-self: flex-start;
+  min-height: 28px;
+  color: var(--trace);
+  font-weight: 600;
+}
+
+.sa-all-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-left: 3px solid var(--caution-lamp);
+  background: var(--caution-bg);
+}
+
+.sa-all-warning {
+  color: var(--ink);
+}

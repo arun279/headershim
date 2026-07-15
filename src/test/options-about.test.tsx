@@ -9,12 +9,20 @@ import { fire, render, settle } from "../ui/test/render";
 import { THEME_CACHE_KEY } from "../ui/theme";
 
 const text = copy.options.about;
+const settings = copy.options.settings;
 
-async function mount(): Promise<HTMLElement> {
+async function mount(hash = "#about"): Promise<HTMLElement> {
   await write(stateDoc([profile("p1")]));
-  window.location.hash = "#about";
+  window.location.hash = hash;
   const root = render(<App />);
   await settle();
+  if (hash === "#settings") {
+    await vi.waitFor(() => {
+      if (root.querySelector("#settings-title") === null) {
+        throw new Error("settings page is still loading");
+      }
+    });
+  }
   return root;
 }
 
@@ -35,31 +43,45 @@ function check(input: HTMLInputElement): void {
   });
 }
 
-describe("options about", () => {
+describe("options settings", () => {
   beforeEach(() => {
     resetFixtures();
     document.documentElement.removeAttribute("data-theme");
   });
 
   it("persists the theme choice and stamps data-theme on the root", async () => {
-    const root = await mount();
-    expect(radio(root, "theme", "system").checked).toBe(true);
+    const root = await mount("#settings");
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
 
-    check(radio(root, "theme", "dark"));
+    const theme = root.querySelector<HTMLButtonElement>(
+      `button[aria-label="${settings.theme.label}"]`,
+    );
+    fire(() => theme?.click());
+    const dark = [
+      ...root.querySelectorAll<HTMLButtonElement>(".theme-option"),
+    ].find((option) =>
+      option.textContent?.includes(settings.theme.options.dark),
+    );
+    fire(() => dark?.click());
     await settle();
 
     expect((await read()).settings.theme).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(localStorage.getItem(THEME_CACHE_KEY)).toBe("dark");
 
-    check(radio(root, "theme", "system"));
+    fire(() => theme?.click());
+    const system = [
+      ...root.querySelectorAll<HTMLButtonElement>(".theme-option"),
+    ].find((option) =>
+      option.textContent?.includes(settings.theme.options.system),
+    );
+    fire(() => system?.click());
     await settle();
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
   });
 
   it("persists the badge mode choice", async () => {
-    const root = await mount();
+    const root = await mount("#settings");
     expect(radio(root, "badge-mode", "count").checked).toBe(true);
 
     check(radio(root, "badge-mode", "initials"));
@@ -71,19 +93,32 @@ describe("options about", () => {
 
   it("opens the browser shortcut manager from the shortcuts control", async () => {
     const create = vi.spyOn(fakeBrowser.tabs, "create");
-    const root = await mount();
-    const button = [...root.querySelectorAll("button")].find((candidate) =>
-      candidate.textContent?.includes(text.shortcuts),
+    const root = await mount("#settings");
+    const link = [...root.querySelectorAll("a")].find((candidate) =>
+      candidate.textContent?.includes(settings.shortcuts),
     );
-    if (button === undefined) {
+    if (link === undefined) {
       throw new Error("no shortcuts control");
     }
 
-    fire(() => button.click());
+    fire(() => link.click());
 
     expect(create).toHaveBeenCalledWith({
       url: "chrome://extensions/shortcuts",
     });
+  });
+});
+
+describe("options about", () => {
+  beforeEach(() => {
+    resetFixtures();
+  });
+
+  it("keeps appearance controls out of the trust page", async () => {
+    const root = await mount();
+    expect(root.querySelector(".settings-card")).toBeNull();
+    expect(root.querySelector('input[name="badge-mode"]')).toBeNull();
+    expect(root.textContent).not.toContain(settings.shortcuts);
   });
 
   it("shows the version, commit, and first-run tagline verbatim", async () => {

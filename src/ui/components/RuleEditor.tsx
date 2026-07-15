@@ -35,7 +35,7 @@ import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
-interface RuleEditorProps {
+export interface RuleEditorProps {
   profileName: string;
   /** Absent for a new rule. */
   rule?: Rule | undefined;
@@ -64,6 +64,8 @@ interface RuleEditorProps {
   onDiscardRule: (ruleId: string) => Promise<void>;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
+  /** Options hosts the same editor inline instead of as a modal popup mode. */
+  modal?: boolean | undefined;
 }
 
 interface GrantStep {
@@ -257,6 +259,7 @@ export function RuleEditor(props: RuleEditorProps) {
     <Sheet
       label={title}
       class="editor-sheet"
+      modal={props.modal ?? true}
       onKeyDown={onKeyDown}
       header={
         <>

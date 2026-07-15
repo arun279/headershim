@@ -72,7 +72,7 @@ export function ThemeControl({ theme, onChange }: ThemeControlProps) {
   };
 
   const dark = selected === "dark" || (selected === "system" && systemDark);
-  const labels = copy.options.about.theme;
+  const labels = copy.options.settings.theme;
 
   return (
     <div class="theme-control">

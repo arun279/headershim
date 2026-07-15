@@ -52,6 +52,12 @@ function expectGranted(root: HTMLElement, domain: string): void {
   expect(group(root, text.grantedHeading).textContent).toContain(domain);
 }
 
+function expectAllSitesCollapsed(root: HTMLElement): void {
+  expect(root.textContent).toContain(text.allSites.consequence);
+  expect(root.textContent).not.toContain(text.allSites.warning);
+  expect(() => findButton(root, text.allSites.button)).toThrow();
+}
+
 describe("options site access", () => {
   beforeEach(() => {
     resetFixtures();
@@ -155,20 +161,34 @@ describe("options site access", () => {
   it("shows the honest all-sites card and swaps it for the revoke line after grant", async () => {
     const root = await mount([profile("p1")]);
 
-    expect(root.textContent).toContain(text.allSites.body);
+    expectAllSitesCollapsed(root);
     expect(root.textContent).not.toContain(text.allSites.on);
 
-    fire(() => findButton(root, text.allSites.button).click());
+    const disclosure = root.querySelector<HTMLButtonElement>(".sa-disclosure");
+    if (disclosure === null) throw new Error("no all-sites disclosure");
+    expect(disclosure.textContent).toContain(text.allSites.disclosure);
+    fire(() => disclosure.click());
+    const details = root.querySelector<HTMLElement>(".sa-all-details");
+    if (details === null) throw new Error("no expanded all-sites details");
+    expect(details.textContent).toContain(text.allSites.warning);
+    const warning = details.querySelector(".sa-all-warning");
+    if (warning === null) throw new Error("no all-sites warning");
+    const allow = findButton(details, text.allSites.button);
+    expect(
+      warning.compareDocumentPosition(allow) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fire(() => allow.click());
     await settle();
 
     expect(root.textContent).toContain(text.allSites.on);
-    expect(root.textContent).not.toContain(text.allSites.body);
+    expect(root.textContent).not.toContain(text.allSites.warning);
 
     fire(() => findButton(root, text.revoke).click());
     await settle();
 
     expect(root.textContent).not.toContain(text.allSites.on);
-    expect(root.textContent).toContain(text.allSites.body);
+    expectAllSitesCollapsed(root);
     expect(
       await fakeBrowser.permissions.contains({ origins: [ALL_SITES_ORIGIN] }),
     ).toBe(false);

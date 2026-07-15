@@ -189,12 +189,16 @@ describe("RuleRow states", () => {
     );
   });
 
-  it("exposes position and the full value to AT", () => {
+  it("exposes position while keeping credential values redacted", () => {
     const { row } = mount();
     expect(row.getAttribute("aria-posinset")).toBe("3");
     expect(row.getAttribute("aria-setsize")).toBe("12");
     expect(row.getAttribute("aria-description")).toBe(
-      "authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+      "authorization: Bearer …redacted",
+    );
+    expect(row.textContent).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(row.querySelector(".rule-value")?.getAttribute("title")).toBe(
+      "Bearer …redacted",
     );
   });
 

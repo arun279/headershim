@@ -1,21 +1,29 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
-import type { Profile, Rule } from "../../core/model";
+import {
+  ALL_SITES_ORIGIN,
+  domainFromOriginPattern,
+  type GrantSnapshot,
+  missingGrants,
+} from "../../core/grants";
+import type { Profile } from "../../core/model";
 import { copy } from "../copy";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
-import { RuleFace } from "./RuleFace";
-import { scopeSummary, typesSummary } from "./ruleSummary";
-import { sentence } from "./sentence";
-import { Toggle } from "./Toggle";
+import { RuleRow } from "./RuleRow";
 import "./ProfileRulesPanel.css";
 
 interface ProfileRulesPanelProps {
   profile: Profile;
+  grants: GrantSnapshot;
+  invalidRuleIds: ReadonlySet<string>;
   /** Profiles a selection can be moved to (everything but this one). */
   moveTargets: readonly Pick<Profile, "id" | "name">[];
   onSetEnabled: (ruleIds: readonly string[], enabled: boolean) => void;
   onDelete: (ruleIds: readonly string[]) => void;
   onMove: (ruleIds: readonly string[], toProfileId: string) => void;
+  onCreate: () => void;
+  onEdit: (ruleId: string) => void;
+  onGrant: (origins: readonly string[]) => void;
 }
 
 /**
@@ -74,14 +82,19 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
 
   return (
     <section class="rules-panel" aria-labelledby={headingId}>
-      <h2
-        class="silk rules-panel-label"
-        id={headingId}
-        ref={heading}
-        tabIndex={-1}
-      >
-        {copy.options.rules.sectionLabel(profile.name)}
-      </h2>
+      <div class="rules-panel-head">
+        <h2
+          class="rules-panel-label"
+          id={headingId}
+          ref={heading}
+          tabIndex={-1}
+        >
+          {copy.options.rules.sectionLabel(profile.name)}
+        </h2>
+        <Button kind="primary" onClick={props.onCreate}>
+          {copy.options.rules.new}
+        </Button>
+      </div>
       {profile.rules.length === 0 ? (
         <EmptyState message={copy.emptyState.profile(profile.name)} />
       ) : (
@@ -144,56 +157,40 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
             </div>
           )}
           <ul class="selectable-rules">
-            {profile.rules.map((rule) => (
-              <SelectableRuleRow
-                key={rule.id}
-                rule={rule}
-                selected={selected.has(rule.id)}
-                onSelect={(on) => toggleOne(rule.id, on)}
-                onToggle={(enabled) => props.onSetEnabled([rule.id], enabled)}
-              />
-            ))}
+            {profile.rules.map((rule, index) => {
+              const origins =
+                profile.enabled && rule.enabled
+                  ? missingGrants(rule, props.grants)
+                  : [];
+              return (
+                <RuleRow
+                  key={rule.id}
+                  rule={rule}
+                  active={profile.enabled}
+                  invalid={props.invalidRuleIds.has(rule.id)}
+                  missingHosts={origins.map(
+                    (origin) =>
+                      domainFromOriginPattern(origin) ??
+                      (origin === ALL_SITES_ORIGIN
+                        ? copy.scopeSummary.allSites
+                        : origin),
+                  )}
+                  selection={{
+                    checked: selected.has(rule.id),
+                    label: copy.options.rules.selectRule(rule.header),
+                    onChange: (on) => toggleOne(rule.id, on),
+                  }}
+                  posinset={index + 1}
+                  setsize={profile.rules.length}
+                  onToggle={(enabled) => props.onSetEnabled([rule.id], enabled)}
+                  onGrant={() => props.onGrant(origins)}
+                  onEdit={() => props.onEdit(rule.id)}
+                />
+              );
+            })}
           </ul>
         </>
       )}
     </section>
-  );
-}
-
-function SelectableRuleRow({
-  rule,
-  selected,
-  onSelect,
-  onToggle,
-}: {
-  rule: Rule;
-  selected: boolean;
-  onSelect: (on: boolean) => void;
-  onToggle: (enabled: boolean) => void;
-}) {
-  const types = typesSummary(rule);
-  return (
-    <li class="selectable-rule">
-      <input
-        type="checkbox"
-        checked={selected}
-        aria-label={copy.options.rules.selectRule(rule.header)}
-        onChange={(event) => onSelect(event.currentTarget.checked)}
-      />
-      <Toggle
-        checked={rule.enabled}
-        label={copy.rules.switchLabel(rule.header, rule.enabled)}
-        onChange={onToggle}
-      />
-      <RuleFace
-        rule={rule}
-        secondLine={
-          <>
-            {sentence(scopeSummary(rule))}
-            {types !== undefined && <> · {types}</>}
-          </>
-        }
-      />
-    </li>
   );
 }

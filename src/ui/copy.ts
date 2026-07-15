@@ -104,15 +104,17 @@ export const copy = {
   options: {
     nav: {
       label: "Sections",
-      profiles: "Profiles",
+      profiles: "Profiles & rules",
       importExport: "Import & export",
       siteAccess: "Site access",
-      about: "Appearance & about",
+      settings: "Settings",
+      about: "About",
     },
     version: (version: string) => `v${version}`,
     profiles: {
       title: "Profiles",
       new: "+ New",
+      listLabel: "Profiles",
       // The name a fresh profile is created under before the user renames it;
       // availableProfileName resolves collisions ("New profile 2", …).
       newName: "New profile",
@@ -153,6 +155,7 @@ export const copy = {
     },
     rules: {
       sectionLabel: (name: string) => `Rules in ${name}`,
+      new: "+ New rule",
       selectAll: "Select all rules",
       selected: (count: number) => `${count} ${rules(count)} selected`,
       selectRule: (header: string) => `Select rule: ${header}`,
@@ -242,19 +245,19 @@ export const copy = {
         "Requests started by other pages also need those pages granted.",
       allSites: {
         heading: "Allow on all sites",
-        // Includes Chrome's real all-sites permission-warning string verbatim.
-        body: "If you're constantly adding rules for new sites, you can grant HeaderShim access to every site at once. Chrome will show its strongest warning — \"Read and change all your data on all websites\" — and that warning is accurate: this is real, broad access, which is exactly why HeaderShim doesn't ask for it by default. Your rules still only apply where their scopes say; this only removes the per-site permission step. You can revoke it here at any time.",
+        consequence:
+          "This gives HeaderShim access to every website instead of asking one site at a time.",
+        disclosure: "Review all-sites access",
+        // Chrome shows this exact warning before it can grant broad access.
+        warning:
+          'Chrome will warn: "Read and change all your data on all websites". Your rules still only apply where their scopes say, and you can revoke this access here at any time.',
         button: "Allow on all sites",
         on: "All-sites access is on",
         revoked: "All-sites access revoked",
       },
     },
-    // The trust page: prose a security reviewer can paste into an
-    // approval request. Claim wording says "no install-time
-    // warning", never "no permission text anywhere"; the CWS caveat is stated,
-    // never "verify the store build".
-    about: {
-      appearanceHeading: "Appearance",
+    settings: {
+      title: "Settings",
       theme: {
         label: "Theme",
         options: { system: "System", light: "Light", dark: "Dark" },
@@ -263,7 +266,13 @@ export const copy = {
         label: "Badge shows",
         options: { count: "Matched-rule count", initials: "Profile initials" },
       },
-      shortcuts: "Keyboard shortcuts — manage in Chrome",
+      shortcuts: "Keyboard shortcuts",
+    },
+    // The trust page: prose a security reviewer can paste into an
+    // approval request. Claim wording says "no install-time
+    // warning", never "no permission text anywhere"; the CWS caveat is stated,
+    // never "verify the store build".
+    about: {
       trustHeading: "About & trust",
       build: (version: string, commit: string): Sentence => [
         "HeaderShim v",
@@ -444,6 +453,8 @@ export const copy = {
     menuLabel: (header: string) => `Rule actions: ${header}`,
     direction: { request: "request", response: "response" },
     operation: { set: "set", append: "append", remove: "remove" },
+    redacted: "…redacted",
+    profileOff: "Profile off",
     needsAccess: (host: string, moreSites: number): Sentence => [
       "Needs access · ",
       data(host),

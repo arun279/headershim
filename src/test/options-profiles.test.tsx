@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
+import { fakeBrowser } from "@webext-core/fake-browser";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import type { Profile, Rule } from "../core/model";
+import { originPatternForDomain } from "../core/scope";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import {
@@ -85,7 +87,7 @@ beforeEach(() => {
 });
 
 describe("options frame", () => {
-  it("renders the wordmark, version, and a four-item section nav", async () => {
+  it("renders the wordmark, version, and five-section navigation", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
@@ -96,8 +98,9 @@ describe("options frame", () => {
     ];
     expect(links.map((link) => link.textContent)).toEqual([
       copy.options.nav.profiles,
-      copy.options.nav.importExport,
       copy.options.nav.siteAccess,
+      copy.options.nav.importExport,
+      copy.options.nav.settings,
       copy.options.nav.about,
     ]);
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
@@ -110,13 +113,29 @@ describe("options frame", () => {
       ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),
     ];
 
-    expect(links.map((link) => link.tabIndex)).toEqual([0, -1, -1, -1]);
+    expect(links.map((link) => link.tabIndex)).toEqual([0, -1, -1, -1, -1]);
     press(links[0] as HTMLElement, "ArrowDown");
     expect(document.activeElement).toBe(links[1]);
     press(links[1] as HTMLElement, "End");
-    expect(document.activeElement).toBe(links[3]);
-    press(links[3] as HTMLElement, "Home");
+    expect(document.activeElement).toBe(links[4]);
+    press(links[4] as HTMLElement, "Home");
     expect(document.activeElement).toBe(links[0]);
+  });
+
+  it("moves focus to the section heading after hash navigation", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    window.location.hash = "#settings";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    await vi.waitFor(() => {
+      if (root.querySelector("#settings-title") === null) {
+        throw new Error("settings page is still loading");
+      }
+    });
+
+    expect(document.activeElement).toBe(within(root, "#settings-title"));
   });
 
   it("stamps the stored theme on the document root", async () => {
@@ -133,7 +152,10 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    fire(() => findButton(root, copy.options.profiles.new).click());
+    const add = root.querySelector<HTMLButtonElement>(
+      `button[aria-label="${copy.options.profiles.new}"]`,
+    );
+    fire(() => add?.click());
     await settle();
 
     expect(cardNames(root)).toEqual(["Default", copy.options.profiles.newName]);
@@ -322,6 +344,96 @@ describe("badge editor", () => {
     await settle();
 
     expect((await read()).profiles[0]?.badgeText).toBe("QA");
+  });
+});
+
+describe("rule authoring", () => {
+  it("creates with the shared editor and no current-tab prefill", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    fire(() => findButton(root, copy.options.rules.new).click());
+    await settle();
+    expect(
+      root.querySelector(".editor-sheet")?.getAttribute("aria-modal"),
+    ).toBe(null);
+    expect(root.querySelectorAll(".domain-chip")).toHaveLength(0);
+
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "x-options-created",
+    );
+    typeInto(
+      root.querySelector(".value-row textarea") as HTMLTextAreaElement,
+      "created",
+    );
+    const domain = root.querySelector(".domain-chip-input") as HTMLInputElement;
+    typeInto(domain, "api.example.com");
+    press(domain, "Enter");
+    fire(() => findButton(root, copy.actions.createRule).click());
+    await settle();
+
+    expect((await read()).profiles[0]?.rules[0]?.header).toBe(
+      "x-options-created",
+    );
+    expect(root.querySelector(".grant-panel")?.textContent).toContain(
+      copy.grantPanel.noContextInitiators,
+    );
+
+    fire(() => findButton(root, copy.actions.grantLater).click());
+    await settle();
+    expect(root.querySelector(".editor-sheet")).toBeNull();
+    expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
+  });
+
+  it("edits from the shared row while bulk selection stays independent", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("example.com")],
+    });
+    await seed([
+      profile("p1", {
+        name: "Default",
+        rules: [rule({ header: "x-before" })],
+      }),
+    ]);
+    const root = await mount();
+
+    expect(root.querySelector(".rule-select")).not.toBeNull();
+    expect(root.querySelector(".rule-menu-btn")).toBeNull();
+    fire(() => root.querySelector<HTMLElement>(".rule-lines")?.click());
+    await settle();
+    expect(findButton(root, copy.actions.saveChanges)).not.toBeNull();
+
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "x-after",
+    );
+    fire(() => findButton(root, copy.actions.saveChanges).click());
+    await settle();
+
+    expect((await read()).profiles[0]?.rules[0]?.header).toBe("x-after");
+    expect(root.querySelector(".editor-sheet")).toBeNull();
+  });
+
+  it("uses the shared blocked state and redacts secrets", async () => {
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "authorization",
+            value: "Bearer super-secret-token",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+    const row = within(root, ".rule-row");
+
+    expect(row.classList.contains("blocked")).toBe(true);
+    expect(row.textContent).toContain("Bearer …redacted");
+    expect(row.textContent).not.toContain("super-secret-token");
+    expect(row.querySelector(".rule-grant")).not.toBeNull();
   });
 });
 

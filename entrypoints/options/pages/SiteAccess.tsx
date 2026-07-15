@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useRef } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
@@ -37,6 +37,7 @@ export function SiteAccessPage({
 }) {
   const announce = useAnnounce();
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const [allSitesOpen, setAllSitesOpen] = useState(false);
   const view = siteAccessView(doc, grants);
 
   // A grant or revocation reparents the row to the other group, unmounting the
@@ -69,6 +70,7 @@ export function SiteAccessPage({
   const grantAllSites = () =>
     void requestPermissions([ALL_SITES_ORIGIN]).then((granted) => {
       if (granted) {
+        setAllSitesOpen(false);
         announce(text.allSites.on);
       }
     });
@@ -147,12 +149,27 @@ export function SiteAccessPage({
       {!grants.allSites && (
         <div class="sa-card sa-all-sites">
           <h2 class="sa-all-heading">{text.allSites.heading}</h2>
-          <p class="sa-all-body">{text.allSites.body}</p>
-          <div>
-            <Button kind="quiet" onClick={grantAllSites}>
-              {text.allSites.button}
-            </Button>
-          </div>
+          <p class="sa-all-body">{text.allSites.consequence}</p>
+          <button
+            type="button"
+            class="sa-disclosure"
+            aria-expanded={allSitesOpen}
+            aria-controls="all-sites-details"
+            onClick={() => setAllSitesOpen((open) => !open)}
+          >
+            {text.allSites.disclosure}
+            <span aria-hidden="true"> {allSitesOpen ? "▾" : "▸"}</span>
+          </button>
+          {allSitesOpen && (
+            <div class="sa-all-details" id="all-sites-details">
+              <p class="sa-all-warning">{text.allSites.warning}</p>
+              <div>
+                <Button kind="quiet" onClick={grantAllSites}>
+                  {text.allSites.button}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

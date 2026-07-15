@@ -15,6 +15,16 @@
   background: var(--panel-1);
 }
 
+.rule-row.has-selection {
+  grid-template-columns: auto auto 34px minmax(0, 1fr) auto;
+}
+
+.rule-select {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--trace);
+}
+
 .rule-row + .rule-row {
   border-top: var(--hairline) solid var(--bezel);
 }
@@ -36,6 +46,15 @@
 
 /* Off: mute carries the state with the switch and neutral rail. */
 .rule-row.off .rule-line1 {
+  color: var(--ink-mute);
+}
+
+.rule-row.inactive {
+  border-left-color: var(--bezel-strong);
+}
+
+.rule-row.inactive .rule-line1,
+.rule-status-inactive {
   color: var(--ink-mute);
 }
 

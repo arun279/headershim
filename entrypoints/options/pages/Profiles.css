@@ -1,0 +1,67 @@
+.profiles-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.8fr) minmax(420px, 1.6fr);
+  min-height: 480px;
+  background: var(--panel-1);
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-outer);
+  overflow: hidden;
+}
+
+.profile-master {
+  min-width: 0;
+  border-right: var(--hairline) solid var(--bezel);
+  background: var(--panel-2);
+}
+
+.profile-master-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.profile-add {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-inner);
+  color: var(--trace);
+  font-size: 18px;
+}
+
+.profile-add:hover {
+  background: var(--panel-1);
+}
+
+.profile-detail-pane {
+  min-width: 0;
+  background: var(--panel-0);
+}
+
+.profile-detail-pane > .rules-panel {
+  min-height: 100%;
+  padding: var(--sp-5);
+}
+
+.profile-detail-pane .editor-sheet {
+  min-height: 100%;
+}
+
+.profile-detail-pane .sheet-region {
+  max-height: none;
+}
+
+@media (max-width: 900px) {
+  .profiles-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-master {
+    border-right: 0;
+    border-bottom: var(--hairline) solid var(--bezel);
+  }
+}

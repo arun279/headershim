@@ -9,7 +9,7 @@ import {
   openPositionedPopover,
   trapPopoverFocus,
 } from "./popover";
-import { RuleFace } from "./RuleFace";
+import { RuleFace, ruleValueSummary } from "./RuleFace";
 import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
 import { Toggle } from "./Toggle";
@@ -17,13 +17,13 @@ import "./RuleRow.css";
 
 interface RuleRowActions {
   onToggle: (enabled: boolean) => void;
-  onGrant: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  onMoveToProfile: (profileId: string) => void;
-  onRegenerate: () => void;
-  onUndoDelete: () => void;
+  onGrant?: (() => void) | undefined;
+  onEdit?: (() => void) | undefined;
+  onDelete?: (() => void) | undefined;
+  onDuplicate?: (() => void) | undefined;
+  onMoveToProfile?: ((profileId: string) => void) | undefined;
+  onRegenerate?: (() => void) | undefined;
+  onUndoDelete?: (() => void) | undefined;
 }
 
 interface RuleRowProps extends RuleRowActions {
@@ -36,15 +36,27 @@ interface RuleRowProps extends RuleRowActions {
   overridden?: boolean | undefined;
   /** Session-scoped This-tab row: dotted edge + Temporary line. */
   temporary?: { host: string } | undefined;
+  /** False when the containing profile is off. */
+  active?: boolean | undefined;
+  /** Options-only bulk-selection control. Omit on popup rows. */
+  selection?:
+    | {
+        checked: boolean;
+        label: string;
+        onChange: (checked: boolean) => void;
+      }
+    | undefined;
   /** "Undo last delete" stays in this menu until the next mutation. */
-  undoAvailable: boolean;
+  undoAvailable?: boolean | undefined;
   /** Profiles this rule could move to (everything but its own). */
-  moveTargets: readonly Pick<Profile, "id" | "name">[];
-  posinset: number;
-  setsize: number;
-  tabIndex: number;
-  onFocus: () => void;
-  onRowCommand: (event: KeyboardEvent, openMenu: () => void) => void;
+  moveTargets?: readonly Pick<Profile, "id" | "name">[] | undefined;
+  posinset?: number | undefined;
+  setsize?: number | undefined;
+  tabIndex?: number | undefined;
+  onFocus?: (() => void) | undefined;
+  onRowCommand?:
+    | ((event: KeyboardEvent, openMenu: () => void) => void)
+    | undefined;
   rowRef?: ((element: HTMLLIElement | null) => void) | undefined;
 }
 
@@ -54,25 +66,30 @@ interface RuleRowProps extends RuleRowActions {
  * action so the toggle never implies healthy operation on its own.
  */
 export function RuleRow(props: RuleRowProps) {
-  const { rule, invalid, missingHosts, temporary } = props;
+  const { rule, invalid, missingHosts, temporary, selection } = props;
   const noteRef = useRef<HTMLSpanElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuActions = toMenuActions(props);
+  const active = props.active !== false;
 
   const needsAccess =
-    rule.enabled && !invalid && (missingHosts?.length ?? 0) > 0;
+    active && rule.enabled && !invalid && (missingHosts?.length ?? 0) > 0;
   const state = invalid
     ? "invalid"
     : needsAccess
       ? "blocked"
       : temporary !== undefined
         ? "temporary"
-        : rule.enabled
+        : rule.enabled && active
           ? "running"
-          : "off";
+          : rule.enabled
+            ? "inactive"
+            : "off";
 
+  const value = ruleValueSummary(rule);
   const description = [
-    rule.value === undefined ? undefined : `${rule.header}: ${rule.value}`,
+    value === undefined ? undefined : `${rule.header}: ${value}`,
     needsAccess ? "needs access" : undefined,
   ]
     .filter((part) => part !== undefined)
@@ -80,7 +97,7 @@ export function RuleRow(props: RuleRowProps) {
 
   return (
     <li
-      class={`rule-row ${state}`}
+      class={`rule-row ${state}${selection === undefined ? "" : " has-selection"}`}
       data-rule-id={rule.id}
       tabIndex={props.tabIndex}
       aria-posinset={props.posinset}
@@ -89,21 +106,31 @@ export function RuleRow(props: RuleRowProps) {
       ref={(element) => props.rowRef?.(element)}
       onFocus={(event) => {
         if (event.target === event.currentTarget) {
-          props.onFocus();
+          props.onFocus?.();
         }
       }}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget) {
-          props.onRowCommand(event, () => setMenuOpen(true));
+          props.onRowCommand?.(event, () => setMenuOpen(true));
         }
       }}
-      onClick={() => props.onEdit()}
+      onClick={() => props.onEdit?.()}
     >
+      {selection !== undefined && (
+        <input
+          class="rule-select"
+          type="checkbox"
+          checked={selection.checked}
+          aria-label={selection.label}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => selection.onChange(event.currentTarget.checked)}
+        />
+      )}
       <Toggle
         checked={rule.enabled}
         label={copy.rules.switchLabel(rule.header, rule.enabled)}
         ariaDisabled={invalid}
-        tabIndex={-1}
+        {...(props.tabIndex === undefined ? {} : { tabIndex: -1 })}
         onChange={(enabled) => {
           // An invalid rule cannot be enabled; activation points at the reason.
           if (invalid) {
@@ -118,24 +145,27 @@ export function RuleRow(props: RuleRowProps) {
         secondLine={lineTwo(props, noteRef)}
         secondLineTitle={lineTwoTitle(props)}
       />
-      <button
-        type="button"
-        class="icon-btn rule-menu-btn"
-        aria-label={copy.rules.menuLabel(rule.header)}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        ref={menuButtonRef}
-        tabIndex={-1}
-        onClick={(event) => {
-          event.stopPropagation();
-          setMenuOpen((open) => !open);
-        }}
-      >
-        ⋯
-      </button>
-      {menuOpen && (
+      {menuActions !== undefined && (
+        <button
+          type="button"
+          class="icon-btn rule-menu-btn"
+          aria-label={copy.rules.menuLabel(rule.header)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          ref={menuButtonRef}
+          tabIndex={props.tabIndex === undefined ? undefined : -1}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenuOpen((open) => !open);
+          }}
+        >
+          ⋯
+        </button>
+      )}
+      {menuOpen && menuActions !== undefined && (
         <RowMenu
-          {...props}
+          {...menuActions}
+          rule={rule}
           menuButton={menuButtonRef}
           onClose={(returnFocus) => {
             setMenuOpen(false);
@@ -163,7 +193,7 @@ function lineTwo(
   }
   const missing = missingHosts ?? [];
   const [firstMissing] = missing;
-  if (firstMissing !== undefined) {
+  if (props.active !== false && firstMissing !== undefined) {
     return (
       <>
         <span class="rule-status">
@@ -173,16 +203,20 @@ function lineTwo(
         <button
           type="button"
           class="rule-grant"
-          tabIndex={-1}
+          tabIndex={props.tabIndex === undefined ? undefined : -1}
           onClick={(event) => {
             event.stopPropagation();
-            props.onGrant();
+            props.onGrant?.();
           }}
         >
           {copy.actions.grant}
         </button>
       </>
     );
+  }
+
+  if (props.active === false && rule.enabled) {
+    return <span class="rule-status-inactive">{copy.rules.profileOff}</span>;
   }
 
   const scope = scopeSummary(rule);
@@ -208,6 +242,9 @@ function lineTwo(
 function lineTwoTitle(props: RuleRowProps): string {
   if (props.invalid === true) {
     return copy.rules.invalidRegex;
+  }
+  if (props.active === false && props.rule.enabled) {
+    return copy.rules.profileOff;
   }
   const missing = props.missingHosts ?? [];
   const firstMissing = missing[0];
@@ -245,13 +282,44 @@ function CautionTriangle() {
   );
 }
 
-interface RowMenuProps extends RuleRowActions {
+interface RowMenuProps {
   rule: Rule;
   undoAvailable: boolean;
   moveTargets: readonly Pick<Profile, "id" | "name">[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onMoveToProfile: (profileId: string) => void;
+  onRegenerate: () => void;
+  onUndoDelete: () => void;
   menuButton: RefObject<HTMLButtonElement>;
   /** returnFocus: restore focus to the ⋯ trigger (Esc/activation, not click-away). */
   onClose: (returnFocus: boolean) => void;
+}
+
+function toMenuActions(
+  props: RuleRowProps,
+): Omit<RowMenuProps, "rule" | "menuButton" | "onClose"> | undefined {
+  if (
+    props.onEdit === undefined ||
+    props.onDelete === undefined ||
+    props.onDuplicate === undefined ||
+    props.onMoveToProfile === undefined ||
+    props.onRegenerate === undefined ||
+    props.onUndoDelete === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    undoAvailable: props.undoAvailable ?? false,
+    moveTargets: props.moveTargets ?? [],
+    onEdit: props.onEdit,
+    onDelete: props.onDelete,
+    onDuplicate: props.onDuplicate,
+    onMoveToProfile: props.onMoveToProfile,
+    onRegenerate: props.onRegenerate,
+    onUndoDelete: props.onUndoDelete,
+  };
 }
 
 interface MenuItem {

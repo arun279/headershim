@@ -122,12 +122,14 @@ describe("copy", () => {
   it("keeps the trust-page claims inside their honest wording bounds", () => {
     // The all-sites card quotes Chrome's real warning string and keeps the
     // revocation promise.
-    expect(copy.options.siteAccess.allSites.body).toContain(
+    expect(copy.options.siteAccess.allSites.warning).toContain(
       '"Read and change all your data on all websites"',
     );
-    expect(copy.options.siteAccess.allSites.body).toContain(
-      "You can revoke it here at any time.",
+    expect(copy.options.siteAccess.allSites.warning).toContain(
+      "you can revoke this access here at any time.",
     );
+    expect(copy.options.about).not.toHaveProperty("theme");
+    expect(copy.options.settings.theme.label).toBe("Theme");
     // The install claim is always "no install-time warning" — never a broader
     // "no permission text anywhere" — and the build claim never says the store
     // build itself is verifiable.

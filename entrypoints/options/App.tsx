@@ -20,8 +20,9 @@ const VERSION = browser.runtime.getManifest().version;
 
 const SECTIONS = [
   { id: "profiles", label: copy.options.nav.profiles },
-  { id: "import-export", label: copy.options.nav.importExport },
   { id: "site-access", label: copy.options.nav.siteAccess },
+  { id: "import-export", label: copy.options.nav.importExport },
+  { id: "settings", label: copy.options.nav.settings },
   { id: "about", label: copy.options.nav.about },
 ] as const;
 
@@ -30,12 +31,27 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 export function App() {
   const app = useAppState();
   const section = useHashRoute();
+  const [SettingsPage, setSettingsPage] =
+    useState<typeof import("./pages/Settings").SettingsPage>();
   const theme = app.phase === "ready" ? app.doc.settings.theme : undefined;
+  useEffect(() => {
+    void import("./pages/Settings").then((module) =>
+      setSettingsPage(() => module.SettingsPage),
+    );
+  }, []);
   useEffect(() => {
     if (theme !== undefined) {
       applyTheme(theme);
     }
   }, [theme]);
+  useEffect(() => {
+    if (app.phase !== "ready") {
+      return;
+    }
+    queueMicrotask(() => {
+      document.getElementById(`${section}-title`)?.focus();
+    });
+  }, [section, app.phase, SettingsPage]);
 
   return (
     <LiveRegionProvider>
@@ -54,13 +70,23 @@ export function App() {
                 message={copy.errors.newerStore(app.foundVersion, CURRENT)}
               />
             ) : section === "profiles" ? (
-              <ProfilesPage doc={app.doc} mutations={mutations} />
-            ) : section === "import-export" ? (
-              <ImportExportPage doc={app.doc} mutations={mutations} />
+              <ProfilesPage
+                doc={app.doc}
+                grants={app.grants}
+                mutations={mutations}
+              />
             ) : section === "site-access" ? (
               <SiteAccessPage doc={app.doc} grants={app.grants} />
+            ) : section === "import-export" ? (
+              <ImportExportPage doc={app.doc} mutations={mutations} />
+            ) : section === "settings" ? (
+              SettingsPage === undefined ? (
+                <div aria-busy="true" />
+              ) : (
+                <SettingsPage doc={app.doc} mutations={mutations} />
+              )
             ) : (
-              <AboutPage doc={app.doc} mutations={mutations} />
+              <AboutPage />
             )}
           </main>
         </div>
@@ -76,6 +102,7 @@ function OptionsNav({ current }: { current: SectionId }) {
     SECTIONS.findIndex((entry) => entry.id === current),
   );
   const [roving, setRoving] = useState(currentIndex);
+  useEffect(() => setRoving(currentIndex), [currentIndex]);
 
   const moveTo = (index: number) => {
     const target = Math.max(0, Math.min(index, SECTIONS.length - 1));
