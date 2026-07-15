@@ -1,3 +1,5 @@
+import { getFocusable } from "../a11y/focus";
+
 /** Opens a Popover API surface and clamps it to the popup with fixed pixels. */
 export function openPositionedPopover(
   popover: HTMLElement,
@@ -59,9 +61,7 @@ export function trapPopoverFocus(event: KeyboardEvent, root: HTMLElement) {
   if (event.key !== "Tab") {
     return;
   }
-  const items = [
-    ...root.querySelectorAll<HTMLElement>("button:not(:disabled)"),
-  ];
+  const items = getFocusable(root);
   if (items.length === 0) {
     event.preventDefault();
     return;

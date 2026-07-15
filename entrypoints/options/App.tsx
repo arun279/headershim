@@ -8,6 +8,7 @@ import { EmptyState } from "../../src/ui/components/EmptyState";
 import { copy } from "../../src/ui/copy";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
+import type { Theme } from "../../src/ui/theme";
 import { AboutPage } from "./pages/About";
 import { ImportExportPage } from "./pages/ImportExport";
 import { ProfilesPage } from "./pages/Profiles";
@@ -29,14 +30,10 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 export function App() {
   const app = useAppState();
   const section = useHashRoute();
-  const theme = app.phase === "ready" ? app.doc.settings.theme : "system";
-  // The token stylesheet follows the OS unless the stored theme stamps the
-  // root; System leaves it unset (tokens.css contract).
+  const theme = app.phase === "ready" ? app.doc.settings.theme : undefined;
   useEffect(() => {
-    if (theme === "system") {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", theme);
+    if (theme !== undefined) {
+      syncThemeCache(theme);
     }
   }, [theme]);
 
@@ -70,6 +67,20 @@ export function App() {
       </div>
     </LiveRegionProvider>
   );
+}
+
+function syncThemeCache(theme: Theme): void {
+  const rootTheme = document.documentElement.dataset;
+  if (theme === "system") {
+    Reflect.deleteProperty(rootTheme, "theme");
+  } else {
+    Reflect.set(rootTheme, "theme", theme);
+  }
+  try {
+    localStorage.setItem("headershim.theme", theme);
+  } catch {
+    // The extension store remains authoritative if this pre-paint cache fails.
+  }
 }
 
 function OptionsNav({ current }: { current: SectionId }) {

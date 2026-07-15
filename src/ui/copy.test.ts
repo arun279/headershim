@@ -44,7 +44,9 @@ describe("copy", () => {
       "Profile 'QA roles' deleted",
     );
     expect(copy.actions.allowOn("3 sites")).toBe("Allow on 3 sites");
-    expect(copy.emptyState.profile("Staging")).toBe("No rules in Staging yet.");
+    expect(copy.emptyState.profile("Staging")).toBe(
+      "Staging has no rules yet.",
+    );
     expect(copy.grantPanel.single("api.example.com")).toContain(
       "To change headers on api.example.com",
     );

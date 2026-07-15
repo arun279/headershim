@@ -16,6 +16,7 @@ interface AnnunciatorProps {
   status: SystemStatus;
   /** This-tab override rows on the current tab (annunciator live detail). */
   temporaryCount: number;
+  activeProfileCount: number;
   onResume: () => void;
   onGrantAccess: () => void;
 }
@@ -28,6 +29,7 @@ interface AnnunciatorProps {
 export function Annunciator({
   status,
   temporaryCount,
+  activeProfileCount,
   onResume,
   onGrantAccess,
 }: AnnunciatorProps) {
@@ -35,7 +37,12 @@ export function Annunciator({
   const alertedKinds = useRef(new Set<SystemStatus["kind"]>());
   const caution =
     status.kind === "needs-access" || status.kind === "out-of-sync";
-  const sentence = sentenceFor(status, temporaryCount);
+  const sentence = [
+    ...sentenceFor(status, temporaryCount),
+    ...(activeProfileCount > 1
+      ? copy.annunciator.activeProfiles(activeProfileCount)
+      : []),
+  ];
   const assertive = caution && !alertedKinds.current.has(status.kind);
   const announcement = caution ? sentenceText(sentence) : "";
 

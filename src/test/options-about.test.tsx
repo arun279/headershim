@@ -50,6 +50,7 @@ describe("options about", () => {
 
     expect((await read()).settings.theme).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(localStorage.getItem("headershim.theme")).toBe("dark");
 
     check(radio(root, "theme", "system"));
     await settle();

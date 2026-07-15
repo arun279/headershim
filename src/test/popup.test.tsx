@@ -6,7 +6,14 @@ import { App } from "../../entrypoints/popup/App";
 import type { Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import { read, write } from "../platform/store";
-import { fire, press, render, settle, typeInto } from "../ui/test/render";
+import {
+  findButton,
+  fire,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../ui/test/render";
 
 async function mount(doc?: StateDoc) {
   if (doc !== undefined) {
@@ -58,20 +65,25 @@ describe("popup App", () => {
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
     );
     const actions = [...root.querySelectorAll(".first-run-actions button")];
-    // Create a rule is the single primary and comes first; focus lands on it.
     expect(actions.map((button) => button.textContent)).toEqual([
-      "Create a rule",
+      "Create your first rule",
       "Try it on this tab",
-      "Import from ModHeader or a file",
+      "Import from a file",
     ]);
     expect(actions[0]?.classList.contains("primary")).toBe(true);
     expect(document.activeElement).toBe(actions[0]);
     expect(root.textContent).toContain(
-      "Temporary — this tab only, gone on close.",
+      "temporary, this tab only, gone on close",
     );
     expect(annunciator().textContent).toBe("Live — no rules yet.");
-    // The footer is always present.
     expect(root.querySelector(".foot")?.textContent).toContain("Pause");
+    expect(
+      root.querySelector('.popup-head [aria-label="Theme"]'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector('.popup-head [aria-label="Options"]'),
+    ).not.toBeNull();
+    expect(root.querySelector('.foot [aria-label="Options"]')).toBeNull();
   });
 
   it("routes the first-run import action to the options import section", async () => {
@@ -82,7 +94,7 @@ describe("popup App", () => {
     const importButton = [
       ...root.querySelectorAll(".first-run-actions button"),
     ].find(
-      (button) => button.textContent === "Import from ModHeader or a file",
+      (button) => button.textContent === "Import from a file",
     ) as HTMLButtonElement;
 
     fire(() => importButton.click());
@@ -211,6 +223,36 @@ describe("popup App", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBeNull();
   });
 
+  it("changes theme in place and persists the synchronous mirror", async () => {
+    const { root } = await mount(createV1Seed());
+    const themeButton = root.querySelector<HTMLButtonElement>(
+      '[aria-label="Theme"]',
+    );
+    if (themeButton === null) throw new Error("no theme control");
+    fire(() => themeButton.click());
+    fire(() => findButton(root, "Dark").click());
+    await settle();
+
+    expect({
+      stored: (await read()).settings.theme,
+      stamped: document.documentElement.getAttribute("data-theme") ?? undefined,
+      mirrored: localStorage.getItem("headershim.theme"),
+    }).toEqual({ stored: "dark", stamped: "dark", mirrored: "dark" });
+  });
+
+  it("opens options from the header gear", async () => {
+    const open = vi
+      .spyOn(fakeBrowser.runtime, "openOptionsPage")
+      .mockResolvedValue(undefined);
+    const { root } = await mount(createV1Seed());
+    fire(() =>
+      (
+        root.querySelector('[aria-label="Options"]') as HTMLButtonElement
+      ).click(),
+    );
+    expect(open).toHaveBeenCalledOnce();
+  });
+
   it("shows the empty-profile state with the focused profile's name", async () => {
     const { root, annunciator } = await mount({
       ...createV1Seed(),
@@ -236,11 +278,13 @@ describe("popup App", () => {
       nextRuleNum: 100,
     });
 
-    expect(root.textContent).toContain("No rules in Staging yet.");
+    expect(root.textContent).toContain("Staging has no rules yet.");
+    expect(root.textContent).toContain("Your other profiles are unchanged.");
+    expect(document.activeElement?.textContent).toBe("Create a rule");
     expect(annunciator().textContent).toBe("Live — no rules yet.");
   });
 
-  it("switches profiles exclusively from the chips and toggles with shift", async () => {
+  it("switches profiles exclusively from the chips even with Shift held", async () => {
     const base = createV1Seed();
     const first = base.profiles[0];
     if (first === undefined) {
@@ -269,7 +313,9 @@ describe("popup App", () => {
       candidate.textContent?.includes("Second"),
     ) as HTMLButtonElement;
     await act(async () => {
-      chip.click();
+      chip.dispatchEvent(
+        new MouseEvent("click", { shiftKey: true, bubbles: true }),
+      );
     });
     await settle();
 
@@ -279,6 +325,133 @@ describe("popup App", () => {
       true,
     ]);
     expect(stored.focusedProfileId).toBe("p2");
+  });
+
+  it("creates a profile in place with duplicated rules and an exclusive switch", async () => {
+    const base = seededDoc([rule()]);
+    const source = base.profiles[0];
+    if (source === undefined) throw new Error("seed has no profile");
+    const { root } = await mount({
+      ...base,
+      profiles: [
+        source,
+        {
+          id: "p-existing",
+          name: "New profile",
+          badgeText: "NE",
+          color: "blue",
+          enabled: false,
+          rules: [],
+        },
+      ],
+    });
+
+    fire(() =>
+      (root.querySelector(".new-profile-chip") as HTMLButtonElement).click(),
+    );
+    const popover = root.querySelector(".profile-create-pop") as HTMLElement;
+    const name = popover.querySelector(
+      ".profile-name-field",
+    ) as HTMLInputElement;
+    expect(name.value).toBe("New profile 2");
+    typeInto(name, "Preview");
+    const duplicate = popover.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    const form = popover.querySelector("form");
+    if (duplicate === null || form === null) throw new Error("incomplete form");
+    fire(() => duplicate.click());
+    fire(() =>
+      form.dispatchEvent(
+        new SubmitEvent("submit", { bubbles: true, cancelable: true }),
+      ),
+    );
+    await settle();
+
+    const stored = await read();
+    expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    expect(stored.profiles[2]?.name).toBe("Preview");
+    expect(stored.profiles[2]?.rules[0]?.header).toBe("authorization");
+    expect(stored.profiles[2]?.rules[0]?.id).not.toBe(source.rules[0]?.id);
+    expect(root.textContent).toContain("Preview");
+  });
+
+  it("renames and additively enables from a chip menu without switching focus", async () => {
+    const base = seededDoc([rule()]);
+    const first = base.profiles[0];
+    if (first === undefined) throw new Error("seed has no profile");
+    const { root, annunciator } = await mount({
+      ...base,
+      profiles: [
+        first,
+        {
+          id: "p2",
+          name: "Second",
+          badgeText: "SE",
+          color: "blue",
+          enabled: false,
+          rules: [],
+        },
+      ],
+    });
+    const secondMenu = [
+      ...root.querySelectorAll<HTMLButtonElement>(".profile-menu-trigger"),
+    ][1] as HTMLButtonElement;
+    fire(() => secondMenu.click());
+    fire(() =>
+      [...root.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Rename")
+        ?.click(),
+    );
+    const field = root.querySelector(
+      ".profile-actions-pop .profile-name-field",
+    ) as HTMLInputElement;
+    typeInto(field, "QA");
+    fire(() =>
+      (
+        root.querySelector(
+          '.profile-actions-pop button[type="submit"]',
+        ) as HTMLButtonElement
+      ).click(),
+    );
+    await settle();
+    expect((await read()).profiles[1]?.name).toBe("QA");
+
+    const renamedMenu = [
+      ...root.querySelectorAll<HTMLButtonElement>(".profile-menu-trigger"),
+    ][1] as HTMLButtonElement;
+    fire(() => renamedMenu.click());
+    const enable = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Enable without switching",
+    ) as HTMLButtonElement;
+    fire(() => enable.click());
+    await settle();
+
+    const stored = await read();
+    expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
+      true,
+      true,
+    ]);
+    expect(stored.focusedProfileId).toBe(first.id);
+    expect(annunciator().textContent).toContain("2 profiles active");
+  });
+
+  it("deep-links profile management from the chip menu", async () => {
+    const create = vi
+      .spyOn(fakeBrowser.tabs, "create")
+      .mockResolvedValue({} as never);
+    const { root } = await mount(seededDoc([rule()]));
+    fire(() =>
+      (
+        root.querySelector(".profile-menu-trigger") as HTMLButtonElement
+      ).click(),
+    );
+    fire(() => findButton(root, "Manage profiles").click());
+    expect(create.mock.calls[0]?.[0]?.url).toMatch(/options\.html#profiles$/);
   });
 });
 
@@ -316,7 +489,13 @@ describe("popup rule list integration", () => {
     await settle();
 
     expect(root.querySelector(".verify-sheet")).not.toBeNull();
-    expect(root.querySelector(".profiles")).toBeNull();
+    expect(root.querySelector(".profiles")).not.toBeNull();
+    expect(
+      root.querySelector('.popup-head [aria-label="Theme"]'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector('.popup-head [aria-label="Options"]'),
+    ).not.toBeNull();
     expect(root.querySelector(".annunciator")).toBeNull();
     expect(root.querySelector(".foot")).toBeNull();
 

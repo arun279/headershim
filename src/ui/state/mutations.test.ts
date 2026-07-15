@@ -666,6 +666,48 @@ describe("profile operations", () => {
     expect((await read()).focusedProfileId).toBe(doc.focusedProfileId);
   });
 
+  it("creates an exclusive active profile and can duplicate the current rules", async () => {
+    const source = rule({ header: "x-preview" });
+    await seed([
+      profile("p1", { rules: [source] }),
+      profile("p2", { enabled: true }),
+    ]);
+    const created = await mutations.createProfile({
+      name: "Preview",
+      color: "green",
+      enabled: true,
+      exclusive: true,
+      duplicateFromProfileId: "p1",
+    });
+
+    expect(created.ok).toBe(true);
+    const stored = await read();
+    expect(stored.profiles.map((candidate) => candidate.enabled)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    expect(stored.focusedProfileId).toBe(created.ok ? created.value.id : "");
+    const copied = stored.profiles[2]?.rules[0];
+    expect(copied).toMatchObject({ header: "x-preview" });
+    expect(copied?.id).not.toBe(source.id);
+    expect(copied?.num).not.toBe(source.num);
+  });
+
+  it("rejects creation when the duplicate source disappeared", async () => {
+    await seed([profile("p1")]);
+    expect(
+      errorKind(
+        await mutations.createProfile({
+          name: "Preview",
+          color: "green",
+          enabled: true,
+          duplicateFromProfileId: "missing",
+        }),
+      ),
+    ).toBe("not-found");
+  });
+
   it.each([
     "p1",
     "P1",
@@ -822,6 +864,21 @@ describe("enable semantics", () => {
     const stored = await read();
     expect(stored.profiles.map((p) => p.enabled)).toEqual([true, true]);
     expect(stored.focusedProfileId).toBe("p2");
+  });
+
+  it("can enable an additional profile without changing focus", async () => {
+    await seed([profile("p1"), profile("p2", { enabled: false })], {
+      focusedProfileId: "p1",
+    });
+    expect((await mutations.setProfileEnabled("p2", true, false)).ok).toBe(
+      true,
+    );
+    const stored = await read();
+    expect(stored.profiles.map((candidate) => candidate.enabled)).toEqual([
+      true,
+      true,
+    ]);
+    expect(stored.focusedProfileId).toBe("p1");
   });
 
   it("disabling the focused profile moves focus to the topmost enabled one", async () => {

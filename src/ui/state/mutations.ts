@@ -461,26 +461,57 @@ export function createMutations({ validateRegex }: MutationDeps) {
       badgeText?: string;
       color: BadgeColor;
       enabled: boolean;
+      duplicateFromProfileId?: string;
+      exclusive?: boolean;
     }): MutationResult<Profile> {
       return commit((doc) => {
-        const name = input.name.trim();
-        if (!isProfileNameAvailable(doc.profiles, name)) {
-          return err({ kind: "profile-name-unavailable", name } as const);
+        const available = availableName(doc, input.name);
+        if (!available.ok) return available;
+        const name = available.value;
+        const source =
+          input.duplicateFromProfileId === undefined
+            ? undefined
+            : findProfile(doc, input.duplicateFromProfileId);
+        if (
+          input.duplicateFromProfileId !== undefined &&
+          source === undefined
+        ) {
+          return notFound();
         }
-        const profile = buildProfile({
-          name,
-          badgeText: input.badgeText ?? defaultBadgeText(name),
-          color: input.color,
-          enabled: input.enabled,
-        });
-        const next: StateDoc = {
-          ...doc,
-          profiles: [...doc.profiles, profile],
-          // Enabling a profile focuses it; creating one enabled is
-          // the same gesture.
-          ...(input.enabled ? { focusedProfileId: profile.id } : {}),
+        let next = doc;
+        const rules: Rule[] = [];
+        for (const rule of source?.rules ?? []) {
+          const [copy, allocated] = cloneRule(next, rule);
+          rules.push(copy);
+          next = allocated;
+        }
+        const profile: Profile = {
+          ...buildProfile({
+            name,
+            badgeText: input.badgeText ?? defaultBadgeText(name),
+            color: input.color,
+            enabled: input.enabled,
+          }),
+          rules,
         };
-        return ok([next, profile]);
+        return ok([
+          {
+            ...next,
+            profiles: [
+              ...(input.exclusive === true
+                ? next.profiles.map((candidate) => ({
+                    ...candidate,
+                    enabled: false,
+                  }))
+                : next.profiles),
+              profile,
+            ],
+            // Enabling a profile focuses it; creating one enabled is
+            // the same gesture.
+            ...(input.enabled ? { focusedProfileId: profile.id } : {}),
+          },
+          profile,
+        ]);
       });
     },
 
@@ -489,17 +520,12 @@ export function createMutations({ validateRegex }: MutationDeps) {
         if (findProfile(doc, profileId) === undefined) {
           return notFound();
         }
-        const trimmed = name.trim();
-        if (!isProfileNameAvailable(doc.profiles, trimmed, profileId)) {
-          return err({
-            kind: "profile-name-unavailable",
-            name: trimmed,
-          } as const);
-        }
+        const available = availableName(doc, name, profileId);
+        if (!available.ok) return available;
         return ok([
           withProfile(doc, profileId, (profile) => ({
             ...profile,
-            name: trimmed,
+            name: available.value,
           })),
           undefined,
         ]);
@@ -614,6 +640,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
     setProfileEnabled(
       profileId: string,
       enabled: boolean,
+      focusOnEnable = true,
     ): MutationResult<void> {
       return commit((doc) => {
         const profile = findProfile(doc, profileId);
@@ -631,7 +658,9 @@ export function createMutations({ validateRegex }: MutationDeps) {
         // disabling the focused one moves focus to the topmost enabled
         // profile, or the topmost profile when none is enabled.
         const focusedProfileId = enabled
-          ? profileId
+          ? focusOnEnable
+            ? profileId
+            : doc.focusedProfileId
           : doc.focusedProfileId === profileId
             ? topmostFocus(next.profiles)
             : doc.focusedProfileId;
@@ -835,6 +864,17 @@ function regexCount(rules: readonly Rule[]): number {
 
 function findProfile(doc: StateDoc, profileId: string): Profile | undefined {
   return doc.profiles.find((profile) => profile.id === profileId);
+}
+
+function availableName(
+  doc: StateDoc,
+  candidate: string,
+  excludedProfileId?: string,
+): Result<string, MutationError> {
+  const name = candidate.trim();
+  return isProfileNameAvailable(doc.profiles, name, excludedProfileId)
+    ? ok(name)
+    : err({ kind: "profile-name-unavailable", name } as const);
 }
 
 function findRule(

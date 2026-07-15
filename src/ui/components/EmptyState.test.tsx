@@ -10,7 +10,7 @@ describe("EmptyState", () => {
       <EmptyState message={copy.emptyState.profile("Staging")} />,
     );
     expect(root.querySelector(".empty-message")?.textContent).toBe(
-      "No rules in Staging yet.",
+      "Staging has no rules yet.",
     );
     expect(root.querySelector(".empty-actions")).toBeNull();
   });
@@ -25,5 +25,20 @@ describe("EmptyState", () => {
     expect(root.querySelector(".empty-actions button")?.textContent).toBe(
       "+ New rule",
     );
+  });
+
+  it("renders reassurance and can focus the primary action", () => {
+    const root = render(
+      <EmptyState
+        message={copy.emptyState.profile("Staging")}
+        detail={copy.emptyState.otherProfilesUnchanged}
+        actions={<button type="button">Create a rule</button>}
+        autoFocusAction
+      />,
+    );
+    expect(root.querySelector(".empty-detail")?.textContent).toBe(
+      "Your other profiles are unchanged.",
+    );
+    expect(document.activeElement).toBe(root.querySelector("button"));
   });
 });

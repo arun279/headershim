@@ -71,6 +71,7 @@ export function VerifyPanel({
     <Sheet
       class="verify-sheet"
       label={copy.verify.regionLabel}
+      modal={false}
       header={
         <>
           <h1 class="verify-title">{copy.verify.heading}</h1>

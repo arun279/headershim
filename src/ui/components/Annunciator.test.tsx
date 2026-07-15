@@ -5,13 +5,18 @@ import type { SystemStatus } from "../../core/status";
 import { fire, render } from "../test/render";
 import { Annunciator } from "./Annunciator";
 
-function mount(status: SystemStatus, temporaryCount = 0) {
+function mount(
+  status: SystemStatus,
+  temporaryCount = 0,
+  activeProfileCount = status.kind === "live" ? status.profileCount : 1,
+) {
   const onResume = vi.fn();
   const onGrantAccess = vi.fn();
   const root = render(
     <Annunciator
       status={status}
       temporaryCount={temporaryCount}
+      activeProfileCount={activeProfileCount}
       onResume={onResume}
       onGrantAccess={onGrantAccess}
     />,
@@ -94,8 +99,13 @@ describe("Annunciator states", () => {
       1,
     );
     expect(strip.textContent).toBe(
-      "Live — 2 of 3 rules enabled. · 1 temporary on this tab",
+      "Live — 2 of 3 rules enabled. · 1 temporary on this tab · 2 profiles active",
     );
+  });
+
+  it("states the active-profile count alongside a caution state", () => {
+    const { strip } = mount(needsAccess, 0, 3);
+    expect(strip.textContent).toContain("3 profiles active");
   });
 
   it("reads live-with-no-rules honestly", () => {
@@ -147,6 +157,7 @@ describe("Annunciator alert-once per popup open", () => {
       <Annunciator
         status={status}
         temporaryCount={0}
+        activeProfileCount={status.kind === "live" ? status.profileCount : 1}
         onResume={() => {}}
         onGrantAccess={() => {}}
       />

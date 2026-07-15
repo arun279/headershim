@@ -149,7 +149,7 @@ describe("popup This-tab wiring", () => {
     fire(() => promote.click());
     await settle();
     const create = [...root.querySelectorAll(".editor-actions button")].find(
-      (button) => button.textContent === "Create rule",
+      (button) => button.textContent === "Create a rule",
     ) as HTMLButtonElement;
     fire(() => create.click());
     await settle();

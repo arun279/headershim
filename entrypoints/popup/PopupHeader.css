@@ -1,0 +1,28 @@
+.popup-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 48px;
+  padding: 8px 10px 7px 12px;
+  background: var(--panel-0);
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.popup-profile-region {
+  min-width: 0;
+  flex: 1;
+}
+
+.popup-head-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-left: var(--sp-2);
+  border-left: var(--hairline) solid var(--bezel);
+}
+
+.popup-head-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+}

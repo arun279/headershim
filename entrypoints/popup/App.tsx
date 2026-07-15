@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
+import { availableProfileName } from "../../src/core/codec/headershim";
 import { domainFromOriginPattern } from "../../src/core/grants";
 import { decodeMatches } from "../../src/core/matches";
-import type { Rule, RuleDraft, TabOverride } from "../../src/core/model";
+import {
+  BADGE_COLORS,
+  type Rule,
+  type RuleDraft,
+  type TabOverride,
+} from "../../src/core/model";
 import type { Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
 import { summarizeVerify, type VerifyReadout } from "../../src/core/verify";
@@ -14,7 +20,6 @@ import { LiveRegionProvider, useAnnounce } from "../../src/ui/a11y/LiveRegion";
 import { Annunciator } from "../../src/ui/components/Annunciator";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
-import { ProfileSwitcher } from "../../src/ui/components/ProfileSwitcher";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { RuleList } from "../../src/ui/components/RuleList";
 import { overrideToRuleDraft, ThisTab } from "../../src/ui/components/ThisTab";
@@ -34,7 +39,9 @@ import {
 } from "../../src/ui/state/session-mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
 import { useInvalidRules } from "../../src/ui/state/useInvalidRules";
+import { applyTheme } from "../../src/ui/theme";
 import { popupKeyHandler } from "./keyboard";
+import { PopupHeader } from "./PopupHeader";
 import "./App.css";
 
 const mutations = createMutations({ validateRegex: isRegexSupported });
@@ -151,14 +158,8 @@ function Ready({
     void pruneForeignOrigins(tabId, tabDomain);
   }, [tabResolved, tabId, tabDomain]);
   const theme = doc.settings.theme;
-  // The token stylesheet follows the OS unless the stored theme stamps the
-  // root; System leaves it unset (tokens.css contract).
   useEffect(() => {
-    if (theme === "system") {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", theme);
-    }
+    applyTheme(theme);
   }, [theme]);
   const firstRun = doc.profiles.every((profile) => profile.rules.length === 0);
   const focused = doc.profiles.find(
@@ -168,6 +169,11 @@ function Ready({
   const enabledProfilesEmpty = doc.profiles.every(
     (profile) => !profile.enabled || profile.rules.length === 0,
   );
+  const showEmptyProfile =
+    !firstRun &&
+    someProfileEnabled &&
+    enabledProfilesEmpty &&
+    focused !== undefined;
   const enabledProfiles = useMemo(
     () => doc.profiles.filter((profile) => profile.enabled),
     [doc],
@@ -287,6 +293,41 @@ function Ready({
       // Undo is not timing-locked, but it only survives until the next
       // mutation; any other successful commit retires it.
       setPendingUndo(undefined);
+    });
+  };
+
+  const profileCommit = async <T,>(
+    mutation: Promise<Result<T, MutationError>>,
+  ) => {
+    const outcome = await mutation;
+    if (outcome.ok) {
+      setPendingUndo(undefined);
+      return { ok: true } as const;
+    }
+    return {
+      ok: false,
+      error: blockedCommitCopy(outcome.error) ?? copy.profiles.saveError,
+    } as const;
+  };
+
+  const createProfile = (name: string, duplicateCurrentRules: boolean) =>
+    profileCommit(
+      mutations.createProfile({
+        name,
+        color:
+          BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
+          BADGE_COLORS[0],
+        enabled: true,
+        exclusive: true,
+        ...(duplicateCurrentRules
+          ? { duplicateFromProfileId: doc.focusedProfileId }
+          : {}),
+      }),
+    );
+
+  const openOptionsSection = (section: "profiles" | "import-export") => {
+    void browser.tabs.create({
+      url: browser.runtime.getURL(`/options.html#${section}`),
     });
   };
 
@@ -444,6 +485,31 @@ function Ready({
     }
   };
 
+  const popupHeader = (
+    <PopupHeader
+      profiles={doc.profiles}
+      focusedProfileId={doc.focusedProfileId}
+      newProfileName={availableProfileName(
+        copy.options.profiles.newName,
+        doc.profiles,
+        [],
+      )}
+      theme={theme}
+      autoFocusProfiles={!firstRun && !showEmptyProfile && verify === undefined}
+      onActivateProfile={(id) => run(mutations.activateProfile(id))}
+      onCreateProfile={createProfile}
+      onRenameProfile={(id, name) =>
+        profileCommit(mutations.renameProfile(id, name))
+      }
+      onEnableProfile={(id) =>
+        profileCommit(mutations.setProfileEnabled(id, true, false))
+      }
+      onManageProfiles={() => openOptionsSection("profiles")}
+      onThemeChange={(next) => run(mutations.setTheme(next))}
+      onOpenOptions={() => void browser.runtime.openOptionsPage()}
+    />
+  );
+
   return (
     // tabIndex -1 (not a tab stop) lets removing the last This-tab override,
     // which unmounts its whole section, land focus on the popup landmark rather
@@ -499,33 +565,26 @@ function Ready({
           onClose={() => setEditing(undefined)}
         />
       ) : verify !== undefined ? (
-        <VerifyPanel
-          readout={verify}
-          blocked={verifyBlocked}
-          onGrant={grantAccess}
-          onReload={() => {
-            void browser.tabs.reload();
-            closeVerify();
-          }}
-          onClose={closeVerify}
-        />
+        <>
+          {popupHeader}
+          <VerifyPanel
+            readout={verify}
+            blocked={verifyBlocked}
+            onGrant={grantAccess}
+            onReload={() => {
+              void browser.tabs.reload();
+              closeVerify();
+            }}
+            onClose={closeVerify}
+          />
+        </>
       ) : (
         <>
-          <ProfileSwitcher
-            profiles={doc.profiles}
-            focusedProfileId={doc.focusedProfileId}
-            onActivate={(id) => run(mutations.activateProfile(id))}
-            onToggle={(id) => {
-              const target = doc.profiles.find((profile) => profile.id === id);
-              if (target !== undefined) {
-                run(mutations.setProfileEnabled(id, !target.enabled));
-              }
-            }}
-            autoFocus={!firstRun}
-          />
+          {popupHeader}
           <Annunciator
             status={status}
             temporaryCount={overrides.length}
+            activeProfileCount={enabledProfiles.length}
             onResume={() => run(mutations.setPaused(false))}
             onGrantAccess={grantAccess}
           />
@@ -550,14 +609,14 @@ function Ready({
                   onTryThisTab={openThisTabComposer}
                 />
               )
-            ) : someProfileEnabled &&
-              enabledProfilesEmpty &&
-              focused !== undefined ? (
+            ) : showEmptyProfile && focused !== undefined ? (
               <EmptyState
                 message={copy.emptyState.profile(focused.name)}
+                detail={copy.emptyState.otherProfilesUnchanged}
+                autoFocusAction
                 actions={
                   <Button kind="primary" onClick={openNewRule}>
-                    {copy.actions.newRule}
+                    {copy.actions.createRule}
                   </Button>
                 }
               />
@@ -612,13 +671,6 @@ function Ready({
                 onChange={(paused) => run(mutations.setPaused(paused))}
               />
             </span>
-            <Button
-              kind="ghost"
-              label={copy.actions.options}
-              onClick={() => void browser.runtime.openOptionsPage()}
-            >
-              <GearGlyph />
-            </Button>
           </footer>
         </>
       )}
@@ -651,9 +703,7 @@ function Ready({
 
 /**
  * First run is onboarding with one obvious act: the wordmark and
- * trust sentence, a single primary "Create a rule" that focus lands on, and two
- * ranked-below routes — "Try it" (with its temporary/persistent tell) and
- * Import — as quiet secondaries.
+ * trust sentence, one focused primary action, and two quieter routes.
  */
 function FirstRun({
   onCreateRule,
@@ -693,22 +743,5 @@ function FirstRun({
         </Button>
       </div>
     </div>
-  );
-}
-
-function GearGlyph() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.4"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="2.4" />
-      <path d="M8 1.2v2M8 12.8v2M1.2 8h2M12.8 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M12.8 3.2l-1.4 1.4M4.6 11.4l-1.4 1.4" />
-    </svg>
   );
 }

@@ -9,6 +9,7 @@ interface SheetProps {
   children: ComponentChildren;
   pinned?: ComponentChildren;
   class?: string;
+  modal?: boolean;
   onKeyDown?: JSX.KeyboardEventHandler<HTMLElement>;
 }
 
@@ -23,17 +24,18 @@ export function Sheet({
   children,
   pinned,
   class: className,
+  modal = true,
   onKeyDown,
 }: SheetProps) {
   const sheetRef = useRef<HTMLElement>(null);
-  useFocusTrap(sheetRef, true, { focusOnActivate: false });
+  useFocusTrap(sheetRef, modal, { focusOnActivate: false });
 
   return (
     <section
       ref={sheetRef}
       class={className === undefined ? "sheet" : `sheet ${className}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal={modal ? "true" : undefined}
       aria-label={label}
       tabIndex={-1}
       onKeyDown={onKeyDown}

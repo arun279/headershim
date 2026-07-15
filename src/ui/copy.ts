@@ -73,20 +73,29 @@ export const copy = {
         : []),
       ".",
     ],
+    activeProfiles: (count: number): Sentence => [
+      " · ",
+      data(count),
+      " profiles active",
+    ],
   },
 
   firstRun: {
-    // One primary path (Create a rule); the other two are ranked below it.
-    createRule: "Create a rule",
+    createRule: "Create your first rule",
     tryThisTab: "Try it on this tab",
-    // The temporary/persistent difference the empty state must make legible.
-    tryThisTabSubline: "Temporary — this tab only, gone on close.",
-    importFile: "Import from ModHeader or a file",
+    tryThisTabSubline: "temporary, this tab only, gone on close",
+    importFile: "Import from a file",
   },
 
   profiles: {
     navLabel: "Profiles",
     offTag: "off",
+    duplicateRules: "Duplicate this profile's rules",
+    create: "Create profile",
+    enableWithoutSwitching: "Enable without switching",
+    manage: "Manage profiles",
+    actions: (name: string) => `Profile actions: ${name}`,
+    saveError: "Could not save the profile. Try again.",
     chipState: (focused: boolean, on: boolean) =>
       `${focused ? ", focused" : ""}${on ? ", on" : ", off"}`,
   },
@@ -392,7 +401,7 @@ export const copy = {
 
   actions: {
     newRule: "+ New rule",
-    createRule: "Create rule",
+    createRule: "Create a rule",
     saveChanges: "Save changes",
     verify: "Verify",
     resume: "Resume",
@@ -490,7 +499,8 @@ export const copy = {
   },
 
   emptyState: {
-    profile: (name: string) => `No rules in ${name} yet.`,
+    profile: (name: string) => `${name} has no rules yet.`,
+    otherProfilesUnchanged: "Your other profiles are unchanged.",
     siteAccess:
       "No sites granted yet. Grants appear here when a rule asks for one.",
   },
