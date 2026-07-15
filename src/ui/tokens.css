@@ -29,6 +29,7 @@
   /* controls */
   --sw-off: #6E7B88; /* switch off-track: 3.93:1 vs panel-0 */
   --sw-on: var(--advisory); /* switch on-track */
+  --sw-paused: var(--caution-lamp); /* checked pause track */
   --focus: var(--trace); /* 2px ring, offset 2px, never removed */
 
   /* profile badge palette (fixed 8; same hex in both themes; white 2-char text) */
@@ -71,8 +72,8 @@
     /* surfaces (dark: bluish charcoal). panel-0 is the base both the popup and
        the options page paint; it is lifted off near-black so the popup's bare
        field reads as the same charcoal as the options view rather than as a
-       second, blacker app (verdict theme note). panel-1/2 keep their elevation
-       steps above/below it. */
+       second, blacker app. panel-1/2 keep their elevation steps above/below
+       it. */
     --panel-0: #171C24;
     --panel-1: #202832;
     --panel-2: #0E1319;

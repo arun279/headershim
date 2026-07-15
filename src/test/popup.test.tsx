@@ -77,7 +77,7 @@ describe("popup App", () => {
       "temporary, this tab only, gone on close",
     );
     expect(annunciator().textContent).toBe("Live. No rules yet.");
-    expect(root.querySelector(".foot")?.textContent).toContain("Pause");
+    expect(root.querySelector(".foot")).toBeNull();
     const theme = root.querySelector('.popup-head [aria-label="Theme"]');
     const options = root.querySelector('.popup-head [aria-label="Options"]');
     expect(theme).not.toBeNull();
@@ -85,6 +85,13 @@ describe("popup App", () => {
     expect(theme?.querySelector(".gear-glyph")).toBeNull();
     expect(options?.querySelector(".gear-glyph")).not.toBeNull();
     expect(root.querySelector('.foot [aria-label="Options"]')).toBeNull();
+
+    const popup = root.querySelector(".popup") as HTMLElement;
+    press(popup, "v");
+    press(popup, "p");
+    await settle();
+    expect(root.querySelector(".verify-sheet")).toBeNull();
+    expect((await read()).settings.paused).toBe(false);
   });
 
   it("routes the first-run import action to the options import section", async () => {
@@ -150,7 +157,7 @@ describe("popup App", () => {
     await settle();
 
     // The change is live, but the open page still holds its pre-grant response;
-    // the toast hands over the reload rather than doing it unbidden (P1).
+    // the toast hands over the reload rather than doing it unbidden.
     const toast = root.querySelector(".toast") as HTMLElement;
     expect(toast.textContent).toContain("Access granted");
     expect(toast.querySelector(".toast-action")?.textContent).toBe(
@@ -181,6 +188,7 @@ describe("popup App", () => {
     const pauseSwitch = root.querySelector(
       '[aria-label="Global pause"]',
     ) as HTMLButtonElement;
+    expect(pauseSwitch.classList.contains("sw-paused")).toBe(true);
     await act(async () => {
       pauseSwitch.click();
     });
@@ -283,6 +291,7 @@ describe("popup App", () => {
     expect(root.textContent).toContain("Your other profiles are unchanged.");
     expect(document.activeElement?.textContent).toBe("Create a rule");
     expect(annunciator().textContent).toBe("Live. No rules yet.");
+    expect(root.querySelector(".foot")).toBeNull();
   });
 
   it("switches profiles exclusively from the chips even with Shift held", async () => {

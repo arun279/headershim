@@ -121,6 +121,8 @@ describe("origin patterns", () => {
 describe("urlFilter grammar", () => {
   it.each([
     "||example.com^",
+    "||example.com/",
+    "||example.com/api/",
     "*://*/api/*",
     "|https://x/*|",
     "/path",

@@ -32,10 +32,10 @@ export function RuleFace({
         <p class="rule-line1">
           <Truncate value={rule.header} class="rule-name" />
           {rule.operation !== "remove" && value !== undefined && (
-            <>
+            <span class="rule-value-preview">
               <span class="colon">: </span>
               <Truncate mode="middle" value={value} class="rule-value" />
-            </>
+            </span>
           )}
         </p>
         <p class="rule-line2" title={secondLineTitle}>

@@ -53,30 +53,23 @@ describe("options settings", () => {
   it("persists the theme choice and stamps data-theme on the root", async () => {
     const root = await mount("#settings");
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
+    expect(radio(root, "theme", "system").checked).toBe(true);
+    expect(
+      [...root.querySelectorAll('input[name="theme"]')].map(
+        (input) => input.parentElement?.textContent,
+      ),
+    ).toEqual(["System", "Light", "Dark"]);
 
-    const theme = root.querySelector<HTMLButtonElement>(
-      `button[aria-label="${settings.theme.label}"]`,
-    );
-    fire(() => theme?.click());
-    const dark = [
-      ...root.querySelectorAll<HTMLButtonElement>(".theme-option"),
-    ].find((option) =>
-      option.textContent?.includes(settings.theme.options.dark),
-    );
-    fire(() => dark?.click());
+    check(radio(root, "theme", "dark"));
     await settle();
 
     expect((await read()).settings.theme).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(localStorage.getItem(THEME_CACHE_KEY)).toBe("dark");
 
-    fire(() => theme?.click());
-    const system = [
-      ...root.querySelectorAll<HTMLButtonElement>(".theme-option"),
-    ].find((option) =>
-      option.textContent?.includes(settings.theme.options.system),
-    );
-    fire(() => system?.click());
+    expect(radio(root, "theme", "dark").checked).toBe(true);
+
+    check(radio(root, "theme", "system"));
     await settle();
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
   });

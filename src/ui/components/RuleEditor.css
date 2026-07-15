@@ -15,6 +15,12 @@
   animation: editor-in var(--t-med) var(--ease);
 }
 
+/* The sticky action bar is 50px tall. Extra trailing space lets the final
+   editor control scroll completely above it inside the capped sheet region. */
+.editor-sheet-with-footer .sheet-body {
+  padding-bottom: 64px;
+}
+
 .editor-primary-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

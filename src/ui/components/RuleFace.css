@@ -25,14 +25,22 @@
   line-height: 1.45;
 }
 
-/* Shrinkable so a long name ellipsises (end-truncate) instead of hard-clipping;
-   the value still keeps its middle-truncated tail on the same one line. */
+/* The identifier keeps its full width before the optional value preview gets
+   any room. Exceptionally long names still ellipsise within the row. */
 .rule-name {
   font-weight: 600;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
-.colon {
+.rule-value-preview {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rule-value-preview .colon {
   flex: none;
 }
 

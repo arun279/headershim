@@ -24,6 +24,13 @@ describe("Toggle", () => {
     expect(getSwitch(root).getAttribute("aria-checked")).toBe("false");
   });
 
+  it("marks a checked Pause switch for the stopped-state color", () => {
+    const root = render(
+      <Toggle checked label="Global pause" tone="paused" onChange={() => {}} />,
+    );
+    expect(getSwitch(root).classList.contains("sw-paused")).toBe(true);
+  });
+
   it("reports the flipped value on activation", () => {
     const onChange = vi.fn();
     const root = render(

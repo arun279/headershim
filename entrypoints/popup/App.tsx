@@ -178,6 +178,10 @@ function Ready({
     () => doc.profiles.filter((profile) => profile.enabled),
     [doc],
   );
+  const hasEnabledProfileRules = enabledProfiles.some(
+    (profile) => profile.rules.length > 0,
+  );
+  const showFooterNewRule = !firstRun && !showEmptyProfile;
   const invalidRuleIds = useInvalidRules(enabledProfiles, isRegexSupported);
   const missingByRule = new Map(
     grantGaps.map((gap) => [gap.ruleId, gap.missing]),
@@ -422,8 +426,14 @@ function Ready({
   const onKeyDown = popupKeyHandler({
     newRule: openNewRule,
     newThisTabOverride: openThisTabComposer,
-    verify: runVerify,
-    togglePause: () => run(mutations.setPaused(status.kind !== "paused")),
+    verify: () => {
+      if (hasEnabledProfileRules) runVerify();
+    },
+    togglePause: () => {
+      if (hasEnabledProfileRules) {
+        run(mutations.setPaused(status.kind !== "paused"));
+      }
+    },
     activateProfile: (position) => {
       const profile = doc.profiles[position - 1];
       if (profile !== undefined) {
@@ -650,28 +660,35 @@ function Ready({
               />
             )}
           </div>
-          <footer class="foot">
-            {!firstRun && (
-              <span class="foot-new-rule" ref={newRuleTrigger}>
-                <Button kind="primary" onClick={openNewRule}>
-                  {copy.actions.newRule}
-                </Button>
-              </span>
-            )}
-            <span class="foot-verify" ref={verifyTrigger}>
-              <Button kind="quiet" onClick={runVerify}>
-                {copy.actions.verify}
-              </Button>
-            </span>
-            <span class="pause">
-              {copy.actions.pause}
-              <Toggle
-                checked={status.kind === "paused"}
-                label={copy.actions.globalPause}
-                onChange={(paused) => run(mutations.setPaused(paused))}
-              />
-            </span>
-          </footer>
+          {(showFooterNewRule || hasEnabledProfileRules) && (
+            <footer class="foot">
+              {showFooterNewRule && (
+                <span class="foot-new-rule" ref={newRuleTrigger}>
+                  <Button kind="primary" onClick={openNewRule}>
+                    {copy.actions.newRule}
+                  </Button>
+                </span>
+              )}
+              {hasEnabledProfileRules && (
+                <>
+                  <span class="foot-verify" ref={verifyTrigger}>
+                    <Button kind="quiet" onClick={runVerify}>
+                      {copy.actions.verify}
+                    </Button>
+                  </span>
+                  <span class="pause">
+                    {copy.actions.pause}
+                    <Toggle
+                      checked={status.kind === "paused"}
+                      label={copy.actions.globalPause}
+                      tone="paused"
+                      onChange={(paused) => run(mutations.setPaused(paused))}
+                    />
+                  </span>
+                </>
+              )}
+            </footer>
+          )}
         </>
       )}
       {toast !== undefined && (

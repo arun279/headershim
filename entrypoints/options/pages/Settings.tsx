@@ -1,8 +1,8 @@
 import { browser } from "wxt/browser";
 import type { StateDoc } from "../../../src/core/model";
-import { ThemeControl } from "../../../src/ui/components/ThemeControl";
 import { copy } from "../../../src/ui/copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
+import { applyTheme, type Theme } from "../../../src/ui/theme";
 import "./Settings.css";
 
 const text = copy.options.settings;
@@ -27,13 +27,26 @@ export function SettingsPage({
       </h1>
 
       <div class="settings-card">
-        <div class="settings-row">
-          <span>{text.theme.label}</span>
-          <ThemeControl
-            theme={doc.settings.theme}
-            onChange={(theme) => void mutations.setTheme(theme)}
-          />
-        </div>
+        <fieldset class="settings-row settings-radios">
+          <legend>{text.theme.label}</legend>
+          {(Object.entries(text.theme.options) as [Theme, string][]).map(
+            ([value, label]) => (
+              <label key={value} class="settings-radio">
+                <input
+                  type="radio"
+                  name="theme"
+                  value={value}
+                  checked={doc.settings.theme === value}
+                  onChange={() => {
+                    applyTheme(value);
+                    void mutations.setTheme(value);
+                  }}
+                />
+                {label}
+              </label>
+            ),
+          )}
+        </fieldset>
 
         <fieldset class="settings-row settings-radios">
           <legend>{text.badgeMode.label}</legend>

@@ -14,6 +14,8 @@ interface ToggleProps {
   ariaDisabled?: boolean | undefined;
   /** -1 inside roving-tabindex composites; the owning row carries the tab stop. */
   tabIndex?: number;
+  /** Pausing is a stopped state, so its checked track uses caution instead of on. */
+  tone?: "paused";
 }
 
 export function Toggle({
@@ -23,6 +25,7 @@ export function Toggle({
   disabled,
   ariaDisabled,
   tabIndex,
+  tone,
 }: ToggleProps) {
   return (
     <button
@@ -31,7 +34,7 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       aria-disabled={ariaDisabled}
-      class="sw"
+      class={tone === "paused" ? "sw sw-paused" : "sw"}
       disabled={disabled}
       tabIndex={tabIndex}
       onClick={(event) => {

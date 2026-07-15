@@ -87,3 +87,30 @@ describe("focus-indicator token contrast", () => {
     expect(ringOnSurface).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("status token contrast", () => {
+  const themes = [
+    { name: "light", selector: ":root", expected: 6.2 },
+    {
+      name: "dark",
+      selector: ':root[data-theme="dark"]',
+      expected: 8.41,
+    },
+  ];
+
+  it("keeps running and paused tracks on distinct semantic colors", () => {
+    const source = block(":root");
+    expect(source).toMatch(/--sw-on:\s*var\(--advisory\)/);
+    expect(source).toMatch(/--sw-paused:\s*var\(--caution-lamp\)/);
+  });
+
+  it.each(themes)("$name: caution text clears 4.5:1 on its tinted row", ({
+    selector,
+    expected,
+  }) => {
+    const source = block(selector);
+    const ratio = contrast(hex(source, "caution"), hex(source, "caution-bg"));
+    expect(ratio).toBeCloseTo(expected, 1);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});

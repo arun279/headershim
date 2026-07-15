@@ -121,7 +121,7 @@ describe("summarizeVerify hints stay statically determinable", () => {
     expect(hints.get("rule-3")).toBe("needs-access");
     // The one whose only possible causes are traffic-derived (a cached
     // response, a resource-type mismatch, an unnamed initiator) gets no
-    // per-rule verdict — those live only in the hedged general guidance.
+    // per-rule conclusion — those live only in the hedged general guidance.
     expect(hints.get("rule-4")).toBeUndefined();
 
     for (const row of readout.unmatched) {

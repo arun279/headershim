@@ -73,7 +73,7 @@ describe("copy", () => {
       "saved as x-feature-override",
     );
     expect(sentenceText(copy.editor.patternHint)).toBe(
-      "||example.com^ matches the site and subdomains · *://*/api/* matches paths",
+      "||example.com/ matches the site, subdomains, and every path · ||example.com/api/ narrows it to /api/ paths",
     );
     expect(sentenceText(copy.verify.matchedHeadline(2))).toBe(
       "Last request: 2 matched",

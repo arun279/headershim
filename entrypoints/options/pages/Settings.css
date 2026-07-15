@@ -29,6 +29,10 @@
   margin-right: var(--sp-5);
 }
 
+.settings-radios {
+  flex-wrap: wrap;
+}
+
 .settings-radio {
   display: inline-flex;
   align-items: center;

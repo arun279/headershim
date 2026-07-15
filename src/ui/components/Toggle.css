@@ -38,6 +38,11 @@
   background: var(--sw-on);
 }
 
+/* A checked Pause control means header application is stopped, not running. */
+.sw.sw-paused[aria-checked="true"]::before {
+  background: var(--sw-paused);
+}
+
 .sw[aria-checked="true"]::after {
   transform: translateX(16px);
 }

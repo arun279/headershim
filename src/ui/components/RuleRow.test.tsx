@@ -71,6 +71,7 @@ describe("RuleRow states", () => {
     expect(toggle().getAttribute("aria-label")).toBe("Rule on: authorization");
     expect(row.querySelector(".rule-name")?.textContent).toBe("authorization");
     expect(row.querySelector(".colon")?.textContent).toBe(": ");
+    expect(row.querySelector(".rule-value-preview .rule-value")).not.toBeNull();
     expect(line2().textContent).toBe("api.staging.acme.dev · staging token");
     expect(line2().querySelector(".mono")?.textContent).toBe(
       "api.staging.acme.dev",
@@ -254,8 +255,8 @@ describe("RuleRow standing initiator note", () => {
     expect(line2().textContent).toContain(note);
   });
 
-  // Verdict P2: a default all-types rule includes top-level navigation, so its
-  // requests are the direct-navigation the user made — no standing caveat.
+  // A default all-types rule includes top-level navigation, so its requests
+  // are the direct navigation the user made and need no standing caveat.
   it("stays quiet on a default all-types (direct-navigation) rule", () => {
     const { line2 } = mount({ rule: rule({ initiators: [] }) });
     expect(line2().textContent).not.toContain(note);

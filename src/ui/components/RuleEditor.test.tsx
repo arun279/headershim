@@ -139,6 +139,11 @@ async function fillAndCommit(
 describe("RuleEditor commit model", () => {
   it("renders the new-rule sheet with an explicit Create rule action", () => {
     const { root } = mount();
+    expect(
+      root
+        .querySelector(".editor-sheet")
+        ?.classList.contains("editor-sheet-with-footer"),
+    ).toBe(true);
     expect(root.querySelector(".sheet-head")?.textContent).toContain(
       "‹ New rule · Default",
     );
@@ -522,6 +527,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.grantPanel()?.textContent).toContain(
       copy.grantPanel.createdLead,
     );
+    expect(ctx.root.querySelector(".editor-sheet-with-footer")).toBeNull();
     expect(ctx.onCommitted).not.toHaveBeenCalled();
     expect(ctx.onGrantStep).toHaveBeenCalledOnce();
   });

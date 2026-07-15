@@ -11,7 +11,7 @@
   display: flex;
   flex: none;
   align-items: stretch;
-  min-height: 32px;
+  min-height: 44px;
   overflow: hidden;
   border: var(--hairline) solid var(--bezel);
   border-radius: var(--radius-outer);
@@ -54,7 +54,7 @@
 }
 
 .profile-menu-trigger {
-  width: 24px;
+  width: 44px;
   border-left: var(--hairline) solid var(--bezel);
   color: var(--ink-mute);
   font-family: var(--font-data);
@@ -69,8 +69,8 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 32px;
-  min-height: 32px;
+  width: 44px;
+  min-height: 44px;
   border: var(--hairline) solid var(--bezel-strong);
   border-radius: var(--radius-outer);
   background: var(--panel-1);

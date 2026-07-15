@@ -285,7 +285,11 @@ export function RuleEditor(props: RuleEditorProps) {
   return (
     <Sheet
       label={title}
-      class="editor-sheet"
+      class={
+        grantStep === undefined
+          ? "editor-sheet editor-sheet-with-footer"
+          : "editor-sheet"
+      }
       modal={props.modal ?? true}
       initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}

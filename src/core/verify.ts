@@ -7,7 +7,7 @@ import type { Profile, Rule, Scope } from "./model";
  * alone — never from which requests actually occurred, which headershim does
  * not record. Everything else a zero match could mean (a cached response, a
  * resource-type mismatch, an unnamed initiator) stays in the panel's hedged
- * general guidance, never a per-rule verdict.
+ * general guidance, never a per-rule conclusion.
  */
 export type VerifyHint = "disabled" | "scope-excludes" | "needs-access";
 
@@ -97,10 +97,10 @@ function staticHint(
 /**
  * True only when the scope provably cannot cover the tab's own site. Provable
  * for a Domains scope against a known host; a pattern or regex scope is left
- * unproven (no honest static verdict without running Chrome's match engine),
+ * unproven (no honest static conclusion without running Chrome's match engine),
  * and an unknown host (chrome://, store pages) proves nothing. Resource types
  * are deliberately not consulted: a resource-type mismatch is a non-static
- * cause, and per-rule verdicts deliberately exclude those.
+ * cause, and per-rule conclusions deliberately exclude those.
  */
 function scopeExcludes(scope: Scope, tabHost: string | undefined): boolean {
   if (tabHost === undefined || scope.type !== "domains") {
