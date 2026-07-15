@@ -154,7 +154,7 @@ export function SiteAccessPage({
             type="button"
             class="sa-disclosure"
             aria-expanded={allSitesOpen}
-            aria-controls="all-sites-details"
+            aria-controls={allSitesOpen ? "all-sites-details" : undefined}
             onClick={() => setAllSitesOpen((open) => !open)}
           >
             {text.allSites.disclosure}

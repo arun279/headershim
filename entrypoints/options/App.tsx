@@ -12,6 +12,7 @@ import { applyTheme } from "../../src/ui/theme";
 import { AboutPage } from "./pages/About";
 import { ImportExportPage } from "./pages/ImportExport";
 import { ProfilesPage } from "./pages/Profiles";
+import { SettingsPage } from "./pages/Settings";
 import { SiteAccessPage } from "./pages/SiteAccess";
 import "./App.css";
 
@@ -31,27 +32,23 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 export function App() {
   const app = useAppState();
   const section = useHashRoute();
-  const [SettingsPage, setSettingsPage] =
-    useState<typeof import("./pages/Settings").SettingsPage>();
+  const previousSection = useRef(section);
   const theme = app.phase === "ready" ? app.doc.settings.theme : undefined;
-  useEffect(() => {
-    void import("./pages/Settings").then((module) =>
-      setSettingsPage(() => module.SettingsPage),
-    );
-  }, []);
   useEffect(() => {
     if (theme !== undefined) {
       applyTheme(theme);
     }
   }, [theme]);
   useEffect(() => {
-    if (app.phase !== "ready") {
+    const changed = previousSection.current !== section;
+    previousSection.current = section;
+    if (!changed || app.phase !== "ready") {
       return;
     }
     queueMicrotask(() => {
       document.getElementById(`${section}-title`)?.focus();
     });
-  }, [section, app.phase, SettingsPage]);
+  }, [section, app.phase]);
 
   return (
     <LiveRegionProvider>
@@ -80,11 +77,7 @@ export function App() {
             ) : section === "import-export" ? (
               <ImportExportPage doc={app.doc} mutations={mutations} />
             ) : section === "settings" ? (
-              SettingsPage === undefined ? (
-                <div aria-busy="true" />
-              ) : (
-                <SettingsPage doc={app.doc} mutations={mutations} />
-              )
+              <SettingsPage doc={app.doc} mutations={mutations} />
             ) : (
               <AboutPage />
             )}

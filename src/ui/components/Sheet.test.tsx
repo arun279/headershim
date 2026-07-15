@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
+import { useRef, useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
-import { press, render } from "../test/render";
+import { fire, press, render } from "../test/render";
 import { Sheet } from "./Sheet";
 
 describe("Sheet", () => {
@@ -58,6 +59,62 @@ describe("Sheet", () => {
       }),
     );
     expect(document.activeElement).toBe(save);
+  });
+
+  it("moves and restores focus without trapping an inline sheet", () => {
+    function InlineSheet() {
+      const [open, setOpen] = useState(false);
+      const heading = useRef<HTMLHeadingElement>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Open editor
+          </button>
+          {open && (
+            <Sheet
+              label="Edit rule"
+              modal={false}
+              initialFocus={heading}
+              header={
+                <>
+                  <h1 ref={heading} tabIndex={-1}>
+                    Edit rule
+                  </h1>
+                  <button type="button" onClick={() => setOpen(false)}>
+                    Close
+                  </button>
+                </>
+              }
+            >
+              <input aria-label="Header name" />
+            </Sheet>
+          )}
+        </>
+      );
+    }
+
+    const root = render(<InlineSheet />);
+    const trigger = root.querySelector("button") as HTMLButtonElement;
+    trigger.focus();
+    fire(() => trigger.click());
+
+    expect(document.activeElement).toBe(root.querySelector("h1"));
+    const input = root.querySelector("input") as HTMLInputElement;
+    input.focus();
+    const tab = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    input.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
+
+    fire(() =>
+      [...root.querySelectorAll("button")]
+        .find((button) => button.textContent === "Close")
+        ?.click(),
+    );
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("omits the pinned stratum when a mode has no trailing controls", () => {

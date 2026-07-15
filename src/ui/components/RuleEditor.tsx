@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "preact/hooks";
+import { useEffect, useId, useRef, useState } from "preact/hooks";
 import {
   coversSubresourceTypes,
   type GrantSnapshot,
@@ -35,7 +35,7 @@ import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
-export interface RuleEditorProps {
+interface RuleEditorProps {
   profileName: string;
   /** Absent for a new rule. */
   rule?: Rule | undefined;
@@ -66,6 +66,10 @@ export interface RuleEditorProps {
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
   modal?: boolean | undefined;
+  /** A parent-owned close request, such as choosing another options profile. */
+  closeRequest?: number | undefined;
+  /** The requested close was cancelled in the dirty-draft confirmation. */
+  onCloseRequestCancelled?: (() => void) | undefined;
 }
 
 interface GrantStep {
@@ -104,6 +108,9 @@ export function RuleEditor(props: RuleEditorProps) {
   const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [busy, setBusy] = useState(false);
+  const initialFocusRef = useRef<HTMLInputElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const previousCloseRequest = useRef(props.closeRequest);
   // The saved rule's id survives a new-rule commit so the grant step can persist
   // its collected sites onto that same rule rather than creating a second one.
   const savedIdRef = useRef(props.rule?.id);
@@ -196,6 +203,26 @@ export function RuleEditor(props: RuleEditorProps) {
     setConfirmDiscard(true);
   };
 
+  const keepEditing = () => {
+    setConfirmDiscard(false);
+    props.onCloseRequestCancelled?.();
+    queueMicrotask(() => initialFocusRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (props.closeRequest === previousCloseRequest.current) {
+      return;
+    }
+    previousCloseRequest.current = props.closeRequest;
+    requestClose();
+  }, [props.closeRequest]);
+
+  useEffect(() => {
+    if (confirmDiscard) {
+      keepEditingRef.current?.focus();
+    }
+  }, [confirmDiscard]);
+
   const discardSavedRule = () => {
     if (grantStep === undefined || busyRef.current) {
       return;
@@ -218,7 +245,7 @@ export function RuleEditor(props: RuleEditorProps) {
     if (event.key === "Escape") {
       event.preventDefault();
       if (confirmDiscard) {
-        setConfirmDiscard(false);
+        keepEditing();
       } else {
         requestClose();
       }
@@ -260,6 +287,7 @@ export function RuleEditor(props: RuleEditorProps) {
       label={title}
       class="editor-sheet"
       modal={props.modal ?? true}
+      initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
       header={
         <>
@@ -284,7 +312,8 @@ export function RuleEditor(props: RuleEditorProps) {
                   <button
                     type="button"
                     class="editor-cancel"
-                    onClick={() => setConfirmDiscard(false)}
+                    ref={keepEditingRef}
+                    onClick={keepEditing}
                   >
                     {copy.editor.discardConfirm.keepEditing}
                   </button>
@@ -322,6 +351,9 @@ export function RuleEditor(props: RuleEditorProps) {
               idBase={id}
               draft={draft}
               errors={errors}
+              nameInputRef={(element) => {
+                initialFocusRef.current = element;
+              }}
               update={update}
             />
 

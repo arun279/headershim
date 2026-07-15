@@ -156,6 +156,7 @@ export const copy = {
     rules: {
       sectionLabel: (name: string) => `Rules in ${name}`,
       new: "+ New rule",
+      loadingEditor: "Loading rule editor…",
       selectAll: "Select all rules",
       selected: (count: number) => `${count} ${rules(count)} selected`,
       selectRule: (header: string) => `Select rule: ${header}`,

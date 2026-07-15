@@ -51,6 +51,12 @@
   min-height: 100%;
 }
 
+.editor-loading {
+  min-height: 100%;
+  padding: var(--sp-5);
+  color: var(--ink-mute);
+}
+
 .profile-detail-pane .sheet-region {
   max-height: none;
 }

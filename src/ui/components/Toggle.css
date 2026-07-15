@@ -54,6 +54,18 @@
   border: var(--hairline) solid var(--caution);
 }
 
+/* A configured-on rule in an off profile is held, never painted as running. */
+.rule-row.inactive .sw[aria-checked="true"]::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bezel-strong) 0,
+    var(--bezel-strong) 4px,
+    var(--panel-2) 4px,
+    var(--panel-2) 7px
+  );
+  border: var(--hairline) solid var(--bezel-strong);
+}
+
 .sw:disabled {
   cursor: default;
 }

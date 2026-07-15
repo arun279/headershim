@@ -1,4 +1,4 @@
-import type { ComponentChildren, JSX } from "preact";
+import type { ComponentChildren, JSX, RefObject } from "preact";
 import { useRef } from "preact/hooks";
 import { useFocusTrap } from "../a11y/focus";
 import "./Sheet.css";
@@ -10,6 +10,7 @@ interface SheetProps {
   pinned?: ComponentChildren;
   class?: string;
   modal?: boolean;
+  initialFocus?: RefObject<HTMLElement | null>;
   onKeyDown?: JSX.KeyboardEventHandler<HTMLElement>;
 }
 
@@ -25,10 +26,11 @@ export function Sheet({
   pinned,
   class: className,
   modal = true,
+  initialFocus,
   onKeyDown,
 }: SheetProps) {
   const sheetRef = useRef<HTMLElement>(null);
-  useFocusTrap(sheetRef, modal, { focusOnActivate: false });
+  useFocusTrap(sheetRef, true, { initialFocus, trapFocus: modal });
 
   return (
     <section

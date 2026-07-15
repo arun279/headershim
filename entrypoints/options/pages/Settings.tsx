@@ -6,7 +6,11 @@ import type { Mutations } from "../../../src/ui/state/mutations";
 import "./Settings.css";
 
 const text = copy.options.settings;
-const SHORTCUTS_URL = "chrome://extensions/shortcuts";
+export function shortcutManagerUrl(runtime: object): string {
+  return "getBrowserInfo" in runtime
+    ? "about:addons"
+    : "chrome://extensions/shortcuts";
+}
 
 export function SettingsPage({
   doc,
@@ -15,6 +19,7 @@ export function SettingsPage({
   doc: StateDoc;
   mutations: Mutations;
 }) {
+  const shortcutsUrl = shortcutManagerUrl(browser.runtime);
   return (
     <section class="page" aria-labelledby="settings-title">
       <h1 class="page-title" id="settings-title" tabIndex={-1}>
@@ -54,10 +59,10 @@ export function SettingsPage({
         <div class="settings-row settings-shortcuts">
           <a
             class="settings-link"
-            href={SHORTCUTS_URL}
+            href={shortcutsUrl}
             onClick={(event) => {
               event.preventDefault();
-              void browser.tabs.create({ url: SHORTCUTS_URL });
+              void browser.tabs.create({ url: shortcutsUrl });
             }}
           >
             {text.shortcuts}

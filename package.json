@@ -64,9 +64,27 @@
       "limit": "23 kB"
     },
     {
-      "name": "Options",
-      "path": ".output/chrome-mv3/chunks/options-*.js",
-      "limit": "7.5 kB"
+      "name": "Options initial load",
+      "path": [
+        ".output/chrome-mv3/options.html",
+        ".output/chrome-mv3/theme-bootstrap.js",
+        ".output/chrome-mv3/chunks/options-*.js",
+        ".output/chrome-mv3/chunks/glyphs-*.js",
+        ".output/chrome-mv3/chunks/popover-*.js",
+        ".output/chrome-mv3/chunks/headers-*.js",
+        ".output/chrome-mv3/assets/glyphs-*.css",
+        ".output/chrome-mv3/assets/popover-*.css",
+        ".output/chrome-mv3/assets/options-*.css"
+      ],
+      "limit": "45 kB"
+    },
+    {
+      "name": "Options rule editor",
+      "path": [
+        ".output/chrome-mv3/chunks/RuleEditor-*.js",
+        ".output/chrome-mv3/assets/RuleEditor-*.css"
+      ],
+      "limit": "10 kB"
     }
   ],
   "pnpm": {

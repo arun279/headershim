@@ -138,6 +138,18 @@ describe("options frame", () => {
     expect(document.activeElement).toBe(within(root, "#settings-title"));
   });
 
+  it("leaves existing focus alone on initial load", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    await seed([profile("p1", { name: "Default" })]);
+
+    await mount();
+
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
+  });
+
   it("stamps the stored theme on the document root", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const doc = await read();
@@ -357,6 +369,9 @@ describe("rule authoring", () => {
     expect(
       root.querySelector(".editor-sheet")?.getAttribute("aria-modal"),
     ).toBe(null);
+    expect(document.activeElement).toBe(
+      root.querySelector('[role="combobox"]'),
+    );
     expect(root.querySelectorAll(".domain-chip")).toHaveLength(0);
 
     typeInto(
@@ -384,9 +399,12 @@ describe("rule authoring", () => {
     await settle();
     expect(root.querySelector(".editor-sheet")).toBeNull();
     expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
+    expect(document.activeElement).toBe(
+      findButton(root, copy.options.rules.new),
+    );
   });
 
-  it("edits from the shared row while bulk selection stays independent", async () => {
+  it("opens the shared editor from a focused row and keeps selection independent", async () => {
     await fakeBrowser.permissions.request({
       origins: [originPatternForDomain("example.com")],
     });
@@ -395,14 +413,35 @@ describe("rule authoring", () => {
         name: "Default",
         rules: [rule({ header: "x-before" })],
       }),
+      profile("p2", { name: "Other" }),
     ]);
     const root = await mount();
 
-    expect(root.querySelector(".rule-select")).not.toBeNull();
-    expect(root.querySelector(".rule-menu-btn")).toBeNull();
-    fire(() => root.querySelector<HTMLElement>(".rule-lines")?.click());
+    const row = within(root, ".rule-row");
+    const selection = within(root, ".rule-select") as HTMLInputElement;
+    expect(row.tabIndex).toBe(0);
+    expect(selection.checked).toBe(false);
+    expect(root.querySelector(".rule-menu-btn")).not.toBeNull();
+
+    fire(() => row.focus());
+    press(row, "ContextMenu");
+    expect(within(root, ".rule-menu").textContent).toContain(copy.menu.edit);
+    expect(within(root, ".rule-menu").textContent).toContain(
+      copy.menu.duplicate,
+    );
+    expect(within(root, ".rule-menu").textContent).toContain(
+      copy.menu.moveToProfile,
+    );
+    expect(within(root, ".rule-menu").textContent).toContain(copy.menu.delete);
+    press(document.activeElement as HTMLElement, "Escape");
+
+    fire(() => row.focus());
+    press(row, "Enter");
     await settle();
     expect(findButton(root, copy.actions.saveChanges)).not.toBeNull();
+    expect(document.activeElement).toBe(
+      root.querySelector('[role="combobox"]'),
+    );
 
     typeInto(
       root.querySelector('[role="combobox"]') as HTMLInputElement,
@@ -413,6 +452,45 @@ describe("rule authoring", () => {
 
     expect((await read()).profiles[0]?.rules[0]?.header).toBe("x-after");
     expect(root.querySelector(".editor-sheet")).toBeNull();
+    const restoredRow = within(root, ".rule-row");
+    expect(document.activeElement).toBe(restoredRow);
+    expect(
+      restoredRow.querySelector<HTMLInputElement>(".rule-select")?.checked,
+    ).toBe(false);
+  });
+
+  it("confirms before a profile switch can discard a dirty draft", async () => {
+    await seed([
+      profile("p1", { name: "First" }),
+      profile("p2", { name: "Second" }),
+    ]);
+    const root = await mount();
+
+    fire(() => findButton(root, copy.options.rules.new).click());
+    await settle();
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "x-unsaved",
+    );
+
+    openCard(root, 1);
+    expect(root.textContent).toContain(copy.editor.discardConfirm.title);
+    expect(root.querySelector(".editor-sheet")).not.toBeNull();
+    expect(cards(root)[0]?.classList.contains("open")).toBe(true);
+    expect(cards(root)[1]?.classList.contains("open")).toBe(false);
+
+    fire(() =>
+      findButton(root, copy.editor.discardConfirm.keepEditing).click(),
+    );
+    expect(root.textContent).not.toContain(copy.editor.discardConfirm.title);
+    expect(root.querySelector(".editor-sheet")).not.toBeNull();
+
+    openCard(root, 1);
+    fire(() => findButton(root, copy.editor.discardConfirm.discard).click());
+    await settle();
+
+    expect(root.querySelector(".editor-sheet")).toBeNull();
+    expect(cards(root)[1]?.classList.contains("open")).toBe(true);
   });
 
   it("uses the shared blocked state and redacts secrets", async () => {

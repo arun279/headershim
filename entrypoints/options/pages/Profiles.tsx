@@ -52,6 +52,10 @@ export function ProfilesPage({
   const [editing, setEditing] = useState<
     { profileId: string; ruleId: string | undefined } | undefined
   >(undefined);
+  const [pendingProfileId, setPendingProfileId] = useState<string | undefined>(
+    undefined,
+  );
+  const [closeRequest, setCloseRequest] = useState(0);
   const [Editor, setEditor] =
     useState<
       typeof import("../../../src/ui/components/RuleEditor").RuleEditor
@@ -63,6 +67,12 @@ export function ProfilesPage({
   const [undo, setUndo] = useState<Undo | undefined>(undefined);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const editorTrigger = useRef<
+    { profileId: string; ruleId: string | undefined } | undefined
+  >(undefined);
+  const editorFocusReturn = useRef<
+    { kind: "trigger" } | { kind: "profile"; profileId: string } | undefined
+  >(undefined);
   const announce = useAnnounce();
   const invalidRuleIds = useInvalidRules(doc.profiles, isRegexSupported);
   useEffect(() => {
@@ -86,6 +96,14 @@ export function ProfilesPage({
   if (open === undefined) {
     return null;
   }
+
+  const editingRule =
+    editing?.profileId === open.id && editing.ruleId !== undefined
+      ? open.rules.find((rule) => rule.id === editing.ruleId)
+      : undefined;
+  const editorOpen =
+    editing?.profileId === open.id &&
+    (editing.ruleId === undefined || editingRule !== undefined);
 
   // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap;
   // the count mirrors the enabled set the cap governs.
@@ -113,7 +131,72 @@ export function ProfilesPage({
   };
 
   const openEditor = (ruleId: string | undefined) => {
+    editorTrigger.current = { profileId: open.id, ruleId };
+    setPendingProfileId(undefined);
     setEditing({ profileId: open.id, ruleId });
+  };
+
+  const restoreEditorTrigger = () => {
+    const trigger = editorTrigger.current;
+    if (trigger === undefined) {
+      titleRef.current?.focus();
+      return;
+    }
+    const panel = document.querySelector<HTMLElement>(".rules-panel");
+    const target =
+      trigger.ruleId === undefined
+        ? panel?.querySelector<HTMLElement>(".rules-panel-head .primary")
+        : [...(panel?.querySelectorAll<HTMLElement>(".rule-row") ?? [])].find(
+            (row) => row.getAttribute("data-rule-id") === trigger.ruleId,
+          );
+    (
+      target ?? panel?.querySelector<HTMLElement>(".rules-panel-label")
+    )?.focus();
+  };
+
+  useEffect(() => {
+    const focusReturn = editorFocusReturn.current;
+    if (editing !== undefined || focusReturn === undefined) {
+      return;
+    }
+    editorFocusReturn.current = undefined;
+    if (focusReturn.kind === "trigger") {
+      restoreEditorTrigger();
+      return;
+    }
+    const target = [...document.querySelectorAll<HTMLElement>(".profile-card")]
+      .find(
+        (card) =>
+          card.getAttribute("data-profile-id") === focusReturn.profileId,
+      )
+      ?.querySelector<HTMLElement>(".profile-open");
+    (target ?? titleRef.current)?.focus();
+  }, [editing, open.id]);
+
+  const closeEditor = () => {
+    const targetProfileId = pendingProfileId;
+    editorFocusReturn.current =
+      targetProfileId === undefined
+        ? { kind: "trigger" }
+        : { kind: "profile", profileId: targetProfileId };
+    setEditing(undefined);
+    setPendingProfileId(undefined);
+    if (targetProfileId !== undefined) {
+      setOpenId(targetProfileId);
+    }
+  };
+
+  const requestOpenProfile = (profileId: string) => {
+    if (profileId === open.id) {
+      return;
+    }
+    if (!editorOpen || Editor === undefined) {
+      setEditing(undefined);
+      setOpenId(profileId);
+      return;
+    }
+    setPendingProfileId(profileId);
+    setCloseRequest((request) => request + 1);
   };
 
   const grant = (origins: readonly string[]) => {
@@ -157,7 +240,7 @@ export function ProfilesPage({
       .then((outcome) => {
         if (outcome.ok) {
           setUndo(undefined);
-          setOpenId(outcome.value.id);
+          requestOpenProfile(outcome.value.id);
         } else {
           flash(outcome.error);
         }
@@ -168,7 +251,7 @@ export function ProfilesPage({
     void mutations.cloneProfile(profileId).then((outcome) => {
       if (outcome.ok) {
         setUndo(undefined);
-        setOpenId(outcome.value.id);
+        requestOpenProfile(outcome.value.id);
       } else {
         flash(outcome.error);
       }
@@ -212,14 +295,6 @@ export function ProfilesPage({
       flash(outcome.error);
     }
   };
-
-  const editingRule =
-    editing?.profileId === open.id && editing.ruleId !== undefined
-      ? open.rules.find((rule) => rule.id === editing.ruleId)
-      : undefined;
-  const editorOpen =
-    editing?.profileId === open.id &&
-    (editing.ruleId === undefined || editingRule !== undefined);
 
   const runUndo = () => {
     if (undo === undefined) {
@@ -280,10 +355,7 @@ export function ProfilesPage({
           <ProfileList
             profiles={doc.profiles}
             openProfileId={open.id}
-            onOpen={(profileId) => {
-              setEditing(undefined);
-              setOpenId(profileId);
-            }}
+            onOpen={requestOpenProfile}
             onToggle={(id, enabled) =>
               run(mutations.setProfileEnabled(id, enabled))
             }
@@ -307,28 +379,36 @@ export function ProfilesPage({
         </aside>
 
         <div class="profile-detail-pane">
-          {editorOpen && Editor !== undefined ? (
-            <Editor
-              key={`${open.id}:${editing?.ruleId ?? "new"}`}
-              profileName={open.name}
-              rule={editingRule}
-              grants={grants}
-              modal={false}
-              onSave={(ruleId, draft) =>
-                mutations.saveRule(open.id, ruleId, draft)
-              }
-              onRequestGrant={requestPermissions}
-              onGranted={showGrantToast}
-              onCommitted={(kind) =>
-                showToast(
-                  kind === "create"
-                    ? copy.toast.ruleCreated
-                    : copy.toast.changesSaved,
-                )
-              }
-              onDiscardRule={discardEditingRule}
-              onClose={() => setEditing(undefined)}
-            />
+          {editorOpen ? (
+            Editor === undefined ? (
+              <div class="editor-loading" role="status" aria-busy="true">
+                {copy.options.rules.loadingEditor}
+              </div>
+            ) : (
+              <Editor
+                key={`${open.id}:${editing?.ruleId ?? "new"}`}
+                profileName={open.name}
+                rule={editingRule}
+                grants={grants}
+                modal={false}
+                onSave={(ruleId, draft) =>
+                  mutations.saveRule(open.id, ruleId, draft)
+                }
+                onRequestGrant={requestPermissions}
+                onGranted={showGrantToast}
+                onCommitted={(kind) =>
+                  showToast(
+                    kind === "create"
+                      ? copy.toast.ruleCreated
+                      : copy.toast.changesSaved,
+                  )
+                }
+                onDiscardRule={discardEditingRule}
+                closeRequest={closeRequest}
+                onCloseRequestCancelled={() => setPendingProfileId(undefined)}
+                onClose={closeEditor}
+              />
+            )
           ) : (
             <ProfileRulesPanel
               profile={open}
@@ -344,6 +424,14 @@ export function ProfilesPage({
               onMove={(ruleIds, toProfileId) =>
                 run(mutations.moveRulesToProfile(open.id, ruleIds, toProfileId))
               }
+              onDuplicate={(ruleId) =>
+                run(mutations.duplicateRule(open.id, ruleId))
+              }
+              onRegenerate={(ruleId) =>
+                run(mutations.regenerateValue(open.id, ruleId))
+              }
+              undoAvailable={undo !== undefined}
+              onUndoDelete={runUndo}
               onCreate={() => openEditor(undefined)}
               onEdit={openEditor}
               onGrant={grant}

@@ -19,11 +19,13 @@ export function HeaderFields<D extends HeaderDraft>({
   idBase,
   draft,
   errors,
+  nameInputRef,
   update,
 }: {
   idBase: string;
   draft: D;
   errors: { name?: string; operation?: string };
+  nameInputRef?: ((element: HTMLInputElement | null) => void) | undefined;
   update: (transform: (draft: D) => D) => void;
 }) {
   return (
@@ -85,6 +87,7 @@ export function HeaderFields<D extends HeaderDraft>({
         value={draft.header}
         error={errors.name}
         autoFocus
+        inputRef={nameInputRef}
         onInput={(value) =>
           update((current) => ({ ...current, header: value }))
         }

@@ -19,6 +19,7 @@ interface HeaderNameInputProps {
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
+  inputRef?: ((element: HTMLInputElement | null) => void) | undefined;
   onInput: (raw: string) => void;
 }
 
@@ -99,7 +100,10 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
       <div class="editor-control combobox">
         <input
           id={`${id}-input`}
-          ref={inputRef}
+          ref={(element) => {
+            inputRef.current = element;
+            props.inputRef?.(element);
+          }}
           class="field mono editor-commit-field"
           type="text"
           role="combobox"

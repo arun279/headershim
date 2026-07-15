@@ -163,6 +163,7 @@ function ProfileCard(props: ProfileCardProps) {
   return (
     <li
       class={props.open ? "profile-card open" : "profile-card"}
+      data-profile-id={profile.id}
       aria-setsize={props.setsize}
       aria-posinset={props.posinset}
       onDragEnter={props.onDragEnter}

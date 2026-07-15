@@ -167,7 +167,9 @@ describe("options site access", () => {
     const disclosure = root.querySelector<HTMLButtonElement>(".sa-disclosure");
     if (disclosure === null) throw new Error("no all-sites disclosure");
     expect(disclosure.textContent).toContain(text.allSites.disclosure);
+    expect(disclosure.getAttribute("aria-controls")).toBe(null);
     fire(() => disclosure.click());
+    expect(disclosure.getAttribute("aria-controls")).toBe("all-sites-details");
     const details = root.querySelector<HTMLElement>(".sa-all-details");
     if (details === null) throw new Error("no expanded all-sites details");
     expect(details.textContent).toContain(text.allSites.warning);

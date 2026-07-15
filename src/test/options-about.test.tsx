@@ -2,6 +2,7 @@
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
+import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
@@ -104,8 +105,15 @@ describe("options settings", () => {
     fire(() => link.click());
 
     expect(create).toHaveBeenCalledWith({
-      url: "chrome://extensions/shortcuts",
+      url: "about:addons",
     });
+  });
+
+  it("chooses the shortcut manager supported by the browser runtime", () => {
+    expect(shortcutManagerUrl({})).toBe("chrome://extensions/shortcuts");
+    expect(shortcutManagerUrl({ getBrowserInfo: () => undefined })).toBe(
+      "about:addons",
+    );
   });
 });
 

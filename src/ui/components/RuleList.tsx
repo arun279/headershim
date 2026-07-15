@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import {
-  listNavCommand,
-  rowCommand,
-} from "../../../entrypoints/popup/keyboard";
+import { listNavCommand } from "../../../entrypoints/popup/keyboard";
 import { findOverriddenRules } from "../../core/conflicts";
 import { ALL_SITES_ORIGIN, domainFromOriginPattern } from "../../core/grants";
 import type { Profile } from "../../core/model";
 import { copy } from "../copy";
 import { RuleRow } from "./RuleRow";
+import { dispatchRowCommand, rovingRuleRowProps } from "./ruleRowCommand";
 import "./RuleList.css";
 
 interface RuleListProps {
@@ -141,39 +139,30 @@ export function RuleList(props: RuleListProps) {
                   )}
                   posinset={posinset}
                   setsize={flat.length}
-                  tabIndex={index === rovingIndex ? 0 : -1}
-                  onFocus={() => setRovingId(rule.id)}
-                  rowRef={(element) => {
-                    if (element === null) {
-                      rows.current.delete(rule.id);
-                    } else {
-                      rows.current.set(rule.id, element);
-                    }
-                  }}
+                  {...rovingRuleRowProps(
+                    rows,
+                    rule.id,
+                    index === rovingIndex,
+                    setRovingId,
+                  )}
                   onRowCommand={(event, openMenu) => {
-                    const command = rowCommand(event);
-                    if (command === undefined) {
-                      return;
-                    }
-                    event.preventDefault();
-                    switch (command) {
-                      case "edit":
-                        return props.onEdit?.(profile.id, rule.id);
-                      case "toggle":
-                        // The invalid state's redirect lives on the switch;
-                        // Space must not bypass it.
-                        return props.invalidRuleIds.has(rule.id)
+                    dispatchRowCommand(event, openMenu, {
+                      edit:
+                        props.onEdit === undefined
                           ? undefined
-                          : props.onToggle(profile.id, rule.id, !rule.enabled);
-                      case "grant":
-                        return missing !== undefined && missing.length > 0
-                          ? props.onGrant(profile.id, rule.id, missing)
-                          : undefined;
-                      case "delete":
-                        return props.onDelete(profile.id, rule.id);
-                      case "menu":
-                        return openMenu();
-                    }
+                          : () => props.onEdit?.(profile.id, rule.id),
+                      // The invalid state's redirect lives on the switch;
+                      // Space must not bypass it.
+                      toggle: props.invalidRuleIds.has(rule.id)
+                        ? undefined
+                        : () =>
+                            props.onToggle(profile.id, rule.id, !rule.enabled),
+                      grant:
+                        missing !== undefined && missing.length > 0
+                          ? () => props.onGrant(profile.id, rule.id, missing)
+                          : undefined,
+                      delete: () => props.onDelete(profile.id, rule.id),
+                    });
                   }}
                   onToggle={(enabled) =>
                     props.onToggle(profile.id, rule.id, enabled)
