@@ -1,20 +1,38 @@
-/* The row expands in place into the shared .inline-editor-well (tokens.css). */
-
 .editor-title {
-  display: block;
-  margin-bottom: var(--sp-3);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-editor {
+  min-width: 0;
+  padding: var(--sp-4);
+  animation: editor-in var(--t-med) var(--ease);
+}
+
+.editor-primary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+
+.editor-primary-field {
+  min-width: 0;
+  border: 0;
 }
 
 .editor-field {
-  display: flex;
-  gap: var(--sp-3);
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
 .editor-label {
-  flex: none;
-  width: 88px;
-  padding-top: 5px;
+  display: block;
+  margin-bottom: var(--sp-2);
   font-size: 12px;
   color: var(--ink-mute);
 }
@@ -41,14 +59,13 @@
 }
 
 .editor-select {
-  width: auto;
-  min-width: 96px;
+  width: 100%;
 }
 
 .editor-radios {
   display: flex;
   gap: var(--sp-4);
-  padding-top: 4px;
+  min-height: 28px;
 }
 
 .editor-radio {
@@ -64,19 +81,6 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ink-mute);
-}
-
-.editor-advisory {
-  margin-top: var(--sp-1);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--ink-mute);
-}
-
-/* Append on a hop-by-hop name: same words, said at the moment of selection. */
-.editor-advisory.prominent {
-  font-weight: 600;
-  color: var(--ink);
 }
 
 .editor-error {
@@ -96,4 +100,52 @@
   padding: 0 var(--sp-1);
   font-size: 11px;
   color: var(--trace);
+}
+
+.editor-option {
+  margin-top: var(--sp-3);
+}
+
+.editor-option .disclosure {
+  max-width: 100%;
+}
+
+.editor-option .field {
+  margin-top: var(--sp-2);
+}
+
+.editor-request-target {
+  color: var(--ink);
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  min-height: 50px;
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.editor-cancel {
+  min-height: 30px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-outer);
+  color: var(--ink-mute);
+}
+
+.editor-cancel:hover {
+  background: var(--panel-2);
+}
+
+.discard-title {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--caution);
+}
+
+@media (max-width: 360px) {
+  .editor-primary-grid {
+    grid-template-columns: 1fr;
+  }
 }

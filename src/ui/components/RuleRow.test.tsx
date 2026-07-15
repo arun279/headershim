@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { Rule } from "../../core/model";
-import { copy } from "../copy";
 import { fire, press, render } from "../test/render";
 import { RuleRow } from "./RuleRow";
 
@@ -26,6 +25,7 @@ function mount(
 ) {
   const handlers = {
     onToggle: vi.fn(),
+    onGrant: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn(),
     onDuplicate: vi.fn(),
@@ -62,11 +62,11 @@ function mount(
 }
 
 describe("RuleRow states", () => {
-  it("enabled: on-switch, clean edge, name/value line, scoped line 2", () => {
+  it("running: on-switch, trace rail, name/value line, scoped line 2", () => {
     const { row, toggle, line2 } = mount({
       rule: rule({ comment: "staging token" }),
     });
-    expect(row.classList.contains("enabled")).toBe(true);
+    expect(row.classList.contains("running")).toBe(true);
     expect(toggle().getAttribute("aria-checked")).toBe("true");
     expect(toggle().getAttribute("aria-label")).toBe("Rule on: authorization");
     expect(row.querySelector(".rule-name")?.textContent).toBe("authorization");
@@ -79,20 +79,26 @@ describe("RuleRow states", () => {
 
   it("disabled: off-switch with the state in its name, no caution anywhere", () => {
     const { row, toggle } = mount({ rule: rule({ enabled: false }) });
-    expect(row.classList.contains("disabled")).toBe(true);
+    expect(row.classList.contains("off")).toBe(true);
     expect(toggle().getAttribute("aria-checked")).toBe("false");
     expect(toggle().getAttribute("aria-label")).toBe("Rule off: authorization");
     expect(row.querySelector(".rule-status")).toBeNull();
   });
 
-  it("needs access: dashed-edge class, triangle + host, state in the description", () => {
-    const { row, line2 } = mount({
+  it("blocked: held toggle, caution state, host, and row-level Grant", () => {
+    const { row, line2, toggle, onGrant } = mount({
       missingHosts: ["app.acme.dev", "api.acme.dev"],
     });
-    expect(row.classList.contains("needs-access")).toBe(true);
+    expect(row.classList.contains("blocked")).toBe(true);
+    expect(toggle().closest(".rule-row")?.classList.contains("blocked")).toBe(
+      true,
+    );
     expect(line2().querySelector("svg")).not.toBeNull();
-    expect(line2().textContent).toBe(" Needs access · app.acme.dev +1");
+    expect(line2().textContent).toContain("Needs access · app.acme.dev +1");
     expect(row.getAttribute("aria-description")).toContain("needs access");
+    const grant = line2().querySelector(".rule-grant") as HTMLButtonElement;
+    fire(() => grant.click());
+    expect(onGrant).toHaveBeenCalledOnce();
   });
 
   it("temporary: dotted-edge class, sentence-case Temporary tag, applies-to line", () => {
@@ -192,6 +198,21 @@ describe("RuleRow states", () => {
     );
   });
 
+  it("opens from the readout while toggle, menu, and Grant stay separate", () => {
+    const { row, toggle, menuButton, onEdit, onToggle, onGrant } = mount({
+      missingHosts: ["api.acme.dev"],
+    });
+    fire(() => row.querySelector<HTMLElement>(".rule-lines")?.click());
+    expect(onEdit).toHaveBeenCalledOnce();
+
+    fire(() => toggle().click());
+    fire(() => menuButton().click());
+    fire(() => row.querySelector<HTMLButtonElement>(".rule-grant")?.click());
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(onGrant).toHaveBeenCalledOnce();
+  });
+
   it("summarizes pattern, regex, and all-sites scopes without host lists", () => {
     const pattern = mount({
       rule: rule({
@@ -259,36 +280,16 @@ describe("RuleRow standing initiator note", () => {
   });
 });
 
-describe("RuleRow saved acknowledgement", () => {
-  it("shows no Saved chip without a save pulse", () => {
-    const { root } = mount();
-    expect(root.querySelector(".rule-saved")).toBeNull();
-  });
-
-  it("pulses a transient Saved chip and clears it after ~1.5s", () => {
-    vi.useFakeTimers();
-    try {
-      const { root } = mount({ savedNonce: 1 });
-      const saved = root.querySelector(".rule-saved");
-      expect(saved?.textContent).toContain(copy.rules.saved);
-      // Decorative, so it never intercepts the overflow menu behind it.
-      expect(saved?.getAttribute("aria-hidden")).toBe("true");
-
-      fire(() => vi.advanceTimersByTime(1500));
-      expect(root.querySelector(".rule-saved")).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
 describe("RuleRow overflow menu", () => {
   it("opens from the ⋯ button with the base actions", () => {
-    const { menuButton, menuLabels } = mount();
+    const { root, menuButton, menuLabels } = mount();
     expect(menuButton().getAttribute("aria-haspopup")).toBe("menu");
     expect(menuButton().getAttribute("aria-expanded")).toBe("false");
     fire(() => menuButton().click());
     expect(menuButton().getAttribute("aria-expanded")).toBe("true");
+    expect(root.querySelector('[role="menu"]')?.getAttribute("popover")).toBe(
+      "manual",
+    );
     expect(menuLabels()).toEqual([
       "Edit",
       "Copy value",

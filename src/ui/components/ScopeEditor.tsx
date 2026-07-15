@@ -1,7 +1,7 @@
 import { useId, useState } from "preact/hooks";
 import type { ResourceGroup, Scope } from "../../core/model";
-import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
+import { ChipField } from "./ChipField";
 import { sentence } from "./sentence";
 import "./ScopeEditor.css";
 
@@ -19,8 +19,11 @@ interface ScopeEditorProps {
   /** Blocking commit error for the active scope field (e.g. empty scope). */
   error?: string | undefined;
   typesError?: string | undefined;
+  defaultResourceTypesOpen?: boolean | undefined;
+  suggestedDomain?: string | undefined;
   onScope: (scope: ScopeDraft) => void;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
+  onCommit?: (() => void) | undefined;
 }
 
 const SEGMENTS = ["domains", "pattern", "regex"] as const;
@@ -60,11 +63,33 @@ export function ScopeEditor(props: ScopeEditorProps) {
             type={scope.type}
             onType={(type) => props.onScope({ ...scope, type })}
           />
-          {scope.type === "domains" && <DomainChips {...props} />}
+          {scope.type === "domains" && (
+            <>
+              <ChipField
+                id={`${id}-domains`}
+                inputLabel={copy.editor.domainInputLabel}
+                placeholder={copy.editor.addDomain}
+                values={scope.domains}
+                variant="domain"
+                invalid={props.error !== undefined}
+                removeLabel={copy.editor.removeDomain}
+                onChange={(domains) => props.onScope({ ...scope, domains })}
+                onEnter={props.onCommit}
+              />
+              {props.suggestedDomain !== undefined &&
+                scope.domains.includes(props.suggestedDomain) && (
+                  <p class="editor-micro">{copy.editor.domainSuggestion}</p>
+                )}
+              <p class="editor-micro">{copy.editor.domainsHelper}</p>
+              <p class="editor-micro editor-request-target">
+                {copy.editor.requestTarget}
+              </p>
+            </>
+          )}
           {scope.type === "pattern" && (
             <>
               <input
-                class="field mono"
+                class="field mono editor-commit-field"
                 type="text"
                 aria-label={copy.editor.scopeType.pattern}
                 aria-invalid={props.error !== undefined ? true : undefined}
@@ -81,7 +106,7 @@ export function ScopeEditor(props: ScopeEditorProps) {
           )}
           {scope.type === "regex" && (
             <input
-              class="field mono"
+              class="field mono editor-commit-field"
               type="text"
               aria-label={copy.editor.scopeType.regex}
               aria-invalid={props.error !== undefined ? true : undefined}
@@ -104,6 +129,7 @@ export function ScopeEditor(props: ScopeEditorProps) {
       <ResourceTypes
         resourceTypes={props.resourceTypes}
         error={props.typesError}
+        defaultOpen={props.defaultResourceTypesOpen === true}
         onResourceTypes={props.onResourceTypes}
       />
     </>
@@ -154,91 +180,19 @@ function SegmentedType({
   );
 }
 
-function DomainChips(props: ScopeEditorProps) {
-  const [pending, setPending] = useState("");
-  const { scope } = props;
-
-  const commitPending = (raw: string) => {
-    const domain = raw.trim().toLowerCase();
-    setPending("");
-    if (domain !== "" && !scope.domains.includes(domain)) {
-      props.onScope({ ...scope, domains: [...scope.domains, domain] });
-    }
-  };
-
-  const removeChip = (domain: string) => {
-    props.onScope({
-      ...scope,
-      domains: scope.domains.filter((candidate) => candidate !== domain),
-    });
-  };
-
-  return (
-    <>
-      <div class="domain-chips">
-        {scope.domains.map((domain) => (
-          <span class="domain-chip" key={domain}>
-            <span class="mono">{domain}</span>
-            <button
-              type="button"
-              class="domain-chip-x"
-              aria-label={copy.editor.removeDomain(domain)}
-              onClick={(event) => {
-                focusOnRemoval(event.currentTarget);
-                removeChip(domain);
-              }}
-            >
-              ✕
-            </button>
-          </span>
-        ))}
-        <input
-          class="domain-chip-input mono"
-          type="text"
-          aria-label={copy.editor.domainInputLabel}
-          aria-invalid={props.error !== undefined ? true : undefined}
-          placeholder={copy.editor.addDomain}
-          value={pending}
-          onInput={(event) => setPending(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === ",") {
-              if (pending.trim() !== "") {
-                commitPending(pending);
-                // Ctrl/Cmd+Enter also commits the rule: the fresh chip is
-                // already in the draft, so the event may keep bubbling.
-                if (!(event.ctrlKey || event.metaKey)) {
-                  event.preventDefault();
-                }
-              } else if (event.key === ",") {
-                event.preventDefault();
-              }
-            } else if (
-              event.key === "Backspace" &&
-              pending === "" &&
-              scope.domains.length > 0
-            ) {
-              removeChip(scope.domains[scope.domains.length - 1] as string);
-            }
-          }}
-          onBlur={() => commitPending(pending)}
-        />
-      </div>
-      <p class="editor-micro">{copy.editor.domainsHelper}</p>
-    </>
-  );
-}
-
 function ResourceTypes({
   resourceTypes,
   error,
+  defaultOpen,
   onResourceTypes,
 }: {
   resourceTypes: ResourceGroup[] | "all";
   error?: string | undefined;
+  defaultOpen: boolean;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }) {
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const selected = resourceTypes === "all" ? GROUPS : resourceTypes;
 
   const toggle = (group: ResourceGroup) => {
@@ -256,10 +210,7 @@ function ResourceTypes({
   };
 
   return (
-    <div class="editor-field">
-      <span class="editor-label" id={`${id}-label`}>
-        {copy.editor.labels.resourceTypes}
-      </span>
+    <div class="editor-option">
       <div class="editor-control">
         <button
           type="button"
@@ -268,7 +219,8 @@ function ResourceTypes({
           aria-controls={open ? `${id}-panel` : undefined}
           onClick={() => setOpen((current) => !current)}
         >
-          {typesSummary(resourceTypes)} <span aria-hidden="true">▾</span>
+          {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}
+          <span aria-hidden="true">▾</span>
         </button>
         {selected.includes("pages") && (
           <p class="editor-micro">{copy.editor.includesPages}</p>
@@ -277,7 +229,7 @@ function ResourceTypes({
           <fieldset
             class="rt-grid"
             id={`${id}-panel`}
-            aria-labelledby={`${id}-label`}
+            aria-label={copy.editor.labels.resourceTypes}
           >
             {GROUPS.map((group) => (
               <label class="rt-item" key={group}>

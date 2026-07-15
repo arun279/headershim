@@ -1,0 +1,20 @@
+.advisory-slot {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--caution);
+  background: var(--caution-bg);
+  border-bottom: var(--hairline) solid var(--caution-edge);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.advisory-icon {
+  flex: none;
+  color: var(--caution-lamp);
+}
+
+.advisory-slot strong {
+  display: block;
+  margin-bottom: var(--sp-1);
+}

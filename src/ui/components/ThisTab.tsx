@@ -1,4 +1,4 @@
-import { useId, useState } from "preact/hooks";
+import { useId, useRef, useState } from "preact/hooks";
 import type {
   Direction,
   HeaderOp,
@@ -20,7 +20,7 @@ import {
 import { HeaderFields } from "./HeaderFields";
 import { sentence } from "./sentence";
 import { Truncate } from "./Truncate";
-import { useInlineCommit } from "./useInlineCommit";
+import { useDraftState } from "./useDraftState";
 import "./ThisTab.css";
 
 interface ThisTabProps {
@@ -210,16 +210,52 @@ function Composer({
       busyRef.current = false;
     }
   };
-  const { draft, draftRef, busyRef, rootRef, update, onKeyDown, onFocusOut } =
-    useInlineCommit<Draft>(
-      () => ({
-        direction: "request",
-        operation: "set",
-        header: "",
-        value: "",
-      }),
-      { commit, onClose, clearErrors: () => setErrors({}) },
-    );
+  const rootRef = useRef<HTMLFieldSetElement>(null);
+  const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
+    () => ({
+      direction: "request",
+      operation: "set",
+      header: "",
+      value: "",
+    }),
+    () => setErrors({}),
+  );
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!busyRef.current) {
+        onClose();
+      }
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (event.key === "Enter") {
+      if (target?.tagName !== "BUTTON") {
+        event.preventDefault();
+        void commit();
+      }
+      return;
+    }
+    if (target?.tagName === "BUTTON" && /^[a-zA-Z0-9]$/.test(event.key)) {
+      event.preventDefault();
+    }
+  };
+
+  const onFocusOut = (event: FocusEvent) => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || rootRef.current?.contains(next) === true) {
+      return;
+    }
+    if (dirtyRef.current) {
+      void commit();
+    } else {
+      onClose();
+    }
+  };
 
   return (
     <fieldset

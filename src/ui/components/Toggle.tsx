@@ -34,7 +34,10 @@ export function Toggle({
       class="sw"
       disabled={disabled}
       tabIndex={tabIndex}
-      onClick={() => onChange(!checked)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange(!checked);
+      }}
     />
   );
 }

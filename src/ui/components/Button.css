@@ -42,13 +42,19 @@
 
 /* Shared popover surface for menus; each menu adds its own placement. */
 .menu-pop {
-  position: absolute;
+  position: fixed;
+  inset: auto;
+  margin: 0;
   z-index: 2;
   padding: var(--sp-2);
   background: var(--panel-1);
   border: var(--hairline) solid var(--bezel-strong);
   border-radius: var(--radius-outer);
   box-shadow: var(--shadow-pop);
+}
+
+.menu-pop[data-popover-open] {
+  display: block;
 }
 
 .menu-item {

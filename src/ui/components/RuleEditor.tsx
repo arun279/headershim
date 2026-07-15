@@ -14,13 +14,14 @@ import type {
   Scope,
 } from "../../core/model";
 import type { Result } from "../../core/result";
-import { originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import {
   headerErrorToFieldError,
   headerValueEmptyErrors,
 } from "../state/header-errors";
 import type { MutationError } from "../state/mutations";
+import { AdvisorySlot } from "./AdvisorySlot";
+import { Button } from "./Button";
 import {
   GrantPanel,
   type GrantSelection,
@@ -28,11 +29,13 @@ import {
 } from "./GrantPanel";
 import { HeaderFields } from "./HeaderFields";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
-import { useInlineCommit } from "./useInlineCommit";
+import { Sheet } from "./Sheet";
+import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
 interface RuleEditorProps {
+  profileName: string;
   /** Absent for a new rule. */
   rule?: Rule | undefined;
   /** Domain of the tab the popup opened on; pre-fills a new Domains scope. */
@@ -54,6 +57,8 @@ interface RuleEditorProps {
   onRequestGrant: (origins: string[]) => Promise<boolean>;
   /** A grant landed: the now-active sites, for the "Active on …" toast. */
   onGranted?: (sites: readonly string[]) => void;
+  onCommitted?: (kind: "create" | "edit") => void;
+  onDiscardRule: (ruleId: string) => Promise<void>;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
 }
@@ -87,39 +92,22 @@ interface FieldErrors {
   editor?: string;
 }
 
-/**
- * The inline editor. No save ceremony: Enter or focus-leave commits when the
- * required fields hold up, Esc reverts, and there is no Apply button anywhere.
- * Every blocking save rule renders its exact copy inline under the offending
- * field with the input preserved; an untouched editor abandons quietly when
- * focus leaves it.
- */
+/** Full-popup rule editor with explicit save, guarded discard, and grant steps. */
 export function RuleEditor(props: RuleEditorProps) {
   const id = useId();
   const [errors, setErrors] = useState<FieldErrors>({});
   const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [busy, setBusy] = useState(false);
   // The saved rule's id survives a new-rule commit so the grant step can persist
   // its collected sites onto that same rule rather than creating a second one.
   const savedIdRef = useRef(props.rule?.id);
-  const grantOpenRef = useRef(false);
-  grantOpenRef.current = grantStep !== undefined;
+  const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
+    () => initialDraft(props.rule, props.prefillDomain, props.prefill),
+    () => setErrors({}),
+  );
 
-  // Handlers that fire mid-gesture (chip blur, then the editor's focus-leave
-  // commit in the same event turn) must see each other's writes, so the draft
-  // and interaction flags live in refs; focus leaving an open grant step
-  // abandons it rather than committing.
-  const { draft, draftRef, busyRef, rootRef, update, onKeyDown, onFocusOut } =
-    useInlineCommit<Draft>(
-      () => initialDraft(props.rule, props.prefillDomain, props.prefill),
-      {
-        commit: (grantImmediately) => void commit(grantImmediately),
-        onClose: props.onClose,
-        clearErrors: () => setErrors({}),
-        abandon: () => grantOpenRef.current,
-      },
-    );
-
-  const commit = async (grantImmediately = false) => {
+  const commit = async () => {
     if (busyRef.current) {
       return;
     }
@@ -130,6 +118,7 @@ export function RuleEditor(props: RuleEditorProps) {
       return;
     }
     busyRef.current = true;
+    setBusy(true);
     try {
       const outcome = await props.onSave(
         savedIdRef.current,
@@ -146,37 +135,24 @@ export function RuleEditor(props: RuleEditorProps) {
       }
       const saved = outcome.value;
       savedIdRef.current = saved.id;
+      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
       const step = planGrant(saved, props.grants, props.tabDomain);
       if (step === undefined) {
         props.onClose();
         return;
       }
       setGrantStep(step);
-      if (grantImmediately) {
-        // Ctrl/Cmd+Enter: prompt in the same gesture, with the panel's defaults.
-        allow(step, defaultSelection(step));
-      }
     } finally {
       busyRef.current = false;
+      setBusy(false);
     }
   };
 
-  // The permission prompt is created synchronously here so it stays inside the
-  // click/keydown gesture; the store write and the prompt's outcome are awaited
-  // afterwards. Granting a host permission itself never recompiles — the
-  // permissions.onChanged event drives only the badge (background lifecycle).
-  const allow = (step: GrantStep, selection: GrantSelection) => {
-    const origins = [
-      ...new Set(
-        [...selection.targetHosts, ...selection.initiators].map(
-          originPatternForDomain,
-        ),
-      ),
-    ];
-    const granted =
-      origins.length === 0
-        ? Promise.resolve(true)
-        : props.onRequestGrant(origins);
+  const allow = (
+    step: GrantStep,
+    selection: GrantSelection,
+    granted: Promise<boolean>,
+  ) => {
     void finishGrant(step.rule, selection, granted);
   };
 
@@ -203,6 +179,67 @@ export function RuleEditor(props: RuleEditorProps) {
     props.onClose();
   };
 
+  const requestClose = () => {
+    if (busyRef.current) {
+      return;
+    }
+    if (grantStep !== undefined || !dirtyRef.current) {
+      props.onClose();
+      return;
+    }
+    setConfirmDiscard(true);
+  };
+
+  const discardSavedRule = () => {
+    if (grantStep === undefined || busyRef.current) {
+      return;
+    }
+    busyRef.current = true;
+    setBusy(true);
+    void props
+      .onDiscardRule(grantStep.rule.id)
+      .then(props.onClose)
+      .finally(() => {
+        busyRef.current = false;
+        setBusy(false);
+      });
+  };
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (confirmDiscard) {
+        setConfirmDiscard(false);
+      } else {
+        requestClose();
+      }
+      return;
+    }
+    if (grantStep !== undefined) {
+      return;
+    }
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      void commit();
+      return;
+    }
+    if (
+      event.key === "Enter" &&
+      target?.classList.contains("editor-commit-field") === true
+    ) {
+      event.preventDefault();
+      void commit();
+      return;
+    }
+    if (target?.tagName === "BUTTON" && /^[a-zA-Z0-9]$/.test(event.key)) {
+      event.preventDefault();
+    }
+  };
+
   const generate = (kind: "uuid" | "timestamp") => {
     const at = new Date().toISOString();
     update((current) => ({
@@ -212,86 +249,194 @@ export function RuleEditor(props: RuleEditorProps) {
     }));
   };
 
-  const title =
-    props.rule === undefined ? copy.editor.newRule : copy.editor.editRule;
+  const mode = props.rule === undefined ? "new" : "edit";
+  const title = copy.editor.heading(mode, props.profileName);
+  const saveLabel =
+    mode === "new" ? copy.actions.createRule : copy.actions.saveChanges;
 
   return (
-    <fieldset
-      class="rule-editor inline-editor-well"
-      ref={rootRef}
+    <Sheet
+      label={title}
+      class="editor-sheet"
       onKeyDown={onKeyDown}
-      onFocusOut={onFocusOut}
+      header={
+        <>
+          <h1 class="editor-title">
+            <span aria-hidden="true">‹</span> {title}
+          </h1>
+          <Button kind="ghost" label={copy.editor.close} onClick={requestClose}>
+            <span aria-hidden="true">✕</span>
+          </Button>
+        </>
+      }
+      pinned={
+        grantStep === undefined ? (
+          <>
+            <AdvisorySlot header={draft.header} />
+            <div class="editor-actions">
+              {confirmDiscard ? (
+                <>
+                  <strong class="discard-title">
+                    {copy.editor.discardConfirm.title}
+                  </strong>
+                  <button
+                    type="button"
+                    class="editor-cancel"
+                    onClick={() => setConfirmDiscard(false)}
+                  >
+                    {copy.editor.discardConfirm.keepEditing}
+                  </button>
+                  <Button kind="quiet" onClick={props.onClose}>
+                    {copy.editor.discardConfirm.discard}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    class="editor-cancel"
+                    onClick={requestClose}
+                  >
+                    {copy.actions.cancel}
+                  </button>
+                  <Button
+                    kind="primary"
+                    disabled={busy}
+                    onClick={() => void commit()}
+                  >
+                    {saveLabel}
+                  </Button>
+                </>
+              )}
+            </div>
+          </>
+        ) : undefined
+      }
     >
-      <legend class="silk editor-title">{title}</legend>
+      <div class="rule-editor">
+        {grantStep === undefined ? (
+          <>
+            <HeaderFields
+              idBase={id}
+              draft={draft}
+              errors={errors}
+              update={update}
+            />
 
-      <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
+            {draft.operation !== "remove" && (
+              <ValueField
+                value={draft.value}
+                generated={draft.generated}
+                frozenAt={
+                  draft.generated !== undefined &&
+                  draft.generated.at === props.rule?.generated?.at
+                    ? formatFrozenAt(draft.generated.at)
+                    : undefined
+                }
+                error={errors.value}
+                onInput={(value) =>
+                  update((current) => ({
+                    ...current,
+                    value,
+                    generated: undefined,
+                  }))
+                }
+                onGenerate={generate}
+              />
+            )}
 
-      {draft.operation !== "remove" && (
-        <ValueField
-          value={draft.value}
-          generated={draft.generated}
-          frozenAt={
-            draft.generated !== undefined &&
-            draft.generated.at === props.rule?.generated?.at
-              ? formatFrozenAt(draft.generated.at)
-              : undefined
-          }
-          error={errors.value}
-          onInput={(value) =>
-            update((current) => ({ ...current, value, generated: undefined }))
-          }
-          onGenerate={generate}
-        />
-      )}
+            <ScopeEditor
+              scope={draft.scope}
+              resourceTypes={draft.resourceTypes}
+              error={errors.scope}
+              typesError={errors.types}
+              defaultResourceTypesOpen={
+                props.rule !== undefined && props.rule.resourceTypes !== "all"
+              }
+              suggestedDomain={props.prefillDomain}
+              onScope={(scope) => update((current) => ({ ...current, scope }))}
+              onResourceTypes={(resourceTypes) =>
+                update((current) => ({ ...current, resourceTypes }))
+              }
+              onCommit={() => void commit()}
+            />
 
-      <ScopeEditor
-        scope={draft.scope}
-        resourceTypes={draft.resourceTypes}
-        error={errors.scope}
-        typesError={errors.types}
-        onScope={(scope) => update((current) => ({ ...current, scope }))}
-        onResourceTypes={(resourceTypes) =>
-          update((current) => ({ ...current, resourceTypes }))
-        }
-      />
+            <CommentDisclosure
+              id={`${id}-comment`}
+              value={draft.comment}
+              onInput={(comment) =>
+                update((current) => ({ ...current, comment }))
+              }
+            />
 
-      <div class="editor-field">
-        <label class="editor-label" for={`${id}-comment`}>
-          {copy.editor.labels.comment}
-        </label>
-        <div class="editor-control">
+            {errors.editor !== undefined && (
+              <p class="editor-error editor-error-global" role="alert">
+                {errors.editor}
+              </p>
+            )}
+          </>
+        ) : (
+          <GrantPanel
+            scopeType={grantStep.scopeType}
+            targetHosts={grantStep.targets}
+            editableTargets={grantStep.editableTargets}
+            targetPrefill={grantStep.targetPrefill}
+            initiator={grantStep.initiator}
+            created={props.rule === undefined}
+            onRequestGrant={props.onRequestGrant}
+            onAllow={(selection, granted) =>
+              allow(grantStep, selection, granted)
+            }
+            onGrantLater={props.onClose}
+            onDiscardRule={discardSavedRule}
+            onAllSites={props.onClose}
+          />
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function CommentDisclosure({
+  id,
+  value,
+  onInput,
+}: {
+  id: string;
+  value: string;
+  onInput: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const summary = value.trim();
+  return (
+    <div class="editor-option">
+      <button
+        type="button"
+        class="disclosure"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-panel` : undefined}
+        title={summary === "" ? undefined : summary}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {copy.editor.labels.comment}
+        {summary === "" ? "" : ` · ${summary}`}{" "}
+        <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div id={`${id}-panel`}>
+          <label class="sr-only" for={id}>
+            {copy.editor.labels.comment}
+          </label>
           <input
-            id={`${id}-comment`}
+            id={id}
             class="field"
             type="text"
-            value={draft.comment}
-            onInput={(event) => {
-              const comment = event.currentTarget.value;
-              update((current) => ({ ...current, comment }));
-            }}
+            value={value}
+            onInput={(event) => onInput(event.currentTarget.value)}
           />
         </div>
-      </div>
-
-      {errors.editor !== undefined && (
-        <p class="editor-error editor-error-global" role="alert">
-          {errors.editor}
-        </p>
       )}
-
-      {grantStep !== undefined && (
-        <GrantPanel
-          scopeType={grantStep.scopeType}
-          targetHosts={grantStep.targets}
-          editableTargets={grantStep.editableTargets}
-          targetPrefill={grantStep.targetPrefill}
-          initiator={grantStep.initiator}
-          onAllow={(selection) => allow(grantStep, selection)}
-          onNotNow={props.onClose}
-          onAllSites={props.onClose}
-        />
-      )}
-    </fieldset>
+    </div>
   );
 }
 
@@ -550,20 +695,6 @@ function domainInitiator(
     };
   }
   return { kind: "none" };
-}
-
-function defaultSelection(step: GrantStep): GrantSelection {
-  return {
-    targetHosts: step.editableTargets
-      ? [...step.targetPrefill]
-      : [...step.targets],
-    initiators:
-      step.initiator.kind === "checkbox"
-        ? [step.initiator.host]
-        : step.initiator.kind === "chips"
-          ? [...step.initiator.prefill]
-          : [],
-  };
 }
 
 /**

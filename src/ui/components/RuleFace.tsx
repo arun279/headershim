@@ -13,9 +13,11 @@ import "./RuleFace.css";
 export function RuleFace({
   rule,
   secondLine,
+  secondLineTitle,
 }: {
   rule: Rule;
   secondLine: ComponentChildren;
+  secondLineTitle?: string | undefined;
 }) {
   return (
     <>
@@ -35,7 +37,9 @@ export function RuleFace({
             </>
           )}
         </p>
-        <p class="rule-line2">{secondLine}</p>
+        <p class="rule-line2" title={secondLineTitle}>
+          {secondLine}
+        </p>
       </div>
     </>
   );

@@ -22,6 +22,7 @@ function mount(props: Partial<Parameters<typeof ValueField>[0]> = {}) {
     insertButton: () => root.querySelector(".insert-btn") as HTMLButtonElement,
     menuItems: () =>
       [...root.querySelectorAll('[role="menuitem"]')] as HTMLButtonElement[],
+    input: () => root.querySelector("textarea") as HTMLTextAreaElement,
   };
 }
 
@@ -52,6 +53,28 @@ describe("ValueField insert menu", () => {
     const item = ctx.menuItems()[0] as HTMLButtonElement;
     press(item, "Escape");
     expect(ctx.menuItems()).toHaveLength(0);
+  });
+});
+
+describe("ValueField multiline control", () => {
+  it("uses a soft-wrapping, vertically resizable textarea", () => {
+    const ctx = mount({ value: "x".repeat(320) });
+    expect(ctx.input().getAttribute("wrap")).toBe("soft");
+    expect(ctx.input().value).toHaveLength(320);
+  });
+
+  it("strips pasted line breaks and shows the wire-format note", () => {
+    const ctx = mount({ value: "before after" });
+    fire(() => {
+      ctx.input().setSelectionRange(7, 7);
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { getData: () => "one\ntwo" },
+      });
+      ctx.input().dispatchEvent(event);
+    });
+    expect(ctx.onInput).toHaveBeenCalledWith("before one twoafter");
+    expect(ctx.root.textContent).toContain(copy.editor.newlineRemoved);
   });
 });
 

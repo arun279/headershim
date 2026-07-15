@@ -43,7 +43,7 @@ function mount(readout: VerifyReadout, blocked?: Blocked) {
       />
     </LiveRegionProvider>,
   );
-  const panel = root.querySelector(".verify") as HTMLElement;
+  const panel = root.querySelector(".verify-sheet") as HTMLElement;
   return { root, panel, onClose, onGrant, onReload };
 }
 
@@ -110,7 +110,7 @@ describe("VerifyPanel readout", () => {
     }
   });
 
-  it("carries the honest-limits footer verbatim from the spec", () => {
+  it("carries the honest-limits footer verbatim", () => {
     const { panel } = mount(twoMatched);
     expect(panel.querySelector(".verify-limits")?.textContent).toBe(
       copy.verify.limits,

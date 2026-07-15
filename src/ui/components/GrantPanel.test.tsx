@@ -6,7 +6,9 @@ import { GrantPanel, type GrantPanelProps } from "./GrantPanel";
 
 function mount(props: Partial<GrantPanelProps> = {}) {
   const onAllow = vi.fn();
-  const onNotNow = vi.fn();
+  const onRequestGrant = vi.fn(async () => true);
+  const onGrantLater = vi.fn();
+  const onDiscardRule = vi.fn();
   const onAllSites = vi.fn();
   const root = render(
     <GrantPanel
@@ -15,8 +17,11 @@ function mount(props: Partial<GrantPanelProps> = {}) {
       editableTargets={false}
       targetPrefill={[]}
       initiator={{ kind: "none" }}
+      created
+      onRequestGrant={onRequestGrant}
       onAllow={onAllow}
-      onNotNow={onNotNow}
+      onGrantLater={onGrantLater}
+      onDiscardRule={onDiscardRule}
       onAllSites={onAllSites}
       {...props}
     />,
@@ -24,15 +29,17 @@ function mount(props: Partial<GrantPanelProps> = {}) {
   return {
     root,
     onAllow,
-    onNotNow,
+    onRequestGrant,
+    onGrantLater,
+    onDiscardRule,
     onAllSites,
     allow: () =>
       [...root.querySelectorAll("button")].find((button) =>
         button.textContent?.startsWith("Allow on"),
       ) as HTMLButtonElement,
-    notNow: () =>
+    grantLater: () =>
       [...root.querySelectorAll("button")].find(
-        (button) => button.textContent === copy.actions.notNow,
+        (button) => button.textContent === copy.actions.grantLater,
       ) as HTMLButtonElement,
     input: (label: string) =>
       root.querySelector(`[aria-label="${label}"]`) as HTMLInputElement,
@@ -44,7 +51,8 @@ function expectAllow(
   selection: { targetHosts: string[]; initiators: string[] },
 ) {
   fire(() => ctx.allow().click());
-  expect(ctx.onAllow).toHaveBeenCalledExactlyOnceWith(selection);
+  expect(ctx.onAllow).toHaveBeenCalledOnce();
+  expect(ctx.onAllow.mock.calls[0]?.[0]).toEqual(selection);
 }
 
 describe("GrantPanel — single and multiple domains", () => {
@@ -78,11 +86,40 @@ describe("GrantPanel — single and multiple domains", () => {
     expect(ctx.allow().textContent).toBe(copy.actions.allowOn("3 sites"));
   });
 
-  it("routes Not now back to the caller without a grant", () => {
+  it("routes Grant later back to the caller without a grant", () => {
     const ctx = mount();
-    fire(() => ctx.notNow().click());
-    expect(ctx.onNotNow).toHaveBeenCalledOnce();
+    fire(() => ctx.grantLater().click());
+    expect(ctx.onGrantLater).toHaveBeenCalledOnce();
     expect(ctx.onAllow).not.toHaveBeenCalled();
+    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+  });
+
+  it("shows the labeled step and all three choices", () => {
+    const ctx = mount();
+    expect(ctx.root.textContent).toContain(copy.grantPanel.createdLead);
+    expect(ctx.root.textContent).toContain(copy.grantPanel.heading);
+    expect(
+      [...ctx.root.querySelectorAll(".grant-actions button")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual([
+      copy.actions.discardRule,
+      copy.actions.grantLater,
+      copy.actions.allowOn("api.example.com"),
+    ]);
+  });
+
+  it("requests access before handing the click outcome to the caller", () => {
+    const order: string[] = [];
+    const ctx = mount({
+      onRequestGrant: vi.fn(async () => {
+        order.push("request");
+        return true;
+      }),
+      onAllow: vi.fn(() => order.push("allow")),
+    });
+    fire(() => ctx.allow().click());
+    expect(order).toEqual(["request", "allow"]);
   });
 });
 

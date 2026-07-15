@@ -63,9 +63,9 @@ describe("copy", () => {
       "format 2; this version reads up to 1",
     );
     // The Regenerate action renders as a button after the note, so the visible
-    // reading stays "Frozen at save · … · Regenerate".
+    // reading stays "Frozen at save: … · Regenerate".
     expect(copy.generatedValue.frozen("2026-07-12 14:03 UTC")).toBe(
-      "Frozen at save · 2026-07-12 14:03 UTC",
+      "Frozen at save: 2026-07-12 14:03 UTC",
     );
     expect(copy.editor.suggestions(1)).toBe("1 suggestion");
     expect(copy.editor.suggestions(6)).toBe("6 suggestions");

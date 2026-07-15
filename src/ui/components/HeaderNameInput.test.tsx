@@ -6,21 +6,17 @@ import { copy } from "../copy";
 import { press, render, typeInto } from "../test/render";
 import { HeaderNameInput } from "./HeaderNameInput";
 
-function Harness({
-  operation = "set",
-}: {
-  operation?: "set" | "append" | "remove";
-}) {
+function Harness() {
   const [value, setValue] = useState("");
   return (
     <LiveRegionProvider>
-      <HeaderNameInput value={value} operation={operation} onInput={setValue} />
+      <HeaderNameInput value={value} onInput={setValue} />
     </LiveRegionProvider>
   );
 }
 
-function mount(operation: "set" | "append" | "remove" = "set") {
-  const root = render(<Harness operation={operation} />);
+function mount() {
+  const root = render(<Harness />);
   return {
     root,
     input: () => root.querySelector('[role="combobox"]') as HTMLInputElement,
@@ -91,7 +87,7 @@ describe("HeaderNameInput combobox contract", () => {
   it("shows the option hint in the mute face", () => {
     const ctx = mount();
     typeInto(ctx.input(), "authorization");
-    expect(ctx.options()[0]?.textContent).toBe("authorization— credentials");
+    expect(ctx.options()[0]?.textContent).toBe("authorization: credentials");
   });
 
   it("shows the case-honesty microline only when the typed case differs", () => {
@@ -102,20 +98,5 @@ describe("HeaderNameInput combobox contract", () => {
     );
     typeInto(ctx.input(), "x-feature-override");
     expect(ctx.root.querySelector(".editor-micro")).toBeNull();
-  });
-
-  it("raises the advisories the moment the name matches", () => {
-    const ctx = mount();
-    typeInto(ctx.input(), "host");
-    expect(ctx.root.querySelector(".editor-advisory")?.textContent).toBe(
-      copy.advisories.host,
-    );
-    typeInto(ctx.input(), "Content-Length");
-    expect(ctx.root.querySelector(".editor-advisory")?.textContent).toBe(
-      copy.advisories.managedHeader,
-    );
-    // The advisory participates in the field's accessible description.
-    const advisoryId = ctx.root.querySelector(".editor-advisory")?.id;
-    expect(ctx.input().getAttribute("aria-describedby")).toContain(advisoryId);
   });
 });

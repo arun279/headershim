@@ -1,10 +1,14 @@
 import type { ComponentChildren, RefObject } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import { subresourceScopedRule } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
-import { copy } from "../copy";
-import { CheckGlyph } from "./glyphs";
+import { copy, sentenceText } from "../copy";
+import {
+  closePopover,
+  openPositionedPopover,
+  trapPopoverFocus,
+} from "./popover";
 import { RuleFace } from "./RuleFace";
 import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
@@ -13,6 +17,7 @@ import "./RuleRow.css";
 
 interface RuleRowActions {
   onToggle: (enabled: boolean) => void;
+  onGrant: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -31,12 +36,6 @@ interface RuleRowProps extends RuleRowActions {
   overridden?: boolean | undefined;
   /** Session-scoped This-tab row: dotted edge + Temporary line. */
   temporary?: { host: string } | undefined;
-  /**
-   * A changing token when this row's rule was just auto-saved: pulses the
-   * transient "Saved" acknowledgement. Undefined the rest of the
-   * time; a new value re-triggers the pulse on a subsequent edit.
-   */
-  savedNonce?: number | undefined;
   /** "Undo last delete" stays in this menu until the next mutation. */
   undoAvailable: boolean;
   /** Profiles this rule could move to (everything but its own). */
@@ -51,39 +50,26 @@ interface RuleRowProps extends RuleRowActions {
 
 /**
  * One rule. Grid [switch][direction][content][overflow]; the left edge is the
- * state channel: a nominal list keeps a perfectly clean edge, needs-access
- * breaks it with a dashed caution mark, temporary with a dotted mute one.
+ * state rail, and blocked rows pair their caution rail with words and a Grant
+ * action so the toggle never implies healthy operation on its own.
  */
 export function RuleRow(props: RuleRowProps) {
-  const { rule, invalid, missingHosts, temporary, savedNonce } = props;
+  const { rule, invalid, missingHosts, temporary } = props;
   const noteRef = useRef<HTMLSpanElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  // The auto-save acknowledgement: a transient "Saved" that fades
-  // ~1.5s after a commit. Keyed on the nonce so a repeat edit re-pulses; the
-  // affordance is decorative (aria-hidden) — closure for AT comes from focus
-  // returning to the row, which re-announces the rule.
-  const [showSaved, setShowSaved] = useState(false);
-  useEffect(() => {
-    if (savedNonce === undefined) {
-      return;
-    }
-    setShowSaved(true);
-    const timer = setTimeout(() => setShowSaved(false), 1500);
-    return () => clearTimeout(timer);
-  }, [savedNonce]);
-
-  const needsAccess = !invalid && (missingHosts?.length ?? 0) > 0;
+  const needsAccess =
+    rule.enabled && !invalid && (missingHosts?.length ?? 0) > 0;
   const state = invalid
     ? "invalid"
     : needsAccess
-      ? "needs-access"
+      ? "blocked"
       : temporary !== undefined
         ? "temporary"
         : rule.enabled
-          ? "enabled"
-          : "disabled";
+          ? "running"
+          : "off";
 
   const description = [
     rule.value === undefined ? undefined : `${rule.header}: ${rule.value}`,
@@ -95,6 +81,7 @@ export function RuleRow(props: RuleRowProps) {
   return (
     <li
       class={`rule-row ${state}`}
+      data-rule-id={rule.id}
       tabIndex={props.tabIndex}
       aria-posinset={props.posinset}
       aria-setsize={props.setsize}
@@ -110,6 +97,7 @@ export function RuleRow(props: RuleRowProps) {
           props.onRowCommand(event, () => setMenuOpen(true));
         }
       }}
+      onClick={() => props.onEdit()}
     >
       <Toggle
         checked={rule.enabled}
@@ -125,13 +113,11 @@ export function RuleRow(props: RuleRowProps) {
           }
         }}
       />
-      <RuleFace rule={rule} secondLine={lineTwo(props, noteRef)} />
-      {showSaved && (
-        <span class="rule-saved" aria-hidden="true">
-          <CheckGlyph />
-          {copy.rules.saved}
-        </span>
-      )}
+      <RuleFace
+        rule={rule}
+        secondLine={lineTwo(props, noteRef)}
+        secondLineTitle={lineTwoTitle(props)}
+      />
       <button
         type="button"
         class="icon-btn rule-menu-btn"
@@ -140,7 +126,10 @@ export function RuleRow(props: RuleRowProps) {
         aria-expanded={menuOpen}
         ref={menuButtonRef}
         tabIndex={-1}
-        onClick={() => setMenuOpen((open) => !open)}
+        onClick={(event) => {
+          event.stopPropagation();
+          setMenuOpen((open) => !open);
+        }}
       >
         ⋯
       </button>
@@ -176,10 +165,22 @@ function lineTwo(
   const [firstMissing] = missing;
   if (firstMissing !== undefined) {
     return (
-      <span class="rule-status">
-        <CautionTriangle />{" "}
-        {sentence(copy.rules.needsAccess(firstMissing, missing.length - 1))}
-      </span>
+      <>
+        <span class="rule-status">
+          <CautionTriangle />{" "}
+          {sentence(copy.rules.needsAccess(firstMissing, missing.length - 1))}
+        </span>
+        <button
+          type="button"
+          class="rule-grant"
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onGrant();
+          }}
+        >
+          {copy.actions.grant}
+        </button>
+      </>
     );
   }
 
@@ -201,6 +202,22 @@ function lineTwo(
       {standingInitiatorNote(rule) && <> · {copy.rules.initiatorNote}</>}
     </>
   );
+}
+
+function lineTwoTitle(props: RuleRowProps): string {
+  if (props.invalid === true) {
+    return copy.rules.invalidRegex;
+  }
+  const missing = props.missingHosts ?? [];
+  const firstMissing = missing[0];
+  if (firstMissing !== undefined) {
+    return sentenceText(
+      copy.rules.needsAccess(firstMissing, missing.length - 1),
+    );
+  }
+  const scope = sentenceText(scopeSummary(props.rule));
+  const types = typesSummary(props.rule);
+  return [scope, types, props.rule.comment].filter(Boolean).join(" · ");
 }
 
 /**
@@ -269,8 +286,15 @@ function RowMenu(props: RowMenuProps) {
       : rootItems(props, () => setView("move"), copyValue);
 
   // Focus enters the menu on open and on the move-targets drill-in.
-  useEffect(() => {
-    listRef.current?.querySelector("button")?.focus();
+  useLayoutEffect(() => {
+    const menu = listRef.current;
+    const trigger = props.menuButton.current;
+    if (menu === null || trigger === null) {
+      return;
+    }
+    openPositionedPopover(menu, trigger, "end");
+    menu.querySelector("button")?.focus();
+    return () => closePopover(menu);
   }, [view]);
 
   const moveFocus = (to: number | ((active: number) => number)) => {
@@ -285,12 +309,17 @@ function RowMenu(props: RowMenuProps) {
   return (
     <div
       class="menu-pop rule-menu"
+      popover="manual"
       role="menu"
       aria-label={copy.rules.menuLabel(rule.header)}
       ref={listRef}
       onKeyDown={(event) => {
         // The open menu owns the keyboard; nothing leaks to the list or popup.
         event.stopPropagation();
+        if (event.key === "Tab" && listRef.current !== null) {
+          trapPopoverFocus(event, listRef.current);
+          return;
+        }
         switch (event.key) {
           case "ArrowDown":
             moveFocus((active) => active + 1);
@@ -324,6 +353,7 @@ function RowMenu(props: RowMenuProps) {
           onClose(false);
         }
       }}
+      onClick={(event) => event.stopPropagation()}
     >
       {items.map((item) => (
         <button

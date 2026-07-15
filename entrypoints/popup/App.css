@@ -1,14 +1,19 @@
-/* 400px wide; height content-driven up to 560, only the body region scrolls. */
+body {
+  width: 440px;
+  max-width: 100%;
+}
+
+/* Height stays content-driven; only the active mode's body region scrolls. */
 .popup {
   position: relative;
-  width: 400px;
-  max-height: 560px;
+  max-height: 600px;
   display: flex;
   flex-direction: column;
 }
 
 .popup-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }

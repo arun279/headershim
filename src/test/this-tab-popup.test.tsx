@@ -96,7 +96,7 @@ describe("popup This-tab wiring", () => {
       (root.querySelector('[role="combobox"]') as HTMLInputElement).value,
     ).toBe("x-debug-trace");
     expect(
-      (root.querySelector(".value-row input") as HTMLInputElement).value,
+      (root.querySelector(".value-row textarea") as HTMLTextAreaElement).value,
     ).toBe("1");
     expect(root.querySelector(".rule-editor")?.textContent).toContain(
       "app.example.com",

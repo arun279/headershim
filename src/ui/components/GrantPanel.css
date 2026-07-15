@@ -2,12 +2,21 @@
    expands into. Top border marks it off from the fields above. */
 .grant-panel {
   min-width: 0;
-  margin: var(--sp-3) calc(var(--sp-4) * -1) calc(var(--sp-4) * -1);
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
-  background: var(--caution-bg);
+  padding: var(--sp-5) var(--sp-4);
+  background: var(--panel-0);
   border: 0;
-  border-top: var(--hairline) solid var(--caution-edge);
-  border-radius: 0 0 var(--radius-outer) var(--radius-outer);
+}
+
+.grant-lead {
+  margin-bottom: var(--sp-5);
+  color: var(--advisory);
+  font-weight: 600;
+}
+
+.grant-heading {
+  margin-bottom: var(--sp-3);
+  font-size: 15px;
+  line-height: 1.3;
 }
 
 .grant-line {
@@ -47,63 +56,6 @@
   font-size: 11px;
 }
 
-.grant-field {
-  margin-top: var(--sp-3);
-}
-
-.grant-field-label {
-  display: block;
-  margin-bottom: var(--sp-1);
-  font-size: 11.5px;
-  color: var(--ink);
-}
-
-.grant-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  align-items: center;
-}
-
-.grant-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1);
-  min-height: 24px;
-  padding: 2px var(--sp-1) 2px var(--sp-2);
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--caution-edge);
-  border-radius: var(--radius-inner);
-}
-
-.grant-chip .mono {
-  font-size: 11px;
-  color: var(--ink);
-}
-
-.grant-chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  min-height: 24px;
-  font-size: 10px;
-  color: var(--ink-mute);
-  border-radius: var(--radius-inner);
-}
-
-.grant-chip-input {
-  flex: 1;
-  min-width: 96px;
-  min-height: 24px;
-  padding: 2px var(--sp-2);
-  font-size: 11px;
-  color: var(--ink);
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--caution-edge);
-  border-radius: var(--radius-inner);
-}
-
 .grant-all {
   display: inline-block;
   margin-top: var(--sp-2);
@@ -117,8 +69,16 @@
 }
 
 .grant-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--sp-3);
   align-items: center;
   margin-top: var(--sp-4);
+  padding-top: var(--sp-3);
+  background: var(--panel-0);
+  border-top: var(--hairline) solid var(--bezel);
 }

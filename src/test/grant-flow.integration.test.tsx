@@ -121,7 +121,7 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
 
     // A rule the user believes is running but can't: loud on all three surfaces.
     expect(state(root)).toBe("needs-access");
-    expect(root.querySelector(".rule-row.needs-access")).not.toBeNull();
+    expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
     expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
 
     dnr.updateDynamicRules.mockClear();
@@ -131,7 +131,7 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
     // The grant clears the loud state without recompiling a single rule.
     await grant(ORIGIN);
     expect(state(root)).toBe("live");
-    expect(root.querySelector(".rule-row.needs-access")).toBeNull();
+    expect(root.querySelector(".rule-row.blocked")).toBeNull();
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
     expect(setBadge).toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
     setBadge.mockClear();
     await revoke(ORIGIN);
     expect(state(root)).toBe("needs-access");
-    expect(root.querySelector(".rule-row.needs-access")).not.toBeNull();
+    expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
     expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
   });
 });

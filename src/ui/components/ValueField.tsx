@@ -1,6 +1,11 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Rule } from "../../core/model";
 import { copy } from "../copy";
+import {
+  closePopover,
+  openPositionedPopover,
+  trapPopoverFocus,
+} from "./popover";
 import "./ValueField.css";
 
 interface ValueFieldProps {
@@ -21,8 +26,10 @@ interface ValueFieldProps {
  */
 export function ValueField(props: ValueFieldProps) {
   const id = useId();
+  const [newlineRemoved, setNewlineRemoved] = useState(false);
   const describedBy = [
     ...(props.generated === undefined ? [] : [`${id}-note`]),
+    ...(newlineRemoved ? [`${id}-newline-note`] : []),
     ...(props.error === undefined ? [] : [`${id}-error`]),
   ].join(" ");
 
@@ -33,14 +40,43 @@ export function ValueField(props: ValueFieldProps) {
       </label>
       <div class="editor-control">
         <div class="value-row">
-          <input
+          <textarea
             id={`${id}-input`}
-            class="field mono"
-            type="text"
+            class="field mono value-input"
+            rows={4}
+            wrap="soft"
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
             value={props.value}
-            onInput={(event) => props.onInput(event.currentTarget.value)}
+            onInput={(event) => {
+              const raw = event.currentTarget.value;
+              if (/\r|\n/.test(raw)) {
+                setNewlineRemoved(true);
+                props.onInput(stripLineBreaks(raw));
+              } else {
+                props.onInput(raw);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !(event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
+            onPaste={(event) => {
+              const pasted = event.clipboardData?.getData("text/plain") ?? "";
+              if (!/\r|\n/.test(pasted)) {
+                return;
+              }
+              event.preventDefault();
+              const field = event.currentTarget;
+              const start = field.selectionStart;
+              const end = field.selectionEnd;
+              props.onInput(
+                `${props.value.slice(0, start)}${stripLineBreaks(pasted)}${props.value.slice(end)}`,
+              );
+              setNewlineRemoved(true);
+            }}
           />
           <InsertMenu onGenerate={props.onGenerate} />
         </div>
@@ -58,6 +94,11 @@ export function ValueField(props: ValueFieldProps) {
             </button>
           </p>
         )}
+        {newlineRemoved && (
+          <p class="editor-micro value-newline-note" id={`${id}-newline-note`}>
+            {copy.editor.newlineRemoved}
+          </p>
+        )}
         {props.error !== undefined && (
           <p class="editor-error" role="alert" id={`${id}-error`}>
             {props.error}
@@ -66,6 +107,10 @@ export function ValueField(props: ValueFieldProps) {
       </div>
     </div>
   );
+}
+
+function stripLineBreaks(value: string): string {
+  return value.replace(/(?:\r\n|\r|\n)+/g, " ");
 }
 
 function InsertMenu({
@@ -84,10 +129,15 @@ function InsertMenu({
   };
 
   // Focus moves into the opened menu; Esc and item activation restore it.
-  useEffect(() => {
-    if (open) {
-      menuRef.current?.querySelector("button")?.focus();
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const trigger = buttonRef.current;
+    if (!open || menu === null || trigger === null) {
+      return;
     }
+    openPositionedPopover(menu, trigger, "end");
+    menu.querySelector("button")?.focus();
+    return () => closePopover(menu);
   }, [open]);
 
   return (
@@ -105,10 +155,15 @@ function InsertMenu({
       {open && (
         <div
           class="menu-pop insert-menu"
+          popover="manual"
           role="menu"
           aria-label={copy.editor.insert}
           ref={menuRef}
           onKeyDown={(event) => {
+            if (event.key === "Tab" && menuRef.current !== null) {
+              trapPopoverFocus(event, menuRef.current);
+              return;
+            }
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();

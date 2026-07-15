@@ -107,12 +107,14 @@ describe("popup App", () => {
   });
 
   it("updates needs-access surfaces when a grant lands while mounted", async () => {
-    const { annunciator } = await mount(seededDoc([rule()]));
+    const { root, annunciator } = await mount(seededDoc([rule()]));
 
     expect(annunciator().textContent).toContain(
       "1 rule can't run — HeaderShim doesn't have access to api.example.com.",
     );
     expect(annunciator().getAttribute("data-state")).toBe("needs-access");
+    expect(root.querySelector(".rule-row.blocked .sw")).not.toBeNull();
+    expect(root.querySelector(".rule-row.running")).toBeNull();
 
     await fakeBrowser.permissions.request({
       origins: ["*://*.api.example.com/*"],
@@ -305,6 +307,28 @@ describe("popup rule list integration", () => {
     expect(rows[1]?.textContent).toContain("x-debug");
   });
 
+  it("Verify replaces List mode and returns focus to its trigger on close", async () => {
+    const { root } = await grantAndMount(twoRules());
+    const trigger = root.querySelector(
+      ".foot-verify button",
+    ) as HTMLButtonElement;
+    fire(() => trigger.click());
+    await settle();
+
+    expect(root.querySelector(".verify-sheet")).not.toBeNull();
+    expect(root.querySelector(".profiles")).toBeNull();
+    expect(root.querySelector(".annunciator")).toBeNull();
+    expect(root.querySelector(".foot")).toBeNull();
+
+    const close = root.querySelector(
+      ".verify-sheet .icon-btn",
+    ) as HTMLButtonElement;
+    fire(() => close.click());
+    await settle();
+    expect(root.querySelector(".verify-sheet")).toBeNull();
+    expect((document.activeElement as HTMLElement).textContent).toBe("Verify");
+  });
+
   it("toggles a rule from its switch, instantly and persistently", async () => {
     const { root } = await grantAndMount(twoRules());
     const ruleSwitch = root.querySelector(
@@ -488,12 +512,15 @@ describe("popup rule list integration", () => {
   });
 });
 
-describe("popup inline editor integration", () => {
-  it("n opens a new-rule editor with focus in the header name field", async () => {
+describe("popup editor mode integration", () => {
+  it("n replaces the list with a new-rule sheet and focuses the header", async () => {
     const { root } = await grantAndMount(twoRules());
     press(root.querySelector(".popup") as HTMLElement, "n");
     await settle();
     expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(root.querySelector(".rules")).toBeNull();
+    expect(root.querySelector(".foot")).toBeNull();
+    expect(root.querySelector(".editor-sheet")).not.toBeNull();
     expect(document.activeElement).toBe(
       root.querySelector('[role="combobox"]'),
     );
@@ -532,14 +559,13 @@ describe("popup inline editor integration", () => {
       "x-api-key",
     );
     typeInto(
-      root.querySelector(".value-row input") as HTMLInputElement,
+      root.querySelector(".value-row textarea") as HTMLTextAreaElement,
       "secret",
     );
     const chipInput = root.querySelector(
       ".domain-chip-input",
     ) as HTMLInputElement;
     typeInto(chipInput, "api.example.com");
-    press(chipInput, "Enter");
     press(chipInput, "Enter");
     await settle();
 
@@ -551,15 +577,21 @@ describe("popup inline editor integration", () => {
       "x-api-key",
     ]);
     expect(root.textContent).toContain("x-api-key");
+    expect(root.querySelector(".toast")?.textContent).toContain("Rule created");
   });
 
   it("edits an existing rule in place keeping its identity", async () => {
     const { root } = await grantAndMount(twoRules());
     await openFirstRowEditor(root);
 
-    const value = root.querySelector(".value-row input") as HTMLInputElement;
+    const value = root.querySelector(
+      ".value-row textarea",
+    ) as HTMLTextAreaElement;
     typeInto(value, "Bearer rotated");
-    press(value, "Enter");
+    const save = [...root.querySelectorAll(".editor-actions button")].find(
+      (button) => button.textContent === "Save changes",
+    ) as HTMLButtonElement;
+    fire(() => save.click());
     await settle();
 
     const stored = await read();
@@ -569,5 +601,8 @@ describe("popup inline editor integration", () => {
       header: "authorization",
       value: "Bearer rotated",
     });
+    expect(root.querySelector(".toast")?.textContent).toContain(
+      "Changes saved",
+    );
   });
 });

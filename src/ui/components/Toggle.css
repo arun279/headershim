@@ -42,6 +42,18 @@
   transform: translateX(16px);
 }
 
+/* Amber hatching says the requested on-state is held pending site access. */
+.rule-row.blocked .sw[aria-checked="true"]::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--caution-lamp) 0,
+    var(--caution-lamp) 4px,
+    var(--caution-bg) 4px,
+    var(--caution-bg) 7px
+  );
+  border: var(--hairline) solid var(--caution);
+}
+
 .sw:disabled {
   cursor: default;
 }

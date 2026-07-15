@@ -392,13 +392,17 @@ export const copy = {
 
   actions: {
     newRule: "+ New rule",
+    createRule: "Create rule",
+    saveChanges: "Save changes",
     verify: "Verify",
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands and in Verify's
     // no-request state; never an automatic reload (locus of control).
     reloadTab: "Reload tab",
-    notNow: "Not now",
+    grantLater: "Grant later",
+    discardRule: "Discard rule",
+    grant: "Grant",
     cancel: "Cancel",
     undo: "Undo",
     regenerate: "Regenerate",
@@ -409,6 +413,10 @@ export const copy = {
   },
 
   toast: {
+    ruleCreated: "Rule created",
+    changesSaved: "Changes saved",
+    ruleLive:
+      "Rule is live. Make a request on that site, then run Verify to confirm.",
     activeOn: (host: string) => `Active on ${host}`,
     activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
     // The grant-to-reload prompt when no single host can be named (annunciator /
@@ -422,8 +430,6 @@ export const copy = {
 
   rules: {
     listLabel: "Rules",
-    // The transient auto-save acknowledgement pulsed on a row after a commit.
-    saved: "Saved",
     switchLabel: (header: string, on: boolean) =>
       `Rule ${on ? "on" : "off"}: ${header}`,
     menuLabel: (header: string) => `Rule actions: ${header}`,
@@ -518,6 +524,14 @@ export const copy = {
   editor: {
     editRule: "Edit rule",
     newRule: "New rule",
+    heading: (mode: "new" | "edit", profile: string) =>
+      `${mode === "new" ? "New rule" : "Edit rule"} · ${profile}`,
+    close: "Close editor",
+    discardConfirm: {
+      title: "Discard this rule?",
+      keepEditing: "Keep editing",
+      discard: "Discard",
+    },
     labels: {
       direction: "Direction",
       operation: "Operation",
@@ -538,6 +552,9 @@ export const copy = {
     },
     allSites: "All sites",
     domainsHelper: "matches this domain and its subdomains",
+    domainSuggestion: "Suggested from this tab. Edit or remove it.",
+    requestTarget:
+      "Runs on requests to these hosts, which may differ from the page you are viewing.",
     addDomain: "+ add",
     domainInputLabel: "Add domain",
     removeDomain: (domain: string) => `Remove ${domain}`,
@@ -553,6 +570,8 @@ export const copy = {
     insert: "Insert",
     insertUuid: "UUID",
     insertTimestamp: "Timestamp (ISO 8601)",
+    newlineRemoved: "Line breaks removed. A header value is a single line.",
+    caution: "Caution",
   },
 
   // Optional one-word context after a suggested name ("authorization — credentials").
@@ -577,11 +596,14 @@ export const copy = {
   } as Partial<Record<string, string>>,
 
   generatedValue: {
-    note: "Generated when you saved this rule — this value is frozen; it does not change per request.",
-    frozen: (savedAtUtc: string) => `Frozen at save · ${savedAtUtc}`,
+    note: "Generated when you saved this rule. This value is frozen and does not change per request.",
+    frozen: (savedAtUtc: string) => `Frozen at save: ${savedAtUtc}`,
   },
 
   grantPanel: {
+    heading: "Grant access",
+    createdLead: "Rule created. One step left to make it run.",
+    savedLead: "Saved. One step left to make it run.",
     single: (host: string) =>
       `To change headers on ${host}, Chrome requires you to grant HeaderShim access to that site.`,
     multiple: (siteCount: number) =>
@@ -656,7 +678,7 @@ export const copy = {
   advisories: {
     managedHeader:
       "Chrome's network stack manages this header itself; a rule here usually has no effect.",
-    host: "Chrome can't change the authority on HTTP/2 connections, which most sites use — this rule usually has no effect.",
+    host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
   },
 
   verify: {

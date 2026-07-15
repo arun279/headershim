@@ -1,14 +1,9 @@
-.combobox {
-  position: relative;
-}
-
 /* Max 6 visible options; the rest scroll inside the popover. */
 .combo-list {
-  position: absolute;
-  top: calc(100% - var(--sp-1));
-  left: 0;
-  right: 0;
-  z-index: 2;
+  position: fixed;
+  inset: auto;
+  width: min(360px, calc(100% - 16px));
+  margin: 0;
   max-height: 168px;
   overflow-y: auto;
   list-style: none;

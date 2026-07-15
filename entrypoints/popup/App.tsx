@@ -123,14 +123,12 @@ function Ready({
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [verify, setVerify] = useState<VerifyReadout | undefined>(undefined);
-  // The just-saved rule and a changing token, to pulse that row's transient
-  // "Saved" acknowledgement. Cleared whenever an editor opens so a
-  // later revert can't resurrect a stale pulse.
-  const [savedPulse, setSavedPulse] = useState<
-    { ruleId: string; nonce: number } | undefined
-  >(undefined);
-  // Focus returns here when the verify panel closes.
+  // Mode triggers are re-mounted when their sheet closes; refs point at the
+  // fresh controls by the time the focus-return effects run.
   const verifyTrigger = useRef<HTMLSpanElement>(null);
+  const editorReturn = useRef<
+    { kind: "new" } | { kind: "rule"; ruleId: string }
+  >({ kind: "new" });
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
   const [tabResolved, setTabResolved] = useState(false);
   useEffect(() => {
@@ -195,12 +193,14 @@ function Ready({
       ? editing
       : undefined;
   const openNewRule = () => {
-    setSavedPulse(undefined);
+    editorReturn.current = { kind: "new" };
+    setVerify(undefined);
     setComposing(false);
     setEditing({ profileId: doc.focusedProfileId });
   };
   const editRule = (profileId: string, ruleId: string) => {
-    setSavedPulse(undefined);
+    editorReturn.current = { kind: "rule", ruleId };
+    setVerify(undefined);
     setEditing({ profileId, ruleId });
   };
   const openThisTabComposer = () => {
@@ -212,7 +212,7 @@ function Ready({
   // retired once the rule commits (saveEditing), not on open, so an Esc keeps
   // the temporary override intact.
   const saveAsRule = (override: TabOverride) => {
-    setSavedPulse(undefined);
+    editorReturn.current = { kind: "new" };
     setComposing(false);
     setEditing({
       profileId: doc.focusedProfileId,
@@ -220,16 +220,6 @@ function Ready({
       promote: { tabId: override.tabId, num: override.num },
     });
   };
-
-  // A new rule lands in the focused profile even when that profile is off or
-  // empty; its group appears for the editor's stay.
-  const listProfiles =
-    activeEditing !== undefined &&
-    activeEditing.ruleId === undefined &&
-    editingProfile !== undefined &&
-    !enabledProfiles.some((profile) => profile.id === editingProfile.id)
-      ? [...enabledProfiles, editingProfile]
-      : enabledProfiles;
 
   const saveEditing = (
     profileId: string,
@@ -240,10 +230,6 @@ function Ready({
     mutations.saveRule(profileId, ruleId, draft).then((outcome) => {
       if (outcome.ok) {
         setPendingUndo(undefined);
-        setSavedPulse((prev) => ({
-          ruleId: outcome.value.id,
-          nonce: (prev?.nonce ?? 0) + 1,
-        }));
         // The promotion's source row is retired on its first commit — the one
         // that creates the rule (ruleId was undefined); a later grant-scope
         // save of the same rule must not remove it twice.
@@ -257,19 +243,31 @@ function Ready({
   // When the new-rule editor closes and focus fell with it, the + New rule
   // trigger takes it back; a focus the user moved stays put.
   const newRuleTrigger = useRef<HTMLSpanElement>(null);
-  const wasEditingNew = useRef(false);
+  const wasEditing = useRef(false);
   useEffect(() => {
-    const wasNew = wasEditingNew.current;
-    wasEditingNew.current =
-      activeEditing !== undefined && activeEditing.ruleId === undefined;
-    if (!wasNew || activeEditing !== undefined) {
+    const wasOpen = wasEditing.current;
+    wasEditing.current = activeEditing !== undefined;
+    if (!wasOpen || activeEditing !== undefined) {
       return;
     }
-    const active = document.activeElement;
-    if (active === null || active === document.body) {
-      newRuleTrigger.current?.querySelector("button")?.focus();
+    const target = editorReturn.current;
+    if (target.kind === "rule") {
+      document
+        .querySelector<HTMLElement>(`[data-rule-id="${target.ruleId}"]`)
+        ?.focus();
+      return;
     }
+    const fallback = document.querySelector<HTMLButtonElement>(
+      ".first-run-actions .primary, .empty-state .primary",
+    );
+    (newRuleTrigger.current?.querySelector("button") ?? fallback)?.focus();
   });
+
+  useEffect(() => {
+    if (editing !== undefined && activeEditing === undefined) {
+      setEditing(undefined);
+    }
+  }, [editing, activeEditing]);
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
@@ -352,6 +350,7 @@ function Ready({
         }
       : undefined;
   const runVerify = () => {
+    setEditing(undefined);
     void matchedRulesForActiveTab().then((active) => {
       setVerify(
         summarizeVerify({
@@ -363,10 +362,15 @@ function Ready({
       );
     });
   };
-  const closeVerify = () => {
-    setVerify(undefined);
-    verifyTrigger.current?.querySelector("button")?.focus();
-  };
+  const closeVerify = () => setVerify(undefined);
+  const wasVerifying = useRef(false);
+  useEffect(() => {
+    const wasOpen = wasVerifying.current;
+    wasVerifying.current = verify !== undefined;
+    if (wasOpen && verify === undefined) {
+      verifyTrigger.current?.querySelector("button")?.focus();
+    }
+  }, [verify]);
 
   const onKeyDown = popupKeyHandler({
     newRule: openNewRule,
@@ -391,13 +395,7 @@ function Ready({
   // A grant from the editor's panel lands; the loud surfaces clear themselves
   // when the refreshed snapshot empties the gaps. The toast (a polite live
   // region) states the outcome.
-  const announceGrant = (sites: readonly string[]) => {
-    showReloadToast(
-      sites.length === 1
-        ? copy.toast.activeOn(sites[0] as string)
-        : copy.toast.activeOnSites(sites.length),
-    );
-  };
+  const announceGrant = () => showToast(copy.toast.ruleLive);
 
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
@@ -413,159 +411,198 @@ function Ready({
     });
   };
 
+  const grantRuleAccess = (origins: readonly string[]) => {
+    const granted = requestPermissions([...origins]);
+    void granted.then((allowed) => {
+      if (allowed) {
+        showReloadToast(copy.toast.accessGranted);
+      }
+    });
+  };
+
+  const discardEditingRule = async (profileId: string, ruleId: string) => {
+    const outcome = await mutations.deleteRule(profileId, ruleId);
+    if (!outcome.ok) {
+      const message = blockedCommitCopy(outcome.error);
+      if (message !== undefined) {
+        showToast(message);
+      }
+    }
+  };
+
   return (
     // tabIndex -1 (not a tab stop) lets removing the last This-tab override,
     // which unmounts its whole section, land focus on the popup landmark rather
     // than <body> (WCAG 2.4.3).
-    <main class="popup" tabIndex={-1} onKeyDown={onKeyDown}>
-      <ProfileSwitcher
-        profiles={doc.profiles}
-        focusedProfileId={doc.focusedProfileId}
-        onActivate={(id) => run(mutations.activateProfile(id))}
-        onToggle={(id) => {
-          const target = doc.profiles.find((profile) => profile.id === id);
-          if (target !== undefined) {
-            run(mutations.setProfileEnabled(id, !target.enabled));
+    <main
+      class="popup"
+      tabIndex={-1}
+      onKeyDown={
+        activeEditing === undefined && verify === undefined
+          ? onKeyDown
+          : undefined
+      }
+    >
+      {activeEditing !== undefined && editingProfile !== undefined ? (
+        <RuleEditor
+          key={activeEditing.ruleId ?? "new-rule"}
+          profileName={editingProfile.name}
+          rule={editingRule}
+          prefill={activeEditing.prefill}
+          prefillDomain={
+            activeEditing.ruleId === undefined &&
+            activeEditing.prefill === undefined
+              ? tabDomain
+              : undefined
           }
-        }}
-        autoFocus={!firstRun}
-      />
-      <Annunciator
-        status={status}
-        temporaryCount={overrides.length}
-        onResume={() => run(mutations.setPaused(false))}
-        onGrantAccess={grantAccess}
-      />
-      <div
-        class={status.kind === "paused" ? "popup-body paused" : "popup-body"}
-        // The verify panel slides up opaque over the footer and rule region;
-        // marking them inert keeps Shift+Tab from landing on controls hidden
-        // behind it (WCAG 2.4.11) without trapping focus.
-        inert={verify !== undefined}
-      >
-        <ThisTab
-          tabId={tabId}
-          host={tabDomain}
-          overrides={overrides}
-          composing={composing}
-          onSaveAsRule={saveAsRule}
-          onCreateRule={openNewRule}
-          onCloseComposer={() => setComposing(false)}
+          grants={grants}
+          tabDomain={tabDomain}
+          onSave={(ruleId, draft) =>
+            saveEditing(
+              activeEditing.profileId,
+              ruleId,
+              draft,
+              activeEditing.promote,
+            )
+          }
+          onRequestGrant={requestPermissions}
+          onCommitted={(kind) =>
+            showToast(
+              kind === "create"
+                ? copy.toast.ruleCreated
+                : copy.toast.changesSaved,
+            )
+          }
+          onGranted={announceGrant}
+          onDiscardRule={(ruleId) =>
+            discardEditingRule(activeEditing.profileId, ruleId)
+          }
+          onClose={() => setEditing(undefined)}
         />
-        {activeEditing === undefined && firstRun ? (
-          // The This-tab section stands in for the hero once it has a row or an
-          // open composer; the trust hero only shows on a truly empty open.
-          overrides.length > 0 || composing ? null : (
-            <FirstRun
+      ) : verify !== undefined ? (
+        <VerifyPanel
+          readout={verify}
+          blocked={verifyBlocked}
+          onGrant={grantAccess}
+          onReload={() => {
+            void browser.tabs.reload();
+            closeVerify();
+          }}
+          onClose={closeVerify}
+        />
+      ) : (
+        <>
+          <ProfileSwitcher
+            profiles={doc.profiles}
+            focusedProfileId={doc.focusedProfileId}
+            onActivate={(id) => run(mutations.activateProfile(id))}
+            onToggle={(id) => {
+              const target = doc.profiles.find((profile) => profile.id === id);
+              if (target !== undefined) {
+                run(mutations.setProfileEnabled(id, !target.enabled));
+              }
+            }}
+            autoFocus={!firstRun}
+          />
+          <Annunciator
+            status={status}
+            temporaryCount={overrides.length}
+            onResume={() => run(mutations.setPaused(false))}
+            onGrantAccess={grantAccess}
+          />
+          <div
+            class={
+              status.kind === "paused" ? "popup-body paused" : "popup-body"
+            }
+          >
+            <ThisTab
+              tabId={tabId}
+              host={tabDomain}
+              overrides={overrides}
+              composing={composing}
+              onSaveAsRule={saveAsRule}
               onCreateRule={openNewRule}
-              onTryThisTab={openThisTabComposer}
+              onCloseComposer={() => setComposing(false)}
             />
-          )
-        ) : activeEditing === undefined &&
-          someProfileEnabled &&
-          enabledProfilesEmpty &&
-          focused !== undefined ? (
-          <EmptyState
-            message={copy.emptyState.profile(focused.name)}
-            actions={
-              <Button kind="primary" onClick={openNewRule}>
-                {copy.actions.newRule}
+            {firstRun ? (
+              overrides.length > 0 || composing ? null : (
+                <FirstRun
+                  onCreateRule={openNewRule}
+                  onTryThisTab={openThisTabComposer}
+                />
+              )
+            ) : someProfileEnabled &&
+              enabledProfilesEmpty &&
+              focused !== undefined ? (
+              <EmptyState
+                message={copy.emptyState.profile(focused.name)}
+                actions={
+                  <Button kind="primary" onClick={openNewRule}>
+                    {copy.actions.newRule}
+                  </Button>
+                }
+              />
+            ) : (
+              <RuleList
+                profiles={enabledProfiles}
+                allProfiles={doc.profiles}
+                missingByRule={missingByRule}
+                invalidRuleIds={invalidRuleIds}
+                undoAvailable={pendingUndo !== undefined}
+                onToggle={(profileId, ruleId, enabled) =>
+                  run(mutations.setRuleEnabled(profileId, ruleId, enabled))
+                }
+                onGrant={(_profileId, _ruleId, origins) =>
+                  grantRuleAccess(origins)
+                }
+                onEdit={editRule}
+                onDelete={deleteRule}
+                onDuplicate={(profileId, ruleId) =>
+                  run(mutations.duplicateRule(profileId, ruleId))
+                }
+                onMove={(profileId, ruleId, toProfileId) =>
+                  run(
+                    mutations.moveRuleToProfile(profileId, ruleId, toProfileId),
+                  )
+                }
+                onRegenerate={(profileId, ruleId) =>
+                  run(mutations.regenerateValue(profileId, ruleId))
+                }
+                onUndoDelete={undoDelete}
+              />
+            )}
+          </div>
+          <footer class="foot">
+            {!firstRun && (
+              <span class="foot-new-rule" ref={newRuleTrigger}>
+                <Button kind="primary" onClick={openNewRule}>
+                  {copy.actions.newRule}
+                </Button>
+              </span>
+            )}
+            <span class="foot-verify" ref={verifyTrigger}>
+              <Button kind="quiet" onClick={runVerify}>
+                {copy.actions.verify}
               </Button>
-            }
-          />
-        ) : (
-          <RuleList
-            profiles={listProfiles}
-            allProfiles={doc.profiles}
-            missingByRule={missingByRule}
-            invalidRuleIds={invalidRuleIds}
-            undoAvailable={pendingUndo !== undefined}
-            savedRuleId={savedPulse?.ruleId}
-            savedNonce={savedPulse?.nonce}
-            editing={
-              activeEditing === undefined
-                ? undefined
-                : {
-                    profileId: activeEditing.profileId,
-                    ruleId: activeEditing.ruleId,
-                    node: (
-                      <RuleEditor
-                        key={activeEditing.ruleId ?? "new-rule"}
-                        rule={editingRule}
-                        prefill={activeEditing.prefill}
-                        prefillDomain={
-                          activeEditing.ruleId === undefined &&
-                          activeEditing.prefill === undefined
-                            ? tabDomain
-                            : undefined
-                        }
-                        grants={grants}
-                        tabDomain={tabDomain}
-                        onSave={(ruleId, draft) =>
-                          saveEditing(
-                            activeEditing.profileId,
-                            ruleId,
-                            draft,
-                            activeEditing.promote,
-                          )
-                        }
-                        onRequestGrant={requestPermissions}
-                        onGranted={announceGrant}
-                        onClose={() => setEditing(undefined)}
-                      />
-                    ),
-                  }
-            }
-            onToggle={(profileId, ruleId, enabled) =>
-              run(mutations.setRuleEnabled(profileId, ruleId, enabled))
-            }
-            onEdit={editRule}
-            onDelete={deleteRule}
-            onDuplicate={(profileId, ruleId) =>
-              run(mutations.duplicateRule(profileId, ruleId))
-            }
-            onMove={(profileId, ruleId, toProfileId) =>
-              run(mutations.moveRuleToProfile(profileId, ruleId, toProfileId))
-            }
-            onRegenerate={(profileId, ruleId) =>
-              run(mutations.regenerateValue(profileId, ruleId))
-            }
-            onUndoDelete={undoDelete}
-          />
-        )}
-      </div>
-      <footer class="foot" inert={verify !== undefined}>
-        {/* While empty, the first-run hero owns the single primary "Create a
-            rule"; the footer's + New rule would be a redundant second one,
-            so it collapses until the first rule exists. */}
-        {!firstRun && (
-          <span class="foot-new-rule" ref={newRuleTrigger}>
-            <Button kind="primary" onClick={openNewRule}>
-              {copy.actions.newRule}
+            </span>
+            <span class="pause">
+              {copy.actions.pause}
+              <Toggle
+                checked={status.kind === "paused"}
+                label={copy.actions.globalPause}
+                onChange={(paused) => run(mutations.setPaused(paused))}
+              />
+            </span>
+            <Button
+              kind="ghost"
+              label={copy.actions.options}
+              onClick={() => void browser.runtime.openOptionsPage()}
+            >
+              <GearGlyph />
             </Button>
-          </span>
-        )}
-        <span class="foot-verify" ref={verifyTrigger}>
-          <Button kind="quiet" onClick={runVerify}>
-            {copy.actions.verify}
-          </Button>
-        </span>
-        <span class="pause">
-          {copy.actions.pause}
-          <Toggle
-            checked={status.kind === "paused"}
-            label={copy.actions.globalPause}
-            onChange={(paused) => run(mutations.setPaused(paused))}
-          />
-        </span>
-        <Button
-          kind="ghost"
-          label={copy.actions.options}
-          onClick={() => void browser.runtime.openOptionsPage()}
-        >
-          <GearGlyph />
-        </Button>
-      </footer>
+          </footer>
+        </>
+      )}
       {toast !== undefined && (
         <Toast
           onDismiss={() => setToast(undefined)}
@@ -588,18 +625,6 @@ function Ready({
         >
           {toast.message}
         </Toast>
-      )}
-      {verify !== undefined && (
-        <VerifyPanel
-          readout={verify}
-          blocked={verifyBlocked}
-          onGrant={grantAccess}
-          onReload={() => {
-            void browser.tabs.reload();
-            closeVerify();
-          }}
-          onClose={closeVerify}
-        />
       )}
     </main>
   );

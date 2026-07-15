@@ -1,0 +1,31 @@
+.sheet {
+  min-width: 0;
+  background: var(--panel-0);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--panel-1);
+  border-bottom: var(--hairline) solid var(--bezel);
+}
+
+.sheet-region {
+  max-height: 600px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.sheet-body {
+  min-width: 0;
+}
+
+.sheet-pinned {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--panel-1);
+  border-top: var(--hairline) solid var(--bezel);
+}

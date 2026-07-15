@@ -133,6 +133,7 @@ describe("ScopeEditor domain chips", () => {
   it("carries the subdomain helper line", () => {
     const ctx = mount();
     expect(ctx.micros()).toContain(copy.editor.domainsHelper);
+    expect(ctx.micros()).toContain(copy.editor.requestTarget);
   });
 
   it("moves focus to a surviving chip control when a middle chip is removed", () => {

@@ -6,18 +6,16 @@ import {
   useState,
 } from "preact/hooks";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
-import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
-import type { HeaderOp } from "../../core/model";
+import { normalizeHeaderName } from "../../core/headers";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
+import { closePopover, openPositionedPopover } from "./popover";
 import { sentence } from "./sentence";
 import "./HeaderNameInput.css";
 
 interface HeaderNameInputProps {
   /** Raw text as typed; the editor echoes it and the store lowercases it. */
   value: string;
-  /** Append makes a hop-by-hop advisory prominent the moment it's selected. */
-  operation: HeaderOp;
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
@@ -29,13 +27,14 @@ interface HeaderNameInputProps {
  * filters; ↓/↑ move the active option; Enter accepts it (a closed list lets
  * Enter bubble to commit the rule); Esc closes the list first and only then
  * reaches the editor. Match counts are announced politely. Under the field:
- * the case-honesty microline and the discouraged-header advisories, which
- * appear the moment the typed name matches and persist.
+ * the case-honesty microline. Header advisories render in the editor's pinned
+ * caution band so they remain visible at the save decision.
  */
 export function HeaderNameInput(props: HeaderNameInputProps) {
   const id = useId();
   const announce = useAnnounce();
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   // No option is active until the user arrows into the list: Enter must
   // commit a custom name as typed, never hijack it into a suggestion.
@@ -47,7 +46,6 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     activeIndex === undefined
       ? undefined
       : Math.min(activeIndex, matches.length - 1);
-  const classification = classifyHeaderName(props.value);
 
   // Mount-time gesture: focus moves into the editor when it opens, never again.
   // Synchronous with the commit that mounts the editor, not a post-paint effect:
@@ -68,6 +66,16 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     }
   }, [open, matches.length, announce]);
 
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const input = inputRef.current;
+    if (!open || list === null || input === null) {
+      return;
+    }
+    openPositionedPopover(list, input);
+    return () => closePopover(list);
+  }, [open, matches.length]);
+
   const select = (name: string) => {
     props.onInput(name);
     setOpen(false);
@@ -80,7 +88,6 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     props.value.trim() !== "" && props.value.trim() !== normalized;
   const describedBy = [
     ...(showCase ? [caseId] : []),
-    ...classification.advisories.map((advisory) => `${id}-${advisory.kind}`),
     ...(props.error === undefined ? [] : [errorId]),
   ].join(" ");
 
@@ -93,7 +100,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
         <input
           id={`${id}-input`}
           ref={inputRef}
-          class="field mono"
+          class="field mono editor-commit-field"
           type="text"
           role="combobox"
           aria-expanded={open}
@@ -157,7 +164,13 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
           onBlur={() => setOpen(false)}
         />
         {open && (
-          <div class="combo-list" role="listbox" id={listId}>
+          <div
+            class="combo-list"
+            role="listbox"
+            id={listId}
+            ref={listRef}
+            popover="manual"
+          >
             {matches.map((name, index) => (
               // biome-ignore lint/a11y/useKeyWithClickEvents: aria-activedescendant pattern — the combobox input owns the keyboard (↓/↑/Enter); click is the pointer path.
               <div
@@ -174,7 +187,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
               >
                 <span class="mono">{name}</span>
                 {copy.headerHints[name] !== undefined && (
-                  <span class="combo-hint">— {copy.headerHints[name]}</span>
+                  <span class="combo-hint">: {copy.headerHints[name]}</span>
                 )}
               </div>
             ))}
@@ -185,22 +198,6 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             {sentence(copy.editor.savedAs(normalized))}
           </p>
         )}
-        {classification.advisories.map((advisory) => (
-          <p
-            key={advisory.kind}
-            id={`${id}-${advisory.kind}`}
-            class={
-              props.operation === "append" &&
-              advisory.kind === "network-managed"
-                ? "editor-advisory prominent"
-                : "editor-advisory"
-            }
-          >
-            {advisory.kind === "network-managed"
-              ? copy.advisories.managedHeader
-              : copy.advisories.host}
-          </p>
-        ))}
         {props.error !== undefined && (
           <p class="editor-error" role="alert" id={errorId}>
             {props.error}

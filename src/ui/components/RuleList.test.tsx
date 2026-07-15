@@ -35,6 +35,7 @@ const twoGroups = () => [
 /** For harness tests that never assert on the action callbacks. */
 const inertHandlers = () => ({
   onToggle: vi.fn(),
+  onGrant: vi.fn(),
   onDelete: vi.fn(),
   onDuplicate: vi.fn(),
   onMove: vi.fn(),
@@ -45,6 +46,7 @@ const inertHandlers = () => ({
 function mount(overrides: Partial<Parameters<typeof RuleList>[0]> = {}) {
   const handlers = {
     onToggle: vi.fn(),
+    onGrant: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn(),
     onDuplicate: vi.fn(),
@@ -130,7 +132,19 @@ describe("RuleList grouping", () => {
       missingByRule: new Map([["a", ["*://*.api.acme.dev/*"]]]),
     });
     expect(rows()[0]?.textContent).toContain("Needs access · api.acme.dev");
-    expect(rows()[0]?.classList.contains("needs-access")).toBe(true);
+    expect(rows()[0]?.classList.contains("blocked")).toBe(true);
+  });
+
+  it("hands a blocked row's Grant action the exact missing origins", () => {
+    const { rows, onGrant } = mount({
+      missingByRule: new Map([["a", ["*://*.api.acme.dev/*"]]]),
+    });
+    fire(() =>
+      rows()[0]?.querySelector<HTMLButtonElement>(".rule-grant")?.click(),
+    );
+    expect(onGrant).toHaveBeenCalledExactlyOnceWith("staging", "a", [
+      "*://*.api.acme.dev/*",
+    ]);
   });
 });
 
@@ -228,94 +242,5 @@ describe("RuleList keyboard", () => {
     expect(rows()).toHaveLength(2);
     expect(document.activeElement).toBe(rows()[1]);
     expect(rows()[1]?.tabIndex).toBe(0);
-  });
-});
-
-describe("RuleList inline editor slot", () => {
-  it("stands the editor in for the row being edited and drops it from the keyboard collection", () => {
-    const { root, rows } = mount({
-      editing: {
-        profileId: "staging",
-        ruleId: "a",
-        node: <div class="fake-editor">editor</div>,
-      },
-    });
-    expect(root.querySelector(".editor-slot .fake-editor")).not.toBeNull();
-    expect(rows().map((row) => row.getAttribute("aria-setsize"))).toEqual([
-      "2",
-      "2",
-    ]);
-  });
-
-  it("appends a new-rule editor to its profile group, creating the group if empty", () => {
-    const { root } = mount({
-      profiles: [...twoGroups(), profile("empty", "Fresh", [])],
-      editing: {
-        profileId: "empty",
-        node: <div class="fake-editor">editor</div>,
-      },
-    });
-    const labels = [...root.querySelectorAll(".rule-group-label")].map(
-      (label) => label.textContent,
-    );
-    expect(labels).toContain("Fresh");
-    expect(root.querySelector(".editor-slot .fake-editor")).not.toBeNull();
-  });
-
-  it("leaves arrow keys inside the editor alone", () => {
-    const { root, rows } = mount({
-      editing: {
-        profileId: "staging",
-        ruleId: "a",
-        node: <input class="fake-editor-input" />,
-      },
-    });
-    const input = root.querySelector(".fake-editor-input") as HTMLElement;
-    fire(() => input.focus());
-    press(input, "ArrowDown");
-    expect(document.activeElement).toBe(input);
-    expect(rows().every((row) => row !== document.activeElement)).toBe(true);
-  });
-
-  it("returns focus to the row when its editor closes and took focus with it", () => {
-    function Harness() {
-      const [editing, setEditing] = useState(true);
-      return (
-        <RuleList
-          profiles={twoGroups()}
-          allProfiles={[{ id: "staging", name: "Staging auth" }]}
-          missingByRule={new Map()}
-          invalidRuleIds={new Set()}
-          undoAvailable={false}
-          editing={
-            editing
-              ? {
-                  profileId: "staging",
-                  ruleId: "a",
-                  node: (
-                    <button
-                      type="button"
-                      class="fake-close"
-                      onClick={() => setEditing(false)}
-                    >
-                      close
-                    </button>
-                  ),
-                }
-              : undefined
-          }
-          {...inertHandlers()}
-        />
-      );
-    }
-    const root = render(<Harness />);
-    const close = root.querySelector(".fake-close") as HTMLButtonElement;
-    fire(() => {
-      close.focus();
-      close.click();
-    });
-    const focused = document.activeElement as HTMLElement;
-    expect(focused.classList.contains("rule-row")).toBe(true);
-    expect(focused.textContent).toContain("x-a");
   });
 });

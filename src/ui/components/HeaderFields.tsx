@@ -28,36 +28,34 @@ export function HeaderFields<D extends HeaderDraft>({
 }) {
   return (
     <>
-      <div class="editor-field">
-        <span class="editor-label" id={`${idBase}-dir`}>
-          {copy.editor.labels.direction}
-        </span>
-        <div
-          class="editor-control editor-radios"
-          role="radiogroup"
-          aria-labelledby={`${idBase}-dir`}
-        >
-          {(["request", "response"] as const).map((value) => (
-            <label class="editor-radio" key={value}>
-              <input
-                type="radio"
-                name={`${idBase}-dir`}
-                checked={draft.direction === value}
-                onChange={() =>
-                  update((current) => ({ ...current, direction: value }))
-                }
-              />
-              {copy.editor.direction[value]}
-            </label>
-          ))}
-        </div>
-      </div>
+      <div class="editor-primary-grid">
+        <fieldset class="editor-primary-field">
+          <legend class="editor-label" id={`${idBase}-dir`}>
+            {copy.editor.labels.direction}
+          </legend>
+          <div
+            class="editor-radios"
+            role="radiogroup"
+            aria-labelledby={`${idBase}-dir`}
+          >
+            {(["request", "response"] as const).map((value) => (
+              <label class="editor-radio" key={value}>
+                <input
+                  type="radio"
+                  name={`${idBase}-dir`}
+                  checked={draft.direction === value}
+                  onChange={() =>
+                    update((current) => ({ ...current, direction: value }))
+                  }
+                />
+                {copy.editor.direction[value]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
-      <div class="editor-field">
-        <label class="editor-label" for={`${idBase}-op`}>
-          {copy.editor.labels.operation}
-        </label>
-        <div class="editor-control">
+        <label class="editor-primary-field" for={`${idBase}-op`}>
+          <span class="editor-label">{copy.editor.labels.operation}</span>
           <select
             id={`${idBase}-op`}
             class="field editor-select"
@@ -80,12 +78,11 @@ export function HeaderFields<D extends HeaderDraft>({
               {errors.operation}
             </p>
           )}
-        </div>
+        </label>
       </div>
 
       <HeaderNameInput
         value={draft.header}
-        operation={draft.operation}
         error={errors.name}
         autoFocus
         onInput={(value) =>

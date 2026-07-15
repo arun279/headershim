@@ -2,10 +2,6 @@
   list-style: none;
 }
 
-.editor-slot {
-  display: block;
-}
-
 .rule-group-label {
   display: flex;
   align-items: center;

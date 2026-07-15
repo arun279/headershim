@@ -2,7 +2,13 @@ import { defineConfig } from "vitest/config";
 import { WxtVitest } from "wxt/testing";
 
 export default defineConfig({
-  plugins: [WxtVitest()],
+  // Tests do not launch WXT's reload server. A fixed strict port avoids a
+  // localhost availability probe in restricted and offline build runners.
+  plugins: [
+    WxtVitest({
+      dev: { server: { host: "localhost", port: 3000, strictPort: true } },
+    }),
+  ],
   // WxtVitest applies wxt's own plugins but not the config's vite() overrides,
   // so the build-time commit constant needs its test value declared here.
   define: {
