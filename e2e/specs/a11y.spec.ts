@@ -196,15 +196,14 @@ test("every popup state passes axe in both themes", async ({
     await analyze(editor, `popup rule editor (${theme})`, theme);
     await editor.close();
 
-    // The grant panel: committing an ungranted rule with Enter opens it without
+    // The grant step: explicitly saving an ungranted rule opens it without
     // firing the (unscriptable) permission prompt.
     const grant = await open(ruleDoc(), theme);
     await openFocusSettled(grant);
     await grant.locator(".rule-row").first().focus();
     await grant.keyboard.press("Enter");
     await expect(grant.locator(".rule-editor")).toBeVisible();
-    await grant.locator(".rule-editor .value-row input").focus();
-    await grant.keyboard.press("Enter");
+    await grant.getByRole("button", { name: copy.actions.saveChanges }).click();
     await expect(grant.locator(".grant-panel")).toBeVisible();
     await analyze(grant, `popup grant panel (${theme})`, theme);
     await grant.close();
@@ -218,7 +217,9 @@ test("every popup state passes axe in both themes", async ({
 
     const verify = await open(ruleDoc(), theme);
     await verify.getByRole("button", { name: copy.actions.verify }).click();
-    await expect(verify.locator(".verify")).toBeVisible();
+    await expect(
+      verify.getByRole("dialog", { name: copy.verify.regionLabel }),
+    ).toBeVisible();
     await analyze(verify, `popup verify panel (${theme})`, theme);
     await verify.close();
   }
@@ -229,7 +230,13 @@ test("every options page passes axe in both themes", async ({
   extensionId,
   serviceWorker,
 }) => {
-  const sections = ["profiles", "import-export", "site-access", "about"];
+  const sections = [
+    "profiles",
+    "site-access",
+    "import-export",
+    "settings",
+    "about",
+  ];
 
   for (const theme of THEMES) {
     const page = await context.newPage();

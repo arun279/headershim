@@ -187,6 +187,19 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
   await expect(annunciator).toHaveAttribute("data-state", "needs-access");
   // The loud state carries its one-click recovery, not just a color change.
   await expect(annunciator.getByRole("button")).toBeVisible();
+
+  // The row tells the same truth. The switch preserves the user's requested
+  // on-state, while the held styling, status words, and recovery action make
+  // clear that the rule cannot run yet.
+  const row = popup.locator(".rule-row").first();
+  await expect(row).toHaveClass(/\bblocked\b/);
+  await expect(row).not.toHaveClass(/\brunning\b/);
+  await expect(row.locator(".rule-status")).toContainText("Needs access");
+  await expect(row.locator(".rule-status")).toContainText("needs.example.test");
+  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(
+    row.getByRole("button", { name: copy.actions.grant, exact: true }),
+  ).toBeVisible();
 });
 
 // Site-access UI half: the Site access page is a projection of the
@@ -245,6 +258,40 @@ test("the site-access page mirrors the browser's granted and needed origins", as
   ).toHaveCount(0);
   await expect(page.locator(".sa-all-sites")).toBeVisible();
   await expect(page.locator(".sa-all-on")).toHaveCount(0);
+
+  // The broad grant is gated by its disclosure. While collapsed, only the
+  // consequence and review trigger exist; the permission action is absent
+  // from both the DOM and keyboard order.
+  const allSites = text.allSites;
+  const disclosure = page.getByRole("button", {
+    name: allSites.disclosure,
+  });
+  const allowAll = page.getByRole("button", {
+    name: allSites.button,
+    exact: true,
+  });
+  await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  await expect(allowAll).toHaveCount(0);
+
+  await disclosure.focus();
+  await page.keyboard.press("Enter");
+  await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".sa-all-warning")).toHaveText(allSites.warning);
+  await expect(allowAll).toBeVisible();
+  expect(
+    await page.locator(".sa-all-details").evaluate((details) => {
+      const warning = details.querySelector(".sa-all-warning");
+      const button = details.querySelector("button");
+      return (
+        warning !== null &&
+        button !== null &&
+        Boolean(
+          warning.compareDocumentPosition(button) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        )
+      );
+    }),
+  ).toBe(true);
 
   // The page is a faithful mirror: its granted rows equal the browser's live
   // origins (both empty), so nothing is claimed that permissions.getAll denies.

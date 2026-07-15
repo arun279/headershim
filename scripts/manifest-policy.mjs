@@ -88,6 +88,13 @@ if (manifest.content_security_policy !== undefined) {
   }
 }
 
+// The options surface is a full-width management page; it must open in a real
+// tab. Chrome's default embedded dialog (open_in_tab: false) crushes the layout
+// into an unusable narrow column.
+if (manifest.options_ui?.open_in_tab !== true) {
+  violations.push("options_ui.open_in_tab must be true");
+}
+
 const allowedCommands = ["_execute_action", "toggle-pause", "next-profile"];
 const unexpectedCommands = Object.keys(manifest.commands ?? {}).filter(
   (command) => !allowedCommands.includes(command),
