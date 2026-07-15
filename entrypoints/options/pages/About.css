@@ -1,38 +1,5 @@
 /* .about-card takes the shared options card recipe (App.css). */
 
-.about-radios {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  border: none;
-}
-
-.about-radios legend {
-  float: left;
-  margin-right: var(--sp-5);
-  font-weight: 500;
-}
-
-/* Whole label is the target, kept at the 24px minimum (WCAG 2.5.8). */
-.about-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-height: 24px;
-}
-
-.about-radio input {
-  accent-color: var(--trace);
-  width: 16px;
-  height: 16px;
-}
-
-.about-link-button {
-  color: var(--trace);
-  font-weight: 500;
-  padding: var(--sp-2) 0;
-}
-
 .about-group {
   margin-top: var(--sp-4);
 }

@@ -34,8 +34,6 @@ interface RuleRowProps extends RuleRowActions {
   invalid?: boolean | undefined;
   /** Shadowed by an earlier enabled rule on the same header (passive note). */
   overridden?: boolean | undefined;
-  /** Session-scoped This-tab row: dotted edge + Temporary line. */
-  temporary?: { host: string } | undefined;
   /** False when the containing profile is off. */
   active?: boolean | undefined;
   /** Options-only bulk-selection control. Omit on popup rows. */
@@ -66,7 +64,7 @@ interface RuleRowProps extends RuleRowActions {
  * action so the toggle never implies healthy operation on its own.
  */
 export function RuleRow(props: RuleRowProps) {
-  const { rule, invalid, missingHosts, temporary, selection } = props;
+  const { rule, invalid, missingHosts, selection } = props;
   const noteRef = useRef<HTMLSpanElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -79,13 +77,11 @@ export function RuleRow(props: RuleRowProps) {
     ? "invalid"
     : needsAccess
       ? "blocked"
-      : temporary !== undefined
-        ? "temporary"
-        : rule.enabled && active
-          ? "running"
-          : rule.enabled
-            ? "inactive"
-            : "off";
+      : rule.enabled && active
+        ? "running"
+        : rule.enabled
+          ? "inactive"
+          : "off";
 
   const value = ruleValueSummary(rule);
   const description = [
@@ -184,7 +180,7 @@ function lineTwo(
   props: RuleRowProps,
   noteRef: RefObject<HTMLSpanElement>,
 ): ComponentChildren {
-  const { rule, invalid, missingHosts, overridden, temporary } = props;
+  const { rule, invalid, missingHosts, overridden } = props;
   if (invalid) {
     return (
       <span class="rule-status" tabIndex={-1} ref={noteRef}>
@@ -224,13 +220,6 @@ function lineTwo(
   const types = typesSummary(rule);
   return (
     <>
-      {temporary !== undefined && (
-        <>
-          <span class="silk">{copy.rules.temporaryTag}</span>{" "}
-          {sentence(copy.rules.temporary(temporary.host))}
-          {" · "}
-        </>
-      )}
       {sentence(scope)}
       {types !== undefined && <> · {types}</>}
       {rule.comment !== undefined && <> · {rule.comment}</>}

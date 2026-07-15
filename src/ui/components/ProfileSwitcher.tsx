@@ -260,6 +260,30 @@ function handlePopoverKeyDown(
   }
 }
 
+function useProfileCommit(onClose: PopoverProps["onClose"]) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const runCommit = async (
+    operation: () => Promise<ProfileCommitOutcome>,
+    onError?: () => void,
+  ) => {
+    if (saving) return;
+    setSaving(true);
+    setError(undefined);
+    const outcome = await operation();
+    setSaving(false);
+    if (outcome.ok) {
+      onClose();
+    } else {
+      setError(outcome.error);
+      onError?.();
+    }
+  };
+
+  return { error, runCommit, saving };
+}
+
 function CreateProfilePopover({
   trigger,
   initialName,
@@ -274,24 +298,16 @@ function CreateProfilePopover({
   const input = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(initialName);
   const [duplicate, setDuplicate] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | undefined>();
+  const { error, runCommit, saving } = useProfileCommit(onClose);
 
   useProfilePopover(popover, trigger, "start", input, onClose);
 
   const submit = async (event: JSX.TargetedSubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    const outcome = await onCreate(name, duplicate);
-    setSaving(false);
-    if (outcome.ok) {
-      onClose();
-    } else {
-      setError(outcome.error);
-      input.current?.focus();
-    }
+    await runCommit(
+      () => onCreate(name, duplicate),
+      () => input.current?.focus(),
+    );
   };
 
   return (
@@ -373,8 +389,7 @@ function ProfileMenu({
   const input = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(profile.name);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | undefined>();
+  const { error, runCommit, saving } = useProfileCommit(onClose);
 
   useProfilePopover(popover, trigger, "end", undefined, onClose);
 
@@ -389,30 +404,10 @@ function ProfileMenu({
     event: JSX.TargetedSubmitEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    const outcome = await onRename(profile.id, name);
-    setSaving(false);
-    if (outcome.ok) {
-      onClose();
-    } else {
-      setError(outcome.error);
-      input.current?.focus();
-    }
-  };
-
-  const enable = async () => {
-    if (saving) return;
-    setSaving(true);
-    setError(undefined);
-    const outcome = await onEnable(profile.id);
-    setSaving(false);
-    if (outcome.ok) {
-      onClose();
-    } else {
-      setError(outcome.error);
-    }
+    await runCommit(
+      () => onRename(profile.id, name),
+      () => input.current?.focus(),
+    );
   };
 
   return (
@@ -472,7 +467,7 @@ function ProfileMenu({
               type="button"
               class="menu-item"
               disabled={saving}
-              onClick={() => void enable()}
+              onClick={() => void runCommit(() => onEnable(profile.id))}
             >
               {copy.profiles.enableWithoutSwitching}
             </button>

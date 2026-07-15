@@ -125,8 +125,6 @@ export const copy = {
       delete: "Delete",
       toggleLabel: (name: string, on: boolean) =>
         `Profile ${on ? "on" : "off"}: ${name}`,
-      // The disclosure that opens a profile for badge/rule editing.
-      expand: (name: string) => `Edit ${name}`,
       reorderHandle: (name: string) =>
         `Reorder ${name}; press the arrow keys to move it`,
       reordered: (name: string, position: number) =>
@@ -566,8 +564,6 @@ export const copy = {
   },
 
   editor: {
-    editRule: "Edit rule",
-    newRule: "New rule",
     heading: (mode: "new" | "edit", profile: string) =>
       `${mode === "new" ? "New rule" : "Edit rule"} · ${profile}`,
     close: "Close editor",

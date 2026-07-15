@@ -84,7 +84,6 @@
   border-radius: var(--radius-inner);
 }
 
-.grant-chip .mono,
-.grant-chip-input {
+.grant-chip .mono {
   font-size: 11px;
 }

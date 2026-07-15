@@ -103,16 +103,6 @@ describe("RuleRow states", () => {
     expect(onGrant).toHaveBeenCalledOnce();
   });
 
-  it("temporary: dotted-edge class, sentence-case Temporary tag, applies-to line", () => {
-    const { row, line2 } = mount({ temporary: { host: "app.acme.dev" } });
-    expect(row.classList.contains("temporary")).toBe(true);
-    // Uppercasing is CSS-only; the DOM keeps sentence case for AT and copy-paste.
-    expect(line2().querySelector(".silk")?.textContent).toBe("Temporary");
-    expect(line2().textContent).toContain(
-      "applies to app.acme.dev requests in this tab",
-    );
-  });
-
   it("invalid: soft-disabled switch whose activation focuses the note", () => {
     const { row, toggle, line2, onToggle } = mount({
       rule: rule({

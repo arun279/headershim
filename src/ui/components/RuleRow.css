@@ -1,7 +1,7 @@
 /*
  * Grid [switch][dir 34px][content][overflow], gap 10px, min 48px. The 3px
  * left-edge slot is the state rail: trace when running, caution when held or
- * invalid, neutral when off, and dotted for a temporary override.
+ * invalid, and neutral when off.
  */
 .rule-row {
   position: relative;
@@ -37,11 +37,6 @@
 .rule-row.invalid {
   border-left-color: var(--caution-lamp);
   background: var(--caution-bg);
-}
-
-.rule-row.temporary {
-  border-left: 2px dotted var(--ink-mute);
-  padding-left: 10px;
 }
 
 /* Off: mute carries the state with the switch and neutral rail. */
