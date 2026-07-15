@@ -12,8 +12,8 @@ import { expect, seedState, test } from "../fixtures";
 // The popup half: every in-popup binding driven through real key
 // events against the built popup. The global commands (Alt+Shift+…) are the
 // browser's own shortcut manager dispatching chrome.commands and cannot be
-// synthesized by Playwright or CDP; they get a manual test at
-// the end of this file.
+// synthesized by Playwright or CDP. Their application-side command handlers
+// run in src/test/background.test.ts.
 
 function baseDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
   let doc = createV1Seed();
@@ -379,10 +379,3 @@ test("options rules can be created and edited from the keyboard", async ({
   await expect(editDialog).toBeHidden();
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("edited");
 });
-
-// Global commands are dispatched by the browser's shortcut manager
-// into chrome.commands; neither Playwright nor CDP can synthesize that input,
-// so Alt+Shift+H/P/K stay on the per-release manual keyboard pass. The
-// popup-side behaviour each one triggers (open popup, pause, switch profile) is
-// covered above through its in-popup equivalent.
-test.skip("global Alt+Shift shortcuts need a manual per-release check", () => {});

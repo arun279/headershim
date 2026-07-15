@@ -196,6 +196,40 @@ describe("options site access", () => {
     ).toBe(false);
   });
 
+  it("preserves individual grants when all-sites access is revoked", async () => {
+    await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
+    await grantOrigins("api.example.com");
+    const root = await mount([
+      profile("p1", {
+        rules: [
+          rule({ scope: { type: "domains", domains: ["api.example.com"] } }),
+          rule({ scope: { type: "domains", domains: ["other.example.com"] } }),
+        ],
+      }),
+    ]);
+
+    const revokeAll =
+      root.querySelector<HTMLButtonElement>(".sa-all-on button");
+    if (revokeAll === null) throw new Error("no all-sites revoke button");
+    fire(() => revokeAll.click());
+    await settle();
+
+    expect(
+      await fakeBrowser.permissions.contains({ origins: [ALL_SITES_ORIGIN] }),
+    ).toBe(false);
+    expect(
+      await fakeBrowser.permissions.contains({
+        origins: [originPatternForDomain("api.example.com")],
+      }),
+    ).toBe(true);
+    expect(group(root, text.grantedHeading).textContent).toContain(
+      "api.example.com",
+    );
+    expect(group(root, text.neededHeading).textContent).toContain(
+      "other.example.com",
+    );
+  });
+
   it("hides needed rows while all-sites access is on", async () => {
     await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
     const root = await mount([

@@ -4,10 +4,6 @@ import {
   expect,
   fetchEcho,
   getSessionRules,
-  grantAllSitesViaDetails,
-  ON_WIRE_GRANT_UNAVAILABLE,
-  SAME_SITE_LIFETIME_GRANT_UNAVAILABLE,
-  seedSession,
   seedSessionAndWait,
   test,
 } from "../fixtures";
@@ -24,12 +20,10 @@ function override(tabId: number, originHost: string, num = 1): TabOverride {
   };
 }
 
-// A This-tab session override reaches the network stack only under an activeTab
-// grant from a real gesture on the extension action; the confinement it carries
-// is a property of the compiled rule's own condition, which is observable
-// headless without any grant. These cases assert that condition directly and
-// leave the on-wire half to be verified manually against real Chrome before
-// release.
+// A This-tab session override's confinement is a property of the compiled
+// rule's own condition. The structural cases assert that condition against the
+// shipped build; tagged traffic and lifetime cases use the static-host-access
+// e2e artifact so Chromium exposes the tab URL and applies the session rule.
 
 test("a This-tab override compiles to a session rule confined to its tab and origin", async ({
   context,
@@ -142,49 +136,65 @@ test("closing a tab ends its overrides", async ({
     .toBe(0);
 });
 
-// The continues half of the lifetime: a same-site navigation or SPA route
-// change must keep the override alive. Telling it apart from a cross-site hop
-// needs tab.url in tabs.onUpdated, which the browser only exposes while the
-// activeTab grant is live; headless, the background sees url === undefined and
-// prunes on every navigation, so this half is verified manually against real
-// Chrome before release. The cross-site-ends half above runs green.
-test("a same-site navigation and an SPA route change keep the override", async () => {
-  test.skip(true, SAME_SITE_LIFETIME_GRANT_UNAVAILABLE);
+test("a same-site navigation and an SPA route change keep the override", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
+  const page = await context.newPage();
+  await page.goto(`${echoServers.h1Url}/same-site-start`);
+  const tabId = await activeTabId(serviceWorker);
+  const originHost = new URL(echoServers.h1Url).hostname;
+
+  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+
+  const navigatedUrl = `${echoServers.h1Url}/same-site-navigation`;
+  await page.goto(navigatedUrl);
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(
+        (id) =>
+          chrome.tabs
+            .query({ active: true, lastFocusedWindow: true })
+            .then(([tab]) => (tab?.id === id ? tab.url : undefined)),
+        tabId,
+      ),
+    )
+    .toBe(navigatedUrl);
+  await expect
+    .poll(async () => (await getSessionRules(serviceWorker)).length)
+    .toBe(1);
+
+  const spaUrl = `${echoServers.h1Url}/same-site-spa`;
+  await page.evaluate((url) => history.pushState({}, "", url), spaUrl);
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(
+        (id) =>
+          chrome.tabs
+            .query({ active: true, lastFocusedWindow: true })
+            .then(([tab]) => (tab?.id === id ? tab.url : undefined)),
+        tabId,
+      ),
+    )
+    .toBe(spaUrl);
+  await expect
+    .poll(async () => (await getSessionRules(serviceWorker)).length)
+    .toBe(1);
 });
 
 // The on-wire half: a This-tab override actually modifying a same-origin request
-// needs the activeTab grant a gesture would carry. The exact flow is retained
-// and self-skips when the grant cannot be obtained headless — it is never
-// silently dropped. Seeding happens after the navigation so no cross-origin hop
-// prunes the row before the request is made.
-test("a granted This-tab override modifies a same-origin request", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+// uses the static host grant from the e2e artifact. Seeding happens after the
+// navigation so no hop can prune the row before the request is made.
+test("a granted This-tab override modifies a same-origin request", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/on-wire`);
   const tabId = await activeTabId(serviceWorker);
   const originHost = new URL(echoServers.h1Url).hostname;
 
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  await seedSession(serviceWorker, {
-    nextNum: 2,
-    tabs: { [tabId]: [override(tabId, originHost)] },
-  });
-  await expect
-    .poll(async () => (await getSessionRules(serviceWorker)).length)
-    .toBe(1);
-
-  // Gate only on the grant landing; asserting the header unconditionally so a
-  // granted-but-not-applied regression fails instead of self-skipping.
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
+  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
 
   const result = await fetchEcho(page, `${echoServers.h1Url}/echo.json`);
+  expect(result.status).toBe(200);
   expect(result.requestHeaders["x-headershim-this-tab"]).toBe("session");
 });

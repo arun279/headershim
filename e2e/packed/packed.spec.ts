@@ -43,11 +43,10 @@ test.describe("packed-build gate", () => {
   // The CRX force-installs and enables under the machine policy, but its lazy MV3
   // service worker is not surfaced to Playwright on this runner, so the worker
   // handle these specs drive is unobtainable here. The three behaviours are
-  // verified manually against real Chrome before each release; see
-  // e2e/README.md.
+  // This auxiliary packed harness is not part of pnpm e2e; see e2e/README.md.
   test.skip(
     true,
-    "Force-installed MV3 service worker is not reachable from Playwright in this environment; verified manually against real Chrome before each release.",
+    "Force-installed MV3 service worker is not reachable from Playwright in this environment; the unpacked host-access project owns automated on-wire coverage.",
   );
 
   test("policy-installed CRX modifies a header on the wire", async ({

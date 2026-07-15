@@ -730,7 +730,7 @@ export const copy = {
   verify: {
     // The honest-limits footer.
     limits:
-      'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug), so trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
+      "Chrome only reports rule matches from the last 5 minutes on this tab. DevTools' Network panel will not show header changes made by extensions (a known Chrome bug), so trust this panel or your server logs, not DevTools. Chrome's HTTP cache still passes through header rules. A site's service worker may bypass them when it generates a response or serves CacheStorage.",
     // Verify leads with the most basic unmet precondition,
     // never the caching essay. blocked > no-request > matched, in that order.
     // A grant gap is the headline, with Grant surfaced in the panel itself.

@@ -5,7 +5,6 @@ import {
   expect,
   getBadgeColor,
   getBadgeText,
-  MATCHED_RULES_GESTURE_UNAVAILABLE,
   seedSessionAndWait,
   seedState,
   stateWithRules,
@@ -14,8 +13,8 @@ import {
 
 // Chrome paints the count badge by substituting this sentinel for the live
 // match count; its presence is the observable proof that count mode is engaged
-// (displayActionCountAsBadgeText === true). The number itself only appears once
-// a granted rule matches real traffic, which is the on-wire half deferred below.
+// (displayActionCountAsBadgeText === true). Chrome owns the painted number;
+// HeaderShim's badge state transition is the behavior asserted here.
 const COUNT_SENTINEL = "<<declarativeNetRequestActionCount>>";
 
 const GREY: [number, number, number, number] = [110, 123, 136, 255];
@@ -188,16 +187,4 @@ test("getMatchedRules rejects without a gesture-granted activeTab", async ({
     }
   }, tabId);
   expect(rejected).toBe(true);
-});
-
-test("the popup Verify button grants activeTab for getMatchedRules", async () => {
-  test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
-});
-
-test("Verify per-rule tallies attribute correctly after an in-window edit", async () => {
-  test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
-});
-
-test("21+ gesture-initiated Verify calls succeed under the quota exemption", async () => {
-  test.skip(true, MATCHED_RULES_GESTURE_UNAVAILABLE);
 });

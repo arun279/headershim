@@ -103,10 +103,10 @@ describe("summarizeVerify hints stay statically determinable", () => {
       scope: { type: "domains", domains: ["other.test"] },
     });
     const ungranted = rule(3);
-    const cachedOrTypeMismatch = rule(4); // enabled, on-site, granted, no match
+    const unobservedTraffic = rule(4); // enabled, on-site, granted, no match
     const readout = summarizeVerify({
       profiles: [
-        profile("p", [disabled, offSite, ungranted, cachedOrTypeMismatch]),
+        profile("p", [disabled, offSite, ungranted, unobservedTraffic]),
       ],
       matches: [],
       tabHost: "example.com",
@@ -119,9 +119,10 @@ describe("summarizeVerify hints stay statically determinable", () => {
     expect(hints.get("rule-1")).toBe("disabled");
     expect(hints.get("rule-2")).toBe("scope-excludes");
     expect(hints.get("rule-3")).toBe("needs-access");
-    // The one whose only possible causes are traffic-derived (a cached
-    // response, a resource-type mismatch, an unnamed initiator) gets no
-    // per-rule conclusion — those live only in the hedged general guidance.
+    // The one whose only possible causes are traffic-derived (a resource-type
+    // mismatch, an unnamed initiator, a service-worker-generated response)
+    // gets no per-rule conclusion — those live only in the hedged general
+    // guidance.
     expect(hints.get("rule-4")).toBeUndefined();
 
     for (const row of readout.unmatched) {

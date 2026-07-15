@@ -5,8 +5,6 @@ import {
   expect,
   fetchEcho,
   getDynamicRules,
-  grantAllSitesViaDetails,
-  ON_WIRE_GRANT_UNAVAILABLE,
   readEcho,
   seedStateAndWait,
   stateWithRules,
@@ -184,24 +182,14 @@ test("header operations reconcile into accepted browser rules", async ({
   );
 });
 
-test("HTTP/1.1 header operations are observable on the wire", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+test("HTTP/1.1 header operations are observable on the wire", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const firstCase = headerCases[0];
   if (firstCase === undefined) {
     throw new Error("header matrix is empty");
   }
   await seedStateAndWait(serviceWorker, stateWithRules([firstCase.draft]));
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
-
   const page = await context.newPage();
   for (const [index, row] of headerCases.entries()) {
     if (index !== 0) {
@@ -220,19 +208,10 @@ test("HTTP/1.1 header operations are observable on the wire", async ({
   }
 });
 
-test("Host is a silent no-op over HTTP/2 while a custom header works", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+test("Host is a silent no-op over HTTP/2 while a custom header works", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   await seedStateAndWait(serviceWorker, stateWithRules(h2Drafts));
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
 
   const page = await context.newPage();
   await page.goto(`${echoServers.h2Url}/host-and-custom`);

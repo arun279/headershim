@@ -112,7 +112,10 @@ describe("copy", () => {
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );
-    expect(copy.verify.limits).toContain('check "Disable cache"');
+    expect(copy.verify.limits).toContain(
+      "Chrome's HTTP cache still passes through header rules",
+    );
+    expect(copy.verify.limits).toContain("CacheStorage");
   });
 
   it("keeps the trust-page claims inside their honest wording bounds", () => {

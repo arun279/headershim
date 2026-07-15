@@ -5,9 +5,9 @@ import type { Profile, Rule, Scope } from "./model";
  * The only causes Verify may name for a rule that matched nothing. Each is
  * provable from the stored rules, the tab's own site, and the grant snapshot
  * alone — never from which requests actually occurred, which headershim does
- * not record. Everything else a zero match could mean (a cached response, a
- * resource-type mismatch, an unnamed initiator) stays in the panel's hedged
- * general guidance, never a per-rule conclusion.
+ * not record. Everything else a zero match could mean (a resource-type
+ * mismatch, an unnamed initiator, a service-worker-generated response) stays
+ * in the panel's hedged general guidance, never a per-rule conclusion.
  */
 export type VerifyHint = "disabled" | "scope-excludes" | "needs-access";
 

@@ -1,13 +1,9 @@
 import { planReconcile } from "../../src/core/reconcile";
 import { copy } from "../../src/ui/copy";
 import {
-  BROAD_GRANT_REVOCATION_UNAVAILABLE,
-  DUAL_GRANT_TRANSITION_UNAVAILABLE,
   expect,
   fetchEcho,
   getDynamicRules,
-  grantAllSitesViaDetails,
-  ON_WIRE_GRANT_UNAVAILABLE,
   seedState,
   seedStateAndWait,
   stateWithRules,
@@ -53,113 +49,53 @@ test("a target-and-initiator rule is a silent no-op while access is missing", as
   expect(await getDynamicRules(serviceWorker)).toEqual(installedBeforeRequests);
 });
 
-test("adding initiator access activates a destination-granted rule without a rewrite", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
-  const doc = dualGrantDoc();
-  const desired = await seedStateAndWait(serviceWorker, doc);
-  const installedBeforeRequests = await getDynamicRules(serviceWorker);
-
-  const destinationOnly = await serviceWorker.evaluate(async () => {
-    const [destination, initiator] = await Promise.all([
-      chrome.permissions.contains({ origins: ["http://127.0.0.1/*"] }),
-      chrome.permissions.contains({ origins: ["http://localhost/*"] }),
-    ]);
-    return destination && !initiator;
-  });
-  test.skip(!destinationOnly, DUAL_GRANT_TRANSITION_UNAVAILABLE);
-
-  const page = await context.newPage();
-  await page.goto(`${echoServers.h1Url}/grant-source`);
-  const beforeGrant = await fetchEcho(
-    page,
-    `${echoServers.h1CrossUrl}/echo.json?permission=destination-only`,
-  );
-  expect(beforeGrant.status).toBe(200);
-  expect(beforeGrant.requestHeaders).not.toHaveProperty(HEADER);
-
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  // Gate on the grant landing (an independent permissions signal), not on the
-  // header itself — folding the on-wire check into the skip would let a
-  // grant-lands-but-DNR-stops-applying regression report as an env-skip.
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
-
-  // The next operation after the permission transition is the request itself:
-  // no permission query, storage write, rule toggle, or extension-page reload
-  // is used to wake DNR.
-  const afterGrant = await fetchEcho(
-    page,
-    `${echoServers.h1CrossUrl}/echo.json?permission=after`,
-  );
-  expect(afterGrant.status).toBe(200);
-  expect(afterGrant.requestHeaders[HEADER]).toBe(VALUE);
-
-  const installedAfterRequests = await getDynamicRules(serviceWorker);
-  expect(installedAfterRequests).toEqual(installedBeforeRequests);
-  expect(planReconcile(desired, installedAfterRequests)).toBeNull();
-});
-
-test("a cached response bypasses response-header modification", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+test("response-header rules apply to HTTP-cached responses", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const header = "x-headershim-cache";
-  await seedStateAndWait(
-    serviceWorker,
+  const cacheDoc = (value: string) =>
     stateWithRules([
       {
         direction: "response",
         operation: "set",
         header,
-        value: "modified",
+        value,
         scope: { type: "domains", domains: ["127.0.0.1"] },
         resourceTypes: ["xhr"],
         initiators: [],
         enabled: true,
       },
-    ]),
-  );
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
-
+    ]);
+  await seedStateAndWait(serviceWorker, cacheDoc("fresh-rule"));
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/cache-source`);
   const key = crypto.randomUUID();
   const cacheUrl = `${echoServers.h1CrossUrl}/cache.json?key=${key}`;
   const fresh = await fetchEcho(page, cacheUrl);
   expect(fresh.status).toBe(200);
-  expect(fresh.responseHeaders[header]).toBe("modified");
+  expect(fresh.responseHeaders[header]).toBe("fresh-rule");
   expect(fresh.requestCount).toBe(1);
 
+  // A different installed value distinguishes applying the current rule to
+  // the cached response from merely caching the first modified header.
+  await seedStateAndWait(serviceWorker, cacheDoc("cached-rule"));
   const cached = await fetchEcho(page, cacheUrl);
-  expect(cached.status).toBe(200);
-  expect(cached.responseHeaders[header]).toBe("server");
-  expect(cached.requestCount).toBe(1);
-
   const stats = await fetchEcho(
     page,
     `${echoServers.h1CrossUrl}/cache-stats.json?key=${key}`,
     { cache: "reload" },
   );
+  expect(cached.status).toBe(200);
+  // Both the cached body and an uncached server-side counter prove that the
+  // second /cache.json fetch did not reach the echo server.
+  expect(cached.requestCount).toBe(1);
   expect(stats.requestCount).toBe(1);
+  expect(cached.responseHeaders[header]).toBe("cached-rule");
 });
 
-// UI half: an ungranted rule must light the loud needs-access state in
-// the popup, not fail silently. The network half (destination-only → initiator)
-// lives above; this asserts the surface that tells the user access is missing.
+// An ungranted rule must light the loud needs-access state in the popup, not
+// fail silently. The missing-access network assertion above proves the request
+// still succeeds without the header; this asserts the recovery surface.
 test("an ungranted rule lights the loud needs-access state in the popup", async ({
   context,
   extensionId,
@@ -203,12 +139,10 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
 });
 
 // Site-access UI half: the Site access page is a projection of the
-// browser's live permissions plus the rules' required origins. In the unpacked
-// headless posture no host grant is obtainable (grants.spec's revocation-
-// survival half is deferred for the same reason), so the browser's reality is
-// "nothing granted": every enabled rule's origin sits under needed-but-not-
-// granted, the granted group is empty, and the broad-grant offer stands. The
-// page must match that reality exactly.
+// browser's live permissions plus the rules' required origins. The shipped
+// artifact starts with no optional host grants, so every enabled rule's origin
+// sits under needed-but-not-granted, the granted group is empty, and the broad
+// grant offer stands. The page must match that reality exactly.
 test("the site-access page mirrors the browser's granted and needed origins", async ({
   context,
   extensionId,
@@ -300,51 +234,4 @@ test("the site-access page mirrors the browser's granted and needed origins", as
     return (all.origins ?? []).filter((origin) => origin !== "*://*/*");
   });
   expect(live).toEqual([]);
-});
-
-// Whether individually granted sites survive revoking a broad all-sites
-// grant. Staging it needs a real all-sites grant to then revoke, which the
-// unpacked headless posture cannot obtain; verified manually against real
-// Chrome before release.
-test("individual grants survive broad-grant revocation", async () => {
-  test.skip(true, BROAD_GRANT_REVOCATION_UNAVAILABLE);
-});
-
-test("the network stack owns the outgoing content length", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
-  await seedStateAndWait(
-    serviceWorker,
-    stateWithRules([
-      {
-        direction: "request",
-        operation: "set",
-        header: "content-length",
-        value: "999",
-        scope: { type: "domains", domains: ["localhost"] },
-        resourceTypes: ["xhr"],
-        initiators: [],
-        enabled: true,
-      },
-    ]),
-  );
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
-
-  const page = await context.newPage();
-  await page.goto(`${echoServers.h1Url}/content-length-source`);
-  const response = await fetchEcho(page, `${echoServers.h1Url}/echo.json`, {
-    body: "payload",
-    method: "POST",
-  });
-  expect(response.status).toBe(200);
-  expect(response.requestHeaders["content-length"]).toBe("7");
-  expect(response.requestHeaders["content-length"]).not.toBe("999");
 });

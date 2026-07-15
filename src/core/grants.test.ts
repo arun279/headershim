@@ -138,6 +138,26 @@ describe("missingGrants", () => {
     ).toEqual([originPatternForDomain("app.example.com")]);
   });
 
+  it("clears the initiator gap when destination-only access gains the initiator grant", () => {
+    const target = originPatternForDomain("api.example.com");
+    const initiator = originPatternForDomain("app.example.com");
+    const subject = rule(
+      { type: "domains", domains: ["api.example.com"] },
+      ["xhr"],
+      ["app.example.com"],
+    );
+
+    expect(
+      missingGrants(subject, { origins: [target], allSites: false }),
+    ).toEqual([initiator]);
+    expect(
+      missingGrants(subject, {
+        origins: [target, initiator],
+        allSites: false,
+      }),
+    ).toEqual([]);
+  });
+
   it("accepts a parent-domain grant for a required subdomain", () => {
     const subject = rule({ type: "domains", domains: ["api.example.com"] }, [
       "pages",
