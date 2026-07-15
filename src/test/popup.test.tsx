@@ -14,6 +14,7 @@ import {
   settle,
   typeInto,
 } from "../ui/test/render";
+import { THEME_CACHE_KEY } from "../ui/theme";
 
 async function mount(doc?: StateDoc) {
   if (doc !== undefined) {
@@ -77,12 +78,12 @@ describe("popup App", () => {
     );
     expect(annunciator().textContent).toBe("Live — no rules yet.");
     expect(root.querySelector(".foot")?.textContent).toContain("Pause");
-    expect(
-      root.querySelector('.popup-head [aria-label="Theme"]'),
-    ).not.toBeNull();
-    expect(
-      root.querySelector('.popup-head [aria-label="Options"]'),
-    ).not.toBeNull();
+    const theme = root.querySelector('.popup-head [aria-label="Theme"]');
+    const options = root.querySelector('.popup-head [aria-label="Options"]');
+    expect(theme).not.toBeNull();
+    expect(options).not.toBeNull();
+    expect(theme?.querySelector(".gear-glyph")).toBeNull();
+    expect(options?.querySelector(".gear-glyph")).not.toBeNull();
     expect(root.querySelector('.foot [aria-label="Options"]')).toBeNull();
   });
 
@@ -236,7 +237,7 @@ describe("popup App", () => {
     expect({
       stored: (await read()).settings.theme,
       stamped: document.documentElement.getAttribute("data-theme") ?? undefined,
-      mirrored: localStorage.getItem("headershim.theme"),
+      mirrored: localStorage.getItem(THEME_CACHE_KEY),
     }).toEqual({ stored: "dark", stamped: "dark", mirrored: "dark" });
   });
 

@@ -6,6 +6,7 @@ import {
   openPositionedPopover,
   trapPopoverFocus,
 } from "./popover";
+import { usePopoverDismiss } from "./usePopoverDismiss";
 import "./ThemeControl.css";
 
 interface ThemeControlProps {
@@ -23,9 +24,12 @@ export function ThemeControl({ theme, onChange }: ThemeControlProps) {
   );
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [roving, setRoving] = useState(() => OPTIONS.indexOf(theme));
 
   useEffect(() => {
     setSelected(theme);
+    setRoving(OPTIONS.indexOf(theme));
   }, [theme]);
 
   useEffect(() => {
@@ -41,13 +45,23 @@ export function ThemeControl({ theme, onChange }: ThemeControlProps) {
     const trigger = triggerRef.current;
     if (!open || menu === null || trigger === null) return;
     openPositionedPopover(menu, trigger, "end");
-    menu.querySelector<HTMLButtonElement>("button")?.focus();
+    optionRefs.current[roving]?.focus();
     return () => closePopover(menu);
   }, [open]);
 
-  const close = () => {
+  const close = (restoreFocus = true) => {
     setOpen(false);
-    queueMicrotask(() => triggerRef.current?.focus());
+    if (restoreFocus) {
+      queueMicrotask(() => triggerRef.current?.focus());
+    }
+  };
+
+  usePopoverDismiss(open, menuRef, triggerRef, close);
+
+  const moveTo = (index: number) => {
+    const target = (index + OPTIONS.length) % OPTIONS.length;
+    setRoving(target);
+    optionRefs.current[target]?.focus();
   };
 
   const select = (next: Theme) => {
@@ -87,19 +101,40 @@ export function ThemeControl({ theme, onChange }: ThemeControlProps) {
               trapPopoverFocus(event, menuRef.current);
               return;
             }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              close();
+            switch (event.key) {
+              case "ArrowDown":
+                moveTo(roving + 1);
+                break;
+              case "ArrowUp":
+                moveTo(roving - 1);
+                break;
+              case "Home":
+                moveTo(0);
+                break;
+              case "End":
+                moveTo(OPTIONS.length - 1);
+                break;
+              case "Escape":
+                close();
+                break;
+              default:
+                return;
             }
+            event.preventDefault();
           }}
         >
-          {OPTIONS.map((option) => (
+          {OPTIONS.map((option, index) => (
             <button
               key={option}
               type="button"
               class="menu-item theme-option"
               role="menuitemradio"
               aria-checked={selected === option}
+              tabIndex={index === roving ? 0 : -1}
+              ref={(button) => {
+                optionRefs.current[index] = button;
+              }}
+              onFocus={() => setRoving(index)}
               onClick={() => select(option)}
             >
               <span class="theme-check" aria-hidden="true">

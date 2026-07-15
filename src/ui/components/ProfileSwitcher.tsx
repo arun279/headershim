@@ -8,6 +8,7 @@ import {
   trapPopoverFocus,
 } from "./popover";
 import { Truncate } from "./Truncate";
+import { usePopoverDismiss } from "./usePopoverDismiss";
 import "./ProfileSwitcher.css";
 
 export type ProfileCommitOutcome =
@@ -190,9 +191,11 @@ export function ProfileSwitcher({
           initialName={newProfileName}
           onCreate={onCreate}
           onManageProfiles={onManageProfiles}
-          onClose={() => {
+          onClose={(restoreFocus = true) => {
             setCreating(false);
-            queueMicrotask(() => newButton.current?.focus());
+            if (restoreFocus) {
+              queueMicrotask(() => newButton.current?.focus());
+            }
           }}
         />
       )}
@@ -203,9 +206,11 @@ export function ProfileSwitcher({
           onRename={onRename}
           onEnable={onEnable}
           onManageProfiles={onManageProfiles}
-          onClose={() => {
+          onClose={(restoreFocus = true) => {
             setMenuProfileId(undefined);
-            queueMicrotask(() => menuButtons.current[menuIndex]?.focus());
+            if (restoreFocus) {
+              queueMicrotask(() => menuButtons.current[menuIndex]?.focus());
+            }
           }}
         />
       )}
@@ -216,14 +221,15 @@ export function ProfileSwitcher({
 interface PopoverProps {
   trigger: { readonly current: HTMLButtonElement | null };
   onManageProfiles: () => void;
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => void;
 }
 
 function useProfilePopover(
   popover: RefObject<HTMLDivElement | null>,
   trigger: PopoverProps["trigger"],
   align: "start" | "end",
-  initialInput?: RefObject<HTMLInputElement | null>,
+  initialInput: RefObject<HTMLInputElement | null> | undefined,
+  onClose: PopoverProps["onClose"],
 ) {
   useLayoutEffect(() => {
     if (popover.current === null || trigger.current === null) return;
@@ -236,6 +242,8 @@ function useProfilePopover(
     }
     return () => closePopover(popover.current);
   }, []);
+
+  usePopoverDismiss(true, popover, trigger, onClose);
 }
 
 function handlePopoverKeyDown(
@@ -269,7 +277,7 @@ function CreateProfilePopover({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  useProfilePopover(popover, trigger, "start", input);
+  useProfilePopover(popover, trigger, "start", input, onClose);
 
   const submit = async (event: JSX.TargetedSubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -368,7 +376,7 @@ function ProfileMenu({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  useProfilePopover(popover, trigger, "end");
+  useProfilePopover(popover, trigger, "end", undefined, onClose);
 
   useLayoutEffect(() => {
     if (renaming) {

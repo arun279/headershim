@@ -110,6 +110,9 @@ describe("copy", () => {
     expect(copy.errors.regexRuleCap).toContain(
       "caps regex-scoped rules at 1,000",
     );
+    expect(copy.options.profiles.nameTaken("Staging")).toBe(
+      "'Staging' is taken. Use a different name.",
+    );
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );

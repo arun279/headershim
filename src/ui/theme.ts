@@ -6,10 +6,13 @@ export const THEME_CACHE_KEY = "headershim.theme";
 
 /** Applies the theme immediately and keeps a synchronous pre-paint cache. */
 export function applyTheme(theme: Theme): void {
+  const rootTheme = document.documentElement.dataset as DOMStringMap & {
+    theme?: string;
+  };
   if (theme === "system") {
-    document.documentElement.removeAttribute("data-theme");
+    delete rootTheme.theme;
   } else {
-    document.documentElement.setAttribute("data-theme", theme);
+    rootTheme.theme = theme;
   }
 
   try {

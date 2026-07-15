@@ -33,10 +33,11 @@ const needsAccess: SystemStatus = {
 
 describe("Annunciator states", () => {
   it("renders paused with a Resume verb on a panel strip", () => {
-    const { strip, onResume } = mount({ kind: "paused" });
+    const { strip, onResume } = mount({ kind: "paused" }, 0, 3);
     expect(strip.textContent).toContain(
       "Paused — no headers are being modified.",
     );
+    expect(strip.textContent).not.toContain("profiles active");
     expect(strip.querySelector("strong")?.textContent).toBe("Paused");
 
     const resume = strip.querySelector("button") as HTMLButtonElement;

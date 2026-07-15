@@ -1,7 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { Profile } from "../../core/model";
-import { fire, press, render, settle, typeInto } from "../test/render";
+import {
+  fire,
+  pointerDown,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../test/render";
 import { type ProfileCommitOutcome, ProfileSwitcher } from "./ProfileSwitcher";
 
 function profile(id: string, overrides: Partial<Profile> = {}): Profile {
@@ -165,6 +172,47 @@ describe("ProfileSwitcher", () => {
     press(popover, "Escape");
     await Promise.resolve();
     expect(root.querySelector(".profile-create-pop")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("light-dismisses create when a profile chip is clicked", async () => {
+    const { root, chips, onActivate } = mount();
+    const trigger = root.querySelector(
+      ".new-profile-chip",
+    ) as HTMLButtonElement;
+    fire(() => trigger.click());
+    expect(root.querySelector(".profile-create-pop")).not.toBeNull();
+
+    const target = chips[1] as HTMLButtonElement;
+    pointerDown(target);
+    fire(() => {
+      target.focus();
+      target.click();
+    });
+    await Promise.resolve();
+
+    expect(root.querySelector(".profile-create-pop")).toBeNull();
+    expect(document.activeElement).toBe(target);
+    expect(onActivate).toHaveBeenCalledWith("cors");
+  });
+
+  it("light-dismisses a profile menu and restores its trigger on global Escape", async () => {
+    const { root, chips, menus } = mount();
+    const trigger = menus[0] as HTMLButtonElement;
+    fire(() => trigger.click());
+    expect(root.querySelector(".profile-actions-pop")).not.toBeNull();
+
+    const outside = chips[1] as HTMLButtonElement;
+    pointerDown(outside);
+    fire(() => outside.focus());
+    expect(root.querySelector(".profile-actions-pop")).toBeNull();
+    expect(document.activeElement).toBe(outside);
+
+    fire(() => trigger.click());
+    fire(() => outside.focus());
+    press(outside, "Escape");
+    await Promise.resolve();
+    expect(root.querySelector(".profile-actions-pop")).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 

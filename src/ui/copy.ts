@@ -129,8 +129,7 @@ export const copy = {
         `Reorder ${name}; press the arrow keys to move it`,
       reordered: (name: string, position: number) =>
         `${name}, moved to position ${position}`,
-      nameTaken: (name: string) =>
-        `A profile named '${name}' already exists — pick a different name.`,
+      nameTaken: (name: string) => `'${name}' is taken. Use a different name.`,
       deleteConfirm: {
         title: (name: string) => `Delete profile '${name}'?`,
         body: (count: number) =>

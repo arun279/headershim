@@ -6,6 +6,7 @@ import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
+import { THEME_CACHE_KEY } from "../ui/theme";
 
 const text = copy.options.about;
 
@@ -50,7 +51,7 @@ describe("options about", () => {
 
     expect((await read()).settings.theme).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    expect(localStorage.getItem("headershim.theme")).toBe("dark");
+    expect(localStorage.getItem(THEME_CACHE_KEY)).toBe("dark");
 
     check(radio(root, "theme", "system"));
     await settle();

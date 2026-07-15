@@ -39,7 +39,7 @@ export function Annunciator({
     status.kind === "needs-access" || status.kind === "out-of-sync";
   const sentence = [
     ...sentenceFor(status, temporaryCount),
-    ...(activeProfileCount > 1
+    ...(status.kind !== "paused" && activeProfileCount > 1
       ? copy.annunciator.activeProfiles(activeProfileCount)
       : []),
   ];

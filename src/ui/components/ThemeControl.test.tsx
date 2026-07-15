@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fire, press, render } from "../test/render";
+import { fire, pointerDown, press, render } from "../test/render";
 import { THEME_CACHE_KEY } from "../theme";
 import { ThemeControl } from "./ThemeControl";
 
@@ -28,6 +28,53 @@ describe("ThemeControl", () => {
     expect(document.activeElement).toBe(
       menu.querySelector('[role="menuitemradio"]'),
     );
+  });
+
+  it("roves menu focus with arrows, Home, and End", () => {
+    const root = render(<ThemeControl theme="system" onChange={() => {}} />);
+    fire(() =>
+      (root.querySelector('[aria-label="Theme"]') as HTMLButtonElement).click(),
+    );
+    const options = [
+      ...root.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
+    ];
+
+    expect(options.map((option) => option.tabIndex)).toEqual([0, -1, -1]);
+    press(options[0] as HTMLButtonElement, "ArrowUp");
+    expect(document.activeElement).toBe(options[2]);
+    expect(options.map((option) => option.tabIndex)).toEqual([-1, -1, 0]);
+
+    press(options[2] as HTMLButtonElement, "Home");
+    expect(document.activeElement).toBe(options[0]);
+    press(options[0] as HTMLButtonElement, "End");
+    expect(document.activeElement).toBe(options[2]);
+    press(options[2] as HTMLButtonElement, "ArrowDown");
+    expect(document.activeElement).toBe(options[0]);
+  });
+
+  it("light-dismisses outside and restores focus on a global Escape", async () => {
+    const root = render(<ThemeControl theme="system" onChange={() => {}} />);
+    const trigger = root.querySelector(
+      '[aria-label="Theme"]',
+    ) as HTMLButtonElement;
+    const outside = document.createElement("button");
+    root.appendChild(outside);
+
+    fire(() => trigger.click());
+    pointerDown(outside);
+    fire(() => outside.focus());
+    await Promise.resolve();
+    expect(root.querySelector(".theme-menu")).toBeNull();
+    expect(document.activeElement).toBe(outside);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+
+    fire(() => trigger.click());
+    fire(() => outside.focus());
+    press(outside, "Escape");
+    await Promise.resolve();
+    expect(root.querySelector(".theme-menu")).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("stamps and mirrors a choice immediately, then returns focus", async () => {
