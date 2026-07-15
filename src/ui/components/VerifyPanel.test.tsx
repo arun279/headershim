@@ -88,7 +88,7 @@ describe("VerifyPanel readout", () => {
     const missed = panel.querySelector(".verify-row.unmatched") as HTMLElement;
     expect(missed.textContent).toContain("x-feature-override");
     expect(missed.querySelector(".verify-hint")?.textContent).toBe(
-      " — needs access",
+      " · needs access",
     );
     expect(missed.querySelector(".verify-tally")?.textContent).toBe("×0");
   });
@@ -144,7 +144,7 @@ describe("VerifyPanel readout", () => {
       moreSites: 0,
     });
     expect(panel.querySelector(".verify-summary")?.textContent).toBe(
-      "1 rule can't run — needs access to api.example.com.",
+      "1 rule can't run. Needs access to api.example.com.",
     );
     // The caching essay never leads over the more basic precondition.
     expect(panel.querySelector(".verify-rows")).toBeNull();

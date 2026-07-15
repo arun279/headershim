@@ -165,7 +165,7 @@ function Hint({ row }: { row: VerifyUnmatchedRule }) {
   if (row.hint === undefined) {
     return null;
   }
-  return <span class="verify-hint">{` — ${hintText(row.hint)}`}</span>;
+  return <span class="verify-hint">{` · ${hintText(row.hint)}`}</span>;
 }
 
 function hintText(hint: VerifyHint): string {

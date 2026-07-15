@@ -35,7 +35,7 @@ describe("Annunciator states", () => {
   it("renders paused with a Resume verb on a panel strip", () => {
     const { strip, onResume } = mount({ kind: "paused" }, 0, 3);
     expect(strip.textContent).toContain(
-      "Paused — no headers are being modified.",
+      "Paused. No headers are being modified.",
     );
     expect(strip.textContent).not.toContain("profiles active");
     expect(strip.querySelector("strong")?.textContent).toBe("Paused");
@@ -49,7 +49,7 @@ describe("Annunciator states", () => {
   it("names the first host, counts the rest, and wires the Grant access verb", () => {
     const { strip, onGrantAccess } = mount(needsAccess);
     expect(strip.textContent).toBe(
-      "2 rules can't run — HeaderShim doesn't have access to api.example.com and 2 more sites.Grant access",
+      "2 rules can't run. HeaderShim doesn't have access to api.example.com and 2 more sites.Grant access",
     );
     expect(strip.querySelector("strong")?.textContent).toBe(
       "2 rules can't run",
@@ -74,7 +74,7 @@ describe("Annunciator states", () => {
       hosts: ["app.acme.dev"],
     });
     expect(strip.textContent).toBe(
-      "1 rule can't run — HeaderShim doesn't have access to app.acme.dev.Grant access",
+      "1 rule can't run. HeaderShim doesn't have access to app.acme.dev.Grant access",
     );
   });
 
@@ -100,7 +100,7 @@ describe("Annunciator states", () => {
       1,
     );
     expect(strip.textContent).toBe(
-      "Live — 2 of 3 rules enabled. · 1 temporary on this tab · 2 profiles active",
+      "Live. 2 of 3 rules enabled · 1 temporary on this tab · 2 profiles active",
     );
   });
 
@@ -116,7 +116,7 @@ describe("Annunciator states", () => {
       totalRuleCount: 0,
       profileCount: 1,
     });
-    expect(strip.textContent).toBe("Live — no rules yet.");
+    expect(strip.textContent).toBe("Live. No rules yet.");
   });
 
   it("never claims 'no rules yet' while a This-tab override is modifying traffic", () => {
@@ -125,13 +125,13 @@ describe("Annunciator states", () => {
       1,
     );
     expect(strip.textContent).toBe(
-      "Live — 0 of 2 rules enabled. · 1 temporary on this tab",
+      "Live. 0 of 2 rules enabled · 1 temporary on this tab",
     );
   });
 
   it("renders off when no profile is on", () => {
     const { strip } = mount({ kind: "off" });
-    expect(strip.textContent).toBe("Off — no profiles are on.");
+    expect(strip.textContent).toBe("Off. No profiles are on.");
     expect(strip.querySelector("button")).toBeNull();
   });
 

@@ -4,26 +4,24 @@ import { copy, sentenceText } from "./copy";
 describe("copy", () => {
   it("names the enabled/configured split and appends this-tab temporaries", () => {
     expect(sentenceText(copy.annunciator.live(1, 1, 0))).toBe(
-      "Live — 1 of 1 rule enabled.",
+      "Live. 1 of 1 rule enabled",
     );
     expect(sentenceText(copy.annunciator.live(2, 3, 0))).toBe(
-      "Live — 2 of 3 rules enabled.",
+      "Live. 2 of 3 rules enabled",
     );
     expect(sentenceText(copy.annunciator.live(2, 3, 1))).toBe(
-      "Live — 2 of 3 rules enabled. · 1 temporary on this tab",
+      "Live. 2 of 3 rules enabled · 1 temporary on this tab",
     );
   });
 
   it("names one site inline and counts the rest for needs-access", () => {
     expect(
       sentenceText(copy.annunciator.needsAccess(1, "app.acme.dev", 0)),
-    ).toBe(
-      "1 rule can't run — HeaderShim doesn't have access to app.acme.dev.",
-    );
+    ).toBe("1 rule can't run. HeaderShim doesn't have access to app.acme.dev.");
     expect(
       sentenceText(copy.annunciator.needsAccess(2, "api.example.com", 2)),
     ).toBe(
-      "2 rules can't run — HeaderShim doesn't have access to api.example.com and 2 more sites.",
+      "2 rules can't run. HeaderShim doesn't have access to api.example.com and 2 more sites.",
     );
   });
 
@@ -82,23 +80,21 @@ describe("copy", () => {
     );
     expect(
       sentenceText(copy.verify.blockedHeadline(1, "api.example.com", 0)),
-    ).toBe("1 rule can't run — needs access to api.example.com.");
+    ).toBe("1 rule can't run. Needs access to api.example.com.");
     expect(
       sentenceText(copy.verify.blockedHeadline(2, "api.example.com", 2)),
     ).toBe(
-      "2 rules can't run — needs access to api.example.com and 2 more sites.",
+      "2 rules can't run. Needs access to api.example.com and 2 more sites.",
     );
   });
 
   it("keeps the static canonical strings verbatim", () => {
     expect(sentenceText(copy.annunciator.paused)).toBe(
-      "Paused — no headers are being modified.",
+      "Paused. No headers are being modified.",
     );
-    expect(sentenceText(copy.annunciator.off)).toBe(
-      "Off — no profiles are on.",
-    );
+    expect(sentenceText(copy.annunciator.off)).toBe("Off. No profiles are on.");
     expect(sentenceText(copy.annunciator.outOfSync)).toBe(
-      "Out of sync — Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+      "Out of sync. Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
     );
     expect(copy.app.tagline).toBe(
       "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
@@ -151,7 +147,7 @@ describe("copy", () => {
     // access ended.
     expect(
       copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
-    ).toBe("api.example.com grant removed — all-sites access still covers it");
+    ).toBe("api.example.com grant removed. All-sites access still covers it.");
   });
 
   // A global guard on the copy voice rules and the naming denylist below, so
@@ -221,6 +217,7 @@ describe("copy", () => {
     expect(strings.length).toBeGreaterThan(100);
     for (const text of strings) {
       const lower = text.toLowerCase();
+      expect(text, `em-dash in: ${text}`).not.toMatch(/[–—]/);
       expect(text, `exclamation mark in: ${text}`).not.toContain("!");
       expect(text, `emoji in: ${text}`).not.toMatch(
         /\p{Extended_Pictographic}/u,

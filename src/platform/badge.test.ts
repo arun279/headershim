@@ -87,8 +87,8 @@ describe("badge adapter", () => {
     ).mockResolvedValue();
     const setTitle = vi.spyOn(browser.action, "setTitle");
 
-    await applyBadge(manual(""), [], "HeaderShim — paused");
-    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim — paused" });
+    await applyBadge(manual(""), [], "HeaderShim: paused");
+    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
 
     await applyBadge(manual("QA"), [], "");
     expect(setTitle).toHaveBeenLastCalledWith({ title: "" });

@@ -68,12 +68,23 @@
   overflow-wrap: anywhere;
 }
 
+.about-facts,
 .about-never,
 .about-steps {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding-left: var(--sp-5);
+}
+
+.about-never-group {
+  margin-top: var(--sp-4);
+}
+
+.about-never-heading {
+  margin-bottom: var(--sp-3);
+  color: var(--ink-mute);
+  font-weight: 600;
 }
 
 .about-links {

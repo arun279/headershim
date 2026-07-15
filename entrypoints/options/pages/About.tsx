@@ -23,6 +23,13 @@ export function AboutPage() {
         </p>
         <p>{copy.app.tagline}</p>
 
+        <h3 class="silk about-group">{text.summary.heading}</h3>
+        <ol class="about-facts">
+          {text.summary.facts.map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+        </ol>
+
         <h3 class="silk about-group">{text.permissions.heading}</h3>
         <p>{text.permissions.intro}</p>
         <div class="about-table-scroll">
@@ -53,13 +60,26 @@ export function AboutPage() {
 
         <h3 class="silk about-group">{text.neverList.heading}</h3>
         <p>{text.neverList.intro}</p>
-        <ul class="about-never">
-          {text.neverList.items.map((item) => (
-            <li key={item.lead}>
-              <strong>{item.lead}</strong> — {item.detail}
-            </li>
-          ))}
-        </ul>
+        {text.neverList.groups.map((group) => (
+          <div key={group.heading} class="about-never-group">
+            <h4 class="about-never-heading">{group.heading}</h4>
+            <ul class="about-never">
+              {group.items.map((item) => (
+                <li key={item.lead}>
+                  <strong>{item.lead}.</strong> {item.detail}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        <h3 class="silk about-group">{text.security.heading}</h3>
+        <p>
+          {text.security.body}{" "}
+          <ExternalLink href={text.security.linkUrl}>
+            {text.security.linkLabel}
+          </ExternalLink>
+        </p>
 
         <h3 class="silk about-group">{text.verifyBuild.heading}</h3>
         <p>{text.verifyBuild.intro}</p>

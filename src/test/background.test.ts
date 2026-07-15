@@ -557,7 +557,7 @@ describe("background lifecycle", () => {
       displayActionCountAsBadgeText: false,
     });
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
-    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim — paused" });
+    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
     expect(await browser.action.getBadgeText({})).toBe("");
   });
 

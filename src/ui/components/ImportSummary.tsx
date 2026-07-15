@@ -64,7 +64,7 @@ export function ImportSummary({
                   <div class="import-warning-body">
                     <p>
                       <span class="import-warning-name mono">{name}</span>
-                      {" — "}
+                      {": "}
                       {sentence(detail)}
                     </p>
                     {offer !== undefined && (

@@ -38,11 +38,11 @@ export const copy = {
   },
 
   annunciator: {
-    paused: ["Paused — no headers are being modified."] as Sentence,
-    off: ["Off — no profiles are on."] as Sentence,
-    liveEmpty: ["Live — no rules yet."] as Sentence,
+    paused: ["Paused. No headers are being modified."] as Sentence,
+    off: ["Off. No profiles are on."] as Sentence,
+    liveEmpty: ["Live. No rules yet."] as Sentence,
     outOfSync: [
-      "Out of sync — Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+      "Out of sync. Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
     ] as Sentence,
     // "N of M rules enabled" names the enabled/configured signal so it never
     // reads as a match score; the badge and Verify speak of matches instead.
@@ -51,11 +51,11 @@ export const copy = {
       totalCount: number,
       temporaryCount: number,
     ): Sentence => [
-      "Live — ",
+      "Live. ",
       data(enabledCount),
       " of ",
       data(totalCount),
-      ` ${rules(totalCount)} enabled.`,
+      ` ${rules(totalCount)} enabled`,
       ...(temporaryCount > 0
         ? [" · ", data(temporaryCount), " temporary on this tab"]
         : []),
@@ -66,7 +66,7 @@ export const copy = {
       moreSites: number,
     ): Sentence => [
       data(ruleCount),
-      ` ${rules(ruleCount)} can't run — HeaderShim doesn't have access to `,
+      ` ${rules(ruleCount)} can't run. HeaderShim doesn't have access to `,
       data(host),
       ...(moreSites > 0
         ? [" and ", data(moreSites), ` more ${sites(moreSites)}`]
@@ -170,7 +170,7 @@ export const copy = {
       title: "Import & export",
       importHeading: "Import",
       instruction:
-        "HeaderShim JSON or ModHeader export — detected automatically.",
+        "HeaderShim JSON or ModHeader export, detected automatically.",
       choose: "Choose file…",
       fileInputLabel: "Import a HeaderShim or ModHeader export",
       exportHeading: "Export",
@@ -179,7 +179,7 @@ export const copy = {
       exportChoiceLabel: "Profile to export",
       // Shown verbatim on every export.
       secretsReminder:
-        "This file contains the header values you typed — including any tokens or keys. Treat it like a credentials file.",
+        "This file contains the header values you typed, including any tokens or keys. Treat it like a credentials file.",
       everythingFilename: "headershim-export.json",
       profileFilename: (slug: string) => `headershim-${slug}.json`,
       summaryHeading: "Import summary",
@@ -197,12 +197,12 @@ export const copy = {
       import: "Import",
       convert: "Convert to frozen value",
       imported: (count: number) =>
-        `Imported ${count} ${profiles(count)}, off — turn them on when you're ready.`,
+        `Imported ${count} ${profiles(count)}, turned off. Turn them on when you're ready.`,
       warnings: {
         appendDegraded: (header: string): Sentence => [
           "Chrome only allows appending to a fixed set of request headers, and ",
           data(header),
-          " isn't one of them — imported as Set.",
+          " isn't one of them, so it was imported as Set.",
         ],
         cookieSemantics:
           "Imported as a whole-header append on cookie; per-cookie merge behaves differently.",
@@ -217,12 +217,12 @@ export const copy = {
         dynamicToken:
           "Contains a request-time token Chrome extensions can no longer compute.",
         droppedExcludeUrl:
-          "Dropped — HeaderShim has no per-rule URL exclusion in this version.",
+          "Dropped. HeaderShim has no per-rule URL exclusion in this version.",
         droppedInitiatorDomain:
-          "Dropped — HeaderShim has no initiator scoping in this version.",
-        droppedTab: "Dropped — use This-tab overrides for per-tab needs.",
+          "Dropped. HeaderShim has no initiator scoping in this version.",
+        droppedTab: "Dropped. Use This-tab overrides for per-tab needs.",
         droppedUrlReplacement:
-          "Dropped — HeaderShim changes headers only, never redirects.",
+          "Dropped. HeaderShim changes headers only, never redirects.",
       },
     },
     siteAccess: {
@@ -237,9 +237,9 @@ export const copy = {
       revokeLabel: (domain: string) => `Revoke access to ${domain}`,
       revoked: (domain: string) => `Access to ${domain} revoked`,
       // A narrow grant removed while the broad grant stands changes nothing
-      // about reach — saying "revoked" there would claim access ended.
+      // about reach; saying "revoked" there would claim access ended.
       revokedUnderAllSites: (domain: string) =>
-        `${domain} grant removed — all-sites access still covers it`,
+        `${domain} grant removed. All-sites access still covers it.`,
       // The standing note: shown while any enabled rule reaches
       // subresources without naming the pages that start those requests.
       initiatorNote:
@@ -269,10 +269,11 @@ export const copy = {
       },
       shortcuts: "Keyboard shortcuts",
     },
-    // The trust page: prose a security reviewer can paste into an
-    // approval request. Claim wording says "no install-time
-    // warning", never "no permission text anywhere"; the CWS caveat is stated,
-    // never "verify the store build".
+    // The trust page, written for the person who installed HeaderShim:
+    // falsifiable claims, each with a way to check it. The reviewer-grade threat
+    // model lives in SECURITY.md, linked once. The install claim is always "no
+    // install-time warning", never "no permission text anywhere"; the CWS caveat
+    // is stated, never "verify the store build".
     about: {
       trustHeading: "About & trust",
       build: (version: string, commit: string): Sentence => [
@@ -281,10 +282,18 @@ export const copy = {
         " · commit ",
         data(commit),
       ],
+      summary: {
+        heading: "Three facts you can check",
+        facts: [
+          "HeaderShim is open source. The full source, its MIT license, and every release are linked below.",
+          "No code in HeaderShim can send your data anywhere. It ships no content scripts, no scripting permission, and no webRequest, and it takes no host access at install. Its only capability is Chrome's declarative header engine, which cannot read page contents or make network calls. The manifest shows this.",
+          "HeaderShim has no telemetry or analytics. A policy check in CI fails the build if any network or tracking capability is added.",
+        ],
+      },
       permissions: {
         heading: "Permissions, justified",
         intro:
-          'HeaderShim installs with no install-time warning — it requests no host access and no warning-bearing permission at install. Chrome\'s details page shows its generic site-access line ("This extension can read and change your data on sites. You can control which sites the extension can access."), and that line is accurate: site access is granted per site, by you, when a rule needs it, and revoked in one click.',
+          'HeaderShim installs with no install-time warning. It requests no host access and no warning-bearing permission at install. Chrome\'s details page shows its generic site-access line ("This extension can read and change your data on sites. You can control which sites the extension can access."), and that line is accurate: you grant site access per site, when a rule needs it, and revoke it in one click.',
         columns: {
           permission: "Permission",
           why: "Why it's needed",
@@ -294,90 +303,103 @@ export const copy = {
           {
             permission: "declarativeNetRequestWithHostAccess",
             why: "Applies your header rules through Chrome's declarative rule engine, which only acts on sites you've granted.",
-            when: "At install — no warning dialog.",
+            when: "At install. No warning dialog.",
           },
           {
             permission: "storage",
-            why: "Saves your profiles, rules, and settings on this device — nothing else, nowhere else.",
-            when: "At install — no warning dialog.",
+            why: "Saves your profiles, rules, and settings on this device, and nothing else.",
+            when: "At install. No warning dialog.",
           },
           {
             permission: "activeTab",
             why: "Lets This-tab overrides and Verify act on the tab where you clicked, with no site grant.",
-            when: "Only on your gesture — the click or keyboard shortcut is the consent.",
+            when: "Only on your gesture. The click or keyboard shortcut is the consent.",
           },
           {
             permission: "Site access (optional)",
-            why: "Lets rules change headers on the sites you name — Chrome asks with its own prompt, scoped to exactly those sites.",
-            when: "When a rule first needs a site — revocable any time in Site access.",
+            why: "Lets rules change headers on the sites you name. Chrome asks with its own prompt, scoped to exactly those sites.",
+            when: "When a rule first needs a site. Revocable any time in Site access.",
           },
         ],
       },
       storage: {
         heading: "What's stored",
-        body: "HeaderShim stores exactly what you typed: rule definitions and UI preferences, locally, and nothing else. It never records traffic, headers it observed, hostnames you visited, or history of any kind. You can export the entire store at any time to a human-readable file and inspect it byte for byte — the export is the inspection surface. Your rules can contain secrets (tokens, keys); they live on your device unencrypted, like any local config file, and an export deserves the same care as a .env file.",
+        body: "HeaderShim stores exactly what you typed: rule definitions and UI preferences, on this device, and nothing else. It never records your traffic, the headers on it, the sites you visit, or history of any kind. You can export the whole store to a readable file at any time and check it byte for byte. That export is the inspection surface. A rule can hold a live secret you typed, such as an Authorization token or a Cookie value, stored unencrypted on disk like any local config file. Treat an export like a file of passwords.",
       },
       neverList: {
         heading: "What HeaderShim will never do",
         intro:
-          "Every absence the manifest can express is enforced by an executable policy check in CI — checkable by reading the manifest, not claimed. The rest are standing commitments, in writing here and in the listing.",
-        // This exact wording is the standing commitment; mirrored in the listing.
-        items: [
+          "Some of these you can check in the manifest, some are standing commitments, and some are limits Chrome places on every extension.",
+        // The lead claims are the signature. Each detail is one plain user-facing
+        // consequence. The groups mirror what the listing states.
+        groups: [
           {
-            lead: "No telemetry/analytics ever",
-            detail:
-              "the exfiltration vector; also nothing to disclose in the store data panel.",
+            heading: "Checkable in the manifest",
+            items: [
+              {
+                lead: "No content scripts, no scripting, no web-accessible resources, no webRequest",
+                detail:
+                  "HeaderShim has no code path into the pages you open, so it can't read them or inject into them.",
+              },
+              {
+                lead: "No telemetry or analytics",
+                detail:
+                  "No network code ships to send it, and CI fails the build if any is added.",
+              },
+              {
+                lead: "No remote config",
+                detail:
+                  "Every behavior is bundled in the build you installed. Nothing is fetched to change it after review.",
+              },
+            ],
           },
           {
-            lead: "No accounts, no cloud sync, no vendor server",
-            detail:
-              "a vendor server is a dependency today and a monetization ratchet tomorrow; sharing = files.",
+            heading: "Standing commitments",
+            items: [
+              {
+                lead: "No accounts, no cloud sync, no server",
+                detail:
+                  "There is no HeaderShim server, and none is planned. To share a profile, export a file.",
+              },
+              {
+                lead: "No traffic or header history",
+                detail:
+                  "HeaderShim saves the rules you write, never the requests you make. Any future debug log would be in-memory and off by default.",
+              },
+              {
+                lead: "No sale, no silent ownership transfer",
+                detail:
+                  "A change of maintainer is the most common way a trusted extension goes bad. HeaderShim commits against a quiet handover. The security policy has the detail.",
+              },
+            ],
           },
           {
-            lead: "No remote config of any kind",
-            detail:
-              'remote data, however "legal", is the mechanism by which a trusted extension changes behavior after review; all behavior local and bundled.',
-          },
-          {
-            lead: "No content scripts, no scripting permission, no web-accessible resources, no webRequest",
-            detail:
-              'the ad-injection vector; with no code path into pages, "could this inject ads" is answerable by reading the manifest.',
-          },
-          {
-            lead: "No header history / traffic log",
-            detail:
-              "a log of observed headers is a store of tokens and credentials waiting to leak; HeaderShim stores rule definitions, never observed traffic. If a debug log is ever added: in-memory, off by default.",
-          },
-          {
-            lead: "No request-time dynamic values",
-            detail:
-              'impossible under the platform; promising it recreates the "didn\'t work" review cycle.',
-          },
-          {
-            lead: "No response-body modification",
-            detail:
-              "requires the debugger API; out of scope, stated explicitly to preempt the recurring ask.",
-          },
-          {
-            lead: "No monetization, no sale, no ownership transfer",
-            detail:
-              "stated in README and listing; ownership change is the top predictor of a trusted extension going bad.",
-          },
-          {
-            lead: "Zero runtime dependencies",
-            detail:
-              "enforced in CI; nothing in the shipped artifact that wasn't written or vendored deliberately.",
-          },
-          {
-            lead: "No URL redirect/rewrite",
-            detail:
-              "adjacent scope creep; breaks the single stated purpose that keeps store review clean.",
-          },
-          {
-            lead: "No notifications permission",
-            detail: "status lives on the badge and in the popup.",
+            heading: "Limits HeaderShim doesn't work around",
+            items: [
+              {
+                lead: "No request-time dynamic values",
+                detail:
+                  "Chrome doesn't let an extension compute a header value per request, and HeaderShim doesn't try to. Generated values are frozen when you save the rule.",
+              },
+              {
+                lead: "No response-body changes",
+                detail:
+                  "Chrome's header engine can't touch the page you receive, only its headers. It can't rewrite the page.",
+              },
+              {
+                lead: "No redirects or URL rewriting",
+                detail:
+                  "HeaderShim changes headers only. It can't send you to another site.",
+              },
+            ],
           },
         ],
+      },
+      security: {
+        heading: "Security and disclosure",
+        body: "The full threat model, the risks HeaderShim accepts, and how to report a vulnerability are in the security policy.",
+        linkLabel: "Read the security policy",
+        linkUrl: "https://github.com/arun279/headershim/blob/main/SECURITY.md",
       },
       verifyBuild: {
         heading: "Verify this build",
@@ -468,7 +490,7 @@ export const copy = {
       data(host),
       " requests in this tab",
     ],
-    invalidRegex: "Invalid regex — edit the scope to enable",
+    invalidRegex: "Invalid regex. Edit the scope to enable",
     // Announced after the ⋯ menu copies a (possibly truncated) value in full.
     valueCopied: "Value copied",
     overridden: "overridden by a rule above",
@@ -492,7 +514,7 @@ export const copy = {
     // Persistent honesty line under the section; "Create a rule"
     // is the action button between the two spans.
     standingBefore:
-      "Calling a different API from this page? That needs a saved rule and a one-click site grant — ",
+      "Calling a different API from this page? That needs a saved rule and a one-click site grant. ",
     standingAction: "Create a rule",
     standingAfter: " pre-fills it.",
     // No web origin to bind to (chrome:// or store page).
@@ -596,7 +618,7 @@ export const copy = {
     caution: "Caution",
   },
 
-  // Optional one-word context after a suggested name ("authorization — credentials").
+  // Optional one-word context after a suggested name ("authorization: credentials").
   headerHints: {
     authorization: "credentials",
     "user-agent": "client identity",
@@ -631,7 +653,7 @@ export const copy = {
     multiple: (siteCount: number) =>
       `To change headers on ${siteCount} sites, Chrome requires you to grant HeaderShim access to those sites:`,
     initiator: (initiator: string, target: string) =>
-      `Also allow on ${initiator} (the site you're on) — needed when its pages call ${target}.`,
+      `Also allow on ${initiator} (the site you're on). Its pages need it to call ${target}.`,
     // Pattern/regex scopes: Chrome grants by site, not by pattern, so the two
     // dimensions the platform needs are collected as separate labeled inputs.
     patternIntro:
@@ -652,15 +674,15 @@ export const copy = {
 
   errors: {
     regexInvalid:
-      "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses — it has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
+      "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses. RE2 has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
     regexOversize:
       "This pattern compiles to more than Chrome's 2 KB limit for a single rule. Shorten or split it.",
     patternInvalid:
-      "Chrome's rule engine can't use this URL pattern — it can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
+      "Chrome's rule engine can't use this URL pattern. A pattern can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
     grantDeclined: (host: string) =>
-      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access whenever you're ready — the rule starts working immediately.`,
+      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access whenever you're ready. The rule starts working immediately.`,
     appendDisallowed: (name: string) =>
-      `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead — it replaces any existing value.`,
+      `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
     ruleCap:
       "Chrome caps extensions at 5,000 header rules, and enabling this would pass HeaderShim's safe limit of 4,500. Disable or delete rules you're not using, or turn off a profile.",
     ruleCounter: (enabled: number) =>
@@ -678,14 +700,14 @@ export const copy = {
     importUnrecognized:
       "This file is valid JSON but isn't a HeaderShim or ModHeader export, so nothing was imported and nothing was changed. HeaderShim reads its own exports and ModHeader profile exports only.",
     headerNotModifiable:
-      "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1 — for most modern sites that isn't possible.",
-    headerNameRequired: "Every rule needs a header name — type one to save.",
+      "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1. For most modern sites that isn't possible.",
+    headerNameRequired: "Every rule needs a header name. Type one to save.",
     headerNameInvalid:
-      "This isn't a legal header name — letters, digits, and hyphens are the safe set.",
+      "This isn't a legal header name. Letters, digits, and hyphens are the safe set.",
     valueRequired:
-      "Set and append need a value — type one, or switch the operation to Remove.",
+      "Set and append need a value. Type one, or switch the operation to Remove.",
     valueLineBreak:
-      "Header values can't contain line breaks — remove them to save.",
+      "Header values can't contain line breaks. Remove them to save.",
     scopeEmpty: {
       domains: "Name at least one domain this rule applies to.",
       pattern: "Type a URL pattern this rule applies to.",
@@ -694,7 +716,7 @@ export const copy = {
       resourceTypes: "Pick at least one resource type.",
     },
     newerStore: (foundVersion: number, supportedVersion: number) =>
-      `Your rules were saved by a newer HeaderShim (format ${foundVersion}; this version reads up to ${supportedVersion}). Update HeaderShim to pick them back up — nothing has been changed.`,
+      `Your rules were saved by a newer HeaderShim (format ${foundVersion}; this version reads up to ${supportedVersion}). Update HeaderShim to pick them back up. Nothing has been changed.`,
   },
 
   advisories: {
@@ -706,7 +728,7 @@ export const copy = {
   verify: {
     // The honest-limits footer.
     limits:
-      'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug) — trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
+      'Chrome only reports rule matches from the last 5 minutes on this tab. DevTools\' Network panel will not show header changes made by extensions (a known Chrome bug), so trust this panel or your server logs, not DevTools. Cached responses never pass through header rules: to test reliably, open DevTools → Network → check "Disable cache", then reload.',
     // Verify leads with the most basic unmet precondition,
     // never the caching essay. blocked > no-request > matched, in that order.
     // A grant gap is the headline, with Grant surfaced in the panel itself.
@@ -716,7 +738,7 @@ export const copy = {
       moreSites: number,
     ): Sentence => [
       data(ruleCount),
-      ` ${rules(ruleCount)} can't run — needs access to `,
+      ` ${rules(ruleCount)} can't run. Needs access to `,
       data(host),
       ...(moreSites > 0
         ? [" and ", data(moreSites), ` more ${sites(moreSites)}`]
@@ -727,10 +749,10 @@ export const copy = {
     // been requested since the last change, so lead with the reload, not cache.
     noRequestHeadline: "No headers changed on this tab's last request.",
     reloadHint: "Reload the tab, then run Verify again to see what fired.",
-    // The residual causes once a reload is ruled out — the caching/DevTools half
+    // The residual causes once a reload is ruled out. The caching/DevTools half
     // lives in `limits`, so this names only what that footer does not.
     stillNothing:
-      "Still nothing after a reload? A rule limited to certain resource types only fires on those requests, and requests another site starts need that site granted too — see Site access in options.",
+      "Still nothing after a reload? A rule limited to certain resource types only fires on those requests, and requests another site starts need that site granted too. See Site access in options.",
     // The has-matches headline. Counts of matches, phrased so it never reads as
     // a configuration score; the per-rule list carries the tallies.
     matchedHeadline: (matched: number): Sentence => [

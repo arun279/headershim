@@ -137,6 +137,14 @@ describe("options about", () => {
     expect(root.textContent).toContain(copy.app.tagline);
   });
 
+  it("leads with the three checkable facts", async () => {
+    const root = await mount();
+    const facts = [
+      ...root.querySelectorAll<HTMLElement>(".about-facts li"),
+    ].map((item) => item.textContent);
+    expect(facts).toEqual(text.summary.facts);
+  });
+
   it("justifies every manifest permission plus optional site access", async () => {
     const root = await mount();
     const rows = [
@@ -152,20 +160,44 @@ describe("options about", () => {
     expect(root.textContent).toContain(text.permissions.intro);
   });
 
-  it("renders the full never-list and the build-verification procedure", async () => {
+  it("renders the grouped never-list and the build-verification procedure", async () => {
     const root = await mount();
-    const items = [...root.querySelectorAll<HTMLElement>(".about-never li")];
 
-    expect(
-      items.map((item) => item.querySelector("strong")?.textContent),
-    ).toEqual(text.neverList.items.map((item) => item.lead));
+    const groupHeadings = [
+      ...root.querySelectorAll<HTMLElement>(".about-never-heading"),
+    ].map((heading) => heading.textContent);
+    expect(groupHeadings).toEqual(
+      text.neverList.groups.map((group) => group.heading),
+    );
+
+    const leads = [
+      ...root.querySelectorAll<HTMLElement>(".about-never li strong"),
+    ].map((strong) => strong.textContent);
+    expect(leads).toEqual(
+      text.neverList.groups.flatMap((group) =>
+        group.items.map((item) => `${item.lead}.`),
+      ),
+    );
+
     expect(root.textContent).toContain(text.verifyBuild.caveat);
     expect(root.textContent).toContain("sha256sum -c SHA256SUMS");
   });
 
+  it("carries a single link to the committed security policy", async () => {
+    const root = await mount();
+    const security = [
+      ...root.querySelectorAll<HTMLAnchorElement>("a.about-link"),
+    ].filter((link) => link.href === text.security.linkUrl);
+
+    expect(security).toHaveLength(1);
+    expect(root.textContent).toContain(text.security.body);
+  });
+
   it("links the repository, issues, and changelog", async () => {
     const root = await mount();
-    const links = [...root.querySelectorAll<HTMLAnchorElement>("a.about-link")];
+    const links = [
+      ...root.querySelectorAll<HTMLAnchorElement>(".about-links a.about-link"),
+    ];
 
     expect(links.map((link) => link.href)).toEqual([
       text.links.repositoryUrl,

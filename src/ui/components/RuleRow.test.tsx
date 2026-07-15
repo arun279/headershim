@@ -122,7 +122,7 @@ describe("RuleRow states", () => {
     expect(row.classList.contains("invalid")).toBe(true);
     expect(toggle().getAttribute("aria-disabled")).toBe("true");
     expect(line2().textContent).toBe(
-      " Invalid regex — edit the scope to enable",
+      " Invalid regex. Edit the scope to enable",
     );
     fire(() => toggle().click());
     expect(onToggle).not.toHaveBeenCalled();

@@ -76,7 +76,7 @@ describe("popup App", () => {
     expect(root.textContent).toContain(
       "temporary, this tab only, gone on close",
     );
-    expect(annunciator().textContent).toBe("Live — no rules yet.");
+    expect(annunciator().textContent).toBe("Live. No rules yet.");
     expect(root.querySelector(".foot")?.textContent).toContain("Pause");
     const theme = root.querySelector('.popup-head [aria-label="Theme"]');
     const options = root.querySelector('.popup-head [aria-label="Options"]');
@@ -123,7 +123,7 @@ describe("popup App", () => {
     const { root, annunciator } = await mount(seededDoc([rule()]));
 
     expect(annunciator().textContent).toContain(
-      "1 rule can't run — HeaderShim doesn't have access to api.example.com.",
+      "1 rule can't run. HeaderShim doesn't have access to api.example.com.",
     );
     expect(annunciator().getAttribute("data-state")).toBe("needs-access");
     expect(root.querySelector(".rule-row.blocked .sw")).not.toBeNull();
@@ -135,7 +135,7 @@ describe("popup App", () => {
     await settle();
 
     expect(annunciator().getAttribute("data-state")).toBe("live");
-    expect(annunciator().textContent).toBe("Live — 1 of 1 rule enabled.");
+    expect(annunciator().textContent).toBe("Live. 1 of 1 rule enabled");
   });
 
   it("hands off a single Reload-tab action after granting from the annunciator", async () => {
@@ -188,7 +188,7 @@ describe("popup App", () => {
 
     expect((await read()).settings.paused).toBe(true);
     expect(annunciator().textContent).toContain(
-      "Paused — no headers are being modified.",
+      "Paused. No headers are being modified.",
     );
     expect(body().classList.contains("paused")).toBe(true);
     expect(root.querySelector(".profiles")?.classList.contains("paused")).toBe(
@@ -282,7 +282,7 @@ describe("popup App", () => {
     expect(root.textContent).toContain("Staging has no rules yet.");
     expect(root.textContent).toContain("Your other profiles are unchanged.");
     expect(document.activeElement?.textContent).toBe("Create a rule");
-    expect(annunciator().textContent).toBe("Live — no rules yet.");
+    expect(annunciator().textContent).toBe("Live. No rules yet.");
   });
 
   it("switches profiles exclusively from the chips even with Shift held", async () => {

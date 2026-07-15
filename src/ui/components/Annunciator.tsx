@@ -115,28 +115,30 @@ function hostLabel(host: string | undefined): string {
     : host;
 }
 
-const DASH = " — ";
+// The state word leads, set off from the detail by a full stop; the renderer
+// bolds everything before the first break.
+const LEAD_BREAK = ". ";
 
 /** State word bold, hostnames and counts mono, per the annunciator grammar. */
 function renderSentence(sentence: Sentence): ComponentChildren {
-  const dashIndex = sentence.findIndex(
-    (part) => typeof part === "string" && part.includes(DASH),
+  const breakIndex = sentence.findIndex(
+    (part) => typeof part === "string" && part.includes(LEAD_BREAK),
   );
-  if (dashIndex === -1) {
+  if (breakIndex === -1) {
     return renderParts(sentence);
   }
 
-  const dashed = sentence[dashIndex] as string;
-  const at = dashed.indexOf(DASH);
-  const lead = [...sentence.slice(0, dashIndex), dashed.slice(0, at)];
+  const broken = sentence[breakIndex] as string;
+  const at = broken.indexOf(LEAD_BREAK);
+  const lead = [...sentence.slice(0, breakIndex), broken.slice(0, at)];
   const rest = [
-    dashed.slice(at + DASH.length),
-    ...sentence.slice(dashIndex + 1),
+    broken.slice(at + LEAD_BREAK.length),
+    ...sentence.slice(breakIndex + 1),
   ];
   return (
     <>
       <strong>{renderParts(lead)}</strong>
-      {DASH}
+      {LEAD_BREAK}
       {renderParts(rest)}
     </>
   );
