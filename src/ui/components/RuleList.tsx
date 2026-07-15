@@ -165,6 +165,10 @@ export function RuleList(props: RuleListProps) {
                         return props.invalidRuleIds.has(rule.id)
                           ? undefined
                           : props.onToggle(profile.id, rule.id, !rule.enabled);
+                      case "grant":
+                        return missing !== undefined && missing.length > 0
+                          ? props.onGrant(profile.id, rule.id, missing)
+                          : undefined;
                       case "delete":
                         return props.onDelete(profile.id, rule.id);
                       case "menu":

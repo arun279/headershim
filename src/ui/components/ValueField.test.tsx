@@ -76,6 +76,26 @@ describe("ValueField multiline control", () => {
     expect(ctx.onInput).toHaveBeenCalledWith("before one twoafter");
     expect(ctx.root.textContent).toContain(copy.editor.newlineRemoved);
   });
+
+  it("clears the line-break note after clean input", () => {
+    const ctx = mount({ value: "before after" });
+    fire(() => {
+      ctx.input().setSelectionRange(7, 7);
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", {
+        value: { getData: () => "one\ntwo" },
+      });
+      ctx.input().dispatchEvent(paste);
+    });
+    expect(ctx.root.textContent).toContain(copy.editor.newlineRemoved);
+
+    fire(() => {
+      ctx.input().value = "clean";
+      ctx.input().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    expect(ctx.root.textContent).not.toContain(copy.editor.newlineRemoved);
+  });
 });
 
 describe("ValueField generated notes", () => {

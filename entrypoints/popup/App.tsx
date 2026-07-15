@@ -30,6 +30,7 @@ import {
 import {
   pruneForeignOrigins,
   removeOverride,
+  restoreOverride,
 } from "../../src/ui/state/session-mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
 import { useInvalidRules } from "../../src/ui/state/useInvalidRules";
@@ -81,8 +82,8 @@ interface Editing {
   ruleId?: string;
   /** A full draft to seed a new rule from (This-tab "Save as rule…"). */
   prefill?: RuleDraft;
-  /** The temporary row this new rule promotes; removed once the rule saves. */
-  promote?: { tabId: number; num: number };
+  /** The temporary row this new rule promotes, retained for discard recovery. */
+  promote?: { override: TabOverride; index: number };
 }
 
 function Ready({
@@ -217,28 +218,33 @@ function Ready({
     setEditing({
       profileId: doc.focusedProfileId,
       prefill: overrideToRuleDraft(override, tabDomain ?? override.originHost),
-      promote: { tabId: override.tabId, num: override.num },
+      promote: {
+        override,
+        index: Math.max(
+          0,
+          overrides.findIndex((candidate) => candidate.num === override.num),
+        ),
+      },
     });
   };
 
-  const saveEditing = (
+  const saveEditing = async (
     profileId: string,
     ruleId: string | undefined,
     draft: RuleDraft,
     promote: Editing["promote"],
-  ) =>
-    mutations.saveRule(profileId, ruleId, draft).then((outcome) => {
-      if (outcome.ok) {
-        setPendingUndo(undefined);
-        // The promotion's source row is retired on its first commit — the one
-        // that creates the rule (ruleId was undefined); a later grant-scope
-        // save of the same rule must not remove it twice.
-        if (ruleId === undefined && promote !== undefined) {
-          void removeOverride(promote.tabId, promote.num);
-        }
+  ) => {
+    const outcome = await mutations.saveRule(profileId, ruleId, draft);
+    if (outcome.ok) {
+      setPendingUndo(undefined);
+      // The promotion's source row is retired on its first commit. Waiting for
+      // the removal keeps discard recovery ordered behind this write.
+      if (ruleId === undefined && promote !== undefined) {
+        await removeOverride(promote.override.tabId, promote.override.num);
       }
-      return outcome;
-    });
+    }
+    return outcome;
+  };
 
   // When the new-rule editor closes and focus fell with it, the + New rule
   // trigger takes it back; a focus the user moved stays put.
@@ -420,13 +426,21 @@ function Ready({
     });
   };
 
-  const discardEditingRule = async (profileId: string, ruleId: string) => {
+  const discardEditingRule = async (
+    profileId: string,
+    ruleId: string,
+    promote: Editing["promote"],
+  ) => {
     const outcome = await mutations.deleteRule(profileId, ruleId);
     if (!outcome.ok) {
       const message = blockedCommitCopy(outcome.error);
       if (message !== undefined) {
         showToast(message);
       }
+      return;
+    }
+    if (promote !== undefined) {
+      await restoreOverride(promote.override, promote.index);
     }
   };
 
@@ -473,9 +487,14 @@ function Ready({
                 : copy.toast.changesSaved,
             )
           }
+          onGrantStep={() => setToast(undefined)}
           onGranted={announceGrant}
           onDiscardRule={(ruleId) =>
-            discardEditingRule(activeEditing.profileId, ruleId)
+            discardEditingRule(
+              activeEditing.profileId,
+              ruleId,
+              activeEditing.promote,
+            )
           }
           onClose={() => setEditing(undefined)}
         />

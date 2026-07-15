@@ -22,6 +22,7 @@ import {
 import type { MutationError } from "../state/mutations";
 import { AdvisorySlot } from "./AdvisorySlot";
 import { Button } from "./Button";
+import { handleEditorCommitKey } from "./editorKeys";
 import {
   GrantPanel,
   type GrantSelection,
@@ -58,6 +59,8 @@ interface RuleEditorProps {
   /** A grant landed: the now-active sites, for the "Active on …" toast. */
   onGranted?: (sites: readonly string[]) => void;
   onCommitted?: (kind: "create" | "edit") => void;
+  /** The saved rule needs a grant step; clears messaging outside the sheet. */
+  onGrantStep?: () => void;
   onDiscardRule: (ruleId: string) => Promise<void>;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
@@ -135,12 +138,13 @@ export function RuleEditor(props: RuleEditorProps) {
       }
       const saved = outcome.value;
       savedIdRef.current = saved.id;
-      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
       const step = planGrant(saved, props.grants, props.tabDomain);
       if (step === undefined) {
+        props.onCommitted?.(props.rule === undefined ? "create" : "edit");
         props.onClose();
         return;
       }
+      props.onGrantStep?.();
       setGrantStep(step);
     } finally {
       busyRef.current = false;
@@ -221,12 +225,10 @@ export function RuleEditor(props: RuleEditorProps) {
     if (grantStep !== undefined) {
       return;
     }
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      void commit();
+    if (handleEditorCommitKey(event, () => void commit())) {
       return;
     }
+    const target = event.target instanceof HTMLElement ? event.target : null;
     if (
       event.key === "Enter" &&
       target?.classList.contains("editor-commit-field") === true
@@ -234,9 +236,6 @@ export function RuleEditor(props: RuleEditorProps) {
       event.preventDefault();
       void commit();
       return;
-    }
-    if (target?.tagName === "BUTTON" && /^[a-zA-Z0-9]$/.test(event.key)) {
-      event.preventDefault();
     }
   };
 
@@ -429,7 +428,7 @@ function CommentDisclosure({
           </label>
           <input
             id={id}
-            class="field"
+            class="field editor-commit-field"
             type="text"
             value={value}
             onInput={(event) => onInput(event.currentTarget.value)}

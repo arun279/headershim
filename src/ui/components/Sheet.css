@@ -1,4 +1,8 @@
 .sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
   min-width: 0;
   background: var(--panel-0);
 }
@@ -13,7 +17,8 @@
 }
 
 .sheet-region {
-  max-height: 600px;
+  flex: 1;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
 }

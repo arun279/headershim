@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "preact/hooks";
+import { useId, useState } from "preact/hooks";
 import type {
   Direction,
   HeaderOp,
@@ -17,6 +17,8 @@ import {
   removeOverride,
   type SessionMutationError,
 } from "../state/session-mutations";
+import { Button } from "./Button";
+import { handleEditorCommitKey } from "./editorKeys";
 import { HeaderFields } from "./HeaderFields";
 import { sentence } from "./sentence";
 import { Truncate } from "./Truncate";
@@ -36,7 +38,7 @@ interface ThisTabProps {
   onSaveAsRule: (override: TabOverride) => void;
   /** The standing honesty line's "Create a rule" action. */
   onCreateRule: () => void;
-  /** Closes the composer without adding (Esc, or an empty focus-leave). */
+  /** Closes the composer without adding. */
   onCloseComposer: () => void;
 }
 
@@ -167,10 +169,10 @@ interface Errors extends HeaderFieldError {
 }
 
 /**
- * The inline composer for a new This-tab override. Same no-ceremony commit
- * model as the rule editor: Enter or focus-leave commits when the required
- * fields hold up, Esc reverts, and there is no Add button. Header validation
- * runs in the session write path; its errors and the session cap render inline.
+ * The inline composer for a new This-tab override. Its action button and
+ * Ctrl/Cmd+Enter are the only commit paths; Esc reverts and focus changes leave
+ * the draft untouched. Header validation runs in the session write path; its
+ * errors and the session cap render inline.
  */
 function Composer({
   tabId,
@@ -210,8 +212,7 @@ function Composer({
       busyRef.current = false;
     }
   };
-  const rootRef = useRef<HTMLFieldSetElement>(null);
-  const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
+  const { draft, draftRef, busyRef, update } = useDraftState<Draft>(
     () => ({
       direction: "request",
       operation: "set",
@@ -232,37 +233,13 @@ function Composer({
       }
       return;
     }
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (event.key === "Enter") {
-      if (target?.tagName !== "BUTTON") {
-        event.preventDefault();
-        void commit();
-      }
-      return;
-    }
-    if (target?.tagName === "BUTTON" && /^[a-zA-Z0-9]$/.test(event.key)) {
-      event.preventDefault();
-    }
-  };
-
-  const onFocusOut = (event: FocusEvent) => {
-    const next = event.relatedTarget;
-    if (!(next instanceof Node) || rootRef.current?.contains(next) === true) {
-      return;
-    }
-    if (dirtyRef.current) {
-      void commit();
-    } else {
-      onClose();
-    }
+    handleEditorCommitKey(event, () => void commit());
   };
 
   return (
     <fieldset
       class="this-tab-composer inline-editor-well"
-      ref={rootRef}
       onKeyDown={onKeyDown}
-      onFocusOut={onFocusOut}
     >
       <legend class="silk">{copy.thisTab.composerTitle}</legend>
 
@@ -298,6 +275,15 @@ function Composer({
           {errors.add}
         </p>
       )}
+
+      <div class="this-tab-composer-actions">
+        <Button kind="quiet" onClick={onClose}>
+          {copy.actions.cancel}
+        </Button>
+        <Button kind="primary" onClick={() => void commit()}>
+          {copy.actions.addOverride}
+        </Button>
+      </div>
     </fieldset>
   );
 }

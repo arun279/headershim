@@ -83,8 +83,11 @@ export function ChipField(props: ChipFieldProps) {
             }
             if (props.onEnter !== undefined) {
               event.preventDefault();
-              commit(pending);
-              props.onEnter();
+              if (pending.trim() === "") {
+                props.onEnter();
+              } else {
+                commit(pending);
+              }
               return;
             }
             if (pending.trim() !== "") {

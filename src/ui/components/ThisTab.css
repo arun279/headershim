@@ -62,3 +62,10 @@
 }
 
 /* The composer expands into the shared .inline-editor-well (tokens.css). */
+
+.this-tab-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}

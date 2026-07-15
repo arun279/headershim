@@ -1,4 +1,6 @@
 import type { ComponentChildren, JSX } from "preact";
+import { useRef } from "preact/hooks";
+import { useFocusTrap } from "../a11y/focus";
 import "./Sheet.css";
 
 interface SheetProps {
@@ -23,10 +25,17 @@ export function Sheet({
   class: className,
   onKeyDown,
 }: SheetProps) {
+  const sheetRef = useRef<HTMLElement>(null);
+  useFocusTrap(sheetRef, true, { focusOnActivate: false });
+
   return (
     <section
+      ref={sheetRef}
       class={className === undefined ? "sheet" : `sheet ${className}`}
+      role="dialog"
+      aria-modal="true"
       aria-label={label}
+      tabIndex={-1}
       onKeyDown={onKeyDown}
     >
       <header class="sheet-head">{header}</header>

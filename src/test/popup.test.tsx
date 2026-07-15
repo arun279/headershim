@@ -569,6 +569,15 @@ describe("popup editor mode integration", () => {
     press(chipInput, "Enter");
     await settle();
 
+    expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(root.querySelector(".domain-chip")?.textContent).toContain(
+      "api.example.com",
+    );
+    expect((await read()).profiles[0]?.rules).toHaveLength(2);
+
+    press(chipInput, "Enter");
+    await settle();
+
     expect(root.querySelector(".rule-editor")).toBeNull();
     const stored = await read();
     expect(stored.profiles[0]?.rules.map((entry) => entry.header)).toEqual([

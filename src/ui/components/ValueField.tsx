@@ -54,6 +54,7 @@ export function ValueField(props: ValueFieldProps) {
                 setNewlineRemoved(true);
                 props.onInput(stripLineBreaks(raw));
               } else {
+                setNewlineRemoved(false);
                 props.onInput(raw);
               }
             }}

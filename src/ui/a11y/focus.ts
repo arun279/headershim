@@ -41,17 +41,18 @@ export function focusOnRemoval(anchor: HTMLElement): void {
 
 interface FocusTrapOptions {
   initialFocus?: RefObject<HTMLElement | null> | undefined;
+  focusOnActivate?: boolean | undefined;
 }
 
 /**
- * Confines Tab/Shift+Tab to `containerRef` while `active`, moves focus inside on
- * activation, and returns it to the previously focused element on deactivation.
- * Layers (modal, verify, editor) share this so focus never escapes an open layer.
+ * Confines Tab/Shift+Tab to `containerRef` while `active`, can move focus inside
+ * on activation, and returns it to the previously focused element on
+ * deactivation. Layers share this so focus never escapes an open layer.
  */
 export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
   active: boolean,
-  { initialFocus }: FocusTrapOptions = {},
+  { initialFocus, focusOnActivate = true }: FocusTrapOptions = {},
 ): void {
   useEffect(() => {
     const container = containerRef.current;
@@ -60,7 +61,13 @@ export function useFocusTrap(
     const previouslyFocused = container.ownerDocument
       .activeElement as HTMLElement | null;
 
-    (initialFocus?.current ?? getFocusable(container)[0] ?? container).focus();
+    if (focusOnActivate) {
+      (
+        initialFocus?.current ??
+        getFocusable(container)[0] ??
+        container
+      ).focus();
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -86,5 +93,5 @@ export function useFocusTrap(
       container.removeEventListener("keydown", onKeyDown);
       previouslyFocused?.focus();
     };
-  }, [active, containerRef, initialFocus]);
+  }, [active, containerRef, focusOnActivate, initialFocus]);
 }

@@ -145,6 +145,9 @@ describe("RuleList grouping", () => {
     expect(onGrant).toHaveBeenCalledExactlyOnceWith("staging", "a", [
       "*://*.api.acme.dev/*",
     ]);
+    expect(
+      rows()[0]?.querySelector<HTMLButtonElement>(".rule-grant")?.tabIndex,
+    ).toBe(-1);
   });
 });
 
@@ -184,6 +187,19 @@ describe("RuleList keyboard", () => {
     expect(onDelete.mock.calls).toEqual([
       ["staging", "a"],
       ["staging", "b"],
+    ]);
+  });
+
+  it("g grants a blocked row without adding an in-row Tab stop", () => {
+    const { rows, onGrant } = mount({
+      missingByRule: new Map([["a", ["*://*.api.acme.dev/*"]]]),
+    });
+    const first = rows()[0] as HTMLElement;
+
+    press(first, "g");
+
+    expect(onGrant).toHaveBeenCalledExactlyOnceWith("staging", "a", [
+      "*://*.api.acme.dev/*",
     ]);
   });
 

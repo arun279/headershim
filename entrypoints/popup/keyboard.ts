@@ -122,7 +122,7 @@ function isTextField(target: EventTarget | null): boolean {
   );
 }
 
-export type RowCommand = "edit" | "toggle" | "delete" | "menu";
+export type RowCommand = "edit" | "toggle" | "grant" | "delete" | "menu";
 
 /** Keys that act on the focused rule row (the row element itself, not a control inside it). */
 export function rowCommand(event: KeyLike): RowCommand | undefined {
@@ -138,6 +138,8 @@ export function rowCommand(event: KeyLike): RowCommand | undefined {
       return "edit";
     case " ":
       return "toggle";
+    case "g":
+      return "grant";
     case "Delete":
     case "Backspace":
       return "delete";

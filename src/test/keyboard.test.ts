@@ -157,6 +157,7 @@ describe("rowCommand", () => {
   it.each([
     ["Enter", "edit"],
     [" ", "toggle"],
+    ["g", "grant"],
     ["Delete", "delete"],
     ["Backspace", "delete"],
     ["ContextMenu", "menu"],

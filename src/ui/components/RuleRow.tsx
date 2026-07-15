@@ -173,6 +173,7 @@ function lineTwo(
         <button
           type="button"
           class="rule-grant"
+          tabIndex={-1}
           onClick={(event) => {
             event.stopPropagation();
             props.onGrant();

@@ -403,6 +403,7 @@ export const copy = {
     grantLater: "Grant later",
     discardRule: "Discard rule",
     grant: "Grant",
+    addOverride: "Add override",
     cancel: "Cancel",
     undo: "Undo",
     regenerate: "Regenerate",

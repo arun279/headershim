@@ -34,6 +34,7 @@ function mount(
   const onRequestGrant = vi.fn(async () => true);
   const onGranted = vi.fn();
   const onCommitted = vi.fn();
+  const onGrantStep = vi.fn();
   const onDiscardRule = vi.fn(async () => undefined);
   const onClose = vi.fn();
   const root = render(
@@ -47,6 +48,7 @@ function mount(
       onRequestGrant={onRequestGrant}
       onGranted={onGranted}
       onCommitted={onCommitted}
+      onGrantStep={onGrantStep}
       onDiscardRule={onDiscardRule}
       onClose={onClose}
       {...props}
@@ -58,6 +60,7 @@ function mount(
     onRequestGrant,
     onGranted,
     onCommitted,
+    onGrantStep,
     onDiscardRule,
     onClose,
     editor: root.querySelector(".rule-editor") as HTMLElement,
@@ -306,6 +309,52 @@ describe("RuleEditor commit model", () => {
     expect(ctx.onSave).not.toHaveBeenCalled();
   });
 
+  it("adds a typed domain on Enter and commits only on the next empty Enter", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    typeInto(ctx.chipInput(), "cdn.example.com");
+
+    press(ctx.chipInput(), "Enter");
+    await settle();
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.root.textContent).toContain("cdn.example.com");
+
+    press(ctx.chipInput(), "Enter");
+    await settle();
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      expect.objectContaining({
+        scope: {
+          type: "domains",
+          domains: ["api.example.com", "cdn.example.com"],
+        },
+      }),
+    );
+  });
+
+  it("commits from the single-line Comment field", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    const commentToggle = [...ctx.root.querySelectorAll(".disclosure")].find(
+      (button) => button.textContent?.includes(copy.editor.labels.comment),
+    ) as HTMLButtonElement;
+    fire(() => commentToggle.click());
+    const comment = ctx.root.querySelector(
+      '.editor-option input[type="text"]',
+    ) as HTMLInputElement;
+    typeInto(comment, "staging token");
+
+    press(comment, "Enter");
+    await settle();
+
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      expect.objectContaining({ comment: "staging token" }),
+    );
+  });
+
   it("auto-expands non-default resource types on an existing rule", () => {
     const ctx = mount({ rule: rule({ resourceTypes: ["xhr", "scripts"] }) });
     const disclosure = [...ctx.root.querySelectorAll(".disclosure")].find(
@@ -473,6 +522,8 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.grantPanel()?.textContent).toContain(
       copy.grantPanel.createdLead,
     );
+    expect(ctx.onCommitted).not.toHaveBeenCalled();
+    expect(ctx.onGrantStep).toHaveBeenCalledOnce();
   });
 
   it("pre-checks the tab origin only when it differs from the target and the rule reaches subresources", async () => {
@@ -516,7 +567,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.root.querySelector(".grant-panel .grant-field")).toBeNull();
   });
 
-  it("fires one in-gesture prompt for target and initiator, toasts, and closes on allow", async () => {
+  it("fires one in-gesture prompt for target and initiator, reports it, and closes on allow", async () => {
     const ctx = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",

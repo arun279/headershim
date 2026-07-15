@@ -4,7 +4,8 @@ import { MAX_SESSION_OVERRIDES } from "../../core/limits";
 import type { TabOverride } from "../../core/model";
 import { read as readSession, write } from "../../platform/session-store";
 import { tabOverride } from "../../test/dnr-harness";
-import { fire, press, render, settle, typeInto } from "../test/render";
+import { copy } from "../copy";
+import { fire, render, settle, typeInto } from "../test/render";
 import { ThisTab } from "./ThisTab";
 
 const override = (overrides: Partial<TabOverride> = {}): TabOverride =>
@@ -36,7 +37,10 @@ function valueField(root: HTMLElement): HTMLInputElement {
 async function submit(root: HTMLElement, header: string, value: string) {
   typeInto(root.querySelector('[role="combobox"]') as HTMLInputElement, header);
   typeInto(valueField(root), value);
-  press(valueField(root), "Enter");
+  const add = [...root.querySelectorAll("button")].find(
+    (button) => button.textContent === copy.actions.addOverride,
+  ) as HTMLButtonElement;
+  fire(() => add.click());
   await settle();
 }
 
@@ -71,6 +75,60 @@ describe("ThisTab", () => {
       { tabId: 5, originHost: "app.example.com", header: "x-a", value: "42" },
     ]);
     expect(onCloseComposer).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps ordinary Enter and focus changes from committing a draft", async () => {
+    const onCloseComposer = vi.fn();
+    const root = mount({ composing: true, onCloseComposer });
+    const header = root.querySelector('[role="combobox"]') as HTMLInputElement;
+    const value = valueField(root);
+    typeInto(header, "x-a");
+    typeInto(value, "42");
+
+    fire(() => {
+      value.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      value.blur();
+    });
+    await settle();
+
+    expect((await readSession()).tabs[5]).toBeUndefined();
+    expect(onCloseComposer).not.toHaveBeenCalled();
+    expect(root.querySelector(".this-tab-composer")).not.toBeNull();
+  });
+
+  it("commits the composer with Ctrl+Enter", async () => {
+    const onCloseComposer = vi.fn();
+    const root = mount({ composing: true, onCloseComposer });
+    const value = valueField(root);
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "x-a",
+    );
+    typeInto(value, "42");
+
+    fire(() => {
+      value.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    await settle();
+
+    expect((await readSession()).tabs[5]?.[0]).toMatchObject({
+      header: "x-a",
+      value: "42",
+    });
+    expect(onCloseComposer).toHaveBeenCalledOnce();
   });
 
   it("surfaces the session cap inline without writing", async () => {
