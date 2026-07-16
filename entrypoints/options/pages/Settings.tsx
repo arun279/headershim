@@ -29,44 +29,37 @@ export function SettingsPage({
       <div class="settings-card">
         <fieldset class="settings-row settings-radios">
           <legend>{text.theme.label}</legend>
-          {(Object.entries(text.theme.options) as [Theme, string][]).map(
-            ([value, label]) => (
-              <label key={value} class="settings-radio">
-                <input
-                  type="radio"
-                  name="theme"
-                  value={value}
-                  checked={doc.settings.theme === value}
-                  onChange={() => {
-                    applyTheme(value);
-                    void mutations.setTheme(value);
-                  }}
-                />
-                {label}
-              </label>
-            ),
-          )}
-        </fieldset>
-
-        <fieldset class="settings-row settings-radios">
-          <legend>{text.badgeMode.label}</legend>
-          {(
-            Object.entries(text.badgeMode.options) as [
-              StateDoc["settings"]["badgeMode"],
-              string,
-            ][]
-          ).map(([value, label]) => (
-            <label key={value} class="settings-radio">
-              <input
-                type="radio"
-                name="badge-mode"
-                value={value}
-                checked={doc.settings.badgeMode === value}
-                onChange={() => void mutations.setBadgeMode(value)}
-              />
-              {label}
-            </label>
-          ))}
+          <div
+            class="settings-segments"
+            role="radiogroup"
+            aria-label={text.theme.label}
+          >
+            {(Object.entries(text.theme.options) as [Theme, string][]).map(
+              ([value, label]) => (
+                <label
+                  key={value}
+                  class={
+                    doc.settings.theme === value
+                      ? "settings-segment checked"
+                      : "settings-segment"
+                  }
+                >
+                  <input
+                    class="sr-only"
+                    type="radio"
+                    name="theme"
+                    value={value}
+                    checked={doc.settings.theme === value}
+                    onChange={() => {
+                      applyTheme(value);
+                      void mutations.setTheme(value);
+                    }}
+                  />
+                  {label}
+                </label>
+              ),
+            )}
+          </div>
         </fieldset>
 
         <div class="settings-row settings-shortcuts">

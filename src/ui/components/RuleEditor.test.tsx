@@ -33,23 +33,21 @@ function mount(
   );
   const onRequestGrant = vi.fn(async () => true);
   const onGranted = vi.fn();
+  const onGrantDeclined = vi.fn();
   const onCommitted = vi.fn();
-  const onGrantStep = vi.fn();
-  const onDiscardRule = vi.fn(async () => undefined);
   const onClose = vi.fn();
   const root = render(
     <RuleEditor
       profileName="Default"
       prefillDomain="api.example.com"
       // Default to an all-sites grant so the commit-model tests exercise the
-      // plain close path; grant-panel tests pass an explicit narrow snapshot.
+      // plain close path; grant-commit tests pass an explicit narrow snapshot.
       grants={GRANTED_ALL}
       onSave={onSave}
       onRequestGrant={onRequestGrant}
       onGranted={onGranted}
+      onGrantDeclined={onGrantDeclined}
       onCommitted={onCommitted}
-      onGrantStep={onGrantStep}
-      onDiscardRule={onDiscardRule}
       onClose={onClose}
       {...props}
     />,
@@ -59,9 +57,8 @@ function mount(
     onSave,
     onRequestGrant,
     onGranted,
+    onGrantDeclined,
     onCommitted,
-    onGrantStep,
-    onDiscardRule,
     onClose,
     editor: root.querySelector(".rule-editor") as HTMLElement,
     nameInput: () =>
@@ -74,25 +71,8 @@ function mount(
       root.querySelector(
         `.operation-segments input[value="${operation}"]`,
       ) as HTMLInputElement,
-    grantPanel: () => root.querySelector(".grant-panel"),
-    allowButton: () =>
-      [...root.querySelectorAll(".grant-panel button")].find((button) =>
-        button.textContent?.startsWith("Allow on"),
-      ) as HTMLButtonElement,
-    grantLaterButton: () =>
-      [...root.querySelectorAll(".grant-panel button")].find(
-        (button) => button.textContent === copy.actions.grantLater,
-      ) as HTMLButtonElement,
-    discardRuleButton: () =>
-      [...root.querySelectorAll(".grant-panel button")].find(
-        (button) => button.textContent === copy.actions.discardRule,
-      ) as HTMLButtonElement,
     saveButton: () =>
-      [...root.querySelectorAll(".editor-actions button")].find(
-        (button) =>
-          button.textContent === copy.actions.createRule ||
-          button.textContent === copy.actions.saveChanges,
-      ) as HTMLButtonElement,
+      root.querySelector(".editor-actions .primary") as HTMLButtonElement,
     errors: () =>
       [...root.querySelectorAll(".editor-error")].map(
         (node) => node.textContent,
@@ -150,9 +130,37 @@ async function fillAndCommit(
   await settle();
 }
 
+function openGeneratedValue(ctx: ReturnType<typeof mount>): void {
+  const disclosure = [...ctx.root.querySelectorAll(".disclosure")].find(
+    (button) => button.textContent?.includes(copy.editor.labels.generatedValue),
+  ) as HTMLButtonElement;
+  fire(() => disclosure.click());
+}
+
+async function commitEditedValue(
+  ctx: ReturnType<typeof mount>,
+  value = "Bearer next",
+): Promise<void> {
+  typeInto(ctx.valueInput(), value);
+  fire(() => ctx.saveButton().click());
+  await settle();
+}
+
+function mountPageRule(
+  scope: Rule["scope"],
+  props: Partial<Parameters<typeof RuleEditor>[0]> = {},
+) {
+  return mount({
+    grants: NARROW,
+    rule: rule({ scope, resourceTypes: ["pages"] }),
+    ...props,
+  });
+}
+
 describe("RuleEditor commit model", () => {
   it("renders the new-rule sheet with an explicit Create rule action", () => {
-    const { root } = mount();
+    const ctx = mount();
+    const { root } = ctx;
     expect(
       root
         .querySelector(".editor-sheet")
@@ -161,9 +169,27 @@ describe("RuleEditor commit model", () => {
     expect(root.querySelector(".sheet-head")?.textContent).toContain(
       "New rule · Default",
     );
-    expect(root.querySelector(".sheet-head .icon-btn svg")).not.toBeNull();
+    const headerExit = root.querySelector(
+      `.sheet-head button[aria-label="${copy.editor.close}"]`,
+    );
+    expect(headerExit?.querySelector("svg")).not.toBeNull();
+    expect(root.querySelector(".sheet-head")?.firstElementChild).toBe(
+      headerExit,
+    );
+    expect(
+      [...root.querySelectorAll(".editor-actions button")].filter(
+        (button) => button.textContent === copy.actions.cancel,
+      ),
+    ).toHaveLength(1);
     expect(root.querySelector(".editor-actions")?.textContent).toContain(
       copy.actions.createRule,
+    );
+    expect(ctx.nameInput().placeholder).toBe(
+      copy.editor.placeholders.headerName,
+    );
+    expect(ctx.valueInput().placeholder).toBe(copy.editor.placeholders.value);
+    expect(ctx.nameInput().size).toBe(
+      copy.editor.placeholders.headerName.length,
     );
   });
 
@@ -510,21 +536,17 @@ describe("RuleEditor advisories and value field", () => {
 
   it("inserts a generated UUID literal with the frozen note, regenerates, and clears on hand edit", () => {
     const ctx = mount();
-    const insert = ctx.root.querySelector(".insert-btn") as HTMLButtonElement;
-    fire(() => insert.click());
-    const uuidItem = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.insertUuid,
+    expect(ctx.root.querySelector(".insert-btn")).toBeNull();
+    openGeneratedValue(ctx);
+    const uuid = [...ctx.root.querySelectorAll("button")].find(
+      (button) => button.textContent === copy.editor.insertUuid,
     ) as HTMLButtonElement;
-    fire(() => uuidItem.click());
+    fire(() => uuid.click());
     const first = ctx.valueInput().value;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(ctx.root.textContent).toContain(copy.generatedValue.note);
 
-    const regenerate = ctx.root.querySelector(
-      ".editor-micro .link-btn",
-    ) as HTMLButtonElement;
-    expect(regenerate.textContent).toBe(copy.actions.regenerate);
-    fire(() => regenerate.click());
+    fire(() => uuid.click());
     expect(ctx.valueInput().value).not.toBe(first);
 
     typeInto(ctx.valueInput(), "hand-edited");
@@ -538,42 +560,45 @@ describe("RuleEditor advisories and value field", () => {
         generated: { kind: "uuid", at: "2026-07-12T14:03:27.000Z" },
       }),
     });
+    openGeneratedValue(ctx);
     expect(ctx.root.textContent).toContain(
       copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
-    );
-    expect(ctx.root.querySelector(".editor-micro .link-btn")?.textContent).toBe(
-      copy.actions.regenerate,
     );
   });
 });
 
 describe("RuleEditor grant moment", () => {
-  it("opens the grant panel naming the site when it isn't granted, instead of closing", async () => {
+  it("folds an ungranted host into the primary action and closes after commit", async () => {
     const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("api.example.com"),
+    );
     await fillAndCommit(ctx, "authorization");
-    expect(ctx.onClose).not.toHaveBeenCalled();
-    expect(ctx.grantPanel()?.textContent).toContain(
-      copy.grantPanel.single("api.example.com"),
-    );
-    expect(ctx.grantPanel()?.textContent).toContain(copy.grantPanel.heading);
-    expect(ctx.grantPanel()?.textContent).toContain(
-      copy.grantPanel.createdLead,
-    );
-    expect(ctx.root.querySelector(".editor-sheet-with-footer")).toBeNull();
-    expect(ctx.onCommitted).not.toHaveBeenCalled();
-    expect(ctx.onGrantStep).toHaveBeenCalledOnce();
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledOnce();
+    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("create");
+    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["api.example.com"]);
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+    expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
 
-  it("pre-checks the tab origin only when it differs from the target and the rule reaches subresources", async () => {
+  it("includes and records a different tab origin when the rule reaches subresources", async () => {
     const differs = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
       tabDomain: "app.example.com",
     });
     await fillAndCommit(differs, "authorization");
-    expect(
-      differs.root.querySelector('.grant-panel input[type="checkbox"]'),
-    ).not.toBeNull();
+    expect(differs.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+      "*://*.app.example.com/*",
+    ]);
+    expect(differs.onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ initiators: ["app.example.com"] }),
+    );
 
     const sameOrigin = mount({
       grants: NARROW,
@@ -581,69 +606,130 @@ describe("RuleEditor grant moment", () => {
       tabDomain: "api.example.com",
     });
     await fillAndCommit(sameOrigin, "authorization");
-    expect(
-      sameOrigin.root.querySelector('.grant-panel input[type="checkbox"]'),
-    ).toBeNull();
+    expect(sameOrigin.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+    ]);
+    expect(sameOrigin.onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ initiators: [] }),
+    );
   });
 
-  it("shows no initiator line for a Pages-only rule (no subresource reach)", async () => {
-    const ctx = mount({
-      grants: NARROW,
-      tabDomain: "app.example.com",
-      rule: rule({
-        scope: { type: "domains", domains: ["api.example.com"] },
-        resourceTypes: ["pages"],
-      }),
+  it("does not request or record an initiator for a Pages-only rule", async () => {
+    const ctx = mountPageRule(
+      { type: "domains", domains: ["api.example.com"] },
+      {
+        tabDomain: "app.example.com",
+      },
+    );
+    await commitEditedValue(ctx);
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({ initiators: [] }),
+    );
+  });
+
+  it("requests permission only after the save succeeds", async () => {
+    const order: string[] = [];
+    const onRequestGrant = vi.fn(async () => {
+      order.push("grant");
+      return true;
     });
-    typeInto(ctx.valueInput(), "Bearer next");
-    fire(() => ctx.saveButton().click());
-    await settle();
-    expect(ctx.grantPanel()).not.toBeNull();
-    expect(
-      ctx.root.querySelector('.grant-panel input[type="checkbox"]'),
-    ).toBeNull();
-    expect(ctx.root.querySelector(".grant-panel .grant-field")).toBeNull();
-  });
-
-  it("fires one in-gesture prompt for target and initiator, reports it, and closes on allow", async () => {
+    const onSave = vi.fn(
+      async (_ruleId: string | undefined, draft: RuleDraft) => {
+        order.push("save");
+        return ok(rule(draft));
+      },
+    );
     const ctx = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
-      tabDomain: "app.example.com",
+      onRequestGrant,
+      onSave,
     });
     await fillAndCommit(ctx, "authorization");
-    fire(() => ctx.allowButton().click());
-    await settle();
 
-    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
-      "*://*.api.example.com/*",
-      "*://*.app.example.com/*",
-    ]);
-    // The collected initiator is persisted onto the saved rule, so a
-    // later revoke can re-light the loud state.
-    expect(ctx.onSave).toHaveBeenLastCalledWith(
-      "r1",
-      expect.objectContaining({ initiators: ["app.example.com"] }),
-    );
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
-      "api.example.com",
-      "app.example.com",
-    ]);
-    expect(ctx.onClose).toHaveBeenCalledOnce();
+    expect(order).toEqual(["save", "grant"]);
+    expect(onRequestGrant).toHaveBeenCalledOnce();
+    expect(onSave).toHaveBeenCalledOnce();
   });
 
-  it("keeps the saved rule and closes on Grant later", async () => {
-    const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
+  it("does not request permission when the save fails", async () => {
+    const ctx = mount(
+      { grants: NARROW, prefillDomain: "api.example.com" },
+      {
+        error: {
+          kind: "doc-byte-limit-exceeded",
+          bytes: 4_194_305,
+          limit: 4_194_304,
+        },
+      },
+    );
     await fillAndCommit(ctx, "authorization");
-    fire(() => ctx.grantLaterButton().click());
-    await settle();
+
     expect(ctx.onSave).toHaveBeenCalledOnce();
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
-    expect(ctx.onGranted).not.toHaveBeenCalled();
+    expect(ctx.onCommitted).not.toHaveBeenCalled();
+    expect(ctx.onClose).not.toHaveBeenCalled();
+    expect(ctx.errors()).toContain(copy.errors.storageBudget);
+  });
+
+  it("folds an ungranted all-sites scope into the primary action", async () => {
+    const ctx = mount({ grants: NARROW });
+    const allSites = ctx.root.querySelector(
+      '.segments input[value="all"]',
+    ) as HTMLInputElement;
+    fire(() => allSites.click());
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
+    );
+    await fillAndCommit(ctx, "authorization");
+
+    expect(ctx.onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ scope: { type: "all" } }),
+    );
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
+    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
+      copy.scopeSummary.allSites,
+    ]);
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
-  it("Ctrl/Cmd+Enter saves, advances, and focuses Allow without requesting", async () => {
+  it("keeps all-sites saves plain when broad access is already granted", () => {
+    const ctx = mount({ grants: GRANTED_ALL });
+    const allSites = ctx.root.querySelector(
+      '.segments input[value="all"]',
+    ) as HTMLInputElement;
+    fire(() => allSites.click());
+
+    expect(ctx.saveButton().textContent).toBe(copy.actions.createRule);
+  });
+
+  it("keeps a declined rule and reports its honest blocked outcome", async () => {
+    const onRequestGrant = vi.fn(async () => false);
+    const ctx = mount({
+      grants: NARROW,
+      prefillDomain: "api.example.com",
+      onRequestGrant,
+    });
+    await fillAndCommit(ctx, "authorization");
+
+    expect(ctx.onSave).toHaveBeenCalledOnce();
+    expect(onRequestGrant).toHaveBeenCalledOnce();
+    expect(ctx.onGranted).not.toHaveBeenCalled();
+    expect(ctx.onGrantDeclined).toHaveBeenCalledExactlyOnceWith(
+      "api.example.com",
+    );
+    expect(ctx.onCommitted).toHaveBeenCalledOnce();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Ctrl/Cmd+Enter uses the same save-and-allow commit", async () => {
     const ctx = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
@@ -654,52 +740,82 @@ describe("RuleEditor grant moment", () => {
     pressCtrlEnter(ctx.nameInput());
     await settle();
     expect(ctx.onSave).toHaveBeenCalled();
-    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
-    expect(ctx.onGranted).not.toHaveBeenCalled();
-    expect(ctx.onClose).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(ctx.allowButton());
-  });
-
-  it("offers Discard rule after saving and deletes that saved identity", async () => {
-    const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
-    await fillAndCommit(ctx, "authorization");
-    fire(() => ctx.discardRuleButton().click());
-    await settle();
-    expect(ctx.onDiscardRule).toHaveBeenCalledExactlyOnceWith("r1");
-    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+    expect(ctx.onRequestGrant).toHaveBeenCalledOnce();
+    expect(ctx.onGranted).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
-  it("persists collected pattern hosts onto scope.hosts on allow", async () => {
-    const ctx = mount({
-      grants: NARROW,
-      tabDomain: "app.acme.dev",
-      rule: rule({
-        scope: { type: "pattern", pattern: "||acme.dev^", hosts: [] },
-      }),
+  it("infers and persists an anchored pattern host before requesting it", async () => {
+    const ctx = mountPageRule({
+      type: "pattern",
+      pattern: "||api.acme.dev^",
+      hosts: [],
     });
-    typeInto(ctx.valueInput(), "Bearer next");
-    fire(() => ctx.saveButton().click());
-    await settle();
+    await commitEditedValue(ctx);
 
-    const targetInput = ctx.root.querySelector(
-      `.grant-panel [aria-label="${copy.grantPanel.targetInputLabel}"]`,
-    ) as HTMLInputElement;
-    typeInto(targetInput, "api.acme.dev");
-    press(targetInput, "Enter");
-    fire(() => ctx.allowButton().click());
-    await settle();
-
-    expect(ctx.onSave).toHaveBeenLastCalledWith(
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.acme.dev/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledWith(
       "r1",
       expect.objectContaining({
-        scope: expect.objectContaining({
+        scope: {
           type: "pattern",
-          hosts: expect.arrayContaining(["api.acme.dev"]),
-        }),
+          pattern: "||api.acme.dev^",
+          hosts: ["api.acme.dev"],
+        },
       }),
     );
     expect(ctx.onGranted).toHaveBeenCalledOnce();
+  });
+
+  it("infers a literal host from a common anchored regex", async () => {
+    const ctx = mountPageRule({
+      type: "regex",
+      regex: "^https://api\\.acme\\.dev/",
+      hosts: [],
+    });
+    await commitEditedValue(ctx);
+
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.acme.dev/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({
+        scope: expect.objectContaining({ hosts: ["api.acme.dev"] }),
+      }),
+    );
+  });
+
+  it.each([
+    {
+      type: "pattern" as const,
+      scope: {
+        type: "pattern" as const,
+        pattern: "/api/",
+        hosts: [],
+      },
+    },
+    {
+      type: "regex" as const,
+      scope: {
+        type: "regex" as const,
+        regex: "/v[0-9]+/",
+        hosts: [],
+      },
+    },
+  ])("saves a non-inferable $type scope without claiming a grant", async ({
+    scope,
+  }) => {
+    const ctx = mountPageRule(scope);
+
+    expect(ctx.saveButton().textContent).toBe(copy.actions.saveChanges);
+    await commitEditedValue(ctx);
+
+    expect(ctx.onSave).toHaveBeenCalledOnce();
+    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+    expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
   it("stays out of the way when the site is already granted", async () => {
@@ -708,15 +824,13 @@ describe("RuleEditor grant moment", () => {
       allSites: false,
     };
     const ctx = mount({ grants: granted, prefillDomain: "api.example.com" });
+    expect(ctx.saveButton().textContent).toBe(copy.actions.createRule);
     await fillAndCommit(ctx, "authorization");
-    expect(ctx.grantPanel()).toBeNull();
     expect(ctx.onClose).toHaveBeenCalledOnce();
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
   });
 
-  it("still offers the initiator when the target is granted but the tab page isn't", async () => {
-    // A cross-host subresource rule needs the calling page granted too; the
-    // target being granted already can't stand in for it, so the panel opens.
+  it("requests only the missing initiator when the target is already granted", async () => {
     const granted: GrantSnapshot = {
       origins: ["*://*.api.example.com/*"],
       allSites: false,
@@ -726,10 +840,17 @@ describe("RuleEditor grant moment", () => {
       prefillDomain: "api.example.com",
       tabDomain: "app.example.com",
     });
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("app.example.com"),
+    );
     await fillAndCommit(ctx, "authorization");
-    expect(ctx.onClose).not.toHaveBeenCalled();
-    expect(
-      ctx.root.querySelector('.grant-panel input[type="checkbox"]'),
-    ).not.toBeNull();
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.app.example.com/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ initiators: ["app.example.com"] }),
+    );
+    expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 });

@@ -17,6 +17,8 @@ interface ValueFieldProps {
   error?: string | undefined;
   /** Joins this control to HeaderNameInput inside the header composer. */
   composed?: boolean;
+  /** Keeps generated-value actions out of baseline chrome when false. */
+  generatedActions?: boolean | undefined;
   onInput: (value: string) => void;
   onGenerate?: ((kind: "uuid" | "timestamp") => void) | undefined;
 }
@@ -67,9 +69,14 @@ export function ValueField(props: ValueFieldProps) {
             }
             rows={props.composed === true ? 1 : 4}
             wrap="soft"
+            placeholder={
+              props.composed === true
+                ? copy.editor.placeholders.value
+                : undefined
+            }
+            value={props.value}
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
-            value={props.value}
             onInput={(event) => {
               const raw = event.currentTarget.value;
               if (/\r|\n/.test(raw)) {
@@ -101,24 +108,30 @@ export function ValueField(props: ValueFieldProps) {
               setNewlineRemoved(true);
             }}
           />
-          {props.onGenerate !== undefined && (
-            <InsertMenu onGenerate={props.onGenerate} />
-          )}
+          {props.onGenerate !== undefined &&
+            props.generatedActions !== false && (
+              <InsertMenu onGenerate={props.onGenerate} />
+            )}
         </div>
-        {props.generated !== undefined && (
+        {props.generated !== undefined && props.generatedActions !== false && (
           <p class="editor-micro" id={`${id}-note`}>
             {props.frozenAt === undefined
               ? copy.generatedValue.note
-              : `${copy.generatedValue.frozen(props.frozenAt)} · `}{" "}
-            <button
-              type="button"
-              class="link-btn"
-              onClick={() =>
-                props.onGenerate?.(props.generated?.kind ?? "uuid")
-              }
-            >
-              {copy.actions.regenerate}
-            </button>
+              : copy.generatedValue.frozen(props.frozenAt)}
+            {props.onGenerate !== undefined && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  class="link-btn"
+                  onClick={() =>
+                    props.onGenerate?.(props.generated?.kind ?? "uuid")
+                  }
+                >
+                  {copy.actions.regenerate}
+                </button>
+              </>
+            )}
           </p>
         )}
         {newlineRemoved && (

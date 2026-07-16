@@ -124,7 +124,15 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
           }
           size={
             props.composed === true
-              ? Math.max(1, props.value.length)
+              ? Math.max(
+                  copy.editor.placeholders.headerName.length,
+                  props.value.length,
+                )
+              : undefined
+          }
+          placeholder={
+            props.composed === true
+              ? copy.editor.placeholders.headerName
               : undefined
           }
           type="text"

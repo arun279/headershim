@@ -78,6 +78,9 @@ describe("ThisTab", () => {
   it("commits a new override from the composer into the session store", async () => {
     const onCloseComposer = vi.fn();
     const root = mount({ composing: true, onCloseComposer });
+    expect(root.querySelector(".this-tab-applies")?.textContent).toBe(
+      "Applies to app.example.com on this tab only.",
+    );
 
     await submit(root, "x-a", "42");
 

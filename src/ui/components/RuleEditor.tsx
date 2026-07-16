@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import {
-  coversSubresourceTypes,
+  ALL_SITES_ORIGIN,
   type GrantSnapshot,
-  missingGrants,
   originGranted,
 } from "../../core/grants";
 import type {
@@ -14,6 +13,7 @@ import type {
   Scope,
 } from "../../core/model";
 import type { Result } from "../../core/result";
+import { originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import {
   headerErrorToFieldError,
@@ -23,11 +23,6 @@ import type { MutationError } from "../state/mutations";
 import { AdvisorySlot } from "./AdvisorySlot";
 import { Button } from "./Button";
 import { handleEditorCommitKey } from "./editorKeys";
-import {
-  GrantPanel,
-  type GrantSelection,
-  type InitiatorControl,
-} from "./GrantPanel";
 import { CloseGlyph } from "./glyphs";
 import { HeaderFields } from "./HeaderFields";
 import { HeaderLineFields } from "./HeaderLineFields";
@@ -55,14 +50,13 @@ interface RuleEditorProps {
     ruleId: string | undefined,
     draft: RuleDraft,
   ) => Promise<Result<Rule, MutationError>>;
-  /** Fires the in-gesture permission prompt; resolves to Chrome's decision. */
+  /** Fires the permission prompt after a successful save. */
   onRequestGrant: (origins: string[]) => Promise<boolean>;
-  /** A grant landed: the now-active sites, for the "Active on …" toast. */
+  /** A grant landed: the sites named by the result message. */
   onGranted?: (sites: readonly string[]) => void;
+  /** The rule was saved, but the permission prompt was declined. */
+  onGrantDeclined?: (host: string) => void;
   onCommitted?: (kind: "create" | "edit") => void;
-  /** The saved rule needs a grant step; clears messaging outside the sheet. */
-  onGrantStep?: () => void;
-  onDiscardRule: (ruleId: string) => Promise<void>;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
@@ -71,15 +65,6 @@ interface RuleEditorProps {
   closeRequest?: number | undefined;
   /** The requested close was cancelled in the dirty-draft confirmation. */
   onCloseRequestCancelled?: (() => void) | undefined;
-}
-
-interface GrantStep {
-  rule: Rule;
-  scopeType: Scope["type"];
-  targets: string[];
-  editableTargets: boolean;
-  targetPrefill: string[];
-  initiator: InitiatorControl;
 }
 
 interface Draft {
@@ -102,19 +87,22 @@ interface FieldErrors {
   editor?: string;
 }
 
-/** Full-popup rule editor with explicit save, guarded discard, and grant steps. */
+interface CommitGrant {
+  draft: RuleDraft;
+  host: string;
+  origins: string[];
+  sites: string[];
+}
+
+/** Full-popup rule editor with explicit save and guarded discard. */
 export function RuleEditor(props: RuleEditorProps) {
   const id = useId();
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [busy, setBusy] = useState(false);
   const initialFocusRef = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
   const previousCloseRequest = useRef(props.closeRequest);
-  // The saved rule's id survives a new-rule commit so the grant step can persist
-  // its collected sites onto that same rule rather than creating a second one.
-  const savedIdRef = useRef(props.rule?.id);
   const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
     () => initialDraft(props.rule, props.prefillDomain, props.prefill),
     () => setErrors({}),
@@ -130,12 +118,14 @@ export function RuleEditor(props: RuleEditorProps) {
       setErrors(empties);
       return;
     }
+    const ruleDraft = toRuleDraft(current, props.rule);
+    const grant = planCommitGrant(ruleDraft, props.grants, props.tabDomain);
     busyRef.current = true;
     setBusy(true);
     try {
       const outcome = await props.onSave(
-        savedIdRef.current,
-        toRuleDraft(current, props.rule),
+        props.rule?.id,
+        grant?.draft ?? ruleDraft,
       );
       if (!outcome.ok) {
         const mapped = mapError(outcome.error, current.scope.type);
@@ -146,58 +136,34 @@ export function RuleEditor(props: RuleEditorProps) {
         }
         return;
       }
-      const saved = outcome.value;
-      savedIdRef.current = saved.id;
-      const step = planGrant(saved, props.grants, props.tabDomain);
-      if (step === undefined) {
-        props.onCommitted?.(props.rule === undefined ? "create" : "edit");
-        props.onClose();
-        return;
+      let granted: boolean | undefined;
+      if (grant !== undefined) {
+        try {
+          granted = await props.onRequestGrant(grant.origins);
+        } catch {
+          granted = false;
+        }
       }
-      props.onGrantStep?.();
-      setGrantStep(step);
+      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
+      if (grant !== undefined) {
+        if (granted === true) {
+          props.onGranted?.(grant.sites);
+        } else {
+          props.onGrantDeclined?.(grant.host);
+        }
+      }
+      props.onClose();
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
   };
 
-  const allow = (
-    step: GrantStep,
-    selection: GrantSelection,
-    granted: Promise<boolean>,
-  ) => {
-    void finishGrant(step.rule, selection, granted);
-  };
-
-  const finishGrant = async (
-    rule: Rule,
-    selection: GrantSelection,
-    granted: Promise<boolean>,
-  ) => {
-    const persisted = withGrantScope(rule, selection);
-    if (persisted !== undefined) {
-      // Best-effort: the grant itself has already landed, and the loud surfaces
-      // read the live permission snapshot, not this write. A rare failure here
-      // (byte budget, a concurrent edit) leaves the rule running but its granted
-      // sites unrecorded, so a later revoke can't relight it — no worse than the
-      // grant never having been offered, and nothing the closing popup can undo.
-      await props.onSave(rule.id, persisted);
-    }
-    const sites = [
-      ...new Set([...selection.targetHosts, ...selection.initiators]),
-    ];
-    if ((await granted) && sites.length > 0) {
-      props.onGranted?.(sites);
-    }
-    props.onClose();
-  };
-
   const requestClose = () => {
     if (busyRef.current) {
       return;
     }
-    if (grantStep !== undefined || !dirtyRef.current) {
+    if (!dirtyRef.current) {
       props.onClose();
       return;
     }
@@ -224,21 +190,6 @@ export function RuleEditor(props: RuleEditorProps) {
     }
   }, [confirmDiscard]);
 
-  const discardSavedRule = () => {
-    if (grantStep === undefined || busyRef.current) {
-      return;
-    }
-    busyRef.current = true;
-    setBusy(true);
-    void props
-      .onDiscardRule(grantStep.rule.id)
-      .then(props.onClose)
-      .finally(() => {
-        busyRef.current = false;
-        setBusy(false);
-      });
-  };
-
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) {
       return;
@@ -250,9 +201,6 @@ export function RuleEditor(props: RuleEditorProps) {
       } else {
         requestClose();
       }
-      return;
-    }
-    if (grantStep !== undefined) {
       return;
     }
     if (handleEditorCommitKey(event, () => void commit())) {
@@ -271,157 +219,154 @@ export function RuleEditor(props: RuleEditorProps) {
 
   const mode = props.rule === undefined ? "new" : "edit";
   const title = copy.editor.heading(mode, props.profileName);
+  const commitGrant = planCommitGrant(
+    toRuleDraft(draft, props.rule),
+    props.grants,
+    props.tabDomain,
+  );
   const saveLabel =
-    mode === "new" ? copy.actions.createRule : copy.actions.saveChanges;
+    commitGrant === undefined
+      ? mode === "new"
+        ? copy.actions.createRule
+        : copy.actions.saveChanges
+      : mode === "new"
+        ? copy.actions.createRuleAndAllow(commitGrant.host)
+        : copy.actions.saveChangesAndAllow(commitGrant.host);
 
   return (
     <Sheet
       label={title}
-      class={
-        grantStep === undefined
-          ? "editor-sheet editor-sheet-with-footer"
-          : "editor-sheet"
-      }
+      class="editor-sheet editor-sheet-with-footer"
       modal={props.modal ?? true}
       initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
       header={
         <>
-          <h1 class="editor-title">{title}</h1>
           <Button kind="ghost" label={copy.editor.close} onClick={requestClose}>
             <CloseGlyph />
           </Button>
+          <h1 class="editor-title">{title}</h1>
         </>
       }
       pinned={
-        grantStep === undefined ? (
-          <>
-            <AdvisorySlot header={draft.header} />
-            <div class="editor-actions">
-              {confirmDiscard ? (
-                <>
-                  <strong class="discard-title">
-                    {copy.editor.discardConfirm.title}
-                  </strong>
-                  <button
-                    type="button"
-                    class="editor-cancel"
-                    ref={keepEditingRef}
-                    onClick={keepEditing}
-                  >
-                    {copy.editor.discardConfirm.keepEditing}
-                  </button>
-                  <Button kind="quiet" onClick={props.onClose}>
-                    {copy.editor.discardConfirm.discard}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    class="editor-cancel"
-                    onClick={requestClose}
-                  >
-                    {copy.actions.cancel}
-                  </button>
-                  <Button
-                    kind="primary"
-                    disabled={busy}
-                    onClick={() => void commit()}
-                  >
-                    {saveLabel}
-                  </Button>
-                </>
-              )}
-            </div>
-          </>
-        ) : undefined
+        <>
+          <AdvisorySlot header={draft.header} />
+          <div class="editor-actions">
+            {confirmDiscard ? (
+              <>
+                <strong class="discard-title">
+                  {copy.editor.discardConfirm.title}
+                </strong>
+                <button
+                  type="button"
+                  class="editor-cancel"
+                  ref={keepEditingRef}
+                  onClick={keepEditing}
+                >
+                  {copy.editor.discardConfirm.keepEditing}
+                </button>
+                <Button kind="quiet" onClick={props.onClose}>
+                  {copy.editor.discardConfirm.discard}
+                </Button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  class="editor-cancel"
+                  onClick={requestClose}
+                >
+                  {copy.actions.cancel}
+                </button>
+                <Button
+                  kind="primary"
+                  disabled={busy}
+                  onClick={() => void commit()}
+                >
+                  {saveLabel}
+                </Button>
+              </>
+            )}
+          </div>
+        </>
       }
     >
       <div class="rule-editor">
-        {grantStep === undefined ? (
-          <>
-            <HeaderFields
-              idBase={id}
-              draft={draft}
-              errors={errors}
-              update={update}
-            />
+        <HeaderFields
+          idBase={id}
+          draft={draft}
+          errors={errors}
+          update={update}
+        />
 
-            <HeaderLineFields
-              header={draft.header}
-              value={draft.value}
-              remove={draft.operation === "remove"}
-              generated={draft.generated}
-              frozenAt={
-                draft.generated !== undefined &&
-                draft.generated.at === props.rule?.generated?.at
-                  ? formatFrozenAt(draft.generated.at)
-                  : undefined
-              }
-              nameError={errors.name}
-              valueError={errors.value}
-              nameInputRef={(element) => {
-                initialFocusRef.current = element;
-              }}
-              onHeaderInput={(header) =>
-                update((current) => ({ ...current, header }))
-              }
-              onValueInput={(value) =>
-                update((current) => ({
-                  ...current,
-                  value,
-                  generated: undefined,
-                }))
-              }
-              onGenerate={generate}
-            />
+        <HeaderLineFields
+          header={draft.header}
+          value={draft.value}
+          remove={draft.operation === "remove"}
+          generated={draft.generated}
+          frozenAt={
+            draft.generated !== undefined &&
+            draft.generated.at === props.rule?.generated?.at
+              ? formatFrozenAt(draft.generated.at)
+              : undefined
+          }
+          generatedActions={false}
+          nameError={errors.name}
+          valueError={errors.value}
+          nameInputRef={(element) => {
+            initialFocusRef.current = element;
+          }}
+          onHeaderInput={(header) =>
+            update((current) => ({ ...current, header }))
+          }
+          onValueInput={(value) =>
+            update((current) => ({
+              ...current,
+              value,
+              generated: undefined,
+            }))
+          }
+          onGenerate={generate}
+        />
 
-            <ScopeEditor
-              scope={draft.scope}
-              resourceTypes={draft.resourceTypes}
-              error={errors.scope}
-              typesError={errors.types}
-              defaultResourceTypesOpen={
-                props.rule !== undefined && props.rule.resourceTypes !== "all"
-              }
-              suggestedDomain={props.prefillDomain}
-              onScope={(scope) => update((current) => ({ ...current, scope }))}
-              onResourceTypes={(resourceTypes) =>
-                update((current) => ({ ...current, resourceTypes }))
-              }
-            />
+        <ScopeEditor
+          scope={draft.scope}
+          resourceTypes={draft.resourceTypes}
+          error={errors.scope}
+          typesError={errors.types}
+          defaultResourceTypesOpen={
+            props.rule !== undefined && props.rule.resourceTypes !== "all"
+          }
+          onScope={(scope) => update((current) => ({ ...current, scope }))}
+          onResourceTypes={(resourceTypes) =>
+            update((current) => ({ ...current, resourceTypes }))
+          }
+        />
 
-            <CommentDisclosure
-              id={`${id}-comment`}
-              value={draft.comment}
-              onInput={(comment) =>
-                update((current) => ({ ...current, comment }))
-              }
-            />
-
-            {errors.editor !== undefined && (
-              <p class="editor-error editor-error-global" role="alert">
-                {errors.editor}
-              </p>
-            )}
-          </>
-        ) : (
-          <GrantPanel
-            scopeType={grantStep.scopeType}
-            targetHosts={grantStep.targets}
-            editableTargets={grantStep.editableTargets}
-            targetPrefill={grantStep.targetPrefill}
-            initiator={grantStep.initiator}
-            created={props.rule === undefined}
-            onRequestGrant={props.onRequestGrant}
-            onAllow={(selection, granted) =>
-              allow(grantStep, selection, granted)
+        {draft.operation !== "remove" && (
+          <GeneratedValueDisclosure
+            id={`${id}-generated`}
+            generated={draft.generated}
+            frozenAt={
+              draft.generated !== undefined &&
+              draft.generated.at === props.rule?.generated?.at
+                ? formatFrozenAt(draft.generated.at)
+                : undefined
             }
-            onGrantLater={props.onClose}
-            onDiscardRule={discardSavedRule}
-            onAllSites={props.onClose}
+            onGenerate={generate}
           />
+        )}
+
+        <CommentDisclosure
+          id={`${id}-comment`}
+          value={draft.comment}
+          onInput={(comment) => update((current) => ({ ...current, comment }))}
+        />
+
+        {errors.editor !== undefined && (
+          <p class="editor-error editor-error-global" role="alert">
+            {errors.editor}
+          </p>
         )}
       </div>
     </Sheet>
@@ -449,9 +394,16 @@ function CommentDisclosure({
         title={summary === "" ? undefined : summary}
         onClick={() => setOpen((current) => !current)}
       >
-        {copy.editor.labels.comment}
-        {summary === "" ? "" : ` · ${summary}`}{" "}
-        <span aria-hidden="true">▾</span>
+        <span>
+          {copy.editor.labels.comment}
+          {summary === "" ? "" : ` · ${summary}`}
+        </span>
+        <span
+          class={open ? "disclosure-chevron open" : "disclosure-chevron"}
+          aria-hidden="true"
+        >
+          ›
+        </span>
       </button>
       {open && (
         <div id={`${id}-panel`}>
@@ -465,6 +417,63 @@ function CommentDisclosure({
             value={value}
             onInput={(event) => onInput(event.currentTarget.value)}
           />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GeneratedValueDisclosure({
+  id,
+  generated,
+  frozenAt,
+  onGenerate,
+}: {
+  id: string;
+  generated: Rule["generated"] | undefined;
+  frozenAt: string | undefined;
+  onGenerate: (kind: "uuid" | "timestamp") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div class="editor-option">
+      <button
+        type="button"
+        class="disclosure"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-panel` : undefined}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>
+          {copy.editor.labels.generatedValue}
+          {generated === undefined
+            ? ""
+            : ` · ${copy.editor.generatedKind[generated.kind]}`}
+        </span>
+        <span
+          class={open ? "disclosure-chevron open" : "disclosure-chevron"}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
+      {open && (
+        <div class="generated-value-panel" id={`${id}-panel`}>
+          <div class="generated-value-actions">
+            <Button kind="quiet" onClick={() => onGenerate("uuid")}>
+              {copy.editor.insertUuid}
+            </Button>
+            <Button kind="quiet" onClick={() => onGenerate("timestamp")}>
+              {copy.editor.insertTimestamp}
+            </Button>
+          </div>
+          {generated !== undefined && (
+            <p class="editor-micro">
+              {frozenAt === undefined
+                ? copy.generatedValue.note
+                : copy.generatedValue.frozen(frozenAt)}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -621,144 +630,115 @@ function keptHosts(
     : [];
 }
 
-/**
- * Whether a just-committed rule still needs a grant the popup can prompt for,
- * and the shape of the panel that collects it. All-sites scopes route through
- * the buried options flow, never a popup prompt; a fully-granted rule
- * needs no panel at all.
- */
-function planGrant(
-  rule: Rule,
+/** Builds the permission request and the rule metadata committed with it. */
+function planCommitGrant(
+  draft: RuleDraft,
   grants: GrantSnapshot,
   tabDomain: string | undefined,
-): GrantStep | undefined {
-  if (grants.allSites || rule.scope.type === "all") {
+): CommitGrant | undefined {
+  if (grants.allSites) {
     return undefined;
   }
-  const covers = coversSubresourceTypes(rule);
-  const { scope } = rule;
+  if (draft.scope.type === "all") {
+    return {
+      draft,
+      host: copy.scopeSummary.allSites,
+      origins: [ALL_SITES_ORIGIN],
+      sites: [copy.scopeSummary.allSites],
+    };
+  }
+  const scope = withInferredGrantHost(draft.scope);
+  const targets = targetHosts(scope);
+  if (targets.length === 0) {
+    return undefined;
+  }
+  const reachesSubresources =
+    draft.resourceTypes === "all" ||
+    draft.resourceTypes.some(
+      (group) => group !== "pages" && group !== "subframes",
+    );
+  const inferredInitiator =
+    reachesSubresources &&
+    tabDomain !== undefined &&
+    !targets.includes(tabDomain)
+      ? tabDomain
+      : undefined;
+  const initiators = unique([
+    ...draft.initiators,
+    ...(inferredInitiator === undefined ? [] : [inferredInitiator]),
+  ]);
+  const sites = unique([
+    ...targets,
+    ...(reachesSubresources ? initiators : []),
+  ]);
+  const missing = sites.filter((site) => !originGranted(site, grants));
+  if (missing.length === 0) {
+    return undefined;
+  }
+  const firstTarget = targets.find((target) => missing.includes(target));
+  return {
+    draft: { ...draft, scope, initiators },
+    host: firstTarget ?? (missing[0] as string),
+    origins: missing.map(originPatternForDomain),
+    sites: missing,
+  };
+}
 
-  if (scope.type === "pattern" || scope.type === "regex") {
-    const initiator: InitiatorControl = covers
-      ? {
-          kind: "chips",
-          prefill: tabDomain !== undefined ? [tabDomain] : [...rule.initiators],
-        }
-      : { kind: "none" };
-    // A configured pattern rule whose named hosts are all granted asks nothing
-    // — unless the inferred initiator page is a still-ungranted subresource gap.
-    if (
-      scope.hosts.length > 0 &&
-      missingGrants(rule, grants).length === 0 &&
-      !initiatorNeedsGrant(initiator, grants)
-    ) {
-      return undefined;
+function withInferredGrantHost(scope: Scope): Scope {
+  switch (scope.type) {
+    case "domains":
+    case "all":
+      return scope;
+    case "pattern": {
+      if (scope.hosts.length > 0) return scope;
+      const host = patternHost(scope.pattern);
+      return host === undefined ? scope : { ...scope, hosts: [host] };
     }
-    return {
-      rule,
-      scopeType: scope.type,
-      targets: [],
-      editableTargets: true,
-      targetPrefill: tabDomain !== undefined ? [tabDomain] : [...scope.hosts],
-      initiator,
-    };
-  }
-
-  const targets = [...scope.domains];
-  const initiator = domainInitiator(rule, tabDomain, covers, targets);
-  // The target domains can already be granted while the inferred initiator page
-  // isn't: a cross-host subresource rule still needs that page granted to run,
-  // and the rule's own initiators list can't reveal a page it hasn't recorded.
-  if (
-    missingGrants(rule, grants).length === 0 &&
-    !initiatorNeedsGrant(initiator, grants)
-  ) {
-    return undefined;
-  }
-  return {
-    rule,
-    scopeType: "domains",
-    targets,
-    editableTargets: false,
-    targetPrefill: [],
-    initiator,
-  };
-}
-
-/** An inferred initiator worth a panel: one whose host isn't granted yet. */
-function initiatorNeedsGrant(
-  initiator: InitiatorControl,
-  grants: GrantSnapshot,
-): boolean {
-  switch (initiator.kind) {
-    case "checkbox":
-      return !originGranted(initiator.host, grants);
-    case "chips":
-      return initiator.prefill.some((host) => !originGranted(host, grants));
-    case "none":
-      return false;
+    case "regex": {
+      if (scope.hosts.length > 0) return scope;
+      const host = regexHost(scope.regex);
+      return host === undefined ? scope : { ...scope, hosts: [host] };
+    }
   }
 }
 
-/**
- * The honest split for a Domains rule reaching subresources: pre-check the
- * tab's own origin when it differs from the target (the inferred initiator);
- * offer an explicit optional input when no page context could be captured;
- * ask nothing when the rule stays on navigations or the tab is the target.
- */
-function domainInitiator(
-  rule: Rule,
-  tabDomain: string | undefined,
-  covers: boolean,
-  targets: readonly string[],
-): InitiatorControl {
-  if (!covers) {
-    return { kind: "none" };
+function targetHosts(scope: Scope): string[] {
+  switch (scope.type) {
+    case "domains":
+      return [...scope.domains];
+    case "pattern":
+    case "regex":
+      return [...scope.hosts];
+    case "all":
+      return [];
   }
-  if (tabDomain === undefined) {
-    return { kind: "chips", prefill: [...rule.initiators] };
-  }
-  if (!targets.includes(tabDomain)) {
-    return {
-      kind: "checkbox",
-      host: tabDomain,
-      target: targets[0] ?? tabDomain,
-    };
-  }
-  return { kind: "none" };
 }
 
-/**
- * The rule draft that records what the grant panel collected — target hosts on
- * a pattern/regex scope, initiators on the rule — or undefined when the
- * selection adds nothing new. Target hosts drive grant computation alone;
- * initiators also narrow the match to those pages (initiatorDomains), so a
- * newly named initiator recompiles the rule while a new target host does not.
- */
-function withGrantScope(
-  rule: Rule,
-  selection: GrantSelection,
-): RuleDraft | undefined {
-  const addedInitiators = selection.initiators.filter(
-    (host) => !rule.initiators.includes(host),
+function patternHost(pattern: string): string | undefined {
+  const match =
+    /^\|\|([a-z0-9.-]+)/i.exec(pattern.trim()) ??
+    /^\|?https?:\/\/([a-z0-9.-]+)/i.exec(pattern.trim());
+  return normalizedHost(match?.[1]);
+}
+
+function regexHost(regex: string): string | undefined {
+  const withoutAnchor = regex.trim().replace(/^\^/, "");
+  const match = /^(?:https\?|https|http):\/\/([a-z0-9\\.-]+)/i.exec(
+    withoutAnchor,
   );
-  const { scope } = rule;
-  const addedHosts =
-    scope.type === "pattern" || scope.type === "regex"
-      ? selection.targetHosts.filter((host) => !scope.hosts.includes(host))
-      : [];
-  if (addedInitiators.length === 0 && addedHosts.length === 0) {
-    return undefined;
-  }
-  const { id: _id, num: _num, ...draft } = rule;
-  return {
-    ...draft,
-    scope:
-      scope.type === "pattern" || scope.type === "regex"
-        ? { ...scope, hosts: [...scope.hosts, ...addedHosts] }
-        : scope,
-    initiators: [...rule.initiators, ...addedInitiators],
-  };
+  return normalizedHost(match?.[1]?.replaceAll("\\.", "."));
+}
+
+function normalizedHost(host: string | undefined): string | undefined {
+  const normalized = host?.toLowerCase().replace(/^\*\./, "");
+  return normalized !== undefined &&
+    /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 /** "2026-07-12T14:03:27.000Z" → "2026-07-12 14:03 UTC" (the designed reading). */

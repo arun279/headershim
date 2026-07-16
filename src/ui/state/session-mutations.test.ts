@@ -7,7 +7,6 @@ import {
   type OverrideDraft,
   pruneForeignOrigins,
   removeOverride,
-  restoreOverride,
   setOverrideEnabled,
   updateOverrideValue,
 } from "./session-mutations";
@@ -135,20 +134,6 @@ describe("session mutations", () => {
     const rejected = await updateOverrideValue(5, 1, "line\nbreak");
     expect(rejected.ok).toBe(false);
     expect((await readSession()).tabs[5]?.[0]?.value).toBe("rotated");
-  });
-
-  it("restores a removed row with its original identity", async () => {
-    const before = row(3, 5, "app.example.com");
-    const original = row(4, 5, "app.example.com");
-    const after = row(5, 5, "app.example.com");
-    await write({ nextNum: 6, tabs: { 5: [before, original, after] } });
-    await removeOverride(5, 4);
-
-    await restoreOverride(original, 1);
-    await restoreOverride(original, 1);
-
-    expect((await readSession()).tabs[5]).toEqual([before, original, after]);
-    expect((await readSession()).nextNum).toBe(6);
   });
 
   it("prunes rows whose origin no longer matches where the tab sits", async () => {

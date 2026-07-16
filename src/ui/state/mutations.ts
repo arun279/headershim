@@ -710,10 +710,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
       return updateSettings({ theme });
     },
 
-    setBadgeMode(badgeMode: Settings["badgeMode"]): MutationResult<void> {
-      return updateSettings({ badgeMode });
-    },
-
     applyImport(plan: ImportPlan): MutationResult<void> {
       return commit((doc) => {
         // The plan's names were reserved against the doc at plan time; another

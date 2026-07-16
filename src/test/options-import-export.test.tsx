@@ -97,6 +97,14 @@ beforeEach(() => {
 });
 
 describe("import failure modes", () => {
+  it("places the ModHeader import fact on Import and export", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    expect(root.querySelector(".ie-hint")?.textContent).toBe(text.instruction);
+    expect(text.instruction).toContain("ModHeader export");
+  });
+
   it("renders the parse-failure copy and applies nothing", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();

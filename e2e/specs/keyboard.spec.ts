@@ -242,9 +242,8 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
   await expect(page.locator(".rule-editor")).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBe("not-yet-committed");
 
-  // Ctrl/Cmd+Enter saves from the textarea and advances to the grant step. It
-  // focuses Allow but never activates the native permission prompt itself.
-  await openPopup(page, extensionId, serviceWorker, baseDoc());
+  // Ctrl/Cmd+Enter uses the same explicit commit path from the textarea.
+  await openPopup(page, extensionId, serviceWorker, allScoped);
   await rows(page).first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
@@ -252,8 +251,7 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
     .getByRole("textbox", { name: copy.editor.labels.value })
     .fill("committed-on-cmd");
   await page.keyboard.press("ControlOrMeta+Enter");
-  await expect(page.locator(".grant-panel")).toBeVisible();
-  await expect(page.locator(".grant-allow button")).toBeFocused();
+  await expect(page.locator(".rule-editor")).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBe("committed-on-cmd");
 
   // Esc on a dirty draft asks before discarding. A second Esc keeps editing;
@@ -331,22 +329,12 @@ test("options rules can be created and edited from the keyboard", async ({
   await expect(createDialog.locator(".domain-chip .mono")).toHaveText(
     "example.com",
   );
+  await createDialog.getByRole("radio", { name: copy.editor.allSites }).check();
 
   const create = createDialog.getByRole("button", {
     name: copy.actions.createRule,
   });
   await create.focus();
-  await page.keyboard.press("Enter");
-  await expect(createDialog.locator(".grant-panel")).toBeVisible();
-  await expect(
-    createDialog.getByRole("button", {
-      name: copy.actions.allowOn("example.com"),
-    }),
-  ).toBeFocused();
-  const grantLater = createDialog.getByRole("button", {
-    name: copy.actions.grantLater,
-  });
-  await grantLater.focus();
   await page.keyboard.press("Enter");
   await expect(createDialog).toBeHidden();
 
@@ -367,12 +355,6 @@ test("options rules can be created and edited from the keyboard", async ({
     name: copy.actions.saveChanges,
   });
   await save.focus();
-  await page.keyboard.press("Enter");
-  await expect(editDialog.locator(".grant-panel")).toBeVisible();
-  const editGrantLater = editDialog.getByRole("button", {
-    name: copy.actions.grantLater,
-  });
-  await editGrantLater.focus();
   await page.keyboard.press("Enter");
   await expect(editDialog).toBeHidden();
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("edited");

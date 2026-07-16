@@ -20,7 +20,6 @@ interface ScopeEditorProps {
   error?: string | undefined;
   typesError?: string | undefined;
   defaultResourceTypesOpen?: boolean | undefined;
-  suggestedDomain?: string | undefined;
   onScope: (scope: ScopeDraft) => void;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }
@@ -49,10 +48,10 @@ const GROUPS: readonly ResourceGroup[] = [
 export function ScopeEditor(props: ScopeEditorProps) {
   const id = useId();
   const { scope } = props;
-  const subresourceOnly =
+  const crossPageSubresources =
     props.resourceTypes !== "all" &&
     !props.resourceTypes.includes("pages") &&
-    !props.resourceTypes.includes("subframes");
+    props.resourceTypes.some((group) => group !== "subframes");
 
   return (
     <>
@@ -79,7 +78,7 @@ export function ScopeEditor(props: ScopeEditorProps) {
                 onChange={(domains) => props.onScope({ ...scope, domains })}
               />
               <p class="editor-micro">
-                {subresourceOnly
+                {crossPageSubresources
                   ? copy.editor.requestTarget
                   : copy.editor.domainsHelper}
               </p>
@@ -117,6 +116,9 @@ export function ScopeEditor(props: ScopeEditorProps) {
               />
               <p class="editor-micro">{copy.editor.regexHint}</p>
             </>
+          )}
+          {scope.type === "all" && (
+            <p class="editor-micro">{copy.editor.allSitesHelper}</p>
           )}
           {props.error !== undefined && (
             <p class="editor-error" role="alert">
@@ -212,11 +214,13 @@ function ResourceTypes({
           onClick={() => setOpen((current) => !current)}
         >
           {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}
-          <span aria-hidden="true">▾</span>
+          <span
+            class={open ? "disclosure-chevron open" : "disclosure-chevron"}
+            aria-hidden="true"
+          >
+            ›
+          </span>
         </button>
-        {selected.includes("pages") && (
-          <p class="editor-micro">{copy.editor.includesPages}</p>
-        )}
         {open && (
           <fieldset
             class="rt-grid"

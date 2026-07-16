@@ -52,6 +52,8 @@ describe("options settings", () => {
 
   it("persists the theme choice and stamps data-theme on the root", async () => {
     const root = await mount("#settings");
+    expect(root.querySelectorAll(".settings-row")).toHaveLength(2);
+    expect(root.querySelector(".settings-segments")).not.toBeNull();
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
     expect(radio(root, "theme", "system").checked).toBe(true);
     expect(
@@ -72,17 +74,6 @@ describe("options settings", () => {
     check(radio(root, "theme", "system"));
     await settle();
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
-  });
-
-  it("persists the badge mode choice", async () => {
-    const root = await mount("#settings");
-    expect(radio(root, "badge-mode", "count").checked).toBe(true);
-
-    check(radio(root, "badge-mode", "initials"));
-    await settle();
-
-    expect((await read()).settings.badgeMode).toBe("initials");
-    expect(radio(root, "badge-mode", "initials").checked).toBe(true);
   });
 
   it("opens the browser shortcut manager from the shortcuts control", async () => {
@@ -122,16 +113,15 @@ describe("options about", () => {
     expect(root.textContent).not.toContain(settings.shortcuts);
   });
 
-  it("shows the build identity and only the two factual descriptions", async () => {
+  it("shows the injected build identity and one factual description", async () => {
     const root = await mount();
     expect(root.textContent).toContain(
       sentenceText(text.build("1.0.0", "test")),
     );
-    expect(
-      [...root.querySelectorAll(".about-description p")].map(
-        (paragraph) => paragraph.textContent,
-      ),
-    ).toEqual(text.description);
+    expect(root.querySelector(".about-description")?.textContent).toBe(
+      text.description,
+    );
+    expect(root.querySelectorAll(".about-description")).toHaveLength(1);
     expect(root.textContent).toContain(text.license);
     expect(root.textContent).not.toContain(copy.app.tagline);
     expect(

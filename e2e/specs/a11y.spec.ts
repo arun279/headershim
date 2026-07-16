@@ -186,17 +186,6 @@ test("every popup state passes axe in both themes", async ({
     await analyze(editor, `popup rule editor (${theme})`, theme);
     await editor.close();
 
-    // The grant step: explicitly saving an ungranted rule opens it without
-    // firing the (unscriptable) permission prompt.
-    const grant = await open(ruleDoc(), theme);
-    await grant.locator(".rule-row").first().focus();
-    await grant.keyboard.press("Enter");
-    await expect(grant.locator(".rule-editor")).toBeVisible();
-    await grant.getByRole("button", { name: copy.actions.saveChanges }).click();
-    await expect(grant.locator(".grant-panel")).toBeVisible();
-    await analyze(grant, `popup grant panel (${theme})`, theme);
-    await grant.close();
-
     const thisTab = await open(ruleDoc(), theme);
     await thisTab.locator(".profiles .chip").first().focus();
     await thisTab.keyboard.press("t");

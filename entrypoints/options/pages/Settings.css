@@ -33,17 +33,38 @@
   flex-wrap: wrap;
 }
 
-.settings-radio {
+.settings-segments {
   display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 24px;
+  overflow: hidden;
+  border: var(--hairline) solid var(--ink-mute);
+  border-radius: var(--radius-inner);
 }
 
-.settings-radio input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--trace);
+.settings-segment {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+
+.settings-segment + .settings-segment {
+  border-left: var(--hairline) solid var(--ink-mute);
+}
+
+.settings-segment.checked {
+  color: var(--trace-ink);
+  background: var(--trace);
+}
+
+.settings-segment:has(:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.settings-segment.checked:has(:focus-visible) {
+  outline-color: var(--trace-ink);
 }
 
 .settings-link {

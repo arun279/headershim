@@ -11,6 +11,7 @@ interface HeaderLineFieldsProps {
   frozenAt?: string | undefined;
   nameError?: string | undefined;
   valueError?: string | undefined;
+  generatedActions?: boolean | undefined;
   nameInputRef?: ((element: HTMLInputElement | null) => void) | undefined;
   onHeaderInput: (value: string) => void;
   onValueInput: (value: string) => void;
@@ -42,6 +43,7 @@ export function HeaderLineFields(props: HeaderLineFieldsProps) {
               frozenAt={props.frozenAt}
               error={props.valueError}
               composed
+              generatedActions={props.generatedActions}
               onInput={props.onValueInput}
               onGenerate={props.onGenerate}
             />

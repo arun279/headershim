@@ -6,6 +6,7 @@ import { App } from "../../entrypoints/popup/App";
 import type { Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import { read, write } from "../platform/store";
+import { copy } from "../ui/copy";
 import {
   findButton,
   fire,
@@ -343,7 +344,9 @@ describe("popup App", () => {
 
     expect(root.textContent).toContain("Staging has no rules yet.");
     expect(root.textContent).toContain("Your other profiles are unchanged.");
-    expect(document.activeElement?.textContent).not.toBe("Create a rule");
+    expect(document.activeElement?.textContent).not.toBe(
+      copy.actions.createRule,
+    );
     expect(annunciator().textContent).toBe("No rules yet");
     expect(root.querySelector(".foot")).toBeNull();
   });

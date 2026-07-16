@@ -16,11 +16,7 @@ export function AboutPage() {
             text.build(browser.runtime.getManifest().version, __COMMIT__),
           )}
         </h1>
-        <div class="about-description">
-          {text.description.map((paragraph) => (
-            <p key={paragraph}>{paragraph}</p>
-          ))}
-        </div>
+        <p class="about-description">{text.description}</p>
         <p>{text.license}</p>
 
         <p class="about-links">

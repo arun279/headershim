@@ -177,7 +177,7 @@ function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
  * require the initiating page granted too, so only then can an unnamed
  * initiator be a silent gap worth a standing note.
  */
-export function coversSubresourceTypes(rule: Rule): boolean {
+function coversSubresourceTypes(rule: Rule): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",

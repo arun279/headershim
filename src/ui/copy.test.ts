@@ -40,17 +40,15 @@ describe("copy", () => {
     expect(copy.toast.profileDeleted("QA roles")).toBe(
       "Profile 'QA roles' deleted",
     );
-    expect(copy.actions.allowOn("3 sites")).toBe("Allow on 3 sites");
+    expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
+      "Create rule and allow api.example.com",
+    );
+    expect(copy.actions.saveChangesAndAllow("api.example.com")).toBe(
+      "Save changes and allow api.example.com",
+    );
     expect(copy.emptyState.profile("Staging")).toBe(
       "Staging has no rules yet.",
     );
-    expect(copy.grantPanel.single("api.example.com")).toContain(
-      "To change headers on api.example.com",
-    );
-    expect(copy.grantPanel.multiple(3)).toContain("on 3 sites");
-    expect(
-      copy.grantPanel.initiator("app.example.com", "api.example.com"),
-    ).toContain("the site you're on");
     expect(copy.errors.grantDeclined("api.example.com")).toContain(
       "You declined access to api.example.com",
     );
@@ -130,6 +128,14 @@ describe("copy", () => {
       "you can revoke this access here at any time.",
     );
     expect(copy.options.about).not.toHaveProperty("theme");
+    expect(sentenceText(copy.options.about.build("1.2.0", "a1b2c3d"))).toBe(
+      "HeaderShim v1.2.0 · commit a1b2c3d",
+    );
+    expect(copy.options.about.description).not.toContain("ModHeader");
+    expect(copy.options.importExport.instruction).toContain("ModHeader export");
+    expect(copy.options.about.license).toBe(
+      "Open source under the MIT license. Provided as is, without warranty.",
+    );
     expect(copy.options.settings.theme.label).toBe("Theme");
     expect(Object.keys(copy.options.about).sort()).toEqual(
       ["build", "description", "license", "links"].sort(),
@@ -214,6 +220,7 @@ describe("copy", () => {
     for (const text of strings) {
       const lower = text.toLowerCase();
       expect(text, `em-dash in: ${text}`).not.toMatch(/[–—]/);
+      expect(text, `spaced-hyphen separator in: ${text}`).not.toContain(" - ");
       expect(text, `exclamation mark in: ${text}`).not.toContain("!");
       expect(text, `emoji in: ${text}`).not.toMatch(
         /\p{Extended_Pictographic}/u,

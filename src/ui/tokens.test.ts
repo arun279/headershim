@@ -11,6 +11,12 @@ const css = readFileSync(
   fileURLToPath(new URL("./tokens.css", import.meta.url)),
   "utf8",
 );
+const settingsCss = readFileSync(
+  fileURLToPath(
+    new URL("../../entrypoints/options/pages/Settings.css", import.meta.url),
+  ),
+  "utf8",
+);
 
 function block(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -115,5 +121,30 @@ describe("status token contrast", () => {
     const ratio = contrast(hex(source, "caution"), hex(source, "caution-bg"));
     expect(ratio).toBeCloseTo(expected, 1);
     expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("segmented-control boundary contrast", () => {
+  const themes = [
+    { name: "light", selector: ":root" },
+    { name: "dark", selector: ':root[data-theme="dark"]' },
+  ];
+
+  it("uses the contrast-audited muted ink for the Settings boundary", () => {
+    expect(settingsCss).toMatch(
+      /\.settings-segments\s*\{[^}]*border:\s*var\(--hairline\) solid var\(--ink-mute\)/s,
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-segment \+ \.settings-segment\s*\{[^}]*border-left:\s*var\(--hairline\) solid var\(--ink-mute\)/s,
+    );
+  });
+
+  it.each(themes)("$name: the boundary clears the 3:1 non-text floor", ({
+    selector,
+  }) => {
+    const source = block(selector);
+    expect(
+      contrast(hex(source, "ink-mute"), hex(source, "panel-1")),
+    ).toBeGreaterThanOrEqual(3);
   });
 });

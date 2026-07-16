@@ -144,29 +144,6 @@ export function updateOverrideValue(
   });
 }
 
-/** Restores a promoted row at its prior position when its rule is discarded. */
-export function restoreOverride(
-  override: TabOverride,
-  index: number,
-): Promise<void> {
-  return locked(async () => {
-    const session = await readSession();
-    const rows = session.tabs[override.tabId] ?? [];
-    if (rows.some((row) => row.num === override.num)) {
-      return;
-    }
-    const restored = [...rows];
-    restored.splice(Math.max(0, Math.min(index, restored.length)), 0, override);
-    await writeSession({
-      nextNum: Math.max(session.nextNum, override.num + 1),
-      tabs: {
-        ...session.tabs,
-        [override.tabId]: restored,
-      },
-    });
-  });
-}
-
 /**
  * Fallback lifetime enforcement on popup open: drop this tab's overrides whose
  * origin no longer matches where the tab sits (or all of them when the tab has

@@ -28,6 +28,9 @@
   grid-template-columns: 200px minmax(0, 1fr);
   gap: var(--sp-6);
   align-items: start;
+  width: 100%;
+  max-width: 1040px;
+  margin-inline: auto;
   padding: var(--sp-6);
 }
 
@@ -41,6 +44,7 @@
 
 .options-nav-link {
   padding: var(--sp-3) var(--sp-4);
+  border-left: 2px solid transparent;
   border-radius: var(--radius-inner);
   color: var(--ink-mute);
   text-decoration: none;
@@ -54,13 +58,14 @@
 
 .options-nav-link[aria-current="page"] {
   background: var(--panel-1);
-  box-shadow: inset 3px 0 0 var(--trace);
+  border-left-color: var(--trace);
   color: var(--ink);
 }
 
 .options-content {
   min-width: 0;
-  max-width: 1120px;
+  width: 100%;
+  max-width: 760px;
 }
 
 .page {
@@ -68,11 +73,15 @@
   flex-direction: column;
   gap: var(--sp-5);
   width: 100%;
-  max-width: 640px;
+  max-width: 600px;
 }
 
 .profiles-page {
-  max-width: none;
+  max-width: 760px;
+}
+
+.site-access-page {
+  max-width: 760px;
 }
 
 .page-head {
@@ -129,4 +138,15 @@
   justify-content: flex-end;
   gap: var(--sp-3);
   margin-top: var(--sp-5);
+}
+
+@media (max-width: 720px) {
+  .options-body {
+    grid-template-columns: 1fr;
+  }
+
+  .options-nav {
+    position: static;
+    flex-flow: row wrap;
+  }
 }

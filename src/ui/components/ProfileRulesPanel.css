@@ -25,6 +25,13 @@
   border-bottom: var(--hairline) solid var(--bezel);
 }
 
+.bulk-selection-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
 .bulk-select-all {
   display: flex;
   align-items: center;

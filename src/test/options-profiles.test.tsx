@@ -343,6 +343,8 @@ describe("badge editor", () => {
     await settle();
 
     expect((await read()).profiles[0]?.color).toBe("teal");
+    expect(teal?.checked).toBe(true);
+    expect(teal?.closest(".badge-swatch")).not.toBeNull();
   });
 
   it("commits badge text on Enter", async () => {
@@ -361,6 +363,7 @@ describe("badge editor", () => {
 
 describe("rule authoring", () => {
   it("creates with the shared editor and no current-tab prefill", async () => {
+    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValueOnce(false);
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
@@ -385,20 +388,22 @@ describe("rule authoring", () => {
     const domain = root.querySelector(".domain-chip-input") as HTMLInputElement;
     typeInto(domain, "api.example.com");
     press(domain, "Enter");
-    fire(() => findButton(root, copy.actions.createRule).click());
+    fire(() =>
+      findButton(
+        root,
+        copy.actions.createRuleAndAllow("api.example.com"),
+      ).click(),
+    );
     await settle();
 
     expect((await read()).profiles[0]?.rules[0]?.header).toBe(
       "x-options-created",
     );
-    expect(root.querySelector(".grant-panel")?.textContent).toContain(
-      copy.grantPanel.noContextInitiators,
-    );
-
-    fire(() => findButton(root, copy.actions.grantLater).click());
-    await settle();
     expect(root.querySelector(".editor-sheet")).toBeNull();
     expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.grantDeclined("api.example.com"),
+    );
     expect(document.activeElement).toBe(
       findButton(root, copy.options.rules.new),
     );
@@ -529,6 +534,9 @@ describe("bulk rule actions", () => {
       rule({ enabled: false }),
       rule({ enabled: false }),
     ]);
+    expect(
+      root.querySelector(".bulk-selection-group .bulk-actions"),
+    ).not.toBeNull();
 
     bulkAction(root, copy.options.rules.enable);
     await settle();

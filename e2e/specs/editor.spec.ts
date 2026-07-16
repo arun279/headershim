@@ -139,7 +139,11 @@ test("Create rule is the only pointer action that saves a draft", async ({
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
-  await editor.getByRole("button", { name: copy.actions.createRule }).click();
+  await editor
+    .getByRole("button", {
+      name: copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
+    })
+    .click();
   await expect(editor).toBeHidden();
   await expect(page.locator(".rule-row")).toHaveCount(1);
   await expect.poll(() => ruleCount(serviceWorker)).toBe(1);

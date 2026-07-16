@@ -289,13 +289,6 @@ export function ProfilesPage({
     });
   };
 
-  const discardEditingRule = async (ruleId: string): Promise<void> => {
-    const outcome = await mutations.deleteRule(open.id, ruleId);
-    if (!outcome.ok) {
-      flash(outcome.error);
-    }
-  };
-
   const runUndo = () => {
     if (undo === undefined) {
       return;
@@ -395,6 +388,9 @@ export function ProfilesPage({
                   mutations.saveRule(open.id, ruleId, draft)
                 }
                 onRequestGrant={requestPermissions}
+                onGrantDeclined={(host) =>
+                  showToast(copy.errors.grantDeclined(host))
+                }
                 onGranted={showGrantToast}
                 onCommitted={(kind) =>
                   showToast(
@@ -403,7 +399,6 @@ export function ProfilesPage({
                       : copy.toast.changesSaved,
                   )
                 }
-                onDiscardRule={discardEditingRule}
                 closeRequest={closeRequest}
                 onCloseRequestCancelled={() => setPendingProfileId(undefined)}
                 onClose={closeEditor}

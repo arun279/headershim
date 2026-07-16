@@ -9,6 +9,10 @@
   white-space: nowrap;
 }
 
+.editor-sheet .sheet-head {
+  gap: var(--sp-3);
+}
+
 .rule-editor {
   min-width: 0;
   padding: var(--sp-4);
@@ -150,6 +154,12 @@
   outline: none;
 }
 
+.compose-input::placeholder {
+  color: var(--ink-mute);
+  opacity: 0.65;
+  font-weight: 400;
+}
+
 .compose-name-input {
   field-sizing: content;
   width: auto;
@@ -209,6 +219,16 @@
 
 .editor-option .field {
   margin-top: var(--sp-2);
+}
+
+.generated-value-panel {
+  padding: var(--sp-2) var(--sp-3) 0;
+}
+
+.generated-value-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
 
 .editor-request-target {

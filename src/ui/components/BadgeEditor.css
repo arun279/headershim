@@ -56,8 +56,8 @@
 /* The check stays visible on every palette color, including teal. */
 .badge-swatch:has(input:checked) {
   box-shadow:
-    0 0 0 2px var(--panel-1),
-    0 0 0 3px var(--ink);
+    inset 0 0 0 2px #fff,
+    0 0 0 2px #1b242e;
 }
 
 .badge-swatch:has(input:checked)::after {

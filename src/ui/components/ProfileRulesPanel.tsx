@@ -137,45 +137,49 @@ export function ProfileRulesPanel(props: ProfileRulesPanelProps) {
       ) : (
         <>
           <div class="bulk-bar">
-            <label class="bulk-select-all">
-              <input
-                type="checkbox"
-                ref={selectAll}
-                checked={allSelected}
-                aria-label={copy.options.rules.selectAll}
-                onChange={(event) => toggleAll(event.currentTarget.checked)}
-              />
-              <span>{copy.options.rules.selected(chosen.length)}</span>
-            </label>
-            <div class="bulk-actions">
-              <Button
-                kind="quiet"
-                disabled={chosen.length === 0}
-                onClick={() => act(() => props.onSetEnabled(chosen, true))}
-              >
-                {copy.options.rules.enable}
-              </Button>
-              <Button
-                kind="quiet"
-                disabled={chosen.length === 0}
-                onClick={() => act(() => props.onSetEnabled(chosen, false))}
-              >
-                {copy.options.rules.disable}
-              </Button>
-              <Button
-                kind="quiet"
-                disabled={chosen.length === 0 || props.moveTargets.length === 0}
-                onClick={() => setMoving((open) => !open)}
-              >
-                {copy.options.rules.move}
-              </Button>
-              <Button
-                kind="quiet"
-                disabled={chosen.length === 0}
-                onClick={() => act(() => props.onDelete(chosen))}
-              >
-                {copy.options.rules.delete}
-              </Button>
+            <div class="bulk-selection-group">
+              <label class="bulk-select-all">
+                <input
+                  type="checkbox"
+                  ref={selectAll}
+                  checked={allSelected}
+                  aria-label={copy.options.rules.selectAll}
+                  onChange={(event) => toggleAll(event.currentTarget.checked)}
+                />
+                <span>{copy.options.rules.selected(chosen.length)}</span>
+              </label>
+              <div class="bulk-actions">
+                <Button
+                  kind="quiet"
+                  disabled={chosen.length === 0}
+                  onClick={() => act(() => props.onSetEnabled(chosen, true))}
+                >
+                  {copy.options.rules.enable}
+                </Button>
+                <Button
+                  kind="quiet"
+                  disabled={chosen.length === 0}
+                  onClick={() => act(() => props.onSetEnabled(chosen, false))}
+                >
+                  {copy.options.rules.disable}
+                </Button>
+                <Button
+                  kind="quiet"
+                  disabled={
+                    chosen.length === 0 || props.moveTargets.length === 0
+                  }
+                  onClick={() => setMoving((open) => !open)}
+                >
+                  {copy.options.rules.move}
+                </Button>
+                <Button
+                  kind="quiet"
+                  disabled={chosen.length === 0}
+                  onClick={() => act(() => props.onDelete(chosen))}
+                >
+                  {copy.options.rules.delete}
+                </Button>
+              </div>
             </div>
           </div>
           {moving && (

@@ -41,7 +41,6 @@ import {
 import {
   pruneForeignOrigins,
   removeOverride,
-  restoreOverride,
 } from "../../src/ui/state/session-mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
 import { useInvalidRules } from "../../src/ui/state/useInvalidRules";
@@ -95,8 +94,8 @@ interface Editing {
   ruleId?: string;
   /** A full draft to seed a new rule from (This-tab "Save as rule…"). */
   prefill?: RuleDraft;
-  /** The temporary row this new rule promotes, retained for discard recovery. */
-  promote?: { override: TabOverride; index: number };
+  /** The temporary row this new rule promotes. */
+  promote?: TabOverride;
 }
 
 function Ready({
@@ -229,13 +228,7 @@ function Ready({
     setEditing({
       profileId: doc.focusedProfileId,
       prefill: overrideToRuleDraft(override, tabDomain ?? override.originHost),
-      promote: {
-        override,
-        index: Math.max(
-          0,
-          overrides.findIndex((candidate) => candidate.num === override.num),
-        ),
-      },
+      promote: override,
     });
   };
 
@@ -248,10 +241,9 @@ function Ready({
     const outcome = await mutations.saveRule(profileId, ruleId, draft);
     if (outcome.ok) {
       setPendingUndo(undefined);
-      // The promotion's source row is retired on its first commit. Waiting for
-      // the removal keeps discard recovery ordered behind this write.
+      // The promotion's source row is retired only after its saved-rule write.
       if (ruleId === undefined && promote !== undefined) {
-        await removeOverride(promote.override.tabId, promote.override.num);
+        await removeOverride(promote.tabId, promote.num);
       }
     }
     return outcome;
@@ -502,24 +494,6 @@ function Ready({
     });
   };
 
-  const discardEditingRule = async (
-    profileId: string,
-    ruleId: string,
-    promote: Editing["promote"],
-  ) => {
-    const outcome = await mutations.deleteRule(profileId, ruleId);
-    if (!outcome.ok) {
-      const message = blockedCommitCopy(outcome.error);
-      if (message !== undefined) {
-        showToast(message);
-      }
-      return;
-    }
-    if (promote !== undefined) {
-      await restoreOverride(promote.override, promote.index);
-    }
-  };
-
   const popupHeader = (
     <PopupHeader
       profiles={doc.profiles}
@@ -573,6 +547,7 @@ function Ready({
             )
           }
           onRequestGrant={requestPermissions}
+          onGrantDeclined={(host) => showToast(copy.errors.grantDeclined(host))}
           onCommitted={(kind) =>
             showToast(
               kind === "create"
@@ -580,15 +555,7 @@ function Ready({
                 : copy.toast.changesSaved,
             )
           }
-          onGrantStep={() => setToast(undefined)}
           onGranted={announceGrant}
-          onDiscardRule={(ruleId) =>
-            discardEditingRule(
-              activeEditing.profileId,
-              ruleId,
-              activeEditing.promote,
-            )
-          }
           onClose={() => setEditing(undefined)}
         />
       ) : (

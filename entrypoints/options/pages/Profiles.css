@@ -1,7 +1,6 @@
 .profiles-workspace {
   display: grid;
-  grid-template-columns: minmax(250px, 0.8fr) minmax(420px, 1.6fr);
-  min-height: 480px;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(400px, 1.4fr);
   background: var(--panel-1);
   border: var(--hairline) solid var(--bezel);
   border-radius: var(--radius-outer);
@@ -43,16 +42,14 @@
 }
 
 .profile-detail-pane > .rules-panel {
-  min-height: 100%;
   padding: var(--sp-5);
 }
 
 .profile-detail-pane .editor-sheet {
-  min-height: 100%;
+  min-height: 0;
 }
 
 .editor-loading {
-  min-height: 100%;
   padding: var(--sp-5);
   color: var(--ink-mute);
 }

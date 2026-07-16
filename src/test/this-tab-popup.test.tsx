@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { fakeBrowser } from "@webext-core/fake-browser";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/popup/App";
 import {
@@ -139,16 +140,13 @@ describe("popup This-tab wiring", () => {
     );
   });
 
-  it("restores a promoted temporary row when its saved rule is discarded", async () => {
+  it("promotes a temporary row through save-and-allow and keeps a declined rule blocked", async () => {
+    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValueOnce(false);
     const original = override();
     const root = await mount(withSavedRule(), {
       nextNum: 2,
       tabs: { 5: [original] },
     });
-
-    press(root.querySelector(".rule-row") as HTMLElement, "Delete");
-    await settle();
-    expect(root.querySelector(".toast")?.textContent).toContain("Rule deleted");
 
     openTemporaryMenu(root);
     const promote = [...root.querySelectorAll('[role="menuitem"]')].find(
@@ -157,23 +155,23 @@ describe("popup This-tab wiring", () => {
     fire(() => promote.click());
     await settle();
     const create = [...root.querySelectorAll(".editor-actions button")].find(
-      (button) => button.textContent === "Create a rule",
+      (button) =>
+        button.textContent === "Create rule and allow app.example.com",
     ) as HTMLButtonElement;
     fire(() => create.click());
     await settle();
 
-    expect(root.querySelector(".grant-panel")).not.toBeNull();
-    expect(root.querySelector(".toast")).toBeNull();
+    expect(root.querySelector(".rule-editor")).toBeNull();
     expect((await readSession()).tabs[5]).toBeUndefined();
-
-    const discard = [...root.querySelectorAll(".grant-panel button")].find(
-      (button) => button.textContent === "Discard rule",
-    ) as HTMLButtonElement;
-    fire(() => discard.click());
-    await settle();
-
-    expect((await readState()).profiles[0]?.rules).toEqual([]);
-    expect((await readSession()).tabs[5]).toEqual([original]);
+    expect(
+      (await readState()).profiles[0]?.rules.map((rule) => rule.header),
+    ).toEqual(["x-existing", "x-debug-trace"]);
+    expect(root.querySelectorAll(".rule-row.blocked").length).toBeGreaterThan(
+      0,
+    );
+    expect(root.querySelector(".toast")?.textContent).toContain(
+      "Saved, but not running",
+    );
   });
 
   it("prunes a stale-origin override on popup open", async () => {

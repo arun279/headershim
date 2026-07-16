@@ -942,16 +942,15 @@ describe("enable semantics", () => {
 });
 
 describe("settings and import", () => {
-  it("round-trips pause, theme, and badge mode", async () => {
+  it("round-trips pause and theme", async () => {
     await seed([profile("p1")]);
 
     await mutations.setPaused(true);
     await mutations.setTheme("dark");
-    await mutations.setBadgeMode("initials");
     expect((await read()).settings).toEqual({
       paused: true,
       theme: "dark",
-      badgeMode: "initials",
+      badgeMode: "count",
     });
     await mutations.setPaused(false);
     expect((await read()).settings.paused).toBe(false);

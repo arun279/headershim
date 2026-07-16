@@ -67,10 +67,7 @@ describe("ScopeEditor match type", () => {
     const ctx = mount();
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
-    expect(ctx.micros().slice(0, 2)).toEqual([
-      sentenceText(copy.editor.patternHint),
-      copy.editor.includesPages,
-    ]);
+    expect(ctx.micros()).toEqual([sentenceText(copy.editor.patternHint)]);
   });
 
   it("shows the RE2 helper on regex without a standing grant warning", () => {
@@ -90,6 +87,7 @@ describe("ScopeEditor match type", () => {
       false,
       true,
     ]);
+    expect(ctx.micros()).toEqual([copy.editor.allSitesHelper]);
   });
 });
 
@@ -148,6 +146,11 @@ describe("ScopeEditor domain chips", () => {
     expect(ctx.micros()).not.toContain(copy.editor.domainsHelper);
   });
 
+  it("keeps the caveat for cross-page resources selected with subframes", () => {
+    const ctx = mount({ initialTypes: ["subframes", "xhr"] });
+    expect(ctx.micros()).toEqual([copy.editor.requestTarget]);
+  });
+
   it("moves focus to a surviving chip control when a middle chip is removed", () => {
     const ctx = mount({
       initialScope: {
@@ -171,10 +174,10 @@ describe("ScopeEditor domain chips", () => {
 });
 
 describe("ScopeEditor resource types", () => {
-  it("defaults to All types and says top-level pages are included", () => {
+  it("defaults to All types without adding a second helper line", () => {
     const ctx = mount();
     expect(ctx.disclosure().textContent).toContain(copy.editor.allTypes);
-    expect(ctx.micros()).toContain(copy.editor.includesPages);
+    expect(ctx.micros()).toEqual([copy.editor.domainsHelper]);
   });
 
   it("opens a checkbox group of the ten groupings, all checked by default", () => {
@@ -186,11 +189,10 @@ describe("ScopeEditor resource types", () => {
     expect(boxes.every((box) => box.checked)).toBe(true);
   });
 
-  it("drops the pages helper when Pages is unchecked and counts the rest", () => {
+  it("counts the remaining groups when Pages is unchecked", () => {
     const ctx = mount();
     fire(() => ctx.disclosure().click());
     fire(() => ctx.checkboxes()[0]?.click());
-    expect(ctx.micros()).not.toContain(copy.editor.includesPages);
     expect(ctx.disclosure().textContent).toContain(copy.resourceTypes.count(9));
   });
 

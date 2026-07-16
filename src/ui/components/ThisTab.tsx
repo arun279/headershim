@@ -463,6 +463,7 @@ function Composer({
       onKeyDown={onKeyDown}
     >
       <legend class="silk">{copy.thisTab.composerTitle}</legend>
+      <p class="this-tab-applies">{sentence(copy.thisTab.applies(host))}</p>
 
       <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
 

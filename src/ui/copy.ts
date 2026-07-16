@@ -265,10 +265,6 @@ export const copy = {
         switchToDark: "Switch to dark theme",
         options: { system: "System", light: "Light", dark: "Dark" },
       },
-      badgeMode: {
-        label: "Badge shows",
-        options: { count: "Matched-rule count", initials: "Profile initials" },
-      },
       shortcuts: "Keyboard shortcuts",
     },
     about: {
@@ -278,16 +274,14 @@ export const copy = {
         " · commit ",
         data(commit),
       ],
-      description: [
-        "HeaderShim adds, changes, and removes HTTP headers. Rules can be scoped to domains, URL patterns, regexes, or all sites.",
-        "Rules can be grouped into profiles. Temporary overrides apply to one tab until it navigates or closes. HeaderShim imports and exports JSON and can import ModHeader exports.",
-      ],
+      description:
+        "HeaderShim modifies HTTP request and response headers using scoped rules, profiles, and tab-specific overrides.",
       license:
-        "HeaderShim is open source under the MIT license. It comes with no warranty or guarantees.",
+        "Open source under the MIT license. Provided as is, without warranty.",
       links: {
         repository: "Repository",
         repositoryUrl: "https://github.com/arun279/headershim",
-        license: "MIT license",
+        license: "License",
         licenseUrl: "https://github.com/arun279/headershim/blob/main/LICENSE",
         issues: "Issues",
         issuesUrl: "https://github.com/arun279/headershim/issues",
@@ -299,16 +293,16 @@ export const copy = {
 
   actions: {
     newRule: "+ New rule",
-    createRule: "Create a rule",
+    createRule: "Create rule",
+    createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
     saveChanges: "Save changes",
+    saveChangesAndAllow: (host: string) => `Save changes and allow ${host}`,
     testOnThisTab: "Test on this tab",
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands; there is no
     // automatic reload (locus of control).
     reloadTab: "Reload tab",
-    grantLater: "Grant later",
-    discardRule: "Discard rule",
     grant: "Grant",
     addOverride: "Add override",
     cancel: "Cancel",
@@ -317,7 +311,6 @@ export const copy = {
     options: "Options",
     pause: "Pause",
     globalPause: "Global pause",
-    allowOn: (target: string) => `Allow on ${target}`,
   },
 
   toast: {
@@ -366,7 +359,12 @@ export const copy = {
     sectionLabel: "This tab",
     summary: (host: string): Sentence => [" · ", data(host)],
     addOverride: "+ Temporary override",
-    composerTitle: "New this-tab override",
+    composerTitle: "Temporary override",
+    applies: (host: string): Sentence => [
+      "Applies to ",
+      data(host),
+      " on this tab only.",
+    ],
     saveAsRule: "Save as rule…",
     menuLabel: (header: string) => `Temporary override actions: ${header}`,
     remove: (header: string) => `Remove temporary override: ${header}`,
@@ -436,7 +434,12 @@ export const copy = {
       value: "Value",
       scope: "Scope",
       comment: "Comment",
+      generatedValue: "Generated value",
       resourceTypes: "Resource types",
+    },
+    placeholders: {
+      headerName: "name",
+      value: "value",
     },
     direction: { request: "Request", response: "Response" },
     operation: { set: "Set", append: "Append", remove: "Remove" },
@@ -448,6 +451,7 @@ export const copy = {
       regex: "Regex",
     },
     allSites: "All sites",
+    allSitesHelper: "matches every website",
     domainsHelper: "matches this domain and its subdomains",
     requestTarget:
       "Runs on requests to these hosts, which may differ from the page you are viewing.",
@@ -463,10 +467,10 @@ export const copy = {
     ] as Sentence,
     regexHint: "Uses Chrome's RE2 syntax.",
     allTypes: "All types",
-    includesPages: "Includes top-level pages",
     insert: "Insert",
     insertUuid: "UUID",
     insertTimestamp: "Timestamp (ISO 8601)",
+    generatedKind: { uuid: "UUID", timestamp: "Timestamp" },
     newlineRemoved: "Line breaks removed. A header value is a single line.",
     caution: "Caution",
   },
@@ -495,34 +499,6 @@ export const copy = {
   generatedValue: {
     note: "Generated when you saved this rule. This value is frozen and does not change per request.",
     frozen: (savedAtUtc: string) => `Frozen at save: ${savedAtUtc}`,
-  },
-
-  grantPanel: {
-    heading: "Grant access",
-    createdLead: "Rule created. One step left to make it run.",
-    savedLead: "Saved. One step left to make it run.",
-    single: (host: string) =>
-      `To change headers on ${host}, Chrome requires you to grant HeaderShim access to that site.`,
-    multiple: (siteCount: number) =>
-      `To change headers on ${siteCount} sites, Chrome requires you to grant HeaderShim access to those sites:`,
-    initiator: (initiator: string, target: string) =>
-      `Also allow on ${initiator} (the site you're on). Its pages need it to call ${target}.`,
-    // Pattern/regex scopes: Chrome grants by site, not by pattern, so the two
-    // dimensions the platform needs are collected as separate labeled inputs.
-    patternIntro:
-      "This rule matches by pattern. Chrome grants access by site, so name both:",
-    targetsQuestion: "Which sites do the requests go to?",
-    initiatorsQuestion: "Which pages start those requests?",
-    patternEffect:
-      "The rule matches wherever its pattern says, but only takes effect where both sites are granted.",
-    allSitesLink: "All of them / I can't enumerate",
-    // No page-under-test context (authored from options, or an untracked tab):
-    // no initiator can be inferred, so the input is explicit and optional.
-    noContextInitiators: "Pages that call these sites",
-    addSite: "+ add",
-    targetInputLabel: "Add a site the requests go to",
-    initiatorInputLabel: "Add a page that starts these requests",
-    removeSite: (host: string) => `Remove ${host}`,
   },
 
   errors: {
