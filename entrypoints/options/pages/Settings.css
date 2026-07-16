@@ -1,77 +1,73 @@
 .settings-card {
   display: flex;
   flex-direction: column;
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
-  border-radius: var(--radius-outer);
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
 }
 
 .settings-row {
   display: flex;
   align-items: center;
   gap: var(--sp-5);
-  min-height: 48px;
-  padding: var(--sp-3) var(--sp-5);
+  min-height: 52px;
+  padding: var(--sp-4) 20px;
   border: 0;
 }
-
 .settings-row + .settings-row {
-  border-top: var(--hairline) solid var(--bezel);
+  border-top: var(--hairline) solid var(--line);
 }
-
 .settings-row > :first-child {
   min-width: 150px;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .settings-radios legend {
   float: left;
   margin-right: var(--sp-5);
 }
-
 .settings-radios {
   flex-wrap: wrap;
 }
 
+/* The theme picker is the shared segmented control (App.css .seg), inline. */
 .settings-segments {
   display: inline-flex;
-  overflow: hidden;
-  border: var(--hairline) solid var(--ink-mute);
-  border-radius: var(--radius-inner);
+  gap: 2px;
+  padding: 2px;
+  background: var(--raise2);
+  border-radius: var(--r-chip);
 }
-
 .settings-segment {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
-  padding: var(--sp-2) var(--sp-4);
-  color: var(--ink-mute);
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: var(--ink2);
+  font-weight: 600;
+  font-size: 12px;
   cursor: pointer;
 }
-
-.settings-segment + .settings-segment {
-  border-left: var(--hairline) solid var(--ink-mute);
+.settings-segment:hover {
+  color: var(--ink);
 }
-
 .settings-segment.checked {
-  color: var(--trace-ink);
-  background: var(--trace);
+  color: var(--ink);
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(18, 22, 33, 0.08);
 }
-
 .settings-segment:has(:focus-visible) {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
-}
-
-.settings-segment.checked:has(:focus-visible) {
-  outline-color: var(--trace-ink);
+  outline-offset: 2px;
 }
 
 .settings-link {
-  color: var(--trace);
-  font-weight: 500;
+  color: var(--live-ink);
+  font-weight: 600;
+  font-size: 12.5px;
 }
-
 .settings-shortcuts .settings-link {
   min-width: 0;
 }

@@ -131,18 +131,21 @@ describe("the accent, doubled and reserved", () => {
   });
 });
 
-describe("legacy options surfaces inherit the palette", () => {
-  it("uses the contrast-audited muted ink for the Settings boundary", () => {
+describe("options settings surface inherits the palette", () => {
+  it("draws the segmented theme control on audited surfaces", () => {
     expect(settingsCss).toMatch(
-      /\.settings-segments\s*\{[^}]*border:\s*var\(--hairline\) solid var\(--ink-mute\)/s,
+      /\.settings-segments\s*\{[^}]*background:\s*var\(--raise2\)/s,
+    );
+    expect(settingsCss).toMatch(
+      /\.settings-segment\.checked\s*\{[^}]*background:\s*var\(--panel\)/s,
     );
   });
 
-  it.each(THEMES)("$name: the Settings boundary clears the 3:1 floor", ({
+  it.each(THEMES)("$name: the checked segment text clears 4.5:1", ({
     selector,
   }) => {
-    expect(
-      contrast(block(selector), "ink-mute", "panel-1"),
-    ).toBeGreaterThanOrEqual(3);
+    expect(contrast(block(selector), "ink", "panel")).toBeGreaterThanOrEqual(
+      4.5,
+    );
   });
 });

@@ -93,12 +93,15 @@ export function ImportExportPage({
 
   return (
     <section
-      class="page import-export-page"
+      class="wb-page import-export-page"
       aria-labelledby="import-export-title"
     >
-      <h1 class="page-title" id="import-export-title" tabIndex={-1}>
-        {text.title}
-      </h1>
+      <div>
+        <h1 class="wb-title" id="import-export-title" tabIndex={-1}>
+          {text.title}
+        </h1>
+        <p class="wb-sub">{text.subtitle}</p>
+      </div>
 
       <div class="ie-block">
         <h2 class="silk ie-block-label">{text.importHeading}</h2>

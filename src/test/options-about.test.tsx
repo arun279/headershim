@@ -115,7 +115,7 @@ describe("options about", () => {
 
   it("shows the injected build identity and one factual description", async () => {
     const root = await mount();
-    expect(root.querySelector(".page-title")?.textContent).toBe(text.title);
+    expect(root.querySelector(".wb-title")?.textContent).toBe(text.title);
     expect(root.textContent).toContain(
       sentenceText(text.build("1.0.0", "test")),
     );

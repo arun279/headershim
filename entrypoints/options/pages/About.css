@@ -1,18 +1,34 @@
+/* Base card recipe lives in App.css; About only narrows the measure. */
+.about-card {
+  max-width: 560px;
+}
+
 .about-build {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.about-build .mono {
   font-weight: 600;
 }
 
 .about-description {
-  color: var(--ink);
+  color: var(--ink2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.about-card > p {
+  font-size: 12.5px;
+  color: var(--ink2);
 }
 
 .about-links {
-  padding-top: var(--sp-2);
-  border-top: var(--hairline) solid var(--bezel);
-  color: var(--ink-mute);
+  padding-top: var(--sp-3);
+  border-top: var(--hairline) solid var(--line);
+  color: var(--ink3);
 }
-
 .about-link {
-  color: var(--trace);
+  color: var(--live-ink);
+  font-weight: 600;
 }

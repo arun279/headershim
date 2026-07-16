@@ -1,0 +1,120 @@
+/*
+ * The receipt: a dense monospace ledger of what HeaderShim is set to stamp,
+ * with the exceptions (refused, skipped) surfaced first. Color is doubled by a
+ * glyph and a word on every line, so no state rests on hue alone.
+ */
+
+.tape {
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.tape-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 15px;
+  background: var(--raise);
+  border-bottom: var(--hairline) solid var(--line);
+}
+.tape-secrets {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--ink3);
+  font-style: italic;
+}
+
+.tape-list {
+  list-style: none;
+  overflow-x: auto;
+}
+.tape-row {
+  display: grid;
+  grid-template-columns: 16px auto minmax(120px, 0.9fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 15px;
+}
+.tape-row + .tape-row {
+  border-top: var(--hairline) solid var(--line2);
+}
+.tape-mark {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tape-mark svg {
+  width: 12px;
+  height: 12px;
+}
+.tape-row.live .tape-mark {
+  color: var(--live);
+}
+.tape-row.needs-access .tape-mark {
+  color: var(--amber);
+}
+.tape-row.refused .tape-mark {
+  color: var(--stop);
+}
+.tape-row.paused .tape-mark {
+  color: var(--faint);
+}
+
+.tape-host {
+  font-size: 12px;
+  color: var(--ink2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tape-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tape-op {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  color: var(--ink3);
+}
+.tape-op svg {
+  width: 14px;
+  height: 14px;
+}
+.tape-status {
+  justify-self: end;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tape-row.live .tape-status {
+  color: var(--live-ink);
+}
+.tape-row.needs-access .tape-status {
+  color: var(--amber);
+}
+.tape-row.refused .tape-status {
+  color: var(--stop);
+}
+.tape-row.paused .tape-status {
+  color: var(--ink3);
+}
+
+.tape-empty {
+  padding: 36px 15px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--ink2);
+}

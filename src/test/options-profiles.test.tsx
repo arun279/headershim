@@ -1,18 +1,10 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
-import type { Profile, Rule } from "../core/model";
-import { originPatternForDomain } from "../core/scope";
+import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
-import {
-  profile,
-  resetFixtures,
-  rule,
-  rules,
-  stateDoc,
-} from "../ui/test/fixtures";
+import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 async function seed(
@@ -22,7 +14,8 @@ async function seed(
   await write(stateDoc(profiles, { focusedProfileId }));
 }
 
-async function mount() {
+async function mount(hash = "#profiles") {
+  window.location.hash = hash;
   const root = render(<App />);
   await settle();
   return root;
@@ -73,58 +66,51 @@ function cardAction(root: HTMLElement, index: number, label: string): void {
   fire(() => findButton(within(root, ".profile-actions"), label).click());
 }
 
-/** Selects every rule, then runs one bulk toolbar action. */
-function bulkAction(root: HTMLElement, label: string): void {
-  fire(() =>
-    (within(root, ".bulk-select-all input") as HTMLInputElement).click(),
-  );
-  fire(() => findButton(within(root, ".bulk-actions"), label).click());
-}
-
 beforeEach(() => {
   resetFixtures();
   window.location.hash = "";
 });
 
-describe("options frame", () => {
-  it("renders the wordmark, version, and five-section navigation", async () => {
+describe("workbench frame", () => {
+  it("renders the wordmark, version, and full navigation", async () => {
     await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
+    const root = await mount("");
 
     expect(root.querySelector(".wordmark")?.textContent).toBe("HeaderShim");
-    expect(root.querySelector(".version")?.textContent).toMatch(/^v/);
-    const links = [
-      ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),
-    ];
+    expect(root.querySelector(".wb-version")?.textContent).toMatch(/^v/);
+    const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
     expect(links.map((link) => link.textContent)).toEqual([
+      copy.options.nav.fleet,
       copy.options.nav.profiles,
       copy.options.nav.siteAccess,
+      copy.options.nav.traffic,
       copy.options.nav.importExport,
       copy.options.nav.settings,
       copy.options.nav.about,
     ]);
+    // The default route is the fleet; its nav link carries the marker.
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
   });
 
   it("roves the nav tab stop with vertical arrow keys", async () => {
     await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
-    const links = [
-      ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),
-    ];
+    const root = await mount("");
+    const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
 
-    expect(links.map((link) => link.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    expect(links.map((link) => link.tabIndex)).toEqual([
+      0, -1, -1, -1, -1, -1, -1,
+    ]);
     press(links[0] as HTMLElement, "ArrowDown");
     expect(document.activeElement).toBe(links[1]);
     press(links[1] as HTMLElement, "End");
-    expect(document.activeElement).toBe(links[4]);
-    press(links[4] as HTMLElement, "Home");
+    expect(document.activeElement).toBe(links[links.length - 1]);
+    press(links[links.length - 1] as HTMLElement, "Home");
     expect(document.activeElement).toBe(links[0]);
   });
 
   it("moves focus to the section heading after hash navigation", async () => {
     await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
+    const root = await mount("");
 
     window.location.hash = "#settings";
     window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -144,7 +130,7 @@ describe("options frame", () => {
     outside.focus();
     await seed([profile("p1", { name: "Default" })]);
 
-    await mount();
+    await mount("");
 
     expect(document.activeElement).toBe(outside);
     outside.remove();
@@ -154,7 +140,7 @@ describe("options frame", () => {
     await seed([profile("p1", { name: "Default" })]);
     const doc = await read();
     await write({ ...doc, settings: { ...doc.settings, theme: "dark" } });
-    await mount();
+    await mount("");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 });
@@ -164,10 +150,7 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    const add = root.querySelector<HTMLButtonElement>(
-      `button[aria-label="${copy.options.profiles.new}"]`,
-    );
-    fire(() => add?.click());
+    fire(() => findButton(root, copy.options.profiles.newProfile).click());
     await settle();
 
     expect(cardNames(root)).toEqual(["Default", copy.options.profiles.newName]);
@@ -276,6 +259,26 @@ describe("profile lifecycle", () => {
   });
 });
 
+describe("profile enablement", () => {
+  it("switches exclusively: turning one on turns the rest off", async () => {
+    await seed([
+      profile("p1", { name: "Alpha", enabled: true }),
+      profile("p2", { name: "Beta", enabled: false }),
+    ]);
+    const root = await mount();
+
+    const beta = cards(root)[1] as HTMLElement;
+    fire(() => within(beta, '[role="switch"]').click());
+    await settle();
+
+    const stored = await read();
+    expect(stored.profiles.find((p) => p.name === "Beta")?.enabled).toBe(true);
+    expect(stored.profiles.find((p) => p.name === "Alpha")?.enabled).toBe(
+      false,
+    );
+  });
+});
+
 async function mountThree(): Promise<{
   root: HTMLElement;
   handle: HTMLElement;
@@ -358,255 +361,5 @@ describe("badge editor", () => {
     await settle();
 
     expect((await read()).profiles[0]?.badgeText).toBe("QA");
-  });
-});
-
-describe("rule authoring", () => {
-  it("creates with the shared editor and no current-tab prefill", async () => {
-    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValueOnce(false);
-    await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
-
-    fire(() => findButton(root, copy.options.rules.new).click());
-    await settle();
-    expect(
-      root.querySelector(".editor-sheet")?.getAttribute("aria-modal"),
-    ).toBe(null);
-    expect(document.activeElement).toBe(
-      root.querySelector('[role="combobox"]'),
-    );
-    expect(root.querySelectorAll(".domain-chip")).toHaveLength(0);
-
-    typeInto(
-      root.querySelector('[role="combobox"]') as HTMLInputElement,
-      "x-options-created",
-    );
-    typeInto(
-      root.querySelector(".value-row textarea") as HTMLTextAreaElement,
-      "created",
-    );
-    const domain = root.querySelector(".domain-chip-input") as HTMLInputElement;
-    typeInto(domain, "api.example.com");
-    press(domain, "Enter");
-    fire(() =>
-      findButton(
-        root,
-        copy.actions.createRuleAndAllow("api.example.com"),
-      ).click(),
-    );
-    await settle();
-
-    expect((await read()).profiles[0]?.rules[0]?.header).toBe(
-      "x-options-created",
-    );
-    expect(root.querySelector(".editor-sheet")).toBeNull();
-    expect(root.querySelector(".rule-row.blocked")).not.toBeNull();
-    expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.errors.grantDeclined("api.example.com"),
-    );
-    expect(document.activeElement).toBe(
-      findButton(root, copy.options.rules.new),
-    );
-  });
-
-  it("opens the shared editor from a focused row and keeps selection independent", async () => {
-    await fakeBrowser.permissions.request({
-      origins: [originPatternForDomain("example.com")],
-    });
-    await seed([
-      profile("p1", {
-        name: "Default",
-        rules: [rule({ header: "x-before" })],
-      }),
-      profile("p2", { name: "Other" }),
-    ]);
-    const root = await mount();
-
-    const row = within(root, ".rule-row");
-    const selection = within(root, ".rule-select") as HTMLInputElement;
-    expect(row.tabIndex).toBe(0);
-    expect(selection.checked).toBe(false);
-    expect(root.querySelector(".rule-menu-btn")).not.toBeNull();
-
-    fire(() => row.focus());
-    press(row, "ContextMenu");
-    expect(within(root, ".rule-menu").textContent).toContain(copy.menu.edit);
-    expect(within(root, ".rule-menu").textContent).toContain(
-      copy.menu.duplicate,
-    );
-    expect(within(root, ".rule-menu").textContent).toContain(
-      copy.menu.moveToProfile,
-    );
-    expect(within(root, ".rule-menu").textContent).toContain(copy.menu.delete);
-    press(document.activeElement as HTMLElement, "Escape");
-
-    fire(() => row.focus());
-    press(row, "Enter");
-    await settle();
-    expect(findButton(root, copy.actions.saveChanges)).not.toBeNull();
-    expect(document.activeElement).toBe(
-      root.querySelector('[role="combobox"]'),
-    );
-
-    typeInto(
-      root.querySelector('[role="combobox"]') as HTMLInputElement,
-      "x-after",
-    );
-    fire(() => findButton(root, copy.actions.saveChanges).click());
-    await settle();
-
-    expect((await read()).profiles[0]?.rules[0]?.header).toBe("x-after");
-    expect(root.querySelector(".editor-sheet")).toBeNull();
-    const restoredRow = within(root, ".rule-row");
-    expect(document.activeElement).toBe(restoredRow);
-    expect(
-      restoredRow.querySelector<HTMLInputElement>(".rule-select")?.checked,
-    ).toBe(false);
-  });
-
-  it("confirms before a profile switch can discard a dirty draft", async () => {
-    await seed([
-      profile("p1", { name: "First" }),
-      profile("p2", { name: "Second" }),
-    ]);
-    const root = await mount();
-
-    fire(() => findButton(root, copy.options.rules.new).click());
-    await settle();
-    typeInto(
-      root.querySelector('[role="combobox"]') as HTMLInputElement,
-      "x-unsaved",
-    );
-
-    openCard(root, 1);
-    expect(root.textContent).toContain(copy.editor.discardConfirm.title);
-    expect(root.querySelector(".editor-sheet")).not.toBeNull();
-    expect(cards(root)[0]?.classList.contains("open")).toBe(true);
-    expect(cards(root)[1]?.classList.contains("open")).toBe(false);
-
-    fire(() =>
-      findButton(root, copy.editor.discardConfirm.keepEditing).click(),
-    );
-    expect(root.textContent).not.toContain(copy.editor.discardConfirm.title);
-    expect(root.querySelector(".editor-sheet")).not.toBeNull();
-
-    openCard(root, 1);
-    fire(() => findButton(root, copy.editor.discardConfirm.discard).click());
-    await settle();
-
-    expect(root.querySelector(".editor-sheet")).toBeNull();
-    expect(cards(root)[1]?.classList.contains("open")).toBe(true);
-  });
-
-  it("uses the shared blocked state and redacts secrets", async () => {
-    await seed([
-      profile("p1", {
-        rules: [
-          rule({
-            header: "authorization",
-            value: "Bearer super-secret-token",
-            scope: { type: "domains", domains: ["api.example.com"] },
-          }),
-        ],
-      }),
-    ]);
-    const root = await mount();
-    const row = within(root, ".rule-row");
-
-    expect(row.classList.contains("blocked")).toBe(true);
-    expect(row.textContent).toContain("Bearer …redacted");
-    expect(row.textContent).not.toContain("super-secret-token");
-    expect(row.querySelector(".rule-grant")).not.toBeNull();
-  });
-});
-
-describe("bulk rule actions", () => {
-  async function mountWithRules(rulesForOpen: Rule[], others: Profile[] = []) {
-    await seed(
-      [profile("open", { name: "Open", rules: rulesForOpen }), ...others],
-      "open",
-    );
-    return mount();
-  }
-
-  it("enables every selected rule in one action", async () => {
-    const root = await mountWithRules([
-      rule({ enabled: false }),
-      rule({ enabled: false }),
-    ]);
-    expect(
-      root.querySelector(".bulk-selection-group .bulk-actions"),
-    ).not.toBeNull();
-
-    bulkAction(root, copy.options.rules.enable);
-    await settle();
-
-    expect((await read()).profiles[0]?.rules.every((r) => r.enabled)).toBe(
-      true,
-    );
-  });
-
-  it("deletes a selection and restores it via undo", async () => {
-    const root = await mountWithRules([rule(), rule()]);
-
-    bulkAction(root, copy.options.rules.delete);
-    await settle();
-
-    expect((await read()).profiles[0]?.rules).toHaveLength(0);
-    expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.toast.rulesDeleted(2),
-    );
-    fire(() => findButton(root, copy.actions.undo).click());
-    await settle();
-    expect((await read()).profiles[0]?.rules).toHaveLength(2);
-  });
-
-  it("moves a selection to another profile", async () => {
-    const moved = rule({ header: "x-move" });
-    const root = await mountWithRules(
-      [moved],
-      [profile("dest", { name: "Dest" })],
-    );
-
-    bulkAction(root, copy.options.rules.move);
-    fire(() => findButton(within(root, ".bulk-move-targets"), "Dest").click());
-    await settle();
-
-    const stored = await read();
-    expect(stored.profiles[0]?.rules).toHaveLength(0);
-    expect(stored.profiles[1]?.rules[0]?.header).toBe("x-move");
-    // Picking a move target unmounted its button; focus lands on the panel
-    // heading, never <body> (WCAG 2.4.3).
-    expect(document.activeElement).toBe(within(root, ".rules-panel-label"));
-  });
-
-  it("blocks a bulk-enable that crosses the 4,500 cap with the section-8 copy", async () => {
-    const disabled = rule({ enabled: false });
-    const root = await mountWithRules(
-      [disabled],
-      [profile("big", { name: "Big", rules: rules(4_500) })],
-    );
-
-    bulkAction(root, copy.options.rules.enable);
-    await settle();
-
-    expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.errors.ruleCap,
-    );
-    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
-  });
-
-  it("allows the enable that lands exactly on the 4,500 boundary", async () => {
-    const disabled = rule({ enabled: false });
-    const root = await mountWithRules(
-      [disabled],
-      [profile("big", { name: "Big", rules: rules(4_499) })],
-    );
-
-    bulkAction(root, copy.options.rules.enable);
-    await settle();
-
-    expect(root.querySelector(".toast-msg")).toBeNull();
-    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(true);
   });
 });

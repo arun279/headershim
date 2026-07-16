@@ -89,15 +89,21 @@ export function SiteAccessPage({
     );
 
   return (
-    <section class="page site-access-page" aria-labelledby="site-access-title">
-      <h1
-        class="page-title"
-        id="site-access-title"
-        ref={titleRef}
-        tabIndex={-1}
-      >
-        {text.title}
-      </h1>
+    <section
+      class="wb-page site-access-page"
+      aria-labelledby="site-access-title"
+    >
+      <div>
+        <h1
+          class="wb-title"
+          id="site-access-title"
+          ref={titleRef}
+          tabIndex={-1}
+        >
+          {text.title}
+        </h1>
+        <p class="wb-sub">{text.subtitle}</p>
+      </div>
 
       {grants.allSites && (
         <div class="sa-card sa-all-on">

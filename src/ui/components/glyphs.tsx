@@ -27,20 +27,6 @@ export function TriangleGlyph() {
   );
 }
 
-export function PencilGlyph() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
-      <path
-        d="m2 10 .6-2.4L8.7 1.5l1.8 1.8-6.1 6.1L2 10Z"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.3"
-        stroke-linejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function CloseGlyph() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">

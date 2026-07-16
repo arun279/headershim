@@ -191,7 +191,7 @@ function coversSubresourceTypes(rule: Rule): boolean {
  * granting too. A default all-types rule includes main_frame — the common
  * direct-navigation case the user is not surprised by — so it stays quiet.
  */
-export function subresourceScopedRule(rule: Rule): boolean {
+function subresourceScopedRule(rule: Rule): boolean {
   const expanded = expandResourceTypes(rule.resourceTypes);
   return (
     !expanded.includes("main_frame") &&

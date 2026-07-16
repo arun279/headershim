@@ -57,8 +57,8 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/popover-*.js",
-      "limit": "21.5 kB"
+      "path": ".output/chrome-mv3/chunks/glyphs-*.js",
+      "limit": "15 kB"
     },
     {
       "name": "Popup",
@@ -72,10 +72,10 @@
         ".output/chrome-mv3/theme-bootstrap.js",
         ".output/chrome-mv3/chunks/options-*.js",
         ".output/chrome-mv3/chunks/glyphs-*.js",
-        ".output/chrome-mv3/chunks/popover-*.js",
+        ".output/chrome-mv3/chunks/commit-copy-*.js",
         ".output/chrome-mv3/chunks/headers-*.js",
         ".output/chrome-mv3/assets/glyphs-*.css",
-        ".output/chrome-mv3/assets/popover-*.css",
+        ".output/chrome-mv3/assets/commit-copy-*.css",
         ".output/chrome-mv3/assets/options-*.css"
       ],
       "limit": "45 kB"
@@ -86,7 +86,7 @@
         ".output/chrome-mv3/chunks/RuleEditor-*.js",
         ".output/chrome-mv3/assets/RuleEditor-*.css"
       ],
-      "limit": "10 kB"
+      "limit": "12 kB"
     }
   ],
   "pnpm": {

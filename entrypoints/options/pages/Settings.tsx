@@ -21,10 +21,13 @@ export function SettingsPage({
 }) {
   const shortcutsUrl = shortcutManagerUrl(browser.runtime);
   return (
-    <section class="page settings-page" aria-labelledby="settings-title">
-      <h1 class="page-title" id="settings-title" tabIndex={-1}>
-        {text.title}
-      </h1>
+    <section class="wb-page settings-page" aria-labelledby="settings-title">
+      <div>
+        <h1 class="wb-title" id="settings-title" tabIndex={-1}>
+          {text.title}
+        </h1>
+        <p class="wb-sub">{text.subtitle}</p>
+      </div>
 
       <div class="settings-card">
         <fieldset class="settings-row settings-radios">

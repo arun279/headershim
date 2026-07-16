@@ -9,8 +9,8 @@ const text = copy.options.about;
 /** A compact identity card with the build, product description, and links. */
 export function AboutPage() {
   return (
-    <section class="page about-page" aria-labelledby="about-title">
-      <h1 class="page-title" id="about-title" tabIndex={-1}>
+    <section class="wb-page about-page" aria-labelledby="about-title">
+      <h1 class="wb-title" id="about-title" tabIndex={-1}>
         {text.title}
       </h1>
       <div class="about-card">

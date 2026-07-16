@@ -4,7 +4,6 @@
  * show a scheme word plus a redaction marker, and the popup masks it to a tail.
  */
 
-import type { Rule } from "../core/model";
 import { copy } from "./copy";
 
 const SECRET_HEADERS = new Set([
@@ -22,11 +21,6 @@ export function isSecretHeader(header: string): boolean {
     SECRET_HEADERS.has(normalized) ||
     (normalized.startsWith("x-") && normalized.endsWith("-token"))
   );
-}
-
-/** Rule-list summaries never expose credential-bearing header values. */
-export function ruleValueSummary(rule: Rule): string | undefined {
-  return headerValueSummary(rule.header, rule.value);
 }
 
 export function headerValueSummary(

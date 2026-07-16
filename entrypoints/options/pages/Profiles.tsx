@@ -1,218 +1,48 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
-import {
-  domainFromOriginPattern,
-  type GrantSnapshot,
-} from "../../../src/core/grants";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
   BADGE_COLORS,
   type Profile,
-  type Rule,
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
-import { isRegexSupported } from "../../../src/platform/dnr";
-import { request as requestPermissions } from "../../../src/platform/permissions";
-import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
-import { ProfileRulesPanel } from "../../../src/ui/components/ProfileRulesPanel";
+import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { Toast } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
-import { useInvalidRules } from "../../../src/ui/state/useInvalidRules";
+import { useToast } from "../useToast";
 import "./Profiles.css";
 
-type Undo =
-  | { kind: "profile"; profile: Profile; index: number }
-  | {
-      kind: "rules";
-      profileId: string;
-      removed: readonly { rule: Rule; index: number }[];
-    };
+const text = copy.options.profiles;
 
 /**
- * The Profiles management page: create, rename, clone, delete (confirm + undo),
- * reorder, badge editing, and bulk rule actions — all through the shared
- * mutations API, which enforces the caps and byte budget inside its lock.
+ * Profile management: create, rename, clone, delete (confirm + undo), reorder,
+ * badge editing, and enable. Enabling is exclusive by default, matching the
+ * popup's one-profile-at-a-time model; rules themselves live in the Fleet.
  */
 export function ProfilesPage({
   doc,
-  grants,
   mutations,
 }: {
   doc: StateDoc;
-  grants: GrantSnapshot;
   mutations: Mutations;
 }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const [openId, setOpenId] = useState(doc.focusedProfileId);
-  const [editing, setEditing] = useState<
-    { profileId: string; ruleId: string | undefined } | undefined
-  >(undefined);
-  const [pendingProfileId, setPendingProfileId] = useState<string | undefined>(
-    undefined,
-  );
-  const [closeRequest, setCloseRequest] = useState(0);
-  const [Editor, setEditor] =
-    useState<
-      typeof import("../../../src/ui/components/RuleEditor").RuleEditor
-    >();
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
-  const [toast, setToast] = useState<string | undefined>(undefined);
-  const [undo, setUndo] = useState<Undo | undefined>(undefined);
+  const { toast, show: showToast, flash, dismiss } = useToast();
+  const [undo, setUndo] = useState<
+    { profile: Profile; index: number } | undefined
+  >(undefined);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const editorTrigger = useRef<
-    { profileId: string; ruleId: string | undefined } | undefined
-  >(undefined);
-  const editorFocusReturn = useRef<
-    { kind: "trigger" } | { kind: "profile"; profileId: string } | undefined
-  >(undefined);
-  const announce = useAnnounce();
-  const invalidRuleIds = useInvalidRules(doc.profiles, isRegexSupported);
-  useEffect(() => {
-    void import("../../../src/ui/components/RuleEditor").then((module) =>
-      setEditor(() => module.RuleEditor),
-    );
-  }, []);
-  // A freshly mounted role=status toast is not reliably re-announced, so every
-  // toast also speaks through the persistent polite region.
-  const showToast = (message: string) => {
-    setToast(message);
-    announce(message);
-  };
 
-  const open =
-    doc.profiles.find((profile) => profile.id === openId) ??
-    doc.profiles.find((profile) => profile.id === doc.focusedProfileId) ??
-    doc.profiles[0];
-  // The store always seeds at least one profile (deleting the last recreates
-  // Default), so an empty document never reaches render.
-  if (open === undefined) {
-    return null;
-  }
-
-  const editingRule =
-    editing?.profileId === open.id && editing.ruleId !== undefined
-      ? open.rules.find((rule) => rule.id === editing.ruleId)
-      : undefined;
-  const editorOpen =
-    editing?.profileId === open.id &&
-    (editing.ruleId === undefined || editingRule !== undefined);
-
-  // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap;
-  // the count mirrors the enabled set the cap governs.
-  const enabledRuleCount = doc.profiles
-    .filter((profile) => profile.enabled)
-    .reduce(
-      (total, profile) =>
-        total + profile.rules.filter((rule) => rule.enabled).length,
-      0,
-    );
-
-  const flash = (error: MutationError) => {
-    const message = blockedCommitCopy(error);
-    if (message !== undefined) {
-      showToast(message);
-    }
-  };
-
-  const showGrantToast = (sites: readonly string[]) => {
-    showToast(
-      sites.length === 1
-        ? copy.toast.activeOn(sites[0] as string)
-        : copy.toast.activeOnSites(sites.length),
-    );
-  };
-
-  const openEditor = (ruleId: string | undefined) => {
-    editorTrigger.current = { profileId: open.id, ruleId };
-    setPendingProfileId(undefined);
-    setEditing({ profileId: open.id, ruleId });
-  };
-
-  const restoreEditorTrigger = () => {
-    const trigger = editorTrigger.current;
-    if (trigger === undefined) {
-      titleRef.current?.focus();
-      return;
-    }
-    const panel = document.querySelector<HTMLElement>(".rules-panel");
-    const target =
-      trigger.ruleId === undefined
-        ? panel?.querySelector<HTMLElement>(".rules-panel-head .primary")
-        : [...(panel?.querySelectorAll<HTMLElement>(".rule-row") ?? [])].find(
-            (row) => row.getAttribute("data-rule-id") === trigger.ruleId,
-          );
-    (
-      target ?? panel?.querySelector<HTMLElement>(".rules-panel-label")
-    )?.focus();
-  };
-
-  useEffect(() => {
-    const focusReturn = editorFocusReturn.current;
-    if (editing !== undefined || focusReturn === undefined) {
-      return;
-    }
-    editorFocusReturn.current = undefined;
-    if (focusReturn.kind === "trigger") {
-      restoreEditorTrigger();
-      return;
-    }
-    const target = [...document.querySelectorAll<HTMLElement>(".profile-card")]
-      .find(
-        (card) =>
-          card.getAttribute("data-profile-id") === focusReturn.profileId,
-      )
-      ?.querySelector<HTMLElement>(".profile-open");
-    (target ?? titleRef.current)?.focus();
-  }, [editing, open.id]);
-
-  const closeEditor = () => {
-    const targetProfileId = pendingProfileId;
-    editorFocusReturn.current =
-      targetProfileId === undefined
-        ? { kind: "trigger" }
-        : { kind: "profile", profileId: targetProfileId };
-    setEditing(undefined);
-    setPendingProfileId(undefined);
-    if (targetProfileId !== undefined) {
-      setOpenId(targetProfileId);
-    }
-  };
-
-  const requestOpenProfile = (profileId: string) => {
-    if (profileId === open.id) {
-      return;
-    }
-    if (!editorOpen || Editor === undefined) {
-      setEditing(undefined);
-      setOpenId(profileId);
-      return;
-    }
-    setPendingProfileId(profileId);
-    setCloseRequest((request) => request + 1);
-  };
-
-  const grant = (origins: readonly string[]) => {
-    const granted = requestPermissions([...origins]);
-    void granted.then((allowed) => {
-      if (!allowed) {
-        return;
-      }
-      showGrantToast(
-        origins.map((origin) => domainFromOriginPattern(origin) ?? origin),
-      );
-    });
-  };
-
-  // A successful commit retires any pending undo; a blocked one surfaces its
-  // copy and leaves the undo intact.
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
       if (outcome.ok) {
@@ -223,15 +53,32 @@ export function ProfilesPage({
     });
   };
 
-  const create = () => {
-    const name = availableProfileName(
-      copy.options.profiles.newName,
-      doc.profiles,
-      [],
+  const enabledRuleCount = doc.profiles
+    .filter((profile) => profile.enabled)
+    .reduce(
+      (total, profile) =>
+        total + profile.rules.filter((rule) => rule.enabled).length,
+      0,
     );
+
+  // Exclusive by default: turning a profile on switches to it and turns the
+  // rest off; turning it off simply disables it. Enable the target first so no
+  // frame is ever all-off.
+  const exclusiveEnable = (profileId: string) =>
+    void (async () => {
+      await mutations.setProfileEnabled(profileId, true, true);
+      for (const profile of doc.profiles) {
+        if (profile.id !== profileId && profile.enabled) {
+          await mutations.setProfileEnabled(profile.id, false, false);
+        }
+      }
+      setUndo(undefined);
+    })();
+
+  const create = () => {
     void mutations
       .createProfile({
-        name,
+        name: availableProfileName(text.newName, doc.profiles, []),
         color:
           BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
           BADGE_COLORS[0],
@@ -240,23 +87,22 @@ export function ProfilesPage({
       .then((outcome) => {
         if (outcome.ok) {
           setUndo(undefined);
-          requestOpenProfile(outcome.value.id);
+          setOpenId(outcome.value.id);
         } else {
           flash(outcome.error);
         }
       });
   };
 
-  const clone = (profileId: string) => {
+  const clone = (profileId: string) =>
     void mutations.cloneProfile(profileId).then((outcome) => {
       if (outcome.ok) {
         setUndo(undefined);
-        requestOpenProfile(outcome.value.id);
+        setOpenId(outcome.value.id);
       } else {
         flash(outcome.error);
       }
     });
-  };
 
   const deleteProfile = (profile: Profile) => {
     setConfirmDelete(undefined);
@@ -265,43 +111,19 @@ export function ProfilesPage({
         flash(outcome.error);
         return;
       }
-      setUndo({ kind: "profile", ...outcome.value });
+      setUndo({ ...outcome.value });
       showToast(copy.toast.profileDeleted(profile.name));
-      // The confirm modal restored focus to the now-unmounting profile card's
-      // Delete button; land it on the stable page heading instead of <body>
-      // (WCAG 2.4.3).
       titleRef.current?.focus();
     });
   };
 
-  const deleteRules = (ruleIds: readonly string[]) => {
-    void mutations.deleteRules(open.id, ruleIds).then((outcome) => {
-      if (!outcome.ok) {
-        flash(outcome.error);
-        return;
-      }
-      setUndo({
-        kind: "rules",
-        profileId: open.id,
-        removed: outcome.value.removed,
-      });
-      showToast(copy.toast.rulesDeleted(outcome.value.removed.length));
-    });
-  };
-
   const runUndo = () => {
-    if (undo === undefined) {
-      return;
-    }
-    const mutation =
-      undo.kind === "profile"
-        ? mutations.restoreProfile(undo.profile, undo.index)
-        : mutations.restoreRules(undo.profileId, undo.removed);
-    void mutation.then((outcome) => {
+    if (undo === undefined) return;
+    void mutations.restoreProfile(undo.profile, undo.index).then((outcome) => {
       setUndo(undefined);
       const message = outcome.ok ? undefined : blockedCommitCopy(outcome.error);
       if (message === undefined) {
-        setToast(undefined);
+        dismiss();
       } else {
         showToast(message);
       }
@@ -309,142 +131,60 @@ export function ProfilesPage({
   };
 
   return (
-    <section class="page profiles-page" aria-labelledby="profiles-title">
-      <div class="page-head">
+    <section class="wb-page profiles-page" aria-labelledby="profiles-title">
+      <div class="wb-head">
         <div>
-          <h1
-            class="page-title"
-            id="profiles-title"
-            ref={titleRef}
-            tabIndex={-1}
-          >
-            {copy.options.profiles.title}
+          <h1 class="wb-title" id="profiles-title" ref={titleRef} tabIndex={-1}>
+            {text.title}
           </h1>
+          <p class="wb-sub">{copy.options.profiles.subtitle}</p>
           {shouldShowRuleCountWarning(enabledRuleCount) && (
             <p class="rule-counter">
               {copy.errors.ruleCounter(enabledRuleCount)}
             </p>
           )}
         </div>
+        <button type="button" class="wb-primary" onClick={create}>
+          <PlusGlyph />
+          {copy.options.profiles.newProfile}
+        </button>
       </div>
 
-      <div class="profiles-workspace">
-        <aside
-          class="profile-master"
-          aria-label={copy.options.profiles.listLabel}
-        >
-          <div class="profile-master-head">
-            <span class="silk">{copy.options.profiles.listLabel}</span>
-            <button
-              type="button"
-              class="profile-add"
-              aria-label={copy.options.profiles.new}
-              title={copy.options.profiles.new}
-              onClick={create}
-            >
-              ＋
-            </button>
-          </div>
-          <ProfileList
-            profiles={doc.profiles}
-            openProfileId={open.id}
-            onOpen={requestOpenProfile}
-            onToggle={(id, enabled) =>
-              run(mutations.setProfileEnabled(id, enabled))
-            }
-            onReorder={(id, toIndex) =>
-              run(mutations.reorderProfile(id, toIndex))
-            }
-            onRename={(id, name) => run(mutations.renameProfile(id, name))}
-            onClone={clone}
-            onDelete={(id) => {
-              const profile = doc.profiles.find(
-                (candidate) => candidate.id === id,
-              );
-              if (profile !== undefined) {
-                setConfirmDelete(profile);
-              }
-            }}
-            onBadgeChange={(id, badgeText, color) =>
-              run(mutations.setProfileBadge(id, { badgeText, color }))
-            }
-          />
-        </aside>
-
-        <div class="profile-detail-pane">
-          {editorOpen ? (
-            Editor === undefined ? (
-              <div class="editor-loading" role="status" aria-busy="true">
-                {copy.options.rules.loadingEditor}
-              </div>
-            ) : (
-              <Editor
-                key={`${open.id}:${editing?.ruleId ?? "new"}`}
-                profileName={open.name}
-                rule={editingRule}
-                grants={grants}
-                modal={false}
-                onSave={(ruleId, draft) =>
-                  mutations.saveRule(open.id, ruleId, draft)
-                }
-                onRequestGrant={requestPermissions}
-                onGrantDeclined={(host) =>
-                  showToast(copy.errors.grantDeclined(host))
-                }
-                onGranted={showGrantToast}
-                onCommitted={(kind) =>
-                  showToast(
-                    kind === "create"
-                      ? copy.toast.ruleCreated
-                      : copy.toast.changesSaved,
-                  )
-                }
-                closeRequest={closeRequest}
-                onCloseRequestCancelled={() => setPendingProfileId(undefined)}
-                onClose={closeEditor}
-              />
-            )
-          ) : (
-            <ProfileRulesPanel
-              profile={open}
-              grants={grants}
-              invalidRuleIds={invalidRuleIds}
-              moveTargets={doc.profiles.filter(
-                (profile) => profile.id !== open.id,
-              )}
-              onSetEnabled={(ruleIds, enabled) =>
-                run(mutations.setRulesEnabled(open.id, ruleIds, enabled))
-              }
-              onDelete={deleteRules}
-              onMove={(ruleIds, toProfileId) =>
-                run(mutations.moveRulesToProfile(open.id, ruleIds, toProfileId))
-              }
-              onDuplicate={(ruleId) =>
-                run(mutations.duplicateRule(open.id, ruleId))
-              }
-              onRegenerate={(ruleId) =>
-                run(mutations.regenerateValue(open.id, ruleId))
-              }
-              undoAvailable={undo !== undefined}
-              onUndoDelete={runUndo}
-              onCreate={() => openEditor(undefined)}
-              onEdit={openEditor}
-              onGrant={grant}
-            />
-          )}
-        </div>
+      <div class="profiles-card">
+        <ProfileList
+          profiles={doc.profiles}
+          openProfileId={openId}
+          onOpen={setOpenId}
+          onToggle={(id, enabled) =>
+            enabled
+              ? exclusiveEnable(id)
+              : run(mutations.setProfileEnabled(id, false))
+          }
+          onReorder={(id, toIndex) =>
+            run(mutations.reorderProfile(id, toIndex))
+          }
+          onRename={(id, name) => run(mutations.renameProfile(id, name))}
+          onClone={clone}
+          onDelete={(id) => {
+            const profile = doc.profiles.find(
+              (candidate) => candidate.id === id,
+            );
+            if (profile !== undefined) setConfirmDelete(profile);
+          }}
+          onBadgeChange={(id, badgeText, color) =>
+            run(mutations.setProfileBadge(id, { badgeText, color }))
+          }
+        />
       </div>
 
       {confirmDelete !== undefined && (
         <Modal
-          title={copy.options.profiles.deleteConfirm.title(confirmDelete.name)}
+          title={text.deleteConfirm.title(confirmDelete.name)}
           onClose={() => setConfirmDelete(undefined)}
           initialFocus={cancelDeleteRef}
         >
           <p class="modal-text">
-            {copy.options.profiles.deleteConfirm.body(
-              confirmDelete.rules.length,
-            )}
+            {text.deleteConfirm.body(confirmDelete.rules.length)}
           </p>
           <div class="modal-actions">
             <button
@@ -456,7 +196,7 @@ export function ProfilesPage({
               {copy.actions.cancel}
             </button>
             <Button kind="primary" onClick={() => deleteProfile(confirmDelete)}>
-              {copy.options.profiles.deleteConfirm.confirm}
+              {text.deleteConfirm.confirm}
             </Button>
           </div>
         </Modal>
@@ -464,10 +204,7 @@ export function ProfilesPage({
 
       {toast !== undefined && (
         <Toast
-          onDismiss={() => setToast(undefined)}
-          // While an undo is live the toast holds open (no 6s timer), so the
-          // Undo control stays reachable until the next mutation retires it —
-          // the options page's persistent-undo affordance (WCAG 2.2.1).
+          onDismiss={dismiss}
           persist={undo !== undefined}
           actionLabel={undo !== undefined ? copy.actions.undo : undefined}
           onAction={undo !== undefined ? runUndo : undefined}

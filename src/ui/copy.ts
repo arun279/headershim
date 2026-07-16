@@ -28,6 +28,7 @@ const data = (value: string | number): SentencePart => ({
 const rules = (n: number) => (n === 1 ? "rule" : "rules");
 const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 const changes = (n: number) => (n === 1 ? "change" : "changes");
+const sites = (n: number) => (n === 1 ? "site" : "sites");
 
 /** "5h 18m" / "8m" / "3d 4h", the coarsest two units that stay honest. */
 function duration(ms: number): string {
@@ -158,17 +159,84 @@ export const copy = {
   // The full-tab options surface: frame, profile management, and bulk actions.
   options: {
     nav: {
-      label: "Sections",
-      profiles: "Profiles & rules",
+      label: "Workbench",
+      groupRules: "Rules",
+      groupManage: "Manage",
+      fleet: "Fleet",
+      profiles: "Profiles",
       importExport: "Import & export",
       siteAccess: "Site access",
+      traffic: "Traffic",
       settings: "Settings",
       about: "About",
     },
     version: (version: string) => `v${version}`,
+
+    // The fleet: every rule across every profile, in one severity grammar,
+    // grouped by the site it lands on or the header it carries.
+    fleet: {
+      title: "Fleet",
+      subtitle:
+        "Every rule across your profiles, in one place. Grouping by header is the home for cross-site rules: one header across many sites is one edit, with its reach shown.",
+      lensLabel: "Group rules",
+      bySite: "By site",
+      byHeader: "By header",
+      newRule: "New rule",
+      ruleCount: (count: number) => `${count} ${rules(count)}`,
+      // A site group's header: the domain and how many rules land on it.
+      siteRules: (count: number) => `${count} ${rules(count)}`,
+      crossSite: "Cross-site rules",
+      crossSiteNote:
+        "Pattern, regex, and all-sites rules, whichever tab they meet.",
+      // A header group's blast radius.
+      reaches: (siteCount: number, broad: boolean): Sentence => [
+        "reaches ",
+        data(siteCount),
+        ` ${sites(siteCount)}`,
+        ...(broad ? [" and beyond"] : []),
+      ],
+      broadReach: "reaches every matching site",
+      scope: {
+        all: "all sites",
+        pattern: "URL pattern",
+        regex: "regex",
+        domains: (first: string, more: number): Sentence => [
+          data(first),
+          ...(more > 0 ? [" +", data(more)] : []),
+        ],
+      },
+      editRule: (header: string) => `Edit rule: ${header}`,
+      overriddenHere: "overridden by a rule above",
+      profileOff: "its profile is off",
+      empty: "No rules yet. Add one to see it here.",
+      emptyProfileOff:
+        "Every profile is off. Turn one on to see its rules run.",
+    },
+
+    // The receipt: the live proof under the fleet's honest-status claims. It
+    // reflects the compiled state, never the wire, so it can be trusted.
+    traffic: {
+      title: "Traffic",
+      subtitle:
+        "Every header stamp HeaderShim is set to apply right now, and every one it is skipping or refusing. Read from the live rules, never from the wire.",
+      secretsNote: "secrets never recorded",
+      colHost: "Site",
+      colStamp: "Stamp",
+      status: {
+        live: "live",
+        needsAccess: "skipped · not granted",
+        refused: "refused by Chrome",
+        paused: "paused",
+      },
+      crossSiteHost: "cross-site",
+      empty: "Nothing is running yet. Turn on a rule or grant a site.",
+    },
     profiles: {
       title: "Profiles",
+      subtitle:
+        "One profile runs at a time by default. Turning one on turns the rest off; rules themselves live in the Fleet.",
       new: "+ New",
+      newProfile: "New profile",
       listLabel: "Profiles",
       // The name a fresh profile is created under before the user renames it;
       // availableProfileName resolves collisions ("New profile 2", …).
@@ -221,6 +289,8 @@ export const copy = {
     },
     importExport: {
       title: "Import & export",
+      subtitle:
+        "Move profiles and rules as JSON. HeaderShim reads its own exports and ModHeader profile exports.",
       importHeading: "Import",
       instruction:
         "HeaderShim JSON or ModHeader export, detected automatically.",
@@ -279,6 +349,8 @@ export const copy = {
     },
     siteAccess: {
       title: "Site access",
+      subtitle:
+        "The sites HeaderShim can reach. It asks one site at a time; grant what your rules need, revoke any grant here.",
       neededHeading: "Needed but not granted",
       grantedHeading: "Granted",
       usedBy: (count: number) => `used by ${count} ${rules(count)}`,
@@ -311,6 +383,7 @@ export const copy = {
     },
     settings: {
       title: "Settings",
+      subtitle: "How the Workbench and popup look.",
       theme: {
         label: "Theme",
         switchToLight: "Switch to light theme",
