@@ -8,9 +8,9 @@
 import { BRAND_NAME } from "../brand";
 
 /**
- * Annunciator sentences are segment lists so the wire-facing tokens inside
- * them (hostnames, counts) can render in the data face while every word still
- * lives here. `sentenceText` flattens one back to its plain reading.
+ * A sentence is a segment list so the wire-facing tokens inside it (hostnames,
+ * counts) can render in the data face while every word still lives here.
+ * `sentenceText` flattens one back to its plain reading.
  */
 export type SentencePart = string | { readonly data: string };
 export type Sentence = readonly SentencePart[];
@@ -26,8 +26,19 @@ const data = (value: string | number): SentencePart => ({
 });
 
 const rules = (n: number) => (n === 1 ? "rule" : "rules");
-const sites = (n: number) => (n === 1 ? "site" : "sites");
 const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
+const changes = (n: number) => (n === 1 ? "change" : "changes");
+
+/** "5h 18m" / "8m" / "3d 4h", the coarsest two units that stay honest. */
+function duration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.round(ms / 60_000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
 
 export const copy = {
   app: {
@@ -35,54 +46,95 @@ export const copy = {
     tagline: "Add, change, and remove HTTP headers on the sites you choose.",
   },
 
-  annunciator: {
-    paused: ["Paused · no headers are being modified"] as Sentence,
-    off: ["Off · no profiles are on"] as Sentence,
-    liveEmpty: ["No rules yet"] as Sentence,
-    outOfSync: [
-      "Out of sync · Chrome rejected the last rule update. Any edit retries it.",
-    ] as Sentence,
-    // "N of M rules enabled" names the enabled/configured signal so it does not
-    // read as a match score; the badge and Verify speak of matches instead.
-    live: (
-      enabledCount: number,
-      totalCount: number,
-      temporaryCount: number,
-    ): Sentence => [
-      "On · ",
-      String(enabledCount),
-      " of ",
-      String(totalCount),
-      ` ${rules(totalCount)} enabled`,
-      ...(temporaryCount > 0
-        ? [" · ", String(temporaryCount), " temporary on this tab"]
-        : []),
+  // The popup readout: the tab-scoped answer and the one exception grammar.
+  // Live changes carry no words; only exceptions speak, each in one language.
+  readout: {
+    // The one fact. It wraps rather than truncating the count.
+    status: (count: number): Sentence => [
+      data(count),
+      ` ${changes(count)} on this tab`,
     ],
-    needsAccess: (
-      ruleCount: number,
-      host: string,
-      moreSites: number,
-    ): Sentence => [
-      "Needs access · ",
-      String(ruleCount),
-      ` ${rules(ruleCount)} ${ruleCount === 1 ? "needs" : "need"} `,
+    newChange: "New change on this tab",
+    // Substatus segments, shown only when a count is nonzero.
+    needsAccess: (count: number) => `${count} needs access`,
+    refused: (count: number) =>
+      count === 1 ? "1 refused by Chrome" : `${count} refused by Chrome`,
+    overridden: (count: number) =>
+      count === 1
+        ? "1 overridden by another profile"
+        : `${count} overridden by another profile`,
+    liveLabel: "Running",
+    attentionLabel: "Needs attention",
+    direction: { request: "Request", response: "Response" },
+    verb: { set: "Set", append: "Append", remove: "Remove" },
+    to: "→",
+    overriddenBy: (winner: string) => `overridden by ${winner}`,
+    refusedReason: {
+      host: "Chrome won't let extensions change the Host header",
+    },
+    details: "Details",
+    grant: "Grant",
+    ruleToggle: (header: string, on: boolean) =>
+      `${on ? "Turn off" : "Turn on"}: ${header}`,
+    editValue: (header: string) => `Edit ${header} value`,
+    addChange: "Add a change",
+    justThisTab: "Just this tab",
+    pauseSwitch: "Global pause",
+    onLabel: "On",
+    pausedLabel: "Paused",
+    pausedBanner: "Everything paused. Resume restores this exact state.",
+    empty: (host: string): Sentence => [
+      "HeaderShim isn't changing anything on ",
       data(host),
-      ...(moreSites > 0
-        ? [" and ", String(moreSites), ` more ${sites(moreSites)}`]
-        : []),
+      ".",
     ],
-    activeProfiles: (count: number): Sentence => [
-      " · ",
-      String(count),
-      " profiles on",
-    ],
+    emptyPermNote: "Chrome asks to allow this site when you do.",
+    noHost: "Open the popup on a website to see what HeaderShim does there.",
+    thisTabTag: "This tab only",
+    thisTabClears: "clears when you close the tab",
+    removeOverride: (header: string) => `Remove this-tab change: ${header}`,
+    overrideToggle: (header: string, on: boolean) =>
+      `${on ? "Turn off" : "Turn on"} this-tab change: ${header}`,
+    switcher: {
+      chipLabel: "Switch profile",
+      chipMulti: (count: number) => `${count} profiles on`,
+      title: "Switch profile",
+      select: (name: string) => `Switch to ${name}`,
+      // Consequence first: the local diff a switch would apply to this tab.
+      previewLead: (name: string) => `If you switch to ${name}, on this tab`,
+      drops: (header: string, more: number): Sentence => [
+        "drops ",
+        data(header),
+        ...(more > 0 ? [` and ${more} more`] : []),
+      ],
+      adds: (label: string, more: number): Sentence => [
+        "adds ",
+        data(label),
+        ...(more > 0 ? [` and ${more} more`] : []),
+      ],
+      newProfile: "New profile",
+    },
   },
 
-  firstRun: {
-    createRule: "Create your first rule",
-    tryThisTab: "Try it on this tab",
-    tryThisTabSubline: "clears when you close or leave this tab",
-    importFile: "Import from a file",
+  // The credential hero. Honest by construction: a countdown only where a
+  // countdown can be true, an opaque token stating only that it has none.
+  token: {
+    jwtTag: "JWT",
+    opaque: "opaque token · no expiry to read",
+    expiresIn: (remainingMs: number) =>
+      remainingMs <= 0 ? "expired" : `expires in ${duration(remainingMs)}`,
+    lifeLeft: (fraction: number) =>
+      `${Math.round(fraction * 100)}% of its life left`,
+    warnNote: "swap before it lapses",
+    valueLabel: (header: string) => header,
+    swap: "Swap",
+    swapOn: (host: string): Sentence => ["on ", data(host)],
+    pasteLabel: "Paste the new token",
+    pasteReplaces: "replaces the token on this tab",
+    pasteAria: "New token value",
+    replace: "Replace",
+    cancel: "Cancel",
+    safe: "screen-share safe",
   },
 
   profiles: {
@@ -355,24 +407,6 @@ export const copy = {
       "requests started by other pages also need those pages granted",
   },
 
-  thisTab: {
-    // Silkscreen section label; " · host · N temporary" follows it.
-    sectionLabel: "This tab",
-    summary: (host: string): Sentence => [" · ", data(host)],
-    addOverride: "+ Temporary override",
-    composerTitle: "Temporary override",
-    applies: (host: string): Sentence => [
-      "Applies to ",
-      data(host),
-      " on this tab only.",
-    ],
-    saveAsRule: "Save as rule…",
-    menuLabel: (header: string) => `Temporary override actions: ${header}`,
-    remove: (header: string) => `Remove temporary override: ${header}`,
-    // No web origin to bind to (chrome:// or store page).
-    noHost: "Open the popup on a website to add a temporary override for it.",
-  },
-
   menu: {
     edit: "Edit rule…",
     editValue: "Edit value",
@@ -553,29 +587,5 @@ export const copy = {
     managedHeader:
       "Chrome's network stack manages this header itself; a rule here usually has no effect.",
     host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
-  },
-
-  verify: {
-    // A grant gap is the first unmet precondition. Otherwise the result states
-    // exactly what Chrome's five-minute match window can prove.
-    blockedHeadline: (
-      ruleCount: number,
-      host: string,
-      moreSites: number,
-    ): Sentence => [
-      data(ruleCount),
-      ` ${rules(ruleCount)} can't run. Needs access to `,
-      data(host),
-      ...(moreSites > 0
-        ? [" and ", data(moreSites), ` more ${sites(moreSites)}`]
-        : []),
-      ".",
-    ],
-    noMatchesHeadline: "No matches in the last 5 minutes on this tab.",
-    matchedHeadline: (matched: number): Sentence => [
-      "Last 5 minutes: ",
-      data(matched),
-      " matched",
-    ],
   },
 } as const;

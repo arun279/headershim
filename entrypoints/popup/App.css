@@ -1,15 +1,16 @@
 body {
-  width: 460px;
+  width: 398px;
   max-width: 100%;
 }
 
-/* Height stays content-driven; only the active mode's body region scrolls. */
+/* Height stays content-driven; only the body region scrolls. */
 .popup {
   position: relative;
   max-height: 600px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--paper);
 }
 
 .popup-body {
@@ -17,141 +18,106 @@ body {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-bottom: 6px;
 }
 
-.first-run-mode .popup-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Pause is felt, not only read: the working area desaturates while the
-   switcher, annunciator, and footer stay in color so Resume stays vivid. */
+/* Pause is felt, not only read: the working area desaturates while the head and
+   footer stay in color so Resume and the switcher stay vivid. */
 .popup-body.paused {
   filter: grayscale(1);
   transition: filter var(--t-med) var(--ease);
 }
 
-.profile-off-note {
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: var(--hairline) solid var(--bezel);
-  color: var(--ink-mute);
-  font-size: 11.5px;
-}
-
-.first-run {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  padding: 30px 22px 34px;
-  text-align: center;
-}
-
-.first-run-brand {
+.pausebar {
   display: flex;
   align-items: center;
   gap: 9px;
+  padding: 9px 16px;
+  background: var(--amber-soft);
+  border-bottom: var(--hairline) solid var(--hair);
+  font-size: 11.5px;
+  color: var(--amber);
+  font-weight: 650;
 }
 
-.first-run-mark {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background: var(--trace);
-  color: var(--trace-ink);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.first-run-wordmark {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.first-run-tagline {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--ink-mute);
-  max-width: 290px;
-  margin: 10px 0 22px;
-}
-
-.first-run-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.first-run-actions > .primary {
-  min-height: 38px;
-  padding: 8px 20px;
-  font-size: 14px;
-}
-
-/* The Try-it route and its temporary/persistent tell read as one unit. */
-.first-run-secondary {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 18px;
-}
-
-.first-run-secondary .quiet,
-.first-run-actions > .quiet {
-  background: transparent;
-  border-color: transparent;
-  font-weight: 500;
-}
-
-.first-run-subline {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--ink-mute);
-  margin-top: 5px;
-}
-
-.first-run-actions > .quiet {
-  margin-top: 14px;
-}
-
+/* ---------------- footer ---------------- */
 .foot {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: 10px;
   padding: 9px 12px;
-  border-top: var(--hairline) solid var(--bezel);
-  background: var(--panel-1);
+  border-top: var(--hairline) solid var(--hair);
+  background: var(--panel);
 }
-
-/* The new-rule wrapper holds a focus-return ref without becoming a layout box. */
-.foot-new-rule,
-.foot-verify {
-  display: contents;
+.foot-sp {
+  flex: 1;
 }
-
-.foot-test {
-  flex: none;
-  min-height: 30px;
-  padding: var(--sp-2) var(--sp-1);
-  color: var(--trace);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.foot .verify-inline-result {
-  flex: 1 1 90px;
-}
-
-.pause {
-  margin-left: auto;
+.foot .pause {
   display: flex;
   align-items: center;
   gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink2);
+  font-weight: 600;
+}
+
+/* Bordered "Add a change" and the empty-state action share this affordance. */
+.add {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: var(--hairline) solid var(--line);
+  padding: 7px 13px;
+  border-radius: var(--r-ctl);
+}
+.add:hover {
+  background: var(--raise);
+}
+.add svg {
+  width: 13px;
+  height: 13px;
+  color: var(--live);
+}
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  color: var(--ink-mute);
+  font-weight: 600;
+  color: var(--ink2);
+  padding: 6px 2px;
+}
+.tab-btn svg {
+  color: var(--ink3);
+}
+
+/* ---------------- empty state ---------------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 42px 24px 36px;
+  text-align: center;
+}
+.empty .l1 {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  max-width: 274px;
+  margin-bottom: 20px;
+}
+.empty .l1 .mono {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.empty .perm {
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--ink3);
 }

@@ -27,7 +27,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.getByRole("button", { name: copy.firstRun.createRule }).click();
+  await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
@@ -137,7 +137,7 @@ test("Create rule is the only pointer action that saves a draft", {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.getByRole("button", { name: copy.firstRun.createRule }).click();
+  await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
@@ -191,7 +191,7 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.getByRole("button", { name: copy.firstRun.createRule }).click();
+  await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),

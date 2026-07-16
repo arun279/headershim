@@ -2,47 +2,84 @@
  * Design tokens. Light is :root; dark applies under prefers-color-scheme and is
  * forceable both ways with data-theme (the options theme setting stamps it;
  * System leaves it unset). Contrast ratios in comments are the binding
- * constraint each value was chosen to meet (WCAG 1.4.3 / 1.4.11).
+ * constraint each value was chosen to meet (WCAG 1.4.3 / 1.4.11): text pairs
+ * clear 4.5:1, UI/graphical pairs clear 3:1. --faint is decorative only (dots,
+ * dashed spines, hairlines) and never carries text meaning.
+ *
+ * The near-monochrome scale (paper -> ink) narrates; one teal-green live accent,
+ * an amber needs-you role, and a red refused role are the entire color
+ * vocabulary, so the color is the meaning. Legacy aliases below map the older
+ * token names the not-yet-rebuilt options surfaces still read onto this palette,
+ * so those views inherit the calm look until the Workbench pass replaces them.
  */
 
 :root {
-  /* surfaces (light: daylight panel) */
-  --panel-0: #F2F4F7; /* popup/page background */
-  --panel-1: #FFFFFF; /* raised: rows, chips, footer, cards */
-  --panel-2: #EAEEF2; /* inset wells: fields, verify readout */
-  --bezel: #D2D9E0; /* hairlines, borders (decorative only) */
-  --bezel-strong: #B9C3CC; /* stronger borders on raised controls */
+  /* near-monochrome surfaces (light: warm paper) */
+  --paper: #fcfcfb; /* window background */
+  --panel: #ffffff; /* raised: head, footer, token, cards */
+  --raise: #f5f6f3; /* row hover, quiet wells */
+  --raise2: #eceeea; /* toggle-off track, inset fills */
+  --line: #e7e8e5; /* row seams */
+  --line2: #f0f1ee; /* faintest inner seams */
+  --line-strong: #d3d5d0; /* borders on raised controls */
+  --hair: #e6e7e4; /* head/footer hairline */
 
-  /* ink */
-  --ink: #1B242E; /* primary text: 14.24:1 on panel-0 */
-  --ink-mute: #54616E; /* secondary text: 5.75:1 on panel-0 */
+  /* ink scale */
+  --ink: #191a1d; /* primary text: 16.95:1 on paper */
+  --ink2: #565961; /* secondary text: 6.83:1 on paper */
+  --ink3: #6b7077; /* tertiary text: 4.86:1 on paper */
+  --faint: #a2a7ad; /* decorative dashes/dots: 2.36:1, never text */
 
-  /* semantic hues (the whole color vocabulary) */
-  --trace: #0B7285; /* interactive: action, focus, links: 5.07:1 on panel-0 */
-  --trace-ink: #FFFFFF; /* text on trace: 5.59:1 */
-  --caution: #7A5300; /* can't-run text/icon: 6.22:1 on panel-0 */
-  --caution-bg: #FFF3D2; /* caution strip fill */
-  --caution-edge: #E3C77E; /* caution strip border */
-  --caution-lamp: #B07B00; /* lamp/triangle fill: 3.35:1 vs caution-bg */
-  --advisory: #116329; /* confirmed-fire / on-state: 6.71:1 on panel-0 */
+  /* live — the one accent, reserved for running / primary */
+  --live: #0c8a63; /* spine, glyph, toggle-on: 4.23:1 UI on paper */
+  --live-ink: #0a7a57; /* live text: 5.20:1 on paper */
+  --live-fill: #0a7f5b; /* primary button fill: white text 5.00:1 */
+  --live-soft: rgba(12, 138, 99, 0.09); /* live tint wash */
+  --on-live: #ffffff; /* text on live-fill */
 
-  /* controls */
-  --sw-off: #6E7B88; /* switch off-track: 3.93:1 vs panel-0 */
-  --sw-on: var(--advisory); /* switch on-track */
-  --sw-paused: var(--caution-lamp); /* checked pause track */
-  --focus: var(--trace); /* 2px ring, offset 2px, never removed */
+  /* needs-you — amber, earned by a grant gap */
+  --amber: #8a5a12; /* text / glyph / Grant fill: 5.76:1 on paper */
+  --amber-soft: rgba(138, 90, 18, 0.11);
+  --on-amber: #ffffff; /* text on amber fill: 5.76:1 */
+
+  /* refused — red, the honest failure */
+  --stop: #bb352c; /* text / glyph / Details: 5.59:1 on paper */
+  --stop-soft: rgba(187, 53, 44, 0.08);
+
+  --shadow-pop: 0 1px 2px rgba(18, 22, 33, 0.06),
+    0 18px 40px -18px rgba(18, 22, 33, 0.28);
+  --shadow-toast: 0 4px 16px rgba(20, 30, 40, 0.2);
+
+  /* --- legacy aliases: the pre-rebuild options surfaces read these --- */
+  --panel-0: var(--paper);
+  --panel-1: var(--panel);
+  --panel-2: var(--raise2);
+  --bezel: var(--line);
+  --bezel-strong: var(--line-strong);
+  --ink-mute: var(--ink2);
+  --trace: var(--live-ink); /* interactive text + focus + primary fill */
+  --trace-ink: var(--on-live);
+  --caution: var(--amber);
+  --caution-bg: var(--amber-soft);
+  --caution-edge: var(--line-strong);
+  --caution-lamp: var(--amber);
+  --advisory: var(--live-ink);
+  --sw-off: #8b9096; /* toggle off-track: 3.0:1 vs paper */
+  --sw-on: var(--live);
+  --sw-paused: var(--amber);
+  --focus: var(--live-ink); /* 2px ring, offset 2px, never removed */
 
   /* profile badge palette (fixed 8; same hex in both themes; white 2-char text) */
-  --badge-indigo: #4F5BC4; /* white text 5.79:1 */
-  --badge-blue: #1A6BC7; /* white text 5.29:1 */
-  --badge-teal: #0B7285; /* white text 5.59:1 */
-  --badge-green: #1D7A46; /* white text 5.35:1 */
-  --badge-plum: #7A3FB5; /* white text 6.55:1 */
-  --badge-magenta: #B03A78; /* white text 5.64:1 */
-  --badge-crimson: #C03538; /* white text 5.52:1 */
-  --badge-slate: #46586B; /* white text 7.32:1 */
+  --badge-indigo: #4f5bc4; /* white text 5.79:1 */
+  --badge-blue: #1a6bc7; /* white text 5.29:1 */
+  --badge-teal: #0b7285; /* white text 5.59:1 */
+  --badge-green: #1d7a46; /* white text 5.35:1 */
+  --badge-plum: #7a3fb5; /* white text 6.55:1 */
+  --badge-magenta: #b03a78; /* white text 5.64:1 */
+  --badge-crimson: #c03538; /* white text 5.52:1 */
+  --badge-slate: #46586b; /* white text 7.32:1 */
 
-  /* type */
+  /* type duet: sans narrates, mono is every literal wire byte */
   --font-ui: -apple-system, "Segoe UI", system-ui, sans-serif;
   --font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -53,50 +90,57 @@
   --sp-4: 12px;
   --sp-5: 16px;
   --sp-6: 24px;
-  --radius-outer: 6px; /* popup card, buttons, verify well */
-  --radius-inner: 4px; /* badges, lamps, fields, focus-ring rounding */
+  --radius-outer: 6px; /* legacy: options buttons/wells */
+  --radius-inner: 4px; /* legacy: badges, fields, focus rounding */
+  --r-card: 13px; /* token hero, this-tab strip */
+  --r-ctl: 9px; /* buttons */
+  --r-chip: 8px; /* segmented / chips */
   --hairline: 1px;
-
-  /* elevation */
-  --shadow-pop: 0 8px 28px rgba(20, 30, 40, 0.16);
-  --shadow-toast: 0 4px 16px rgba(20, 30, 40, 0.2);
 
   /* motion (nothing exceeds 200ms; no ambient animation exists) */
   --t-fast: 120ms; /* switch thumb, chip state, hover fills */
-  --t-med: 160ms; /* verify slide, editor expand, toast enter */
+  --t-med: 160ms; /* editor expand, toast enter, swap field */
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* surfaces (dark: bluish charcoal). panel-0 is the base both the popup and
-       the options page paint; it is lifted off near-black so the popup's bare
-       field reads as the same charcoal as the options view rather than as a
-       second, blacker app. panel-1/2 keep their elevation steps above/below
-       it. */
-    --panel-0: #171C24;
-    --panel-1: #202832;
-    --panel-2: #0E1319;
-    --bezel: #2A323C;
-    --bezel-strong: #3A4550;
+    /* surfaces (dark: bluish charcoal). paper is the base both the popup and the
+       options page paint; panel/raise step above it, raise2 above that. */
+    --paper: #121317;
+    --panel: #181a1f;
+    --raise: #1f222a;
+    --raise2: #262a32;
+    --line: #262a31;
+    --line2: #1e222a;
+    --line-strong: #39414c;
+    --hair: #22262d;
 
-    --ink: #E7EDF3; /* 14.50:1 on panel-0 */
-    --ink-mute: #9AA7B4; /* 6.97:1 on panel-0 */
+    --ink: #eaecef; /* 15.68:1 on paper */
+    --ink2: #a5aab3; /* 7.96:1 on paper */
+    --ink3: #949aa2; /* 6.54:1 on paper */
+    --faint: #5a5f68; /* decorative only */
 
-    --trace: #45C4D8; /* 8.26:1 on panel-0 */
-    --trace-ink: #08262C; /* 7.66:1 on trace */
-    --caution: #F0B429; /* 9.17:1 on panel-0 */
-    --caution-bg: #2B2212;
-    --caution-edge: #5C4A18;
-    --caution-lamp: #F0B429; /* 8.41:1 vs caution-bg */
-    --advisory: #4CC38A; /* 7.72:1 on panel-0 */
+    --live: #37cf99; /* 9.32:1 on paper */
+    --live-ink: #4ad6a4; /* 10.12:1 on paper */
+    --live-fill: #25a37c; /* dark text 5.95:1 */
+    --live-soft: rgba(55, 207, 153, 0.12);
+    --on-live: #08130f;
 
-    --sw-off: #626F7C; /* 3.33:1 vs panel-0 */
+    --amber: #e0a94e; /* 8.80:1 on paper */
+    --amber-soft: rgba(224, 169, 78, 0.13);
+    --on-amber: #1a1205;
+
+    --stop: #e88b82; /* 7.47:1 on paper */
+    --stop-soft: rgba(232, 139, 130, 0.12);
+
+    --sw-off: #626f7c; /* 3.33:1 vs paper */
+
+    --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.4),
+      0 22px 48px -20px rgba(0, 0, 0, 0.7);
+    --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);
 
     /* badges keep their light hexes: lightening for dark was the worst AA fail. */
-
-    --shadow-pop: 0 10px 32px rgba(0, 0, 0, 0.5);
-    --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);
   }
 }
 
@@ -105,26 +149,37 @@
    duplicated rather than factored out. */
 /* jscpd:ignore-start */
 :root[data-theme="dark"] {
-  --panel-0: #171C24;
-  --panel-1: #202832;
-  --panel-2: #0E1319;
-  --bezel: #2A323C;
-  --bezel-strong: #3A4550;
+  --paper: #121317;
+  --panel: #181a1f;
+  --raise: #1f222a;
+  --raise2: #262a32;
+  --line: #262a31;
+  --line2: #1e222a;
+  --line-strong: #39414c;
+  --hair: #22262d;
 
-  --ink: #E7EDF3;
-  --ink-mute: #9AA7B4;
+  --ink: #eaecef;
+  --ink2: #a5aab3;
+  --ink3: #949aa2;
+  --faint: #5a5f68;
 
-  --trace: #45C4D8;
-  --trace-ink: #08262C;
-  --caution: #F0B429;
-  --caution-bg: #2B2212;
-  --caution-edge: #5C4A18;
-  --caution-lamp: #F0B429;
-  --advisory: #4CC38A;
+  --live: #37cf99;
+  --live-ink: #4ad6a4;
+  --live-fill: #25a37c;
+  --live-soft: rgba(55, 207, 153, 0.12);
+  --on-live: #08130f;
 
-  --sw-off: #626F7C;
+  --amber: #e0a94e;
+  --amber-soft: rgba(224, 169, 78, 0.13);
+  --on-amber: #1a1205;
 
-  --shadow-pop: 0 10px 32px rgba(0, 0, 0, 0.5);
+  --stop: #e88b82;
+  --stop-soft: rgba(232, 139, 130, 0.12);
+
+  --sw-off: #626f7c;
+
+  --shadow-pop: 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 22px 48px -20px rgba(0, 0, 0, 0.7);
   --shadow-toast: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 /* jscpd:ignore-end */
@@ -140,7 +195,7 @@
 body {
   font: 13px/1.45 var(--font-ui);
   color: var(--ink);
-  background: var(--panel-0);
+  background: var(--paper);
 }
 
 button {
@@ -162,9 +217,9 @@ button {
   font-family: var(--font-data);
 }
 
-/* Tinted colon: neutral ink-mute, never a semantic hue, marks the name/value seam. */
+/* Tinted colon: neutral ink3, never a semantic hue, marks the name/value seam. */
 .colon {
-  color: var(--ink-mute);
+  color: var(--ink3);
 }
 
 /* Shared two-character profile badge glyph; the hue is set inline per profile.
@@ -182,8 +237,8 @@ button {
 
 /* Inset text field: the well look shared by the badge-text and rename inputs. */
 .inset-field {
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
   color: var(--ink);
 }
@@ -194,16 +249,16 @@ button {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute);
+  color: var(--ink3);
 }
 
-/* The bordered inset card the rule editor and This-tab composer expand into. */
+/* The bordered inset card the rule editor and composer expand into. */
 .inline-editor-well {
   min-width: 0;
   margin: var(--sp-2) var(--sp-3);
   padding: 10px var(--sp-4) var(--sp-4);
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--panel);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-outer);
   animation: editor-in var(--t-med) var(--ease);
 }

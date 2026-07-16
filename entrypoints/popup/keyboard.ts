@@ -1,15 +1,13 @@
 /**
  * The popup's keyboard model. Three contexts, three pure maps:
  *
- * - `popupKeyHandler` — popup-wide commands (n/t/p/v, profile digits, Esc),
- *   attached at the popup root. Single-letter and digit shortcuts are inert
- *   while focus is in a text field.
- * - `rowCommand` — keys that act on the focused rule row.
- * - `listNavCommand` — roving-tabindex movement within the rule list.
+ * - `popupKeyHandler` — popup-wide commands (n/t/p, Esc), attached at the popup
+ *   root. Single-letter shortcuts are inert while focus is in a text field.
+ * - `rowCommand` — keys that act on a focused rule row (options bulk panel).
+ * - `listNavCommand` — roving-tabindex movement within a rule list.
  *
- * The row and list maps live here so the whole binding table is one file; the
- * rule list consumes them for focus mechanics it alone can perform. Editor
- * commit keys (Enter, Ctrl/Cmd+Enter, Esc) belong to the editor itself: layers
+ * The row and list maps live here so the whole binding table is one file. Layer
+ * commit keys (Enter, Ctrl/Cmd+Enter, Esc) belong to the layer itself: layers
  * consume their keys with preventDefault, and this handler ignores anything
  * already consumed.
  */
@@ -28,18 +26,12 @@ type KeyLike = Pick<
 >;
 
 export interface PopupCommands {
-  /** `n` — open the new-rule composer. */
-  newRule?: () => void;
-  /** `t` — open a new This-tab override row. */
-  newThisTabOverride?: () => void;
+  /** `n` — add a change (open the rule composer). */
+  addChange?: () => void;
+  /** `t` — add a this-tab change. */
+  justThisTab?: () => void;
   /** `p` — toggle global pause. */
   togglePause?: () => void;
-  /** `v` — run Verify on the current tab. */
-  verify?: () => void;
-  /** `1` through `9` focuses the profile at that position without toggling it. */
-  focusProfile?: (position: number) => void;
-  /** `Shift+1`–`9` — toggle that profile without touching the others. */
-  toggleProfile?: (position: number) => void;
   /** `Esc` with no layer open — close the popup. */
   closePopup?: () => void;
 }
@@ -60,54 +52,27 @@ export function popupKeyHandler(
       event.ctrlKey ||
       event.metaKey ||
       event.altKey ||
+      event.shiftKey ||
       isTextField(event.target)
     ) {
       return;
     }
-
-    const digit = profileDigit(event);
-    if (digit !== undefined) {
-      dispatch(
-        event,
-        event.shiftKey ? commands.toggleProfile : commands.focusProfile,
-        digit,
-      );
-      return;
-    }
-    if (event.shiftKey) {
-      return;
-    }
     switch (event.key) {
       case "n":
-        return dispatch(event, commands.newRule);
+        return dispatch(event, commands.addChange);
       case "t":
-        return dispatch(event, commands.newThisTabOverride);
+        return dispatch(event, commands.justThisTab);
       case "p":
         return dispatch(event, commands.togglePause);
-      case "v":
-        return dispatch(event, commands.verify);
     }
   };
 }
 
-function dispatch(
-  event: KeyLike,
-  command: ((position: number) => void) | undefined,
-  position = 0,
-): void {
+function dispatch(event: KeyLike, command: (() => void) | undefined): void {
   if (command !== undefined) {
     event.preventDefault();
-    command(position);
+    command();
   }
-}
-
-/**
- * Profile positions read the physical digit row (and numpad), so Shift+1 works
- * on every layout instead of depending on what `!` happens to be.
- */
-function profileDigit(event: KeyLike): number | undefined {
-  const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-  return match === null ? undefined : Number(match[1]);
 }
 
 function isTextField(target: EventTarget | null): boolean {

@@ -2,35 +2,25 @@ import { describe, expect, it } from "vitest";
 import { copy, sentenceText } from "./copy";
 
 describe("copy", () => {
-  it("names the enabled/configured split and appends this-tab temporaries", () => {
-    expect(sentenceText(copy.annunciator.live(1, 1, 0))).toBe(
-      "On · 1 of 1 rule enabled",
-    );
-    expect(sentenceText(copy.annunciator.live(2, 3, 0))).toBe(
-      "On · 2 of 3 rules enabled",
-    );
-    expect(sentenceText(copy.annunciator.live(2, 3, 1))).toBe(
-      "On · 2 of 3 rules enabled · 1 temporary on this tab",
+  it("answers the tab-scoped question and counts only exceptions", () => {
+    expect(sentenceText(copy.readout.status(1))).toBe("1 change on this tab");
+    expect(sentenceText(copy.readout.status(4))).toBe("4 changes on this tab");
+    expect(copy.readout.needsAccess(2)).toBe("2 needs access");
+    expect(copy.readout.overridden(1)).toBe("1 overridden by another profile");
+    expect(copy.readout.refused(3)).toBe("3 refused by Chrome");
+    expect(copy.readout.overriddenBy("Staging auth")).toBe(
+      "overridden by Staging auth",
     );
   });
 
-  it("names one site inline and counts the rest for needs-access", () => {
-    expect(
-      sentenceText(copy.annunciator.needsAccess(1, "app.acme.dev", 0)),
-    ).toBe("Needs access · 1 rule needs app.acme.dev");
-    expect(
-      sentenceText(copy.annunciator.needsAccess(2, "api.example.com", 2)),
-    ).toBe("Needs access · 2 rules need api.example.com and 2 more sites");
-  });
-
-  it("keeps counts in sans prose and marks only the host as data", () => {
-    const parts = copy.annunciator.needsAccess(2, "api.example.com", 2);
-    expect(parts.filter((part) => typeof part !== "string")).toEqual([
-      { data: "api.example.com" },
-    ]);
-    expect(
-      copy.annunciator.live(2, 3, 1).every((part) => typeof part === "string"),
-    ).toBe(true);
+  it("keeps the token honest: a countdown only when it can read one", () => {
+    expect(copy.token.expiresIn(0)).toBe("expired");
+    expect(copy.token.expiresIn(5 * 3_600_000 + 18 * 60_000)).toBe(
+      "expires in 5h 18m",
+    );
+    expect(copy.token.expiresIn(8 * 60_000)).toBe("expires in 8m");
+    expect(copy.token.opaque).toBe("opaque token · no expiry to read");
+    expect(copy.token.lifeLeft(0.38)).toBe("38% of its life left");
   });
 
   it("builds host-bound toasts, grants, and errors", () => {
@@ -75,26 +65,14 @@ describe("copy", () => {
     expect(sentenceText(copy.editor.patternHint)).toBe(
       "||example.com/ matches the site, subdomains, and every path · ||example.com/api/ narrows it to /api/ paths",
     );
-    expect(sentenceText(copy.verify.matchedHeadline(2))).toBe(
-      "Last 5 minutes: 2 matched",
-    );
-    expect(
-      sentenceText(copy.verify.blockedHeadline(1, "api.example.com", 0)),
-    ).toBe("1 rule can't run. Needs access to api.example.com.");
-    expect(
-      sentenceText(copy.verify.blockedHeadline(2, "api.example.com", 2)),
-    ).toBe(
-      "2 rules can't run. Needs access to api.example.com and 2 more sites.",
-    );
   });
 
   it("keeps the static canonical strings verbatim", () => {
-    expect(sentenceText(copy.annunciator.paused)).toBe(
-      "Paused · no headers are being modified",
+    expect(copy.readout.refusedReason.host).toBe(
+      "Chrome won't let extensions change the Host header",
     );
-    expect(sentenceText(copy.annunciator.off)).toBe("Off · no profiles are on");
-    expect(sentenceText(copy.annunciator.outOfSync)).toBe(
-      "Out of sync · Chrome rejected the last rule update. Any edit retries it.",
+    expect(copy.readout.pausedBanner).toBe(
+      "Everything paused. Resume restores this exact state.",
     );
     expect(copy.app.tagline).toBe(
       "Add, change, and remove HTTP headers on the sites you choose.",
@@ -111,12 +89,6 @@ describe("copy", () => {
     );
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
-    );
-    expect(copy.verify.noMatchesHeadline).toBe(
-      "No matches in the last 5 minutes on this tab.",
-    );
-    expect(Object.keys(copy.verify).sort()).toEqual(
-      ["blockedHeadline", "matchedHeadline", "noMatchesHeadline"].sort(),
     );
   });
 

@@ -1,21 +1,16 @@
 // @vitest-environment happy-dom
 import { fakeBrowser } from "@webext-core/fake-browser";
-import { describe, expect, it, vi } from "vitest";
+import { act } from "preact/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/popup/App";
-import {
-  createRule,
-  type RuleDraft,
-  type StateDoc,
-  type TabOverride,
-} from "../core/model";
+import type { StateDoc, TabOverride } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import {
   read as readSession,
   write as writeSession,
 } from "../platform/session-store";
-import { read as readState, write } from "../platform/store";
-import { fire, press, render, settle, typeInto } from "../ui/test/render";
-import { tabOverride } from "./dnr-harness";
+import { write } from "../platform/store";
+import { press, render, settle, typeInto } from "../ui/test/render";
 
 // The popup's tab is pinned so This-tab writes bind to a known origin.
 vi.mock("../platform/tabs", () => ({
@@ -23,27 +18,21 @@ vi.mock("../platform/tabs", () => ({
   activeTabDomain: () => Promise.resolve("app.example.com"),
 }));
 
-const override = (overrides: Partial<TabOverride> = {}): TabOverride =>
-  tabOverride({ header: "x-debug-trace", value: "1", ...overrides });
+beforeEach(() => {
+  fakeBrowser.reset();
+});
 
-function withSavedRule(): StateDoc {
-  const seed = createV1Seed();
-  const draft: RuleDraft = {
+function override(overrides: Partial<TabOverride> = {}): TabOverride {
+  return {
+    num: 1,
+    tabId: 5,
+    originHost: "app.example.com",
     direction: "request",
     operation: "set",
-    header: "x-existing",
+    header: "x-debug-trace",
     value: "1",
-    scope: { type: "domains", domains: ["app.example.com"] },
-    resourceTypes: "all",
-    initiators: [],
     enabled: true,
-  };
-  const [rule, next] = createRule(seed, draft);
-  return {
-    ...next,
-    profiles: next.profiles.map((profile, index) =>
-      index === 0 ? { ...profile, rules: [rule] } : profile,
-    ),
+    ...overrides,
   };
 }
 
@@ -52,126 +41,78 @@ async function mount(
   session?: Parameters<typeof writeSession>[0],
 ) {
   await write(doc);
-  if (session !== undefined) {
-    await writeSession(session);
-  }
+  if (session !== undefined) await writeSession(session);
   const root = render(<App />);
   await settle();
   return root;
 }
 
-function valueField(root: HTMLElement): HTMLTextAreaElement {
-  return root.querySelector(
-    ".this-tab-composer .compose-value-input",
-  ) as HTMLTextAreaElement;
-}
-
-function openTemporaryMenu(root: HTMLElement): void {
-  fire(() =>
-    (root.querySelector(".this-tab-menu-btn") as HTMLButtonElement).click(),
-  );
-}
-
-describe("popup This-tab wiring", () => {
-  it("opens the composer with t and commits a temporary row", async () => {
+describe("popup This-tab overrides", () => {
+  it("opens the composer with t and commits a this-tab change", async () => {
     const root = await mount(createV1Seed());
-
     press(root.querySelector(".popup") as HTMLElement, "t");
     await settle();
-    expect(root.querySelector(".this-tab-composer")).not.toBeNull();
+    expect(root.querySelector(".compose")).not.toBeNull();
 
-    typeInto(
-      root.querySelector('[role="combobox"]') as HTMLInputElement,
-      "x-a",
-    );
-    typeInto(valueField(root), "42");
-    const add = [...root.querySelectorAll("button")].find(
-      (button) => button.textContent === "Add override",
-    ) as HTMLButtonElement;
-    fire(() => add.click());
+    typeInto(root.querySelector(".cin.name") as HTMLInputElement, "x-a");
+    typeInto(root.querySelector(".cin.val") as HTMLInputElement, "42");
+    await act(async () => {
+      (root.querySelector(".compose .commit") as HTMLButtonElement).click();
+    });
     await settle();
 
-    expect(root.querySelector(".this-tab-composer")).toBeNull();
+    expect(root.querySelector(".compose")).toBeNull();
     expect((await readSession()).tabs[5]).toMatchObject([
       { header: "x-a", value: "42", originHost: "app.example.com" },
     ]);
-    expect(root.querySelector(".this-tab-row")?.textContent).toContain("x-a");
-    // The annunciator reflects the temporary override.
-    expect(root.querySelector(".annunciator")?.textContent).toContain(
-      "1 temporary on this tab",
-    );
+    const strip = root.querySelector(".thistab") as HTMLElement;
+    expect(strip.textContent).toContain("This tab only");
+    expect(strip.querySelector(".change-line .k")?.textContent).toBe("x-a");
   });
 
-  it("opens the composer from the first-run Try it on this tab action", async () => {
+  it("reports a header the composer cannot use inline", async () => {
     const root = await mount(createV1Seed());
-    const tryIt = [...root.querySelectorAll(".first-run-actions button")].find(
-      (button) => button.textContent === "Try it on this tab",
-    ) as HTMLButtonElement;
-
-    fire(() => tryIt.click());
+    press(root.querySelector(".popup") as HTMLElement, "t");
     await settle();
-
-    expect(root.querySelector(".this-tab-composer")).not.toBeNull();
-    expect(root.querySelector(".first-run")).toBeNull();
+    typeInto(root.querySelector(".cin.name") as HTMLInputElement, ":method");
+    typeInto(root.querySelector(".cin.val") as HTMLInputElement, "x");
+    await act(async () => {
+      (root.querySelector(".compose .commit") as HTMLButtonElement).click();
+    });
+    await settle();
+    expect(root.querySelector(".compose")).not.toBeNull();
+    expect(root.querySelector(".c-error")?.textContent).toContain(
+      "HTTP/2 internals",
+    );
+    expect((await readSession()).tabs[5]).toBeUndefined();
   });
 
-  it("promotes a row into a pre-filled rule editor via Save as rule…", async () => {
+  it("renders an override in the dashed strip and toggles it", async () => {
     const root = await mount(createV1Seed(), {
       nextNum: 2,
       tabs: { 5: [override()] },
     });
-
-    openTemporaryMenu(root);
-    const save = [...root.querySelectorAll('[role="menuitem"]')].find(
-      (button) => button.textContent === "Save as rule…",
+    const line = root.querySelector(".thistab .change-line") as HTMLElement;
+    expect(line.classList.contains("live")).toBe(true);
+    const toggle = line.querySelector(
+      '[aria-label="Turn off this-tab change: x-debug-trace"]',
     ) as HTMLButtonElement;
-    fire(() => save.click());
+    await act(async () => toggle.click());
     await settle();
-
-    expect(root.querySelector(".rule-editor")).not.toBeNull();
-    expect(
-      (root.querySelector('[role="combobox"]') as HTMLInputElement).value,
-    ).toBe("x-debug-trace");
-    expect(
-      (root.querySelector(".value-row textarea") as HTMLTextAreaElement).value,
-    ).toBe("1");
-    expect(root.querySelector(".rule-editor")?.textContent).toContain(
-      "app.example.com",
-    );
+    expect((await readSession()).tabs[5]?.[0]?.enabled).toBe(false);
   });
 
-  it("promotes a temporary row through save-and-allow and keeps a declined rule blocked", async () => {
-    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValueOnce(false);
-    const original = override();
-    const root = await mount(withSavedRule(), {
+  it("removes an override from its row", async () => {
+    const root = await mount(createV1Seed(), {
       nextNum: 2,
-      tabs: { 5: [original] },
+      tabs: { 5: [override()] },
     });
-
-    openTemporaryMenu(root);
-    const promote = [...root.querySelectorAll('[role="menuitem"]')].find(
-      (button) => button.textContent === "Save as rule…",
+    const remove = root.querySelector(
+      '[aria-label="Remove this-tab change: x-debug-trace"]',
     ) as HTMLButtonElement;
-    fire(() => promote.click());
+    await act(async () => remove.click());
     await settle();
-    const create = [...root.querySelectorAll(".editor-actions button")].find(
-      (button) =>
-        button.textContent === "Create rule and allow app.example.com",
-    ) as HTMLButtonElement;
-    fire(() => create.click());
-    await settle();
-
-    expect(root.querySelector(".rule-editor")).toBeNull();
-    expect((await readSession()).tabs[5]).toBeUndefined();
-    expect(
-      (await readState()).profiles[0]?.rules.map((rule) => rule.header),
-    ).toEqual(["x-existing", "x-debug-trace"]);
-    expect(root.querySelectorAll(".rule-row.blocked").length).toBeGreaterThan(
-      0,
-    );
-    expect(root.querySelector(".toast")?.textContent).toContain(
-      "Saved, but not running",
-    );
+    expect((await readSession()).tabs).toEqual({});
   });
 
   it("prunes a stale-origin override on popup open", async () => {
@@ -180,7 +121,6 @@ describe("popup This-tab wiring", () => {
       tabs: { 5: [override({ originHost: "old.example.com" })] },
     });
     await settle();
-
     expect((await readSession()).tabs).toEqual({});
   });
 });

@@ -1,8 +1,0 @@
-.verify-inline-result {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink-mute);
-  font-size: 11px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}

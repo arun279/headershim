@@ -4,13 +4,14 @@ import { subresourceScopedRule } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy, sentenceText } from "../copy";
+import { isSecretHeader, ruleValueSummary } from "../secret";
 import { CloseGlyph } from "./glyphs";
 import {
   closePopover,
   handleMenuNavigation,
   openPositionedPopover,
 } from "./popover";
-import { isSecretHeader, RuleFace, ruleValueSummary } from "./RuleFace";
+import { RuleFace } from "./RuleFace";
 import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
 import { Toggle } from "./Toggle";

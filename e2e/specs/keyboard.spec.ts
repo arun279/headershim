@@ -6,7 +6,7 @@ import {
   type StateDoc,
 } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
-import { copy, sentenceText } from "../../src/ui/copy";
+import { copy } from "../../src/ui/copy";
 import { expect, seedState, test } from "../fixtures";
 
 // The popup half: every in-popup binding driven through real key
@@ -138,29 +138,6 @@ test("the temporary-override shortcut opens the composer", async ({
   // The popup opens on the extension page, which has no web origin to bind an
   // override to, so the composer surfaces its no-host state.
   await expect(page.locator(".this-tab-note")).toBeVisible();
-});
-
-test("the verify and pause shortcuts act on the current tab", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
-  const page = await context.newPage();
-  await openPopup(page, extensionId, serviceWorker, baseDoc());
-  await chips(page).first().focus();
-  await page.keyboard.press("v");
-  const verifyResult = page.locator(".verify-inline-result");
-  await expect(verifyResult).toBeVisible();
-  await expect(verifyResult).toHaveText(
-    sentenceText(copy.verify.blockedHeadline(2, "example.com", 0)),
-  );
-
-  // p toggles global pause: the annunciator flips to the paused tier.
-  await chips(page).first().focus();
-  await page.keyboard.press("p");
-  await expect(page.locator('.annunciator[data-state="paused"]')).toBeVisible({
-    timeout: RENDER_TIMEOUT,
-  });
 });
 
 test("a digit key focuses a profile without enabling it", async ({

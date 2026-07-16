@@ -39,15 +39,6 @@ export function press(target: HTMLElement, key: string): void {
   });
 }
 
-/** Dispatches the leading event for a mouse, pen, or touch interaction. */
-export function pointerDown(target: HTMLElement): void {
-  act(() => {
-    target.dispatchEvent(
-      new PointerEvent("pointerdown", { bubbles: true, cancelable: true }),
-    );
-  });
-}
-
 /** Sets an input's value the way a user would: value + bubbling input event. */
 export function typeInto(
   input: HTMLInputElement | HTMLTextAreaElement,

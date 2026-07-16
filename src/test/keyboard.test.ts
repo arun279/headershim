@@ -9,12 +9,9 @@ import {
 
 function commands() {
   return {
-    newRule: vi.fn(),
-    newThisTabOverride: vi.fn(),
+    addChange: vi.fn(),
+    justThisTab: vi.fn(),
     togglePause: vi.fn(),
-    verify: vi.fn(),
-    focusProfile: vi.fn(),
-    toggleProfile: vi.fn(),
     closePopup: vi.fn(),
   } satisfies PopupCommands;
 }
@@ -34,10 +31,9 @@ function keydown(
 
 describe("popupKeyHandler", () => {
   it.each([
-    ["n", "newRule"],
-    ["t", "newThisTabOverride"],
+    ["n", "addChange"],
+    ["t", "justThisTab"],
     ["p", "togglePause"],
-    ["v", "verify"],
   ] as const)("%s dispatches %s and consumes the key", (key, command) => {
     const dispatched = commands();
     const handler = popupKeyHandler(dispatched);
@@ -45,32 +41,6 @@ describe("popupKeyHandler", () => {
     handler(event);
     expect(dispatched[command]).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
-  });
-
-  it("digits focus the profile at that position without toggling it", () => {
-    const dispatched = commands();
-    const handler = popupKeyHandler(dispatched);
-    handler(keydown({ key: "1", code: "Digit1" }));
-    handler(keydown({ key: "9", code: "Digit9" }));
-    handler(keydown({ key: "5", code: "Numpad5" }));
-    expect(dispatched.focusProfile.mock.calls).toEqual([[1], [9], [5]]);
-    expect(dispatched.toggleProfile).not.toHaveBeenCalled();
-  });
-
-  it("Shift+digit toggles that profile without touching the others", () => {
-    const dispatched = commands();
-    const handler = popupKeyHandler(dispatched);
-    // Shift+2 types "@" on a US layout; the physical digit key still binds.
-    handler(keydown({ key: "@", code: "Digit2", shiftKey: true }));
-    expect(dispatched.toggleProfile).toHaveBeenCalledWith(2);
-    expect(dispatched.focusProfile).not.toHaveBeenCalled();
-  });
-
-  it("ignores Digit0 and non-digit codes", () => {
-    const dispatched = commands();
-    const handler = popupKeyHandler(dispatched);
-    handler(keydown({ key: "0", code: "Digit0" }));
-    expect(dispatched.focusProfile).not.toHaveBeenCalled();
   });
 
   it("Escape closes the popup, even from a text field", () => {
@@ -92,24 +62,14 @@ describe("popupKeyHandler", () => {
     const handler = popupKeyHandler(dispatched);
     const field = document.createElement(tag);
     document.body.appendChild(field);
-    for (const init of [
-      { key: "n" },
-      { key: "t" },
-      { key: "p" },
-      { key: "v" },
-      { key: "1", code: "Digit1" },
-      { key: "!", code: "Digit1", shiftKey: true },
-    ]) {
+    for (const init of [{ key: "n" }, { key: "t" }, { key: "p" }]) {
       const event = keydown(init, field);
       handler(event);
       expect(event.defaultPrevented).toBe(false);
     }
-    expect(dispatched.newRule).not.toHaveBeenCalled();
-    expect(dispatched.newThisTabOverride).not.toHaveBeenCalled();
+    expect(dispatched.addChange).not.toHaveBeenCalled();
+    expect(dispatched.justThisTab).not.toHaveBeenCalled();
     expect(dispatched.togglePause).not.toHaveBeenCalled();
-    expect(dispatched.verify).not.toHaveBeenCalled();
-    expect(dispatched.focusProfile).not.toHaveBeenCalled();
-    expect(dispatched.toggleProfile).not.toHaveBeenCalled();
     field.remove();
   });
 
@@ -129,11 +89,11 @@ describe("popupKeyHandler", () => {
     const handler = popupKeyHandler(dispatched);
     handler(keydown({ key: "n", ctrlKey: true }));
     handler(keydown({ key: "p", metaKey: true }));
-    handler(keydown({ key: "v", altKey: true }));
+    handler(keydown({ key: "t", altKey: true }));
     handler(keydown({ key: "N", shiftKey: true }));
-    expect(dispatched.newRule).not.toHaveBeenCalled();
+    expect(dispatched.addChange).not.toHaveBeenCalled();
     expect(dispatched.togglePause).not.toHaveBeenCalled();
-    expect(dispatched.verify).not.toHaveBeenCalled();
+    expect(dispatched.justThisTab).not.toHaveBeenCalled();
   });
 
   it("never re-handles a key a layer already consumed", () => {

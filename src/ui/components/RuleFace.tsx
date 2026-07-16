@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import type { Rule } from "../../core/model";
 import { copy } from "../copy";
+import { ruleValueSummary } from "../secret";
 import { PencilGlyph } from "./glyphs";
 import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./RuleFace.css";
@@ -90,38 +91,5 @@ export function RuleFace({
         {secondLine}
       </p>
     </div>
-  );
-}
-
-const SECRET_HEADERS = new Set([
-  "authorization",
-  "proxy-authorization",
-  "cookie",
-  "set-cookie",
-  "api-key",
-  "x-api-key",
-]);
-
-/** Rule-list summaries never expose credential-bearing header values. */
-export function ruleValueSummary(rule: Rule): string | undefined {
-  return headerValueSummary(rule.header, rule.value);
-}
-
-export function headerValueSummary(
-  header: string,
-  value: string | undefined,
-): string | undefined {
-  if (value === undefined || !isSecretHeader(header)) return value;
-  const scheme = /^(basic|bearer|digest|negotiate)\s+/i.exec(value)?.[1];
-  return scheme === undefined
-    ? copy.rules.redacted
-    : `${scheme} ${copy.rules.redacted}`;
-}
-
-export function isSecretHeader(header: string): boolean {
-  const normalized = header.toLowerCase();
-  return (
-    SECRET_HEADERS.has(normalized) ||
-    (normalized.startsWith("x-") && normalized.endsWith("-token"))
   );
 }

@@ -2,11 +2,12 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// The focus-indicator ratios these tokens carry (the checked-segment ring vs its
-// fill, and the ring vs the surface) are non-text contrast that axe's
-// color-contrast rule does not evaluate — only tokens.css prose asserts them.
-// Parse the real values and hold both the documented ratio and the 3:1 WCAG
-// non-text floor, so reverting the ring to an invisible hue fails here.
+// The readout's whole claim to WCAG AA rides on these token values: text pairs
+// must clear 4.5:1 and graphical/UI pairs 3:1, in both themes. axe checks
+// rendered text, but the tinted roles (a live spine on paper, white on the amber
+// Grant fill) are chosen here, so this file is their only gate. It parses the
+// real palette and follows var() aliases to their hex, so a regression to an
+// invisible hue fails the build.
 const css = readFileSync(
   fileURLToPath(new URL("./tokens.css", import.meta.url)),
   "utf8",
@@ -27,22 +28,45 @@ function block(selector: string): string {
   return match[1];
 }
 
-function hex(source: string, token: string): string {
-  const match = new RegExp(`--${token}:\\s*(#[0-9A-Fa-f]{3,6})`).exec(source);
-  if (match?.[1] === undefined) {
-    throw new Error(`no --${token} in block`);
+const ROOT = block(":root");
+
+function valueIn(source: string, token: string): string | undefined {
+  return new RegExp(`--${token}:\\s*([^;]+);`).exec(source)?.[1]?.trim();
+}
+
+function value(source: string, token: string): string {
+  const raw = valueIn(source, token);
+  if (raw === undefined) throw new Error(`no --${token} in block`);
+  return raw;
+}
+
+/**
+ * Follows var(--x) aliases to their hex the way the cascade resolves them: a
+ * theme block only overrides the base tokens, so an alias or an unoverridden
+ * token falls back to its :root definition.
+ */
+function resolve(source: string, token: string): string {
+  const raw = valueIn(source, token) ?? value(ROOT, token);
+  const alias = /^var\(--([a-z0-9-]+)\)$/.exec(raw);
+  if (alias?.[1] !== undefined) {
+    return resolve(source, alias[1]);
   }
-  return match[1];
+  if (!/^#[0-9A-Fa-f]{3,6}$/.test(raw)) {
+    throw new Error(`--${token} is neither a hex nor a single alias: ${raw}`);
+  }
+  return raw;
 }
 
 function relativeLuminance(color: string): number {
-  const value = Number.parseInt(color.slice(1), 16);
-  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map(
-    (raw) => {
-      const srgb = raw / 255;
-      return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-    },
-  );
+  const numeric = Number.parseInt(color.slice(1), 16);
+  const channels = [
+    (numeric >> 16) & 255,
+    (numeric >> 8) & 255,
+    numeric & 255,
+  ].map((raw) => {
+    const srgb = raw / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  });
   return (
     0.2126 * (channels[0] ?? 0) +
     0.7152 * (channels[1] ?? 0) +
@@ -50,101 +74,75 @@ function relativeLuminance(color: string): number {
   );
 }
 
-function contrast(a: string, b: string): number {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
+function contrast(source: string, a: string, b: string): number {
+  const la = relativeLuminance(resolve(source, a));
+  const lb = relativeLuminance(resolve(source, b));
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-describe("focus-indicator token contrast", () => {
-  const themes = [
-    { name: "light", selector: ":root", trace: 5.59, focus: 5.07 },
-    {
-      name: "dark",
-      selector: ':root[data-theme="dark"]',
-      trace: 7.66,
-      focus: 8.26,
-    },
-  ];
+const THEMES = [
+  { name: "light", selector: ":root" },
+  { name: "dark", selector: ':root[data-theme="dark"]' },
+] as const;
 
-  it("keeps --focus resolving to --trace so the ring hue is the interactive hue", () => {
-    expect(block(":root")).toMatch(/--focus:\s*var\(--trace\)/);
+// [text, background] pairs that carry meaning and must read as text (4.5:1).
+const TEXT_PAIRS: readonly [string, string][] = [
+  ["ink", "paper"],
+  ["ink2", "paper"],
+  ["ink3", "paper"],
+  ["live-ink", "paper"],
+  ["amber", "paper"],
+  ["stop", "paper"],
+  ["on-live", "live-fill"],
+  ["on-amber", "amber"],
+];
+
+// Graphical/UI pairs that carry state and must clear the 3:1 non-text floor.
+const UI_PAIRS: readonly [string, string][] = [
+  ["live", "paper"], // the live spine, glyph, and toggle-on track
+  ["sw-off", "paper"], // the toggle off track
+  ["focus", "paper"], // the focus ring
+];
+
+describe.each(THEMES)("$name palette contrast", ({ selector }) => {
+  const source = block(selector);
+
+  it.each(TEXT_PAIRS)("%s on %s clears 4.5:1", (text, background) => {
+    expect(contrast(source, text, background)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(
-    themes,
-  )("$name: the checked-segment ring and the focus ring clear their documented ratios and the 3:1 floor", ({
-    selector,
-    trace,
-    focus,
-  }) => {
-    const source = block(selector);
-    // The checked-segment ring is --trace-ink over the --trace
-    // fill; --focus is --trace over the --panel-0 surface.
-    const ringOnFill = contrast(hex(source, "trace"), hex(source, "trace-ink"));
-    const ringOnSurface = contrast(
-      hex(source, "trace"),
-      hex(source, "panel-0"),
-    );
-
-    expect(ringOnFill).toBeCloseTo(trace, 1);
-    expect(ringOnSurface).toBeCloseTo(focus, 1);
-    expect(ringOnFill).toBeGreaterThanOrEqual(3);
-    expect(ringOnSurface).toBeGreaterThanOrEqual(3);
+  it.each(UI_PAIRS)("%s on %s clears 3:1", (fore, background) => {
+    expect(contrast(source, fore, background)).toBeGreaterThanOrEqual(3);
   });
 });
 
-describe("status token contrast", () => {
-  const themes = [
-    { name: "light", selector: ":root", expected: 6.2 },
-    {
-      name: "dark",
-      selector: ':root[data-theme="dark"]',
-      expected: 8.41,
-    },
-  ];
+describe("the accent, doubled and reserved", () => {
+  it("resolves the focus ring to the interactive text hue", () => {
+    expect(value(block(":root"), "focus")).toBe("var(--live-ink)");
+  });
 
-  it("keeps running and paused tracks on distinct semantic colors", () => {
+  it("keeps the running and paused toggle tracks on distinct semantic roles", () => {
     const source = block(":root");
-    expect(source).toMatch(/--sw-on:\s*var\(--advisory\)/);
-    expect(source).toMatch(/--sw-paused:\s*var\(--caution-lamp\)/);
+    expect(value(source, "sw-on")).toBe("var(--live)");
+    expect(value(source, "sw-paused")).toBe("var(--amber)");
     expect(
       [...source.matchAll(/--sw-([a-z-]+):/g)].map((match) => match[1]).sort(),
     ).toEqual(["off", "on", "paused"]);
   });
-
-  it.each(themes)("$name: caution text clears 4.5:1 on its tinted row", ({
-    selector,
-    expected,
-  }) => {
-    const source = block(selector);
-    const ratio = contrast(hex(source, "caution"), hex(source, "caution-bg"));
-    expect(ratio).toBeCloseTo(expected, 1);
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
-  });
 });
 
-describe("segmented-control boundary contrast", () => {
-  const themes = [
-    { name: "light", selector: ":root" },
-    { name: "dark", selector: ':root[data-theme="dark"]' },
-  ];
-
+describe("legacy options surfaces inherit the palette", () => {
   it("uses the contrast-audited muted ink for the Settings boundary", () => {
     expect(settingsCss).toMatch(
       /\.settings-segments\s*\{[^}]*border:\s*var\(--hairline\) solid var\(--ink-mute\)/s,
     );
-    expect(settingsCss).toMatch(
-      /\.settings-segment \+ \.settings-segment\s*\{[^}]*border-left:\s*var\(--hairline\) solid var\(--ink-mute\)/s,
-    );
   });
 
-  it.each(themes)("$name: the boundary clears the 3:1 non-text floor", ({
+  it.each(THEMES)("$name: the Settings boundary clears the 3:1 floor", ({
     selector,
   }) => {
-    const source = block(selector);
     expect(
-      contrast(hex(source, "ink-mute"), hex(source, "panel-1")),
+      contrast(block(selector), "ink-mute", "panel-1"),
     ).toBeGreaterThanOrEqual(3);
   });
 });
