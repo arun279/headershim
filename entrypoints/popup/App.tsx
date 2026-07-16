@@ -466,7 +466,7 @@ function Ready({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [activeEditing, onKeyDown]);
 
-  // A grant from the editor's panel lands; the loud surfaces clear themselves
+  // A grant from the editor's panel lands; the blocked surfaces clear themselves
   // when the refreshed snapshot empties the gaps. The toast (a polite live
   // region) states the outcome.
   const announceGrant = () => showToast(copy.toast.ruleLive);

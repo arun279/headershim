@@ -93,10 +93,10 @@ test("response-header rules apply to HTTP-cached responses", {
   expect(cached.responseHeaders[header]).toBe("cached-rule");
 });
 
-// An ungranted rule must light the loud needs-access state in the popup, not
-// fail silently. The missing-access network assertion above proves the request
-// still succeeds without the header; this asserts the recovery surface.
-test("an ungranted rule lights the loud needs-access state in the popup", async ({
+// An ungranted rule must surface the calm needs-access state in the popup, not
+// fail silently. For one visible blocked row, the strip summarizes and the row
+// owns the sole recovery action.
+test("an ungranted rule shows the calm needs-access state in the popup", async ({
   context,
   extensionId,
   serviceWorker,
@@ -107,7 +107,7 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
       {
         direction: "request",
         operation: "set",
-        header: "x-headershim-loud",
+        header: "x-headershim-calm",
         value: "1",
         scope: { type: "domains", domains: ["needs.example.test"] },
         resourceTypes: ["xhr"],
@@ -121,18 +121,38 @@ test("an ungranted rule lights the loud needs-access state in the popup", async 
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   const annunciator = popup.locator(".annunciator");
   await expect(annunciator).toHaveAttribute("data-state", "needs-access");
-  // The loud state carries its one-click recovery, not just a color change.
-  await expect(annunciator.getByRole("button")).toBeVisible();
+  await expect(
+    annunciator.getByRole("button", { name: copy.actions.grantAccess }),
+  ).toHaveCount(0);
 
-  // The row tells the same truth. The switch preserves the user's requested
-  // on-state, while the held styling, status words, and recovery action make
+  // The row tells the actionable truth. The switch preserves the user's
+  // requested on-state, while amber held styling, status words, and Grant make
   // clear that the rule cannot run yet.
   const row = popup.locator(".rule-row").first();
   await expect(row).toHaveClass(/\bblocked\b/);
   await expect(row).not.toHaveClass(/\brunning\b/);
   await expect(row.locator(".rule-status")).toContainText("Needs access");
   await expect(row.locator(".rule-status")).toContainText("needs.example.test");
-  await expect(row.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  const toggle = row.getByRole("switch");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toHaveClass(/\bsw-blocked\b/);
+  const toggleColors = await toggle.evaluate((element) => {
+    const resolveColor = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    };
+    return {
+      track: getComputedStyle(element, "::before").backgroundColor,
+      amber: resolveColor("--caution-lamp"),
+      green: resolveColor("--sw-on"),
+    };
+  });
+  expect(toggleColors.track).toBe(toggleColors.amber);
+  expect(toggleColors.track).not.toBe(toggleColors.green);
   await expect(
     row.getByRole("button", { name: copy.actions.grant, exact: true }),
   ).toBeVisible();

@@ -268,6 +268,7 @@ export const copy = {
       shortcuts: "Keyboard shortcuts",
     },
     about: {
+      title: "About",
       build: (version: string, commit: string): Sentence => [
         "HeaderShim v",
         data(version),

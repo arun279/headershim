@@ -138,7 +138,7 @@ describe("copy", () => {
     );
     expect(copy.options.settings.theme.label).toBe("Theme");
     expect(Object.keys(copy.options.about).sort()).toEqual(
-      ["build", "description", "license", "links"].sort(),
+      ["build", "description", "license", "links", "title"].sort(),
     );
     expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
     expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");

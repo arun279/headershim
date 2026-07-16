@@ -50,11 +50,13 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
-  const operation = editor.getByRole("combobox", {
-    name: copy.editor.labels.operation,
+  const operation = editor.getByRole("radio", {
+    name: copy.editor.operation.remove,
   });
-  await operation.selectOption("remove");
-  await expect(operation).toHaveValue("remove");
+  await editor
+    .locator("label.segment", { hasText: copy.editor.operation.remove })
+    .click();
+  await expect(operation).toBeChecked();
   await expect(
     editor.getByRole("textbox", { name: copy.editor.labels.value }),
   ).toHaveCount(0);
@@ -79,11 +81,31 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
-  const allSites = editor.getByRole("button", {
+  const allSites = editor.getByRole("radio", {
     name: copy.editor.allSites,
   });
-  await allSites.click();
-  await expect(allSites).toHaveAttribute("aria-pressed", "true");
+  await editor
+    .locator("label.segment", { hasText: copy.editor.allSites })
+    .click();
+  await expect(allSites).toBeChecked();
+  await expect(editor).toBeVisible();
+  await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
+
+  const resourceTypes = editor.getByRole("button", {
+    name: `${copy.editor.labels.resourceTypes} · ${copy.editor.allTypes}`,
+  });
+  await resourceTypes.click();
+  await expect(resourceTypes).toHaveAttribute("aria-expanded", "true");
+  await expect(editor).toBeVisible();
+  await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
+
+  const pages = editor.getByRole("checkbox", {
+    name: copy.resourceTypes.groups.pages,
+  });
+  await editor
+    .locator("label.rt-item", { hasText: copy.resourceTypes.groups.pages })
+    .click();
+  await expect(pages).not.toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
@@ -104,11 +126,14 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 });
 
-test("Create rule is the only pointer action that saves a draft", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
+// Runs against the static host-access build: with all-sites already granted the
+// primary is a plain "Create rule" that commits and closes in one gesture, so
+// the test exercises the save path without Chrome's native permission prompt
+// (which cannot be answered in headless). The no-save-on-control guarantees are
+// unchanged.
+test("Create rule is the only pointer action that saves a draft", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -124,15 +149,19 @@ test("Create rule is the only pointer action that saves a draft", async ({
     name: copy.editor.labels.value,
   });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
+  await expect(value).toHaveClass(/\bcompose-value-input\b/);
   await value.fill("created");
-  await editor.getByRole("button", { name: copy.editor.allSites }).click();
+  await editor
+    .locator("label.segment", { hasText: copy.editor.allSites })
+    .click();
+  await expect(
+    editor.getByRole("radio", { name: copy.editor.allSites }),
+  ).toBeChecked();
 
   // Moving focus and clicking inert editor chrome are ordinary draft actions.
   // Neither is permission to save.
   await value.focus();
-  await editor
-    .getByRole("combobox", { name: copy.editor.labels.operation })
-    .focus();
+  await editor.getByRole("radio", { name: copy.editor.operation.set }).focus();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
   await editor.locator(".editor-title").click();
@@ -140,9 +169,7 @@ test("Create rule is the only pointer action that saves a draft", async ({
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
-    .getByRole("button", {
-      name: copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
-    })
+    .getByRole("button", { name: copy.actions.createRule, exact: true })
     .click();
   await expect(editor).toBeHidden();
   await expect(page.locator(".rule-row")).toHaveCount(1);
@@ -156,11 +183,11 @@ test("Create rule is the only pointer action that saves a draft", async ({
   });
 });
 
-test("plain Enter stays in Value while the commit chord creates the rule", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
+// Host-access build so the commit chord closes on an already-granted scope; the
+// plain-Enter-does-not-commit guarantee is the point and is unchanged.
+test("plain Enter stays in Value while the commit chord creates the rule", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -175,8 +202,15 @@ test("plain Enter stays in Value while the commit chord creates the rule", async
   const value = editor.getByRole("textbox", {
     name: copy.editor.labels.value,
   });
+  await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
+  await expect(value).toHaveClass(/\bcompose-value-input\b/);
   await value.fill("chord");
-  await editor.getByRole("button", { name: copy.editor.allSites }).click();
+  await editor
+    .locator("label.segment", { hasText: copy.editor.allSites })
+    .click();
+  await expect(
+    editor.getByRole("radio", { name: copy.editor.allSites }),
+  ).toBeChecked();
 
   await value.focus();
   await page.keyboard.press("Enter");

@@ -9,3 +9,4 @@ e2e/packed/.artifacts/
 *.log
 .DS_Store
 *.tsbuildinfo
+.claude/

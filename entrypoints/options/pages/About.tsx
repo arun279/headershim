@@ -10,12 +10,15 @@ const text = copy.options.about;
 export function AboutPage() {
   return (
     <section class="page about-page" aria-labelledby="about-title">
+      <h1 class="page-title" id="about-title" tabIndex={-1}>
+        {text.title}
+      </h1>
       <div class="about-card">
-        <h1 class="about-build" id="about-title" tabIndex={-1}>
+        <p class="about-build">
           {sentence(
             text.build(browser.runtime.getManifest().version, __COMMIT__),
           )}
-        </h1>
+        </p>
         <p class="about-description">{text.description}</p>
         <p>{text.license}</p>
 

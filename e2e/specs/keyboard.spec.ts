@@ -6,7 +6,7 @@ import {
   type StateDoc,
 } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
-import { copy } from "../../src/ui/copy";
+import { copy, sentenceText } from "../../src/ui/copy";
 import { expect, seedState, test } from "../fixtures";
 
 // The popup half: every in-popup binding driven through real key
@@ -60,6 +60,26 @@ function baseDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
   };
 }
 
+// The first rule scoped to all-sites: on the static host-access build that scope
+// is already granted, so the editor's commit chord closes with no permission
+// prompt and the editor key semantics can be exercised on their own.
+function allScopedDoc(): StateDoc {
+  const base = baseDoc();
+  return {
+    ...base,
+    profiles: base.profiles.map((profile, index) =>
+      index === 0
+        ? {
+            ...profile,
+            rules: profile.rules.map((rule, ruleIndex) =>
+              ruleIndex === 0 ? { ...rule, scope: { type: "all" } } : rule,
+            ),
+          }
+        : profile,
+    ),
+  };
+}
+
 async function openPopup(
   page: Page,
   extensionId: string,
@@ -89,61 +109,100 @@ function firstRuleValue(serviceWorker: Worker): Promise<string | undefined> {
   });
 }
 
-test("single-letter commands open their surfaces", async ({
+// Each in-popup command is exercised on its own freshly opened popup. A real
+// popup is a brand-new document every time the user opens it; reusing one page
+// to re-seed a different document and re-navigate races the popup's own initial
+// read of storage, so the commands are split one-per-open rather than batched.
+
+test("the new-rule shortcut opens the editor", async ({
   context,
   extensionId,
   serviceWorker,
 }) => {
   const page = await context.newPage();
-
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("n");
   await expect(page.locator(".rule-editor")).toBeVisible();
+});
 
+test("the temporary-override shortcut opens the composer", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("t");
-  await expect(page.locator(".this-tab")).toBeVisible();
+  // The popup opens on the extension page, which has no web origin to bind an
+  // override to, so the composer surfaces its no-host state.
+  await expect(page.locator(".this-tab-note")).toBeVisible();
+});
 
+test("the verify and pause shortcuts act on the current tab", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("v");
-  await expect(page.locator(".verify-inline-result")).toBeVisible();
+  const verifyResult = page.locator(".verify-inline-result");
+  await expect(verifyResult).toBeVisible();
+  await expect(verifyResult).toHaveText(
+    sentenceText(copy.verify.blockedHeadline(2, "example.com", 0)),
+  );
 
   // p toggles global pause: the annunciator flips to the paused tier.
-  await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("p");
   await expect(page.locator('.annunciator[data-state="paused"]')).toBeVisible({
     timeout: RENDER_TIMEOUT,
   });
-
-  await page.close();
 });
 
-test("digit keys switch and toggle profiles", async ({
+test("a digit key focuses a profile without enabling it", async ({
   context,
   extensionId,
   serviceWorker,
 }) => {
   const page = await context.newPage();
 
-  // 2 activates the second profile exclusively: it takes focus, the first turns off.
+  // 2 changes only which profile is focused. Local stays off and Default stays
+  // on, so merely inspecting a profile cannot change live traffic.
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("Digit2");
   await expect(chips(page).nth(1)).toHaveAttribute("aria-current", "true", {
     timeout: RENDER_TIMEOUT,
   });
-  await expect(profileChips(page).nth(1)).not.toHaveClass(/\boff\b/, {
+  await expect(profileChips(page).nth(1)).toHaveClass(/\boff\b/, {
     timeout: RENDER_TIMEOUT,
   });
-  await expect(profileChips(page).first()).toHaveClass(/\boff\b/, {
+  await expect(profileChips(page).first()).not.toHaveClass(/\boff\b/, {
     timeout: RENDER_TIMEOUT,
   });
+  await expect(profileChips(page).first().getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(profileChips(page).nth(1).getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+});
 
-  // Shift+2 toggles the second on without turning the first off.
+test("Shift+digit enables a profile without moving focus", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+
+  // Shift+2 is the explicit keyboard enable path. It turns Local on without
+  // turning Default off or moving focus away from Default.
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("Shift+Digit2");
@@ -153,11 +212,22 @@ test("digit keys switch and toggle profiles", async ({
   await expect(profileChips(page).first()).not.toHaveClass(/\boff\b/, {
     timeout: RENDER_TIMEOUT,
   });
-
-  await page.close();
+  await expect(chips(page).first()).toHaveAttribute("aria-current", "true");
+  await expect(chips(page).nth(1)).not.toHaveAttribute("aria-current", "true");
+  await expect(profileChips(page).first().getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(profileChips(page).nth(1).getByRole("switch")).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
 });
 
-test("rule-row keys move focus and act on the focused row", async ({
+// The rule-row keys, one behaviour per freshly seeded popup (Space and Delete
+// mutate storage, so they must not race a re-seed of a reused page).
+
+test("arrow keys move roving focus and Enter opens the editor", async ({
   context,
   extensionId,
   serviceWorker,
@@ -175,14 +245,28 @@ test("rule-row keys move focus and act on the focused row", async ({
   // Enter opens the editor for the focused row.
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
+});
 
-  // Space toggles the focused row off.
+test("Space toggles the focused row off", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await rows(page).first().focus();
   await page.keyboard.press(" ");
   await expect(rows(page).first()).toHaveClass(/\boff\b/, {
     timeout: RENDER_TIMEOUT,
   });
+});
+
+test("Delete removes the focused row and offers undo", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
 
   // Delete removes the focused row (2 → 1) and offers undo.
   await openPopup(page, extensionId, serviceWorker, baseDoc());
@@ -195,40 +279,27 @@ test("rule-row keys move focus and act on the focused row", async ({
   await expect(
     toast.getByRole("button", { name: copy.actions.undo }),
   ).toBeVisible();
-
-  await page.close();
 });
 
-test("editor keys respect field semantics and guard dirty drafts", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
-  const page = await context.newPage();
+// The editor key-semantics coverage is split one popup per behaviour: like the
+// single-letter commands above, each behaviour opens its own freshly seeded
+// popup so nothing races a re-seed of a reused page. All four run on the static
+// host-access build so the seeded all-sites rule's commit chord closes with no
+// native permission prompt.
 
-  // Value is a real textarea. Plain Enter belongs to the field and neither
-  // saves nor closes the editor; a single-line field keeps the explicit Enter
-  // accelerator.
-  const base = baseDoc();
-  const allScoped: StateDoc = {
-    ...base,
-    profiles: base.profiles.map((profile, index) =>
-      index === 0
-        ? {
-            ...profile,
-            rules: profile.rules.map((rule, ruleIndex) =>
-              ruleIndex === 0 ? { ...rule, scope: { type: "all" } } : rule,
-            ),
-          }
-        : profile,
-    ),
-  };
-  await openPopup(page, extensionId, serviceWorker, allScoped);
+// Plain Enter belongs to the field and never saves or closes the editor, from
+// the value textarea or from another field; the chord is the keyboard save path.
+test("plain Enter stays in a field while the commit chord saves", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  const page = await context.newPage();
+  await openPopup(page, extensionId, serviceWorker, allScopedDoc());
   await rows(page).first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
   const value = page.getByRole("textbox", { name: copy.editor.labels.value });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
+  await expect(value).toHaveClass(/\bcompose-value-input\b/);
   await value.fill("not-yet-committed");
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
@@ -239,11 +310,20 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
     .getByRole("combobox", { name: copy.editor.labels.headerName })
     .focus();
   await page.keyboard.press("Enter");
+  await expect(page.locator(".rule-editor")).toBeVisible();
+  expect(await firstRuleValue(serviceWorker)).toBe("1");
+
+  await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.locator(".rule-editor")).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBe("not-yet-committed");
+});
 
-  // Ctrl/Cmd+Enter uses the same explicit commit path from the textarea.
-  await openPopup(page, extensionId, serviceWorker, allScoped);
+// The chord commits from the value textarea too.
+test("the commit chord saves from the value textarea", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  const page = await context.newPage();
+  await openPopup(page, extensionId, serviceWorker, allScopedDoc());
   await rows(page).first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
@@ -253,10 +333,30 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.locator(".rule-editor")).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBe("committed-on-cmd");
+});
 
-  // Esc on a dirty draft asks before discarding. A second Esc keeps editing;
-  // choosing Discard closes the editor, and only then can Esc close the popup.
-  await openPopup(page, extensionId, serviceWorker, allScoped);
+// Esc on an untouched draft closes directly and commits nothing.
+test("Esc on a clean draft closes without committing", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  const page = await context.newPage();
+  await openPopup(page, extensionId, serviceWorker, allScopedDoc());
+  await rows(page).first().focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".rule-editor")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".rule-editor")).toBeHidden();
+  expect(await firstRuleValue(serviceWorker)).toBe("1");
+});
+
+// Esc on a dirty draft asks before discarding. A second Esc keeps editing;
+// choosing Discard closes the editor committing nothing, and only then can Esc
+// close the popup.
+test("Esc on a dirty draft guards with a discard prompt", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  const page = await context.newPage();
+  await openPopup(page, extensionId, serviceWorker, allScopedDoc());
   await rows(page).first().focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
@@ -285,6 +385,7 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
   await discard.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeHidden();
+  expect(await firstRuleValue(serviceWorker)).toBe("1");
   await rows(page).first().focus();
   const closed = page.waitForEvent("close");
   // The keypress runs window.close() synchronously, which can tear the page
@@ -293,11 +394,12 @@ test("editor keys respect field semantics and guard dirty drafts", async ({
   await closed;
 });
 
-test("options rules can be created and edited from the keyboard", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
+// Host-access build so the folded grant is already satisfied: the primary reads
+// plain "Create rule"/"Save changes" and commits from the keyboard without the
+// native permission prompt. The keyboard create-and-edit coverage is unchanged.
+test("options rules can be created and edited from the keyboard", {
+  tag: "@host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html#profiles`);
@@ -329,18 +431,32 @@ test("options rules can be created and edited from the keyboard", async ({
   await expect(createDialog.locator(".domain-chip .mono")).toHaveText(
     "example.com",
   );
-  await createDialog.getByRole("radio", { name: copy.editor.allSites }).check();
+  const domainsScope = createDialog.getByRole("radio", {
+    name: copy.editor.scopeType.domains,
+  });
+  const allSitesScope = createDialog.getByRole("radio", {
+    name: copy.editor.allSites,
+  });
+  await expect(domainsScope).toBeChecked();
+  await allSitesScope.focus();
+  await expect(allSitesScope).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(allSitesScope).toBeChecked();
+  await expect(domainsScope).not.toBeChecked();
 
   const create = createDialog.getByRole("button", {
     name: copy.actions.createRule,
+    exact: true,
   });
   await create.focus();
   await page.keyboard.press("Enter");
   await expect(createDialog).toBeHidden();
 
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("created");
+  // All-sites access is statically granted in this build, so the saved rule is
+  // able to run rather than blocked.
   const row = page.locator(".rule-row").first();
-  await expect(row).toHaveClass(/\bblocked\b/);
+  await expect(row).not.toHaveClass(/\bblocked\b/);
   await row.focus();
   await page.keyboard.press("Enter");
 
@@ -353,6 +469,7 @@ test("options rules can be created and edited from the keyboard", async ({
     .fill("edited");
   const save = editDialog.getByRole("button", {
     name: copy.actions.saveChanges,
+    exact: true,
   });
   await save.focus();
   await page.keyboard.press("Enter");

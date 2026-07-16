@@ -159,8 +159,8 @@ test("every popup state passes axe in both themes", async ({
     await expect(base.locator(".first-run")).toBeVisible();
     await analyze(base, `popup first-run (${theme})`, theme);
 
-    // A populated document with ungranted rules lights the needs-access
-    // annunciator over a full rule list — the loud state and the rows at once.
+    // A populated document with ungranted rules shows the needs-access
+    // summary over the actionable blocked rows.
     await seedState(serviceWorker, withTheme(ruleDoc(), theme));
     await expect(
       base.locator('.annunciator[data-state="needs-access"]'),

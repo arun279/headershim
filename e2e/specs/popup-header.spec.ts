@@ -111,16 +111,20 @@ test("the popup theme control updates the current page in place", async ({
   });
   const url = page.url();
 
-  await page
-    .getByRole("button", { name: copy.options.settings.theme.label })
-    .click();
-  await page
-    .getByRole("menuitemradio", {
-      name: copy.options.settings.theme.options.dark,
-    })
-    .click();
+  const themeToggle = page.getByRole("button", {
+    name: copy.options.settings.theme.switchToDark,
+    exact: true,
+  });
+  await expect(themeToggle).toHaveAttribute("aria-pressed", "false");
+  await themeToggle.click();
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(
+    page.getByRole("button", {
+      name: copy.options.settings.theme.switchToLight,
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".popup-head")).toBeVisible();
   expect(page.url()).toBe(url);
   expect(

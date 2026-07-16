@@ -47,7 +47,7 @@ describe("popupKeyHandler", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
-  it("digits switch to the profile at that position, exclusively", () => {
+  it("digits focus the profile at that position without toggling it", () => {
     const dispatched = commands();
     const handler = popupKeyHandler(dispatched);
     handler(keydown({ key: "1", code: "Digit1" }));
