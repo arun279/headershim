@@ -70,7 +70,10 @@ function mount(
       root.querySelector(".value-row textarea") as HTMLTextAreaElement,
     chipInput: () =>
       root.querySelector(".domain-chip-input") as HTMLInputElement,
-    select: () => root.querySelector("select") as HTMLSelectElement,
+    operationInput: (operation: string) =>
+      root.querySelector(
+        `.operation-segments input[value="${operation}"]`,
+      ) as HTMLInputElement,
     grantPanel: () => root.querySelector(".grant-panel"),
     allowButton: () =>
       [...root.querySelectorAll(".grant-panel button")].find((button) =>
@@ -112,11 +115,22 @@ function pressCtrlEnter(target: HTMLElement) {
   });
 }
 
-function setOperation(select: HTMLSelectElement, operation: string) {
+function setOperation(input: HTMLInputElement) {
   fire(() => {
-    select.value = operation;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    input.click();
   });
+}
+
+async function pressEnterThenSave(
+  ctx: ReturnType<typeof mount>,
+  target: HTMLElement,
+) {
+  press(target, "Enter");
+  await settle();
+  expect(ctx.onSave).not.toHaveBeenCalled();
+
+  fire(() => ctx.saveButton().click());
+  await settle();
 }
 
 function discardDirtyDraft(ctx: ReturnType<typeof mount>) {
@@ -132,7 +146,7 @@ async function fillAndCommit(
 ) {
   typeInto(ctx.nameInput(), header);
   typeInto(ctx.valueInput(), "v1");
-  press(ctx.nameInput(), "Enter");
+  fire(() => ctx.saveButton().click());
   await settle();
 }
 
@@ -145,8 +159,9 @@ describe("RuleEditor commit model", () => {
         ?.classList.contains("editor-sheet-with-footer"),
     ).toBe(true);
     expect(root.querySelector(".sheet-head")?.textContent).toContain(
-      "‹ New rule · Default",
+      "New rule · Default",
     );
+    expect(root.querySelector(".sheet-head .icon-btn svg")).not.toBeNull();
     expect(root.querySelector(".editor-actions")?.textContent).toContain(
       copy.actions.createRule,
     );
@@ -159,10 +174,29 @@ describe("RuleEditor commit model", () => {
     // under <main>), so Esc would be silently dropped.
     const ctx = mount();
     expect(document.activeElement).toBe(ctx.nameInput());
-    expect(ctx.root.textContent).toContain(copy.editor.domainSuggestion);
+    expect(ctx.root.textContent).toContain(copy.editor.domainsHelper);
   });
 
-  it("commits on Enter with the draft as typed and closes", async () => {
+  it("sizes the composed header name from its content without separating the seam", () => {
+    const ctx = mount({ rule: rule() });
+    const name = ctx.nameInput();
+    expect(name.size).toBe("authorization".length);
+
+    typeInto(name, "access-control-allow-origin");
+    expect(name.size).toBe("access-control-allow-origin".length);
+    expect(
+      name.closest(".compose-name-control")?.nextElementSibling?.classList,
+    ).toContain("header-seam");
+
+    typeInto(ctx.valueInput(), "v".repeat(60));
+    expect(
+      (
+        ctx.valueInput().closest(".compose-value-control") as HTMLElement
+      ).style.getPropertyValue("--compose-value-width"),
+    ).toBe("60ch");
+  });
+
+  it("commits from the explicit primary action with the draft as typed", async () => {
     const ctx = mount();
     await fillAndCommit(ctx, "X-Custom");
     expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(undefined, {
@@ -217,7 +251,7 @@ describe("RuleEditor commit model", () => {
     const ctx = mount({ onSave });
     typeInto(ctx.nameInput(), "x-custom");
     typeInto(ctx.valueInput(), "v1");
-    press(ctx.nameInput(), "Enter");
+    fire(() => ctx.saveButton().click());
     press(ctx.nameInput(), "Escape");
     expect(ctx.onClose).not.toHaveBeenCalled();
     fire(() => release(ok(rule())));
@@ -271,7 +305,7 @@ describe("RuleEditor commit model", () => {
 
   it("blocks an empty commit with the required-field copy, unsaved", async () => {
     const ctx = mount({ prefillDomain: undefined });
-    press(ctx.nameInput(), "Enter");
+    fire(() => ctx.saveButton().click());
     await settle();
     expect(ctx.onSave).not.toHaveBeenCalled();
     expect(ctx.errors()).toEqual([
@@ -314,7 +348,7 @@ describe("RuleEditor commit model", () => {
     expect(ctx.onSave).not.toHaveBeenCalled();
   });
 
-  it("adds a typed domain on Enter and commits only on the next empty Enter", async () => {
+  it("adds a typed domain on Enter and waits for the explicit save action", async () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
     typeInto(ctx.valueInput(), "v1");
@@ -325,8 +359,7 @@ describe("RuleEditor commit model", () => {
     expect(ctx.onSave).not.toHaveBeenCalled();
     expect(ctx.root.textContent).toContain("cdn.example.com");
 
-    press(ctx.chipInput(), "Enter");
-    await settle();
+    await pressEnterThenSave(ctx, ctx.chipInput());
     expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
       undefined,
       expect.objectContaining({
@@ -338,7 +371,7 @@ describe("RuleEditor commit model", () => {
     );
   });
 
-  it("commits from the single-line Comment field", async () => {
+  it("keeps Comment Enter inert and commits its value from the save action", async () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
     typeInto(ctx.valueInput(), "v1");
@@ -351,9 +384,7 @@ describe("RuleEditor commit model", () => {
     ) as HTMLInputElement;
     typeInto(comment, "staging token");
 
-    press(comment, "Enter");
-    await settle();
-
+    await pressEnterThenSave(ctx, comment);
     expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
       undefined,
       expect.objectContaining({ comment: "staging token" }),
@@ -402,10 +433,11 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
         },
       },
     );
-    setOperation(ctx.select(), "append");
+    const operation = ctx.operationInput("append");
+    setOperation(operation);
     await fillAndCommit(ctx, "x-custom-token");
     expect(ctx.nameInput().value).toBe("x-custom-token");
-    const field = ctx.select().closest(".editor-primary-field");
+    const field = operation.closest(".editor-primary-field");
     expect(field?.textContent).toContain(
       copy.errors.appendDisallowed("x-custom-token"),
     );
@@ -419,8 +451,8 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       {},
       { error: { kind: "regex-invalid", regex: "(a|b", reason } },
     );
-    const regexRadio = [...ctx.root.querySelectorAll(".segments input")].at(
-      2,
+    const regexRadio = ctx.root.querySelector(
+      '.segments input[value="regex"]',
     ) as HTMLInputElement;
     fire(() => regexRadio.click());
     const regexInput = ctx.root.querySelector(
@@ -472,7 +504,7 @@ describe("RuleEditor advisories and value field", () => {
   it("hides the value field for remove", () => {
     const ctx = mount();
     expect(ctx.root.querySelector(".value-row")).not.toBeNull();
-    setOperation(ctx.select(), "remove");
+    setOperation(ctx.operationInput("remove"));
     expect(ctx.root.querySelector(".value-row")).toBeNull();
   });
 

@@ -4,12 +4,13 @@ import { subresourceScopedRule } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy, sentenceText } from "../copy";
+import { CloseGlyph } from "./glyphs";
 import {
   closePopover,
+  handleMenuNavigation,
   openPositionedPopover,
-  trapPopoverFocus,
 } from "./popover";
-import { RuleFace, ruleValueSummary } from "./RuleFace";
+import { isSecretHeader, RuleFace, ruleValueSummary } from "./RuleFace";
 import { scopeSummary, typesSummary } from "./ruleSummary";
 import { sentence } from "./sentence";
 import { Toggle } from "./Toggle";
@@ -24,6 +25,7 @@ interface RuleRowActions {
   onMoveToProfile?: ((profileId: string) => void) | undefined;
   onRegenerate?: (() => void) | undefined;
   onUndoDelete?: (() => void) | undefined;
+  onUpdateValue?: ((value: string) => Promise<boolean>) | undefined;
 }
 
 interface RuleRowProps extends RuleRowActions {
@@ -66,9 +68,19 @@ interface RuleRowProps extends RuleRowActions {
 export function RuleRow(props: RuleRowProps) {
   const { rule, invalid, missingHosts, selection } = props;
   const noteRef = useRef<HTMLSpanElement>(null);
+  const valueInputRef = useRef<HTMLInputElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingValue, setEditingValue] = useState(false);
+  const [draftValue, setDraftValue] = useState("");
+  const [savingValue, setSavingValue] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const menuActions = toMenuActions(props);
+  const beginValueEdit = () => {
+    if (rule.value === undefined || props.onUpdateValue === undefined) return;
+    setDraftValue(isSecretHeader(rule.header) ? "" : rule.value);
+    setEditingValue(true);
+    setMenuOpen(false);
+  };
+  const menuActions = toMenuActions(props, beginValueEdit);
   const active = props.active !== false;
 
   const needsAccess =
@@ -91,6 +103,20 @@ export function RuleRow(props: RuleRowProps) {
     .filter((part) => part !== undefined)
     .join(" · ");
 
+  useLayoutEffect(() => {
+    if (!editingValue) return;
+    valueInputRef.current?.focus();
+    valueInputRef.current?.select();
+  }, [editingValue]);
+
+  const commitValue = async () => {
+    if (savingValue || props.onUpdateValue === undefined) return;
+    setSavingValue(true);
+    const saved = await props.onUpdateValue(draftValue);
+    setSavingValue(false);
+    if (saved) setEditingValue(false);
+  };
+
   return (
     <li
       class={`rule-row ${state}${selection === undefined ? "" : " has-selection"}`}
@@ -110,7 +136,9 @@ export function RuleRow(props: RuleRowProps) {
           props.onRowCommand?.(event, () => setMenuOpen(true));
         }
       }}
-      onClick={() => props.onEdit?.()}
+      onClick={() => {
+        if (!editingValue) props.onEdit?.();
+      }}
     >
       {selection !== undefined && (
         <input
@@ -137,11 +165,71 @@ export function RuleRow(props: RuleRowProps) {
           }
         }}
       />
-      <RuleFace
-        rule={rule}
-        secondLine={lineTwo(props, noteRef)}
-        secondLineTitle={lineTwoTitle(props)}
-      />
+      {editingValue ? (
+        <div class="rule-lines inline-value-editor">
+          <div class="rule-line1 inline-value-line">
+            <span class="rule-name">{rule.header}</span>
+            <span class="colon">:</span>
+            <input
+              ref={valueInputRef}
+              class="inline-value-input mono"
+              type={isSecretHeader(rule.header) ? "password" : "text"}
+              value={draftValue}
+              placeholder={copy.rules.pasteNewValue}
+              aria-label={copy.editor.labels.value}
+              disabled={savingValue}
+              onInput={(event) => setDraftValue(event.currentTarget.value)}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void commitValue();
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  setEditingValue(false);
+                }
+              }}
+            />
+            <button
+              type="button"
+              class="inline-value-action inline-value-save"
+              aria-label={copy.actions.saveChanges}
+              disabled={savingValue}
+              onClick={(event) => {
+                event.stopPropagation();
+                void commitValue();
+              }}
+            >
+              <CheckGlyph />
+            </button>
+            <button
+              type="button"
+              class="inline-value-action"
+              aria-label={copy.actions.cancel}
+              disabled={savingValue}
+              onClick={(event) => {
+                event.stopPropagation();
+                setEditingValue(false);
+              }}
+            >
+              <CloseGlyph />
+            </button>
+          </div>
+          <p class="rule-line2">{copy.rules.editValueHint}</p>
+        </div>
+      ) : (
+        <RuleFace
+          rule={rule}
+          secondLine={lineTwo(props, noteRef)}
+          secondLineTitle={lineTwoTitle(props)}
+          onEditValue={
+            rule.value === undefined || props.onUpdateValue === undefined
+              ? undefined
+              : beginValueEdit
+          }
+        />
+      )}
       {menuActions !== undefined && (
         <button
           type="button"
@@ -212,10 +300,6 @@ function lineTwo(
     );
   }
 
-  if (props.active === false && rule.enabled) {
-    return <span class="rule-status-inactive">{copy.rules.profileOff}</span>;
-  }
-
   const scope = scopeSummary(rule);
   const types = typesSummary(rule);
   return (
@@ -232,9 +316,6 @@ function lineTwo(
 function lineTwoTitle(props: RuleRowProps): string {
   if (props.invalid === true) {
     return copy.rules.invalidRegex;
-  }
-  if (props.active === false && props.rule.enabled) {
-    return copy.rules.profileOff;
   }
   const missing = props.missingHosts ?? [];
   const firstMissing = missing[0];
@@ -282,6 +363,7 @@ interface RowMenuProps {
   onMoveToProfile: (profileId: string) => void;
   onRegenerate: () => void;
   onUndoDelete: () => void;
+  onEditValue?: (() => void) | undefined;
   menuButton: RefObject<HTMLButtonElement>;
   /** returnFocus: restore focus to the ⋯ trigger (Esc/activation, not click-away). */
   onClose: (returnFocus: boolean) => void;
@@ -289,6 +371,7 @@ interface RowMenuProps {
 
 function toMenuActions(
   props: RuleRowProps,
+  onEditValue: () => void,
 ): Omit<RowMenuProps, "rule" | "menuButton" | "onClose"> | undefined {
   if (
     props.onEdit === undefined ||
@@ -309,6 +392,10 @@ function toMenuActions(
     onMoveToProfile: props.onMoveToProfile,
     onRegenerate: props.onRegenerate,
     onUndoDelete: props.onUndoDelete,
+    onEditValue:
+      props.rule.value === undefined || props.onUpdateValue === undefined
+        ? undefined
+        : onEditValue,
   };
 }
 
@@ -356,15 +443,6 @@ function RowMenu(props: RowMenuProps) {
     return () => closePopover(menu);
   }, [view]);
 
-  const moveFocus = (to: number | ((active: number) => number)) => {
-    const buttons = [
-      ...(listRef.current?.querySelectorAll("button") ?? []),
-    ] as HTMLButtonElement[];
-    const active = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const target = typeof to === "number" ? to : to(active);
-    buttons[(target + buttons.length) % buttons.length]?.focus();
-  };
-
   return (
     <div
       class="menu-pop rule-menu"
@@ -374,31 +452,9 @@ function RowMenu(props: RowMenuProps) {
       ref={listRef}
       onKeyDown={(event) => {
         // The open menu owns the keyboard; nothing leaks to the list or popup.
-        event.stopPropagation();
-        if (event.key === "Tab" && listRef.current !== null) {
-          trapPopoverFocus(event, listRef.current);
-          return;
+        if (listRef.current !== null) {
+          handleMenuNavigation(event, listRef.current, () => onClose(true));
         }
-        switch (event.key) {
-          case "ArrowDown":
-            moveFocus((active) => active + 1);
-            break;
-          case "ArrowUp":
-            moveFocus((active) => active - 1);
-            break;
-          case "Home":
-            moveFocus(0);
-            break;
-          case "End":
-            moveFocus(-1);
-            break;
-          case "Escape":
-            onClose(true);
-            break;
-          default:
-            return;
-        }
-        event.preventDefault();
       }}
       onFocusOut={(event) => {
         const into = event.relatedTarget;
@@ -449,6 +505,9 @@ function rootItems(
     return "close" as const;
   };
   return [
+    ...(props.rule.value !== undefined && props.onEditValue !== undefined
+      ? [{ label: copy.menu.editValue, act: close(props.onEditValue) }]
+      : []),
     { label: copy.menu.edit, act: close(props.onEdit) },
     ...(props.rule.value !== undefined
       ? [{ label: copy.menu.copyValue, act: close(copyValue) }]
@@ -473,4 +532,17 @@ function rootItems(
       : []),
     { label: copy.menu.delete, destructive: true, act: close(props.onDelete) },
   ];
+}
+
+function CheckGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+      <path
+        d="m2.5 7 3 3 5-6.5"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      />
+    </svg>
+  );
 }

@@ -57,7 +57,7 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/glyphs-*.js",
+      "path": ".output/chrome-mv3/chunks/popover-*.js",
       "limit": "21.5 kB"
     },
     {

@@ -1,12 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { copy } from "../copy";
 import { applyTheme, type Theme } from "../theme";
-import {
-  closePopover,
-  openPositionedPopover,
-  trapPopoverFocus,
-} from "./popover";
-import { usePopoverDismiss } from "./usePopoverDismiss";
 import "./ThemeControl.css";
 
 interface ThemeControlProps {
@@ -14,23 +8,15 @@ interface ThemeControlProps {
   onChange: (theme: Theme) => void;
 }
 
-const OPTIONS: readonly Theme[] = ["system", "light", "dark"];
-
+/**
+ * The popup has one immediate theme action. System/Light/Dark remains a
+ * labeled setting in options; this button simply flips the rendered theme and
+ * records the resulting explicit Light or Dark choice.
+ */
 export function ThemeControl({ theme, onChange }: ThemeControlProps) {
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(theme);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [roving, setRoving] = useState(() => OPTIONS.indexOf(theme));
-
-  useEffect(() => {
-    setSelected(theme);
-    setRoving(OPTIONS.indexOf(theme));
-  }, [theme]);
 
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -40,129 +26,43 @@ export function ThemeControl({ theme, onChange }: ThemeControlProps) {
     return () => media.removeEventListener?.("change", update);
   }, []);
 
-  useLayoutEffect(() => {
-    const menu = menuRef.current;
-    const trigger = triggerRef.current;
-    if (!open || menu === null || trigger === null) return;
-    openPositionedPopover(menu, trigger, "end");
-    optionRefs.current[roving]?.focus();
-    return () => closePopover(menu);
-  }, [open]);
-
-  const close = (restoreFocus = true) => {
-    setOpen(false);
-    if (restoreFocus) {
-      queueMicrotask(() => triggerRef.current?.focus());
-    }
-  };
-
-  usePopoverDismiss(open, menuRef, triggerRef, close);
-
-  const moveTo = (index: number) => {
-    const target = (index + OPTIONS.length) % OPTIONS.length;
-    setRoving(target);
-    optionRefs.current[target]?.focus();
-  };
-
-  const select = (next: Theme) => {
-    setSelected(next);
-    applyTheme(next);
-    onChange(next);
-    close();
-  };
-
-  const dark = selected === "dark" || (selected === "system" && systemDark);
-  const labels = copy.options.settings.theme;
+  const dark = theme === "dark" || (theme === "system" && systemDark);
+  const next: Theme = dark ? "light" : "dark";
+  const label = dark
+    ? copy.options.settings.theme.switchToLight
+    : copy.options.settings.theme.switchToDark;
 
   return (
-    <div class="theme-control">
-      <button
-        type="button"
-        class="icon-btn"
-        aria-label={labels.label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={labels.label}
-        ref={triggerRef}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {dark ? <MoonGlyph /> : <SunGlyph />}
-      </button>
-      {open && (
-        <div
-          class="menu-pop theme-menu"
-          popover="manual"
-          role="menu"
-          aria-label={labels.label}
-          ref={menuRef}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-            if (event.key === "Tab" && menuRef.current !== null) {
-              trapPopoverFocus(event, menuRef.current);
-              return;
-            }
-            switch (event.key) {
-              case "ArrowDown":
-                moveTo(roving + 1);
-                break;
-              case "ArrowUp":
-                moveTo(roving - 1);
-                break;
-              case "Home":
-                moveTo(0);
-                break;
-              case "End":
-                moveTo(OPTIONS.length - 1);
-                break;
-              case "Escape":
-                close();
-                break;
-              default:
-                return;
-            }
-            event.preventDefault();
-          }}
-        >
-          {OPTIONS.map((option, index) => (
-            <button
-              key={option}
-              type="button"
-              class="menu-item theme-option"
-              role="menuitemradio"
-              aria-checked={selected === option}
-              tabIndex={index === roving ? 0 : -1}
-              ref={(button) => {
-                optionRefs.current[index] = button;
-              }}
-              onFocus={() => setRoving(index)}
-              onClick={() => select(option)}
-            >
-              <span class="theme-check" aria-hidden="true">
-                {selected === option ? "✓" : ""}
-              </span>
-              {labels.options[option]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      class="icon-btn theme-toggle"
+      aria-label={label}
+      title={label}
+      aria-pressed={dark}
+      onClick={() => {
+        applyTheme(next);
+        onChange(next);
+      }}
+    >
+      {dark ? <SunGlyph /> : <MoonGlyph />}
+    </button>
   );
 }
 
 function SunGlyph() {
   return (
     <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
+      width="17"
+      height="17"
+      viewBox="0 0 17 17"
       fill="none"
       stroke="currentColor"
       stroke-width="1.4"
       stroke-linecap="round"
       aria-hidden="true"
     >
-      <circle cx="8" cy="8" r="2.7" />
-      <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.05 1.05M11.9 11.9l1.05 1.05M12.95 3.05 11.9 4.1M4.1 11.9l-1.05 1.05" />
+      <circle cx="8.5" cy="8.5" r="2.7" />
+      <path d="M8.5 1v1.5m0 12V16M1 8.5h1.5m12 0H16M3.2 3.2l1.1 1.1m8.4 8.4 1.1 1.1m0-10.6-1.1 1.1m-8.4 8.4-1.1 1.1" />
     </svg>
   );
 }
@@ -173,13 +73,10 @@ function MoonGlyph() {
       width="16"
       height="16"
       viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.4"
-      stroke-linejoin="round"
+      fill="currentColor"
       aria-hidden="true"
     >
-      <path d="M12.9 10.7A5.7 5.7 0 0 1 5.3 3.1 5.7 5.7 0 1 0 12.9 10.7Z" />
+      <path d="M13.4 9.2A5.6 5.6 0 0 1 6.8 2.6a5.6 5.6 0 1 0 6.6 6.6Z" />
     </svg>
   );
 }

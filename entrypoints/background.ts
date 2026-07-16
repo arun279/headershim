@@ -297,6 +297,6 @@ function noop(): void {}
 
 function overrideTabIds(session: SessionState): number[] {
   return Object.entries(session.tabs)
-    .filter(([, rows]) => rows.length > 0)
+    .filter(([, rows]) => rows.some((row) => row.enabled))
     .map(([tabId]) => Number(tabId));
 }

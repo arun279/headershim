@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import type { Rule } from "../../core/model";
-import { fire, press, render } from "../test/render";
+import { fire, press, render, settle, typeInto } from "../test/render";
 import { RuleRow } from "./RuleRow";
 
 function rule(overrides: Partial<Rule> = {}): Rule {
@@ -32,6 +32,7 @@ function mount(
     onMoveToProfile: vi.fn(),
     onRegenerate: vi.fn(),
     onUndoDelete: vi.fn(),
+    onUpdateValue: vi.fn(async () => true),
     onFocus: vi.fn(),
     onRowCommand: vi.fn(),
   };
@@ -72,7 +73,7 @@ describe("RuleRow states", () => {
     expect(row.querySelector(".rule-name")?.textContent).toBe("authorization");
     expect(row.querySelector(".colon")?.textContent).toBe(": ");
     expect(row.querySelector(".rule-value-preview .rule-value")).not.toBeNull();
-    expect(line2().textContent).toBe("api.staging.acme.dev · staging token");
+    expect(line2().textContent).toBe("→ api.staging.acme.dev · staging token");
     expect(line2().querySelector(".mono")?.textContent).toBe(
       "api.staging.acme.dev",
     );
@@ -113,9 +114,10 @@ describe("RuleRow states", () => {
     });
     expect(row.classList.contains("invalid")).toBe(true);
     expect(toggle().getAttribute("aria-disabled")).toBe("true");
-    expect(line2().textContent).toBe(
-      " Invalid regex. Edit the scope to enable",
+    expect(line2().textContent).toContain(
+      "Invalid regex. Edit the scope to enable",
     );
+    expect(line2().querySelector(".rule-direction")?.textContent).toBe("→");
     fire(() => toggle().click());
     expect(onToggle).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(line2().querySelector(".rule-status"));
@@ -124,7 +126,7 @@ describe("RuleRow states", () => {
   it("overridden: passive mute note appended after the scope", () => {
     const { row, line2 } = mount({ overridden: true });
     expect(line2().textContent).toBe(
-      "api.staging.acme.dev · overridden by a rule above",
+      "→ api.staging.acme.dev · overridden by a rule above",
     );
     expect(row.querySelector(".rule-status")).toBeNull();
   });
@@ -134,7 +136,7 @@ describe("RuleRow states", () => {
     const glyph = request.row.querySelector('[role="img"]');
     expect(glyph?.getAttribute("aria-label")).toBe("request");
     expect(glyph?.textContent).toBe("→");
-    expect(request.row.querySelector(".rule-op")?.textContent).toBe("set");
+    expect(request.row.querySelector(".rule-op")).toBeNull();
 
     const response = mount({
       rule: rule({ direction: "response", operation: "append" }),
@@ -167,6 +169,46 @@ describe("RuleRow states", () => {
     expect(
       row.querySelector(".rule-value")?.classList.contains("truncate"),
     ).toBe(true);
+  });
+
+  it("makes the value an inset edit target with a hover pencil", () => {
+    const { row } = mount();
+    const target = row.querySelector(".rule-value-button") as HTMLButtonElement;
+    expect(target.getAttribute("aria-label")).toBe("Edit value");
+    expect(target.querySelector(".rule-value-pencil svg")).not.toBeNull();
+  });
+
+  it("masks secret edits and commits with the primary check control", async () => {
+    const { row, onUpdateValue } = mount();
+    fire(() =>
+      (row.querySelector(".rule-value-button") as HTMLButtonElement).click(),
+    );
+    const input = row.querySelector(".inline-value-input") as HTMLInputElement;
+    expect(input.type).toBe("password");
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("Paste new value");
+    expect(document.activeElement).toBe(input);
+    const save = row.querySelector(".inline-value-save") as HTMLButtonElement;
+    expect(save.querySelector("svg")).not.toBeNull();
+
+    typeInto(input, "Bearer rotated");
+    fire(() => save.click());
+    await settle();
+    expect(onUpdateValue).toHaveBeenCalledWith("Bearer rotated");
+  });
+
+  it("prefills and selects the complete non-secret value", () => {
+    const complete = "complete-value-that-must-not-use-the-row-summary";
+    const { row } = mount({
+      rule: rule({ header: "x-debug", value: complete }),
+    });
+    fire(() =>
+      (row.querySelector(".rule-value-button") as HTMLButtonElement).click(),
+    );
+    const input = row.querySelector(".inline-value-input") as HTMLInputElement;
+    expect(input.value).toBe(complete);
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(complete.length);
   });
 
   it("middle-truncates a long header name with the shared limit", () => {
@@ -288,7 +330,8 @@ describe("RuleRow overflow menu", () => {
       "manual",
     );
     expect(menuLabels()).toEqual([
-      "Edit",
+      "Edit value",
+      "Edit rule…",
       "Copy value",
       "Duplicate",
       "Move to profile ▸",

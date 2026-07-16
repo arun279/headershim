@@ -137,6 +137,7 @@ describe("useAppState", () => {
       operation: "set",
       header: "x-debug",
       value: "1",
+      enabled: true,
     } as const;
     await writeSession({
       nextNum: 3,

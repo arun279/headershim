@@ -109,9 +109,7 @@ test("single-letter commands open their surfaces", async ({
   await openPopup(page, extensionId, serviceWorker, baseDoc());
   await chips(page).first().focus();
   await page.keyboard.press("v");
-  await expect(
-    page.getByRole("dialog", { name: copy.verify.regionLabel }),
-  ).toBeVisible();
+  await expect(page.locator(".verify-inline-result")).toBeVisible();
 
   // p toggles global pause: the annunciator flips to the paused tier.
   await openPopup(page, extensionId, serviceWorker, baseDoc());

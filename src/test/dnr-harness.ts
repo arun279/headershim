@@ -57,6 +57,7 @@ export function tabOverride(overrides: Partial<TabOverride> = {}): TabOverride {
     operation: "set",
     header: "x-tab",
     value: "on",
+    enabled: true,
     ...overrides,
   };
 }

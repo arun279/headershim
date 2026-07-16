@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import { browser } from "wxt/browser";
 import { availableProfileName } from "../../src/core/codec/headershim";
 import { domainFromOriginPattern } from "../../src/core/grants";
@@ -25,7 +31,7 @@ import { RuleList } from "../../src/ui/components/RuleList";
 import { overrideToRuleDraft, ThisTab } from "../../src/ui/components/ThisTab";
 import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
-import { VerifyPanel } from "../../src/ui/components/VerifyPanel";
+import { VerifyResult } from "../../src/ui/components/VerifyPanel";
 import { copy } from "../../src/ui/copy";
 import { blockedCommitCopy } from "../../src/ui/state/commit-copy";
 import {
@@ -131,9 +137,6 @@ function Ready({
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [verify, setVerify] = useState<VerifyReadout | undefined>(undefined);
-  // Mode triggers are re-mounted when their sheet closes; refs point at the
-  // fresh controls by the time the focus-return effects run.
-  const verifyTrigger = useRef<HTMLSpanElement>(null);
   const editorReturn = useRef<
     { kind: "new" } | { kind: "rule"; ruleId: string }
   >({ kind: "new" });
@@ -166,18 +169,15 @@ function Ready({
   const focused = doc.profiles.find(
     (profile) => profile.id === doc.focusedProfileId,
   );
-  const someProfileEnabled = doc.profiles.some((profile) => profile.enabled);
-  const enabledProfilesEmpty = doc.profiles.every(
-    (profile) => !profile.enabled || profile.rules.length === 0,
-  );
   const showEmptyProfile =
-    !firstRun &&
-    someProfileEnabled &&
-    enabledProfilesEmpty &&
-    focused !== undefined;
+    !firstRun && focused !== undefined && focused.rules.length === 0;
   const enabledProfiles = useMemo(
     () => doc.profiles.filter((profile) => profile.enabled),
     [doc],
+  );
+  const enabledOverrides = useMemo(
+    () => overrides.filter((override) => override.enabled),
+    [overrides],
   );
   const hasEnabledProfileRules = enabledProfiles.some(
     (profile) => profile.rules.length > 0,
@@ -255,6 +255,26 @@ function Ready({
       }
     }
     return outcome;
+  };
+
+  const updateRuleValue = async (
+    profileId: string,
+    rule: Rule,
+    value: string,
+  ): Promise<boolean> => {
+    const { id: _id, num: _num, generated: _generated, ...unchanged } = rule;
+    const outcome = await mutations.saveRule(profileId, rule.id, {
+      ...unchanged,
+      value,
+    });
+    if (!outcome.ok) {
+      const message = blockedCommitCopy(outcome.error);
+      if (message !== undefined) showToast(message);
+      return false;
+    }
+    setPendingUndo(undefined);
+    showToast(copy.toast.changesSaved);
+    return true;
   };
 
   // When the new-rule editor closes and focus fell with it, the + New rule
@@ -370,16 +390,10 @@ function Ready({
   // Verify is on-demand and per-tab: the click/`v` gesture grants
   // activeTab, so the active tab is resolved and its matched-rules record
   // fetched with the tab id explicit. Tallies come from decodeMatches for
-  // stable-id attribution; the hints Verify may name stay statically
-  // determinable (core/verify). Session matches never enter the profile-rule
-  // count, so the decode overrides are empty here.
-  const needsAccessRuleIds = useMemo(
-    () => new Set(grantGaps.map((gap) => gap.ruleId)),
-    [grantGaps],
-  );
-  // Verify leads with the most basic unmet precondition: a grant
-  // gap outranks the caching essay, and its recovery (Grant) is surfaced in the
-  // panel so the user never has to dismiss it to reach the banner it covers.
+  // stable-id attribution. Session matches never enter the profile-rule count,
+  // so the decode overrides are empty here.
+  // Verify leads with the most basic unmet precondition: a grant gap outranks
+  // the match readout.
   const blockedHosts = useMemo(() => {
     const hosts: string[] = [];
     for (const gap of grantGaps) {
@@ -401,6 +415,18 @@ function Ready({
           moreSites: blockedHosts.length - 1,
         }
       : undefined;
+  const popupBodyRef = useRef<HTMLDivElement>(null);
+  const singleBlockedRuleId =
+    grantGaps.length === 1 && blockedHosts.length === 1
+      ? grantGaps[0]?.ruleId
+      : undefined;
+  const singleBlockedRowVisible = useBlockedRowVisibility(
+    popupBodyRef,
+    singleBlockedRuleId,
+  );
+  const showStatusGrant =
+    blockedHosts.length > 1 ||
+    (singleBlockedRuleId !== undefined && !singleBlockedRowVisible);
   const runVerify = () => {
     setEditing(undefined);
     void matchedRulesForActiveTab().then((active) => {
@@ -408,22 +434,10 @@ function Ready({
         summarizeVerify({
           profiles: enabledProfiles,
           matches: decodeMatches(doc, [], active?.matches ?? []),
-          tabHost: tabDomain,
-          needsAccessRuleIds,
         }),
       );
     });
   };
-  const closeVerify = () => setVerify(undefined);
-  const wasVerifying = useRef(false);
-  useEffect(() => {
-    const wasOpen = wasVerifying.current;
-    wasVerifying.current = verify !== undefined;
-    if (wasOpen && verify === undefined) {
-      verifyTrigger.current?.querySelector("button")?.focus();
-    }
-  }, [verify]);
-
   const onKeyDown = popupKeyHandler({
     newRule: openNewRule,
     newThisTabOverride: openThisTabComposer,
@@ -435,16 +449,16 @@ function Ready({
         run(mutations.setPaused(status.kind !== "paused"));
       }
     },
-    activateProfile: (position) => {
+    focusProfile: (position) => {
       const profile = doc.profiles[position - 1];
       if (profile !== undefined) {
-        run(mutations.activateProfile(profile.id));
+        run(mutations.focusProfile(profile.id));
       }
     },
     toggleProfile: (position) => {
       const profile = doc.profiles[position - 1];
       if (profile !== undefined) {
-        run(mutations.setProfileEnabled(profile.id, !profile.enabled));
+        run(mutations.setProfileEnabled(profile.id, !profile.enabled, false));
       }
     },
     closePopup: () => window.close(),
@@ -453,12 +467,12 @@ function Ready({
   // Popup-wide commands stay available before the user places focus. Row,
   // menu, and editor handlers consume their own keys before they reach here.
   useEffect(() => {
-    if (activeEditing !== undefined || verify !== undefined) {
+    if (activeEditing !== undefined) {
       return;
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [activeEditing, verify, onKeyDown]);
+  }, [activeEditing, onKeyDown]);
 
   // A grant from the editor's panel lands; the loud surfaces clear themselves
   // when the refreshed snapshot empties the gaps. The toast (a polite live
@@ -468,8 +482,8 @@ function Ready({
   const grantAccess = () => {
     // Must run synchronously in the click gesture; the resulting
     // permissions.onChanged event refreshes every surface at once. The reload
-    // prompt follows the grant's outcome for the annunciator and
-    // Verify Grant paths, which name no single site.
+    // prompt follows the grant's outcome for the annunciator path, which names
+    // no single site.
     void requestPermissions([
       ...new Set(grantGaps.flatMap((gap) => gap.missing)),
     ]).then((granted) => {
@@ -516,15 +530,15 @@ function Ready({
         [],
       )}
       theme={theme}
-      showProfiles={!showFirstRun}
-      onActivateProfile={(id) => run(mutations.activateProfile(id))}
+      onFocusProfile={(id) => run(mutations.focusProfile(id))}
+      onToggleProfile={(id, enabled) =>
+        profileCommit(mutations.setProfileEnabled(id, enabled, false))
+      }
       onCreateProfile={createProfile}
       onRenameProfile={(id, name) =>
         profileCommit(mutations.renameProfile(id, name))
       }
-      onEnableProfile={(id) =>
-        profileCommit(mutations.setProfileEnabled(id, true, false))
-      }
+      onCloneProfile={(id) => profileCommit(mutations.cloneProfile(id))}
       onManageProfiles={() => openOptionsSection("profiles")}
       onThemeChange={(next) => run(mutations.setTheme(next))}
       onOpenOptions={() => void browser.runtime.openOptionsPage()}
@@ -577,46 +591,35 @@ function Ready({
           }
           onClose={() => setEditing(undefined)}
         />
-      ) : verify !== undefined ? (
-        <>
-          {popupHeader}
-          <VerifyPanel
-            readout={verify}
-            blocked={verifyBlocked}
-            onGrant={grantAccess}
-            onReload={() => {
-              void browser.tabs.reload();
-              closeVerify();
-            }}
-            onClose={closeVerify}
-          />
-        </>
       ) : (
         <>
           {popupHeader}
           {!showFirstRun && (
             <Annunciator
               status={status}
-              temporaryCount={overrides.length}
+              temporaryCount={enabledOverrides.length}
               activeProfileCount={enabledProfiles.length}
               onResume={() => run(mutations.setPaused(false))}
-              onGrantAccess={grantAccess}
+              onGrantAccess={showStatusGrant ? grantAccess : undefined}
             />
           )}
           <div
+            ref={popupBodyRef}
             class={
               status.kind === "paused" ? "popup-body paused" : "popup-body"
             }
           >
-            <ThisTab
-              tabId={tabId}
-              host={tabDomain}
-              overrides={overrides}
-              composing={composing}
-              onSaveAsRule={saveAsRule}
-              onCreateRule={openNewRule}
-              onCloseComposer={() => setComposing(false)}
-            />
+            {!showFirstRun && (
+              <ThisTab
+                tabId={tabId}
+                host={tabDomain}
+                overrides={overrides}
+                composing={composing}
+                onOpenComposer={openThisTabComposer}
+                onSaveAsRule={saveAsRule}
+                onCloseComposer={() => setComposing(false)}
+              />
+            )}
             {firstRun ? (
               showFirstRun ? (
                 <FirstRun
@@ -635,33 +638,43 @@ function Ready({
                 }
               />
             ) : (
-              <RuleList
-                profiles={enabledProfiles}
-                allProfiles={doc.profiles}
-                missingByRule={missingByRule}
-                invalidRuleIds={invalidRuleIds}
-                undoAvailable={pendingUndo !== undefined}
-                onToggle={(profileId, ruleId, enabled) =>
-                  run(mutations.setRuleEnabled(profileId, ruleId, enabled))
-                }
-                onGrant={(_profileId, _ruleId, origins) =>
-                  grantRuleAccess(origins)
-                }
-                onEdit={editRule}
-                onDelete={deleteRule}
-                onDuplicate={(profileId, ruleId) =>
-                  run(mutations.duplicateRule(profileId, ruleId))
-                }
-                onMove={(profileId, ruleId, toProfileId) =>
-                  run(
-                    mutations.moveRuleToProfile(profileId, ruleId, toProfileId),
-                  )
-                }
-                onRegenerate={(profileId, ruleId) =>
-                  run(mutations.regenerateValue(profileId, ruleId))
-                }
-                onUndoDelete={undoDelete}
-              />
+              <>
+                {focused !== undefined && !focused.enabled && (
+                  <p class="profile-off-note">{copy.rules.profileOffDetail}</p>
+                )}
+                <RuleList
+                  profiles={focused === undefined ? [] : [focused]}
+                  allProfiles={doc.profiles}
+                  missingByRule={missingByRule}
+                  invalidRuleIds={invalidRuleIds}
+                  undoAvailable={pendingUndo !== undefined}
+                  onToggle={(profileId, ruleId, enabled) =>
+                    run(mutations.setRuleEnabled(profileId, ruleId, enabled))
+                  }
+                  onGrant={(_profileId, _ruleId, origins) =>
+                    grantRuleAccess(origins)
+                  }
+                  onEdit={editRule}
+                  onDelete={deleteRule}
+                  onDuplicate={(profileId, ruleId) =>
+                    run(mutations.duplicateRule(profileId, ruleId))
+                  }
+                  onMove={(profileId, ruleId, toProfileId) =>
+                    run(
+                      mutations.moveRuleToProfile(
+                        profileId,
+                        ruleId,
+                        toProfileId,
+                      ),
+                    )
+                  }
+                  onRegenerate={(profileId, ruleId) =>
+                    run(mutations.regenerateValue(profileId, ruleId))
+                  }
+                  onUpdateValue={updateRuleValue}
+                  onUndoDelete={undoDelete}
+                />
+              </>
             )}
           </div>
           {(showFooterNewRule || hasEnabledProfileRules) && (
@@ -675,11 +688,18 @@ function Ready({
               )}
               {hasEnabledProfileRules && (
                 <>
-                  <span class="foot-verify" ref={verifyTrigger}>
-                    <Button kind="quiet" onClick={runVerify}>
-                      {copy.actions.verify}
-                    </Button>
+                  <span class="foot-verify">
+                    <button
+                      type="button"
+                      class="link-btn foot-test"
+                      onClick={runVerify}
+                    >
+                      {copy.actions.testOnThisTab}
+                    </button>
                   </span>
+                  {verify !== undefined && (
+                    <VerifyResult readout={verify} blocked={verifyBlocked} />
+                  )}
                   <span class="pause">
                     {copy.actions.pause}
                     <Toggle
@@ -722,6 +742,48 @@ function Ready({
   );
 }
 
+function useBlockedRowVisibility(
+  scrollerRef: { readonly current: HTMLDivElement | null },
+  ruleId: string | undefined,
+): boolean {
+  const [visible, setVisible] = useState(false);
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (ruleId === undefined || scroller === null) {
+      setVisible(false);
+      return;
+    }
+    const row = [
+      ...scroller.querySelectorAll<HTMLElement>(".rule-row.blocked"),
+    ].find((candidate) => candidate.getAttribute("data-rule-id") === ruleId);
+
+    if (row === undefined) {
+      setVisible(false);
+      return;
+    }
+
+    const measure = () => {
+      const scrollerRect = scroller.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const next =
+        rowRect.top >= scrollerRect.top &&
+        rowRect.bottom <= scrollerRect.bottom;
+      setVisible((current) => (current === next ? current : next));
+    };
+
+    measure();
+    scroller.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    return () => {
+      scroller.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+    };
+  });
+
+  return visible;
+}
+
 /**
  * First run is onboarding with one obvious act: the wordmark, a factual
  * sentence, one primary action, and two quieter routes.
@@ -735,7 +797,12 @@ function FirstRun({
 }) {
   return (
     <div class="first-run">
-      <span class="first-run-wordmark mono">{copy.app.name}</span>
+      <div class="first-run-brand">
+        <span class="first-run-mark mono" aria-hidden="true">
+          HS
+        </span>
+        <span class="first-run-wordmark">{copy.app.name}</span>
+      </div>
       <p class="first-run-tagline">{copy.app.tagline}</p>
       <div class="first-run-actions">
         <Button kind="primary" onClick={onCreateRule}>

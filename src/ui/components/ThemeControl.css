@@ -1,17 +1,3 @@
-.theme-control {
-  display: flex;
-}
-
-.theme-menu {
-  min-width: 132px;
-}
-
-.theme-option {
-  gap: var(--sp-3);
-}
-
-.theme-check {
-  width: 12px;
-  color: var(--trace);
-  font-weight: 700;
+.theme-toggle {
+  flex: none;
 }

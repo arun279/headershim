@@ -2,9 +2,9 @@ import { domainFromOriginPattern, type RuleGrantGap } from "./grants";
 import type { StateDoc } from "./model";
 
 /**
- * The one system-status precedence ladder. The annunciator, the badge, and
- * Verify's hints all read this selector, so the three surfaces can never
- * disagree about what state the product is in.
+ * The one system-status precedence ladder. The annunciator, badge, and popup
+ * actions all read this selector, so the surfaces cannot disagree about what
+ * state the product is in.
  */
 export type SystemStatus =
   | { readonly kind: "paused" }

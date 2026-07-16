@@ -205,11 +205,11 @@ test("every popup state passes axe in both themes", async ({
     await thisTab.close();
 
     const verify = await open(ruleDoc(), theme);
-    await verify.getByRole("button", { name: copy.actions.verify }).click();
-    await expect(
-      verify.getByRole("dialog", { name: copy.verify.regionLabel }),
-    ).toBeVisible();
-    await analyze(verify, `popup verify panel (${theme})`, theme);
+    await verify
+      .getByRole("button", { name: copy.actions.testOnThisTab })
+      .click();
+    await expect(verify.locator(".verify-inline-result")).toBeVisible();
+    await analyze(verify, `popup verify result (${theme})`, theme);
     await verify.close();
   }
 });

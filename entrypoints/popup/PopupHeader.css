@@ -2,8 +2,8 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  min-height: 48px;
-  padding: 2px 4px 1px 8px;
+  min-height: 46px;
+  padding: 8px 10px;
   background: var(--panel-0);
   border-bottom: var(--hairline) solid var(--bezel);
 }
@@ -17,21 +17,10 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--sp-2);
-  padding-left: var(--sp-2);
-  border-left: var(--hairline) solid var(--bezel);
-}
-
-.popup-head.profiles-hidden {
-  justify-content: flex-end;
-}
-
-.popup-head.profiles-hidden .popup-head-actions {
-  padding-left: 0;
-  border-left: 0;
+  gap: var(--sp-1);
 }
 
 .popup-head-actions .icon-btn {
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
 }

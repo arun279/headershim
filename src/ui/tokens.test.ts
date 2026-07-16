@@ -102,7 +102,9 @@ describe("status token contrast", () => {
     const source = block(":root");
     expect(source).toMatch(/--sw-on:\s*var\(--advisory\)/);
     expect(source).toMatch(/--sw-paused:\s*var\(--caution-lamp\)/);
-    expect(hex(source, "sw-held")).not.toBe(hex(source, "sw-off"));
+    expect(
+      [...source.matchAll(/--sw-([a-z-]+):/g)].map((match) => match[1]).sort(),
+    ).toEqual(["off", "on", "paused"]);
   });
 
   it.each(themes)("$name: caution text clears 4.5:1 on its tinted row", ({

@@ -50,11 +50,12 @@ function mount(props: Parameters<typeof Harness>[0] = {}) {
 }
 
 describe("ScopeEditor match type", () => {
-  it("renders the three segments as a native radio group, Domains checked", () => {
+  it("renders four peer segments as a native radio group, Domains checked", () => {
     const ctx = mount();
     expect(ctx.root.querySelector('[role="radiogroup"]')).not.toBeNull();
     expect(ctx.radios().map((radio) => radio.checked)).toEqual([
       true,
+      false,
       false,
       false,
     ]);
@@ -62,35 +63,33 @@ describe("ScopeEditor match type", () => {
     expect(new Set(ctx.radios().map((radio) => radio.name)).size).toBe(1);
   });
 
-  it("switches to URL pattern with the syntax hint and the grant note", () => {
+  it("switches to URL pattern with one syntax helper", () => {
     const ctx = mount();
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
     expect(ctx.micros().slice(0, 2)).toEqual([
       sentenceText(copy.editor.patternHint),
-      copy.editor.grantNote,
+      copy.editor.includesPages,
     ]);
   });
 
-  it("shows the grant note on regex too", () => {
+  it("shows the RE2 helper on regex without a standing grant warning", () => {
     const ctx = mount();
     fire(() => ctx.radios()[2]?.click());
     expect(ctx.root.querySelector('[aria-label="Regex"]')).not.toBeNull();
-    expect(ctx.micros()).toContain(copy.editor.grantNote);
+    expect(ctx.micros()).toContain(copy.editor.regexHint);
   });
 
-  it("keeps All sites a subordinate link, not a fourth segment", () => {
+  it("selects All sites as the fourth scope segment", () => {
     const ctx = mount();
-    const link = ctx.root.querySelector(".all-sites") as HTMLButtonElement;
-    expect(link.getAttribute("aria-pressed")).toBe("false");
-    expect(ctx.radios()).toHaveLength(3);
-    fire(() => link.click());
-    expect(
-      (ctx.root.querySelector(".all-sites") as HTMLElement).getAttribute(
-        "aria-pressed",
-      ),
-    ).toBe("true");
-    expect(ctx.radios().every((radio) => !radio.checked)).toBe(true);
+    expect(ctx.radios()).toHaveLength(4);
+    fire(() => ctx.radios()[3]?.click());
+    expect(ctx.radios().map((radio) => radio.checked)).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ]);
   });
 });
 
@@ -140,7 +139,13 @@ describe("ScopeEditor domain chips", () => {
   it("carries the subdomain helper line", () => {
     const ctx = mount();
     expect(ctx.micros()).toContain(copy.editor.domainsHelper);
+    expect(ctx.micros()).not.toContain(copy.editor.requestTarget);
+  });
+
+  it("replaces it with the request-target caveat for subresource-only rules", () => {
+    const ctx = mount({ initialTypes: ["xhr"] });
     expect(ctx.micros()).toContain(copy.editor.requestTarget);
+    expect(ctx.micros()).not.toContain(copy.editor.domainsHelper);
   });
 
   it("moves focus to a surviving chip control when a middle chip is removed", () => {

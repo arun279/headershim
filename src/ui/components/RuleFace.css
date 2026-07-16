@@ -1,18 +1,3 @@
-.rule-dir {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: var(--font-data);
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.rule-op {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  color: var(--ink-mute);
-}
-
 .rule-lines {
   min-width: 0;
 }
@@ -20,21 +5,18 @@
 .rule-line1 {
   display: flex;
   min-width: 0;
+  overflow: hidden;
   font-family: var(--font-data);
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.45;
+  white-space: nowrap;
 }
 
-/* The identifier keeps its full width before the optional value preview gets
-   any room. Exceptionally long names still ellipsise within the row. */
 .rule-name {
-  font-weight: 600;
-  flex: 0 0 auto;
-  max-width: 100%;
-}
-
-.rule-line1.has-value .rule-name {
-  flex: 0 1 45%;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 58%;
+  font-weight: 500;
 }
 
 .rule-value-preview {
@@ -48,16 +30,51 @@
   flex: none;
 }
 
+.rule-value,
+.rule-value-button {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .rule-value {
   flex: 1 1 auto;
 }
 
-/* One clamped line: scope · types · comment · notes stay on one row, and the
-   leading domain uses the shared trailing-ellipsis treatment. */
+.rule-value-button {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-inner);
+  background: var(--panel-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+.rule-value-pencil {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  color: var(--ink-mute);
+  transition: opacity var(--t-fast);
+}
+
+.rule-row:hover .rule-value-pencil,
+.this-tab-row:hover .rule-value-pencil,
+.rule-value-button:hover .rule-value-pencil,
+.rule-value-button:focus-visible .rule-value-pencil {
+  opacity: 1;
+}
+
 .rule-line2 {
   min-width: 0;
+  margin-top: 3px;
   overflow: hidden;
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.4;
   color: var(--ink-mute);
   white-space: nowrap;
@@ -65,5 +82,22 @@
 }
 
 .rule-line2 .mono {
-  font-size: 11px;
+  font-size: 11.5px;
+}
+
+.rule-direction {
+  color: var(--ink-mute);
+}
+
+.rule-op {
+  display: inline-block;
+  padding: 0 4px;
+  border: var(--hairline) solid var(--bezel);
+  border-radius: var(--radius-inner);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
 }

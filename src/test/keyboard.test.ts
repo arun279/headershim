@@ -13,7 +13,7 @@ function commands() {
     newThisTabOverride: vi.fn(),
     togglePause: vi.fn(),
     verify: vi.fn(),
-    activateProfile: vi.fn(),
+    focusProfile: vi.fn(),
     toggleProfile: vi.fn(),
     closePopup: vi.fn(),
   } satisfies PopupCommands;
@@ -53,7 +53,7 @@ describe("popupKeyHandler", () => {
     handler(keydown({ key: "1", code: "Digit1" }));
     handler(keydown({ key: "9", code: "Digit9" }));
     handler(keydown({ key: "5", code: "Numpad5" }));
-    expect(dispatched.activateProfile.mock.calls).toEqual([[1], [9], [5]]);
+    expect(dispatched.focusProfile.mock.calls).toEqual([[1], [9], [5]]);
     expect(dispatched.toggleProfile).not.toHaveBeenCalled();
   });
 
@@ -63,14 +63,14 @@ describe("popupKeyHandler", () => {
     // Shift+2 types "@" on a US layout; the physical digit key still binds.
     handler(keydown({ key: "@", code: "Digit2", shiftKey: true }));
     expect(dispatched.toggleProfile).toHaveBeenCalledWith(2);
-    expect(dispatched.activateProfile).not.toHaveBeenCalled();
+    expect(dispatched.focusProfile).not.toHaveBeenCalled();
   });
 
   it("ignores Digit0 and non-digit codes", () => {
     const dispatched = commands();
     const handler = popupKeyHandler(dispatched);
     handler(keydown({ key: "0", code: "Digit0" }));
-    expect(dispatched.activateProfile).not.toHaveBeenCalled();
+    expect(dispatched.focusProfile).not.toHaveBeenCalled();
   });
 
   it("Escape closes the popup, even from a text field", () => {
@@ -108,7 +108,7 @@ describe("popupKeyHandler", () => {
     expect(dispatched.newThisTabOverride).not.toHaveBeenCalled();
     expect(dispatched.togglePause).not.toHaveBeenCalled();
     expect(dispatched.verify).not.toHaveBeenCalled();
-    expect(dispatched.activateProfile).not.toHaveBeenCalled();
+    expect(dispatched.focusProfile).not.toHaveBeenCalled();
     expect(dispatched.toggleProfile).not.toHaveBeenCalled();
     field.remove();
   });

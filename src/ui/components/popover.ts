@@ -73,3 +73,35 @@ export function trapPopoverFocus(event: KeyboardEvent, root: HTMLElement) {
   event.preventDefault();
   items[next]?.focus();
 }
+
+/** Owns the standard keyboard loop for a menu popover. */
+export function handleMenuNavigation(
+  event: KeyboardEvent,
+  root: HTMLElement,
+  onEscape: () => void,
+) {
+  event.stopPropagation();
+  if (event.key === "Tab") {
+    trapPopoverFocus(event, root);
+    return;
+  }
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    onEscape();
+    return;
+  }
+
+  const items = [...root.querySelectorAll<HTMLButtonElement>("button")];
+  const active = items.indexOf(document.activeElement as HTMLButtonElement);
+  const next = {
+    ArrowDown: active + 1,
+    ArrowUp: active - 1,
+    Home: 0,
+    End: -1,
+  }[event.key];
+  if (next !== undefined) {
+    event.preventDefault();
+    items[(next + items.length) % items.length]?.focus();
+  }
+}

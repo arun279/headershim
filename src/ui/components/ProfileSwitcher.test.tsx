@@ -32,20 +32,22 @@ const three = [
 const ok = async (): Promise<ProfileCommitOutcome> => ({ ok: true });
 
 function mount(overrides: Partial<Parameters<typeof ProfileSwitcher>[0]> = {}) {
-  const onActivate = overrides.onActivate ?? vi.fn();
+  const onFocusProfile = overrides.onFocusProfile ?? vi.fn();
   const onCreate = overrides.onCreate ?? vi.fn(ok);
   const onRename = overrides.onRename ?? vi.fn(ok);
-  const onEnable = overrides.onEnable ?? vi.fn(ok);
+  const onClone = overrides.onClone ?? vi.fn(ok);
+  const onToggleProfile = overrides.onToggleProfile ?? vi.fn(ok);
   const onManageProfiles = overrides.onManageProfiles ?? vi.fn();
   const root = render(
     <ProfileSwitcher
       profiles={overrides.profiles ?? three}
       focusedProfileId={overrides.focusedProfileId ?? "staging"}
       newProfileName={overrides.newProfileName ?? "New profile"}
-      onActivate={onActivate}
+      onFocusProfile={onFocusProfile}
       onCreate={onCreate}
       onRename={onRename}
-      onEnable={onEnable}
+      onClone={onClone}
+      onToggleProfile={onToggleProfile}
       onManageProfiles={onManageProfiles}
       {...(overrides.autoFocus === undefined
         ? {}
@@ -60,10 +62,11 @@ function mount(overrides: Partial<Parameters<typeof ProfileSwitcher>[0]> = {}) {
     root,
     chips,
     menus,
-    onActivate,
+    onFocusProfile,
     onCreate,
     onRename,
-    onEnable,
+    onClone,
+    onToggleProfile,
     onManageProfiles,
   };
 }
@@ -88,17 +91,18 @@ describe("ProfileSwitcher", () => {
     expect(chips[2]?.querySelector(".silk")?.textContent).toBe("off");
   });
 
-  it("always switches exclusively on click, including Shift+click", () => {
-    const { chips, onActivate } = mount();
+  it("focuses on click without changing what runs, including Shift+click", () => {
+    const { chips, onFocusProfile, onToggleProfile } = mount();
     fire(() =>
       chips[2]?.dispatchEvent(
         new MouseEvent("click", { shiftKey: true, bubbles: true }),
       ),
     );
-    expect(onActivate).toHaveBeenCalledWith("qa");
+    expect(onFocusProfile).toHaveBeenCalledWith("qa");
+    expect(onToggleProfile).not.toHaveBeenCalled();
   });
 
-  it("gives every clipped chip the same menu affordance and word-safe name", () => {
+  it("keeps names word-safe and gives every chip a labeled actions trigger", () => {
     const { root, menus } = mount({
       profiles: [
         profile("staging", { name: "Staging environment overrides" }),
@@ -108,6 +112,7 @@ describe("ProfileSwitcher", () => {
     const containers = root.querySelectorAll(".profile-chip");
     expect(containers).toHaveLength(2);
     expect(menus).toHaveLength(2);
+    expect(menus.map((menu) => menu.textContent)).toEqual(["⋯", "⋯"]);
     expect(
       [...root.querySelectorAll(".chip-name")].map((name) => name.textContent),
     ).toEqual(["Staging environment…", "Production…"]);
@@ -196,7 +201,7 @@ describe("ProfileSwitcher", () => {
   });
 
   it("light-dismisses create when a profile chip is clicked", async () => {
-    const { root, chips, onActivate } = mount();
+    const { root, chips, onFocusProfile } = mount();
     const trigger = root.querySelector(
       ".new-profile-chip",
     ) as HTMLButtonElement;
@@ -213,7 +218,7 @@ describe("ProfileSwitcher", () => {
 
     expect(root.querySelector(".profile-create-pop")).toBeNull();
     expect(document.activeElement).toBe(target);
-    expect(onActivate).toHaveBeenCalledWith("cors");
+    expect(onFocusProfile).toHaveBeenCalledWith("cors");
   });
 
   it("light-dismisses a profile menu and restores its trigger on global Escape", async () => {
@@ -236,8 +241,8 @@ describe("ProfileSwitcher", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("renames inline and enables a disabled profile without switching", async () => {
-    const { root, menus, onRename, onEnable, onActivate } = mount();
+  it("offers Rename, Clone, Turn on/off, and Manage without changing focus", async () => {
+    const { root, menus, onRename, onClone } = mount();
     fire(() => menus[0]?.click());
     const firstMenu = root.querySelector(".profile-actions-pop") as HTMLElement;
     expect(firstMenu.getAttribute("popover")).toBe("manual");
@@ -257,17 +262,67 @@ describe("ProfileSwitcher", () => {
     await settle();
     expect(onRename).toHaveBeenCalledWith("staging", "Production");
 
-    fire(() => menus[2]?.click());
-    const disabledMenu = root.querySelector(
+    const disabled = mount({ focusedProfileId: "qa" });
+    fire(() => disabled.menus[2]?.click());
+    const disabledMenu = disabled.root.querySelector(
       ".profile-actions-pop",
     ) as HTMLElement;
-    const enable = [...disabledMenu.querySelectorAll("button")].find(
-      (button) => button.textContent === "Enable without switching",
+    expect(
+      [...disabledMenu.querySelectorAll("button")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["Rename", "Clone", "Turn on", "Manage profiles"]);
+    const clone = [...disabledMenu.querySelectorAll("button")].find(
+      (button) => button.textContent === "Clone",
+    ) as HTMLButtonElement;
+    fire(() => clone.click());
+    await settle();
+    expect(disabled.onClone).toHaveBeenCalledWith("qa");
+
+    fire(() => disabled.menus[2]?.click());
+    const reopened = disabled.root.querySelector(
+      ".profile-actions-pop",
+    ) as HTMLElement;
+    const enable = [...reopened.querySelectorAll("button")].find(
+      (button) => button.textContent === "Turn on",
     ) as HTMLButtonElement;
     fire(() => enable.click());
     await settle();
-    expect(onEnable).toHaveBeenCalledWith("qa");
-    expect(onActivate).not.toHaveBeenCalled();
+    expect(disabled.onToggleProfile).toHaveBeenCalledWith("qa", true);
+    expect(disabled.onFocusProfile).not.toHaveBeenCalled();
+    expect(onClone).not.toHaveBeenCalled();
+  });
+
+  it("reveals every profile in the trailing overflow popover", () => {
+    const { root, onFocusProfile } = mount();
+    const viewport = root.querySelector(".profiles-viewport") as HTMLElement;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 100 },
+      scrollWidth: { configurable: true, value: 500 },
+    });
+    fire(() => window.dispatchEvent(new Event("resize")));
+
+    const trigger = root.querySelector(
+      ".all-profiles-trigger",
+    ) as HTMLButtonElement;
+    expect(trigger.textContent).toBe("⋯all profiles");
+    fire(() => trigger.click());
+    const popover = root.querySelector(".profile-overflow-pop") as HTMLElement;
+    expect(popover.getAttribute("popover")).toBe("manual");
+    expect(
+      [...popover.querySelectorAll(".profile-overflow-focus")].map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["Staging auth", "CORS dev", "QA roles"]);
+
+    fire(() =>
+      (
+        popover.querySelectorAll<HTMLButtonElement>(
+          ".profile-overflow-focus",
+        )[1] as HTMLButtonElement
+      ).click(),
+    );
+    expect(onFocusProfile).toHaveBeenCalledWith("cors");
   });
 
   it("opens profile management from both popovers", () => {

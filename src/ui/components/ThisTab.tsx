@@ -1,4 +1,4 @@
-import { useId, useState } from "preact/hooks";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type {
   Direction,
   HeaderOp,
@@ -16,13 +16,25 @@ import {
   addOverride,
   removeOverride,
   type SessionMutationError,
+  setOverrideEnabled,
+  updateOverrideValue,
 } from "../state/session-mutations";
 import { Button } from "./Button";
 import { handleEditorCommitKey } from "./editorKeys";
+import { CheckGlyph, CloseGlyph, PencilGlyph } from "./glyphs";
 import { HeaderFields } from "./HeaderFields";
+import { HeaderLineFields } from "./HeaderLineFields";
+import {
+  closePopover,
+  handleMenuNavigation,
+  openPositionedPopover,
+} from "./popover";
+import { headerValueSummary, isSecretHeader } from "./RuleFace";
 import { sentence } from "./sentence";
+import { Toggle } from "./Toggle";
 import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import { useDraftState } from "./useDraftState";
+import { usePopoverDismiss } from "./usePopoverDismiss";
 import "./ThisTab.css";
 
 interface ThisTabProps {
@@ -34,42 +46,48 @@ interface ThisTabProps {
   overrides: readonly TabOverride[];
   /** Whether the composer is open (a fresh empty row awaiting input). */
   composing: boolean;
+  /** Opens a fresh temporary override composer. */
+  onOpenComposer: () => void;
   /** Promotes a temporary row into a real rule (pre-fills the editor). */
   onSaveAsRule: (override: TabOverride) => void;
-  /** The standing honesty line's "Create a rule" action. */
-  onCreateRule: () => void;
   /** Closes the composer without adding. */
   onCloseComposer: () => void;
 }
 
 /**
  * The This-tab section. Rows apply immediately with no permission
- * prompt — opening the popup is the activeTab consent gesture — and are marked
- * Temporary: they cover this tab's own origin only, end when the tab navigates
+ * prompt because opening the popup is the activeTab consent gesture. They
+ * cover this tab's own origin only, end when the tab navigates
  * away or closes, and are suspended by global pause. Writes land in the session
  * store's metadata only; the background scheduler is the sole DNR writer. The
- * section stays hidden until it has a row or the composer is open.
+ * section remains present in normal list mode so the core loop is discoverable.
  */
 export function ThisTab(props: ThisTabProps) {
   const { tabId, host, overrides, composing } = props;
-  if (overrides.length === 0 && !composing) {
-    return null;
-  }
-
   return (
     <section class="this-tab" aria-label={copy.thisTab.sectionLabel}>
-      <p class="this-tab-head">
-        <span class="silk">{copy.thisTab.sectionLabel}</span>
-        {host !== undefined &&
-          sentence(copy.thisTab.summary(host, overrides.length))}
-      </p>
+      <div class="this-tab-head">
+        <p>
+          <span class="silk">{copy.thisTab.sectionLabel}</span>
+          {host !== undefined && sentence(copy.thisTab.summary(host))}
+        </p>
+        {!composing && (
+          <button
+            type="button"
+            class="link-btn this-tab-add"
+            onClick={props.onOpenComposer}
+          >
+            {copy.thisTab.addOverride}
+          </button>
+        )}
+      </div>
+      <p class="this-tab-lifecycle">{copy.firstRun.tryThisTabSubline}</p>
 
       <ul class="this-tab-rows">
         {overrides.map((override) => (
           <OverrideRow
             key={override.num}
             override={override}
-            host={host ?? override.originHost}
             onRemove={() => void removeOverride(override.tabId, override.num)}
             onSaveAsRule={() => props.onSaveAsRule(override)}
           />
@@ -84,87 +102,278 @@ export function ThisTab(props: ThisTabProps) {
         ) : (
           <Composer tabId={tabId} host={host} onClose={props.onCloseComposer} />
         ))}
-
-      <p class="this-tab-note">
-        {copy.thisTab.standingBefore}
-        <button type="button" class="link-btn" onClick={props.onCreateRule}>
-          {copy.thisTab.standingAction}
-        </button>
-        {copy.thisTab.standingAfter}
-      </p>
     </section>
   );
 }
 
 function OverrideRow({
   override,
-  host,
   onRemove,
   onSaveAsRule,
 }: {
   override: TabOverride;
-  host: string;
   onRemove: () => void;
   onSaveAsRule: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+  const summary = headerValueSummary(override.header, override.value);
+
+  const beginEdit = () => {
+    if (override.value === undefined) return;
+    setValue(isSecretHeader(override.header) ? "" : override.value);
+    setError(undefined);
+    setEditing(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!editing) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [editing]);
+
+  const commit = async () => {
+    if (saving) return;
+    setSaving(true);
+    const outcome = await updateOverrideValue(
+      override.tabId,
+      override.num,
+      value,
+    );
+    setSaving(false);
+    if (outcome.ok) {
+      setEditing(false);
+      return;
+    }
+    const mapped = mapError(outcome.error);
+    setError(mapped.value ?? mapped.name ?? copy.errors.valueRequired);
+  };
+
   return (
-    <li class="this-tab-row">
-      <span class="rule-dir">
-        <span role="img" aria-label={copy.rules.direction[override.direction]}>
-          {override.direction === "request" ? "→" : "←"}
-        </span>
-        <span class="rule-op">{copy.rules.operation[override.operation]}</span>
-      </span>
+    <li class={override.enabled ? "this-tab-row" : "this-tab-row off"}>
+      <Toggle
+        checked={override.enabled}
+        label={copy.rules.temporarySwitchLabel(
+          override.header,
+          override.enabled,
+        )}
+        onChange={(enabled) =>
+          void setOverrideEnabled(override.tabId, override.num, enabled)
+        }
+      />
       <div class="rule-lines">
-        <p
-          class={
-            override.operation !== "remove" && override.value !== undefined
-              ? "rule-line1 has-value"
-              : "rule-line1"
-          }
-        >
-          <Truncate
-            mode="middle"
-            value={override.header}
-            maxChars={TRUNCATION_LIMITS.header}
-            class="rule-name"
-          />
-          {override.operation !== "remove" && override.value !== undefined && (
-            <span class="rule-value-preview">
-              <span class="colon">: </span>
+        {editing ? (
+          <>
+            <div class="rule-line1 inline-value-line">
+              <span class="rule-name">{override.header}</span>
+              <span class="colon">:</span>
+              <input
+                ref={inputRef}
+                class="inline-value-input mono"
+                type={isSecretHeader(override.header) ? "password" : "text"}
+                value={value}
+                placeholder={copy.rules.pasteNewValue}
+                aria-label={copy.editor.labels.value}
+                disabled={saving}
+                onInput={(event) => setValue(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void commit();
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    setEditing(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                class="inline-value-action inline-value-save"
+                aria-label={copy.actions.saveChanges}
+                disabled={saving}
+                onClick={() => void commit()}
+              >
+                <CheckGlyph />
+              </button>
+              <button
+                type="button"
+                class="inline-value-action"
+                aria-label={copy.actions.cancel}
+                disabled={saving}
+                onClick={() => setEditing(false)}
+              >
+                <CloseGlyph />
+              </button>
+            </div>
+            <p class={error === undefined ? "rule-line2" : "editor-error"}>
+              {error ?? copy.rules.editValueHint}
+            </p>
+          </>
+        ) : (
+          <>
+            <p
+              class={
+                override.operation !== "remove" && summary !== undefined
+                  ? "rule-line1 has-value"
+                  : "rule-line1"
+              }
+            >
               <Truncate
                 mode="middle"
-                value={override.value}
-                maxChars={TRUNCATION_LIMITS.value}
-                class="rule-value"
+                value={override.header}
+                maxChars={TRUNCATION_LIMITS.header}
+                class="rule-name"
               />
-            </span>
-          )}
-        </p>
-        <p class="rule-line2">
-          <span class="silk">{copy.rules.temporaryTag}</span>{" "}
-          {sentence(copy.rules.temporary(host))}
-        </p>
+              {override.operation !== "remove" && summary !== undefined && (
+                <span class="rule-value-preview">
+                  <span class="colon">: </span>
+                  <button
+                    type="button"
+                    class="rule-value-button"
+                    aria-label={copy.menu.editValue}
+                    onClick={beginEdit}
+                  >
+                    <Truncate
+                      mode="middle"
+                      value={summary}
+                      maxChars={TRUNCATION_LIMITS.value}
+                      class="rule-value"
+                    />
+                    <span class="rule-value-pencil">
+                      <PencilGlyph />
+                    </span>
+                  </button>
+                </span>
+              )}
+            </p>
+            <p class="rule-line2">
+              {override.operation !== "set" && (
+                <span class="rule-op">
+                  {copy.rules.operation[override.operation]}
+                </span>
+              )}{" "}
+              <span
+                class="rule-direction"
+                role="img"
+                aria-label={copy.rules.direction[override.direction]}
+              >
+                {override.direction === "request" ? "→" : "←"}
+              </span>
+            </p>
+          </>
+        )}
+      </div>
+      {!editing && (
         <button
           type="button"
-          class="link-btn save-as-rule"
-          onClick={onSaveAsRule}
+          class="icon-btn this-tab-menu-btn"
+          aria-label={copy.thisTab.menuLabel(override.header)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          ref={menuButtonRef}
+          onClick={() => setMenuOpen((open) => !open)}
         >
-          {copy.thisTab.saveAsRule}
+          ⋯
         </button>
-      </div>
+      )}
+      {menuOpen && (
+        <OverrideMenu
+          override={override}
+          trigger={menuButtonRef}
+          onEditValue={override.value === undefined ? undefined : beginEdit}
+          onSaveAsRule={onSaveAsRule}
+          onDelete={() => {
+            if (menuButtonRef.current !== null) {
+              focusOnRemoval(menuButtonRef.current);
+            }
+            onRemove();
+          }}
+          onClose={(restoreFocus) => {
+            setMenuOpen(false);
+            if (restoreFocus) {
+              queueMicrotask(() => menuButtonRef.current?.focus());
+            }
+          }}
+        />
+      )}
+    </li>
+  );
+}
+
+function OverrideMenu({
+  override,
+  trigger,
+  onEditValue,
+  onSaveAsRule,
+  onDelete,
+  onClose,
+}: {
+  override: TabOverride;
+  trigger: { readonly current: HTMLButtonElement | null };
+  onEditValue: (() => void) | undefined;
+  onSaveAsRule: () => void;
+  onDelete: () => void;
+  onClose: (restoreFocus: boolean) => void;
+}) {
+  const menu = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (menu.current === null || trigger.current === null) return;
+    openPositionedPopover(menu.current, trigger.current, "end");
+    menu.current.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => closePopover(menu.current);
+  }, []);
+  usePopoverDismiss(true, menu, trigger, onClose);
+
+  const activate = (action: () => void) => {
+    onClose(false);
+    action();
+  };
+  return (
+    <div
+      class="menu-pop this-tab-menu"
+      popover="manual"
+      role="menu"
+      aria-label={copy.thisTab.menuLabel(override.header)}
+      ref={menu}
+      onKeyDown={(event) => {
+        if (menu.current !== null) {
+          handleMenuNavigation(event, menu.current, () => onClose(true));
+        }
+      }}
+    >
+      {onEditValue !== undefined && (
+        <button
+          type="button"
+          role="menuitem"
+          class="menu-item"
+          onClick={() => activate(onEditValue)}
+        >
+          {copy.menu.editValue}
+        </button>
+      )}
       <button
         type="button"
-        class="icon-btn this-tab-remove"
-        aria-label={copy.thisTab.remove(override.header)}
-        onClick={(event) => {
-          focusOnRemoval(event.currentTarget);
-          onRemove();
-        }}
+        role="menuitem"
+        class="menu-item"
+        onClick={() => activate(onSaveAsRule)}
       >
-        ✕
+        {copy.thisTab.saveAsRule}
       </button>
-    </li>
+      <button
+        type="button"
+        role="menuitem"
+        class="menu-item destructive"
+        onClick={() => activate(onDelete)}
+      >
+        {copy.menu.delete}
+      </button>
+    </div>
   );
 }
 
@@ -257,30 +466,17 @@ function Composer({
 
       <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
 
-      {draft.operation !== "remove" && (
-        <div class="editor-field">
-          <label class="editor-label" for={`${id}-value`}>
-            {copy.editor.labels.value}
-          </label>
-          <div class="editor-control">
-            <input
-              id={`${id}-value`}
-              class="field mono"
-              type="text"
-              value={draft.value}
-              onInput={(event) => {
-                const value = event.currentTarget.value;
-                update((current) => ({ ...current, value }));
-              }}
-            />
-            {errors.value !== undefined && (
-              <p class="editor-error" role="alert">
-                {errors.value}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      <HeaderLineFields
+        header={draft.header}
+        value={draft.value}
+        remove={draft.operation === "remove"}
+        nameError={errors.name}
+        valueError={errors.value}
+        onHeaderInput={(header) =>
+          update((current) => ({ ...current, header }))
+        }
+        onValueInput={(value) => update((current) => ({ ...current, value }))}
+      />
 
       {errors.add !== undefined && (
         <p class="editor-error editor-error-global" role="alert">

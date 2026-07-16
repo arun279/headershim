@@ -19,6 +19,8 @@ interface HeaderNameInputProps {
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
+  /** Removes the outer field chrome when joined to the value as one header. */
+  composed?: boolean;
   inputRef?: ((element: HTMLInputElement | null) => void) | undefined;
   onInput: (raw: string) => void;
 }
@@ -93,18 +95,38 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   ].join(" ");
 
   return (
-    <div class="editor-field">
-      <label class="editor-label" for={`${id}-input`}>
+    <div
+      class={props.composed === true ? "compose-name-control" : "editor-field"}
+    >
+      <label
+        class={props.composed === true ? "sr-only" : "editor-label"}
+        for={`${id}-input`}
+      >
         {copy.editor.labels.headerName}
       </label>
-      <div class="editor-control combobox">
+      <div
+        class={
+          props.composed === true
+            ? "editor-control combobox compose-control"
+            : "editor-control combobox"
+        }
+      >
         <input
           id={`${id}-input`}
           ref={(element) => {
             inputRef.current = element;
             props.inputRef?.(element);
           }}
-          class="field mono editor-commit-field"
+          class={
+            props.composed === true
+              ? "compose-input compose-name-input mono"
+              : "field mono"
+          }
+          size={
+            props.composed === true
+              ? Math.max(1, props.value.length)
+              : undefined
+          }
           type="text"
           role="combobox"
           aria-expanded={open}

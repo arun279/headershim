@@ -28,11 +28,12 @@ import {
   type GrantSelection,
   type InitiatorControl,
 } from "./GrantPanel";
+import { CloseGlyph } from "./glyphs";
 import { HeaderFields } from "./HeaderFields";
+import { HeaderLineFields } from "./HeaderLineFields";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
 import { useDraftState } from "./useDraftState";
-import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
 interface RuleEditorProps {
@@ -257,15 +258,6 @@ export function RuleEditor(props: RuleEditorProps) {
     if (handleEditorCommitKey(event, () => void commit())) {
       return;
     }
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    if (
-      event.key === "Enter" &&
-      target?.classList.contains("editor-commit-field") === true
-    ) {
-      event.preventDefault();
-      void commit();
-      return;
-    }
   };
 
   const generate = (kind: "uuid" | "timestamp") => {
@@ -295,11 +287,9 @@ export function RuleEditor(props: RuleEditorProps) {
       onKeyDown={onKeyDown}
       header={
         <>
-          <h1 class="editor-title">
-            <span aria-hidden="true">‹</span> {title}
-          </h1>
+          <h1 class="editor-title">{title}</h1>
           <Button kind="ghost" label={copy.editor.close} onClick={requestClose}>
-            <span aria-hidden="true">✕</span>
+            <CloseGlyph />
           </Button>
         </>
       }
@@ -355,33 +345,37 @@ export function RuleEditor(props: RuleEditorProps) {
               idBase={id}
               draft={draft}
               errors={errors}
-              nameInputRef={(element) => {
-                initialFocusRef.current = element;
-              }}
               update={update}
             />
 
-            {draft.operation !== "remove" && (
-              <ValueField
-                value={draft.value}
-                generated={draft.generated}
-                frozenAt={
-                  draft.generated !== undefined &&
-                  draft.generated.at === props.rule?.generated?.at
-                    ? formatFrozenAt(draft.generated.at)
-                    : undefined
-                }
-                error={errors.value}
-                onInput={(value) =>
-                  update((current) => ({
-                    ...current,
-                    value,
-                    generated: undefined,
-                  }))
-                }
-                onGenerate={generate}
-              />
-            )}
+            <HeaderLineFields
+              header={draft.header}
+              value={draft.value}
+              remove={draft.operation === "remove"}
+              generated={draft.generated}
+              frozenAt={
+                draft.generated !== undefined &&
+                draft.generated.at === props.rule?.generated?.at
+                  ? formatFrozenAt(draft.generated.at)
+                  : undefined
+              }
+              nameError={errors.name}
+              valueError={errors.value}
+              nameInputRef={(element) => {
+                initialFocusRef.current = element;
+              }}
+              onHeaderInput={(header) =>
+                update((current) => ({ ...current, header }))
+              }
+              onValueInput={(value) =>
+                update((current) => ({
+                  ...current,
+                  value,
+                  generated: undefined,
+                }))
+              }
+              onGenerate={generate}
+            />
 
             <ScopeEditor
               scope={draft.scope}
@@ -396,7 +390,6 @@ export function RuleEditor(props: RuleEditorProps) {
               onResourceTypes={(resourceTypes) =>
                 update((current) => ({ ...current, resourceTypes }))
               }
-              onCommit={() => void commit()}
             />
 
             <CommentDisclosure
@@ -467,7 +460,7 @@ function CommentDisclosure({
           </label>
           <input
             id={id}
-            class="field editor-commit-field"
+            class="field"
             type="text"
             value={value}
             onInput={(event) => onInput(event.currentTarget.value)}

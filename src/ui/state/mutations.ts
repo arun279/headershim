@@ -640,7 +640,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
     setProfileEnabled(
       profileId: string,
       enabled: boolean,
-      focusOnEnable = true,
+      moveFocus = true,
     ): MutationResult<void> {
       return commit((doc) => {
         const profile = findProfile(doc, profileId);
@@ -654,21 +654,21 @@ export function createMutations({ validateRegex }: MutationDeps) {
           ...candidate,
           enabled,
         }));
-        // Focus follows enablement: enabling focuses the profile;
-        // disabling the focused one moves focus to the topmost enabled
-        // profile, or the topmost profile when none is enabled.
-        const focusedProfileId = enabled
-          ? focusOnEnable
+        // Options keeps the convenience behavior of following an enablement
+        // change. The popup passes false because viewing and running are two
+        // independent axes there.
+        const focusedProfileId = !moveFocus
+          ? doc.focusedProfileId
+          : enabled
             ? profileId
-            : doc.focusedProfileId
-          : doc.focusedProfileId === profileId
-            ? topmostFocus(next.profiles)
-            : doc.focusedProfileId;
+            : doc.focusedProfileId === profileId
+              ? topmostFocus(next.profiles)
+              : doc.focusedProfileId;
         return ok([{ ...next, focusedProfileId }, undefined]);
       });
     },
 
-    activateProfile(profileId: string): MutationResult<void> {
+    focusProfile(profileId: string): MutationResult<void> {
       return commit((doc) => {
         if (findProfile(doc, profileId) === undefined) {
           return notFound();
@@ -677,10 +677,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
           {
             ...doc,
             focusedProfileId: profileId,
-            profiles: doc.profiles.map((profile) => ({
-              ...profile,
-              enabled: profile.id === profileId,
-            })),
           },
           undefined,
         ]);

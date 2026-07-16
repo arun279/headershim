@@ -41,6 +41,7 @@ function tabOverride(tabId: number, originHost: string): TabOverride {
     operation: "set",
     header: "x-headershim-this-tab",
     value: "session",
+    enabled: true,
   };
 }
 

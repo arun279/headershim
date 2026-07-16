@@ -15,8 +15,10 @@ interface ValueFieldProps {
   /** Formatted freeze time when the generated value is the one already saved. */
   frozenAt?: string | undefined;
   error?: string | undefined;
+  /** Joins this control to HeaderNameInput inside the header composer. */
+  composed?: boolean;
   onInput: (value: string) => void;
-  onGenerate: (kind: "uuid" | "timestamp") => void;
+  onGenerate?: ((kind: "uuid" | "timestamp") => void) | undefined;
 }
 
 /**
@@ -34,16 +36,36 @@ export function ValueField(props: ValueFieldProps) {
   ].join(" ");
 
   return (
-    <div class="editor-field">
-      <label class="editor-label" for={`${id}-input`}>
+    <div
+      class={props.composed === true ? "compose-value-control" : "editor-field"}
+      style={
+        props.composed === true
+          ? `--compose-value-width: ${Math.max(24, Math.min(60, props.value.length))}ch`
+          : undefined
+      }
+    >
+      <label
+        class={props.composed === true ? "sr-only" : "editor-label"}
+        for={`${id}-input`}
+      >
         {copy.editor.labels.value}
       </label>
-      <div class="editor-control">
+      <div
+        class={
+          props.composed === true
+            ? "editor-control compose-control"
+            : "editor-control"
+        }
+      >
         <div class="value-row">
           <textarea
             id={`${id}-input`}
-            class="field mono value-input"
-            rows={4}
+            class={
+              props.composed === true
+                ? "compose-input compose-value-input mono"
+                : "field mono value-input"
+            }
+            rows={props.composed === true ? 1 : 4}
             wrap="soft"
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
@@ -79,7 +101,9 @@ export function ValueField(props: ValueFieldProps) {
               setNewlineRemoved(true);
             }}
           />
-          <InsertMenu onGenerate={props.onGenerate} />
+          {props.onGenerate !== undefined && (
+            <InsertMenu onGenerate={props.onGenerate} />
+          )}
         </div>
         {props.generated !== undefined && (
           <p class="editor-micro" id={`${id}-note`}>
@@ -89,7 +113,9 @@ export function ValueField(props: ValueFieldProps) {
             <button
               type="button"
               class="link-btn"
-              onClick={() => props.onGenerate(props.generated?.kind ?? "uuid")}
+              onClick={() =>
+                props.onGenerate?.(props.generated?.kind ?? "uuid")
+              }
             >
               {copy.actions.regenerate}
             </button>

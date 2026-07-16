@@ -23,8 +23,9 @@
 
 .editor-primary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--sp-4);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-5);
 }
 
 .editor-primary-field {
@@ -38,8 +39,12 @@
 
 .editor-label {
   display: block;
-  margin-bottom: var(--sp-2);
-  font-size: 12px;
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--ink-mute);
 }
 
@@ -64,13 +69,9 @@
   font-family: var(--font-data);
 }
 
-.editor-select {
-  width: 100%;
-}
-
 .editor-radios {
   display: flex;
-  gap: var(--sp-4);
+  gap: 14px;
   min-height: 28px;
 }
 
@@ -79,7 +80,92 @@
   align-items: center;
   gap: var(--sp-2);
   min-height: 24px;
-  font-size: 12px;
+  font-size: 12.5px;
+}
+
+.editor-radio input {
+  accent-color: var(--trace);
+}
+
+.operation-segments .segment {
+  min-width: 58px;
+  justify-content: center;
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+
+.header-line-field {
+  margin-top: var(--sp-5);
+}
+
+.header-compose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--sp-2) 0;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--bezel-strong);
+  border-radius: var(--radius-outer);
+}
+
+.header-compose.remove {
+  display: block;
+}
+
+.header-compose:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 22%, transparent);
+}
+
+.compose-name-control,
+.compose-value-control,
+.compose-control {
+  min-width: 0;
+}
+
+.compose-name-control {
+  flex: none;
+  max-width: 100%;
+}
+
+.compose-value-control {
+  flex: 1 1 var(--compose-value-width, 24ch);
+  max-width: 100%;
+}
+
+.compose-input {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.compose-input:focus-visible {
+  outline: none;
+}
+
+.compose-name-input {
+  field-sizing: content;
+  width: auto;
+  min-width: 1ch;
+  max-width: 100%;
+  font-weight: 500;
+}
+
+.header-seam {
+  flex: none;
+  margin-right: var(--sp-2);
+  padding: 2px 0;
+  color: var(--ink-mute);
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .editor-micro {
@@ -95,6 +181,11 @@
   line-height: 1.4;
   font-weight: 600;
   color: var(--caution);
+}
+
+.header-compose .editor-micro,
+.header-compose .editor-error {
+  margin-top: var(--sp-2);
 }
 
 .editor-error-global {

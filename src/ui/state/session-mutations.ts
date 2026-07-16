@@ -59,6 +59,7 @@ export function addOverride(
       direction: draft.direction,
       operation: draft.operation,
       header: validated.value.header,
+      enabled: true,
       ...(validated.value.value === undefined
         ? {}
         : { value: validated.value.value }),
@@ -79,6 +80,67 @@ export function removeOverride(tabId: number, num: number): Promise<void> {
       ...session,
       tabs: withTab(session.tabs, tabId, kept),
     });
+  });
+}
+
+/** Enables or suspends one temporary row without changing its lifetime. */
+export function setOverrideEnabled(
+  tabId: number,
+  num: number,
+  enabled: boolean,
+): Promise<void> {
+  return locked(async () => {
+    const session = await readSession();
+    const rows = session.tabs[tabId] ?? [];
+    if (!rows.some((row) => row.num === num && row.enabled !== enabled)) {
+      return;
+    }
+    await writeSession({
+      ...session,
+      tabs: {
+        ...session.tabs,
+        [tabId]: rows.map((row) =>
+          row.num === num ? { ...row, enabled } : row,
+        ),
+      },
+    });
+  });
+}
+
+/** Replaces only a temporary row's value; structure and insertion order stay put. */
+export function updateOverrideValue(
+  tabId: number,
+  num: number,
+  value: string,
+): Promise<Result<TabOverride | undefined, SessionMutationError>> {
+  return locked(async () => {
+    const session = await readSession();
+    const current = (session.tabs[tabId] ?? []).find((row) => row.num === num);
+    if (current === undefined) return ok(undefined);
+    const validated = validateHeader({
+      direction: current.direction,
+      operation: current.operation,
+      header: current.header,
+      value,
+    });
+    if (!validated.ok) return validated;
+    const { value: _value, ...withoutValue } = current;
+    const updated: TabOverride = {
+      ...withoutValue,
+      ...(validated.value.value === undefined
+        ? {}
+        : { value: validated.value.value }),
+    };
+    await writeSession({
+      ...session,
+      tabs: {
+        ...session.tabs,
+        [tabId]: (session.tabs[tabId] ?? []).map((row) =>
+          row.num === num ? updated : row,
+        ),
+      },
+    });
+    return ok(updated);
   });
 }
 

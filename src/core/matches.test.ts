@@ -103,6 +103,7 @@ describe("matched rule decoding", () => {
       operation: "append",
       header: "x-debug",
       value: "session",
+      enabled: true,
     };
 
     expect(

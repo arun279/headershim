@@ -36,8 +36,8 @@ export interface PopupCommands {
   togglePause?: () => void;
   /** `v` — run Verify on the current tab. */
   verify?: () => void;
-  /** `1`–`9` — switch to the profile at that position, exclusively. */
-  activateProfile?: (position: number) => void;
+  /** `1` through `9` focuses the profile at that position without toggling it. */
+  focusProfile?: (position: number) => void;
   /** `Shift+1`–`9` — toggle that profile without touching the others. */
   toggleProfile?: (position: number) => void;
   /** `Esc` with no layer open — close the popup. */
@@ -69,7 +69,7 @@ export function popupKeyHandler(
     if (digit !== undefined) {
       dispatch(
         event,
-        event.shiftKey ? commands.toggleProfile : commands.activateProfile,
+        event.shiftKey ? commands.toggleProfile : commands.focusProfile,
         digit,
       );
       return;

@@ -35,9 +35,9 @@ describe("Annunciator states", () => {
   it("renders paused with a Resume verb on a panel strip", () => {
     const { strip, onResume } = mount({ kind: "paused" }, 0, 3);
     expect(strip.textContent).toContain(
-      "Paused. No headers are being modified.",
+      "Paused · no headers are being modified",
     );
-    expect(strip.textContent).not.toContain("profiles active");
+    expect(strip.textContent).not.toContain("profiles on");
     expect(strip.querySelector("strong")?.textContent).toBe("Paused");
 
     const resume = strip.querySelector("button") as HTMLButtonElement;
@@ -49,22 +49,19 @@ describe("Annunciator states", () => {
   it("names the first host, counts the rest, and wires the Grant access verb", () => {
     const { strip, onGrantAccess } = mount(needsAccess);
     expect(strip.textContent).toBe(
-      "2 rules can't run. HeaderShim doesn't have access to api.example.com and 2 more sites.Grant access",
+      "Needs access · 2 rules need api.example.com and 2 more sitesGrant access",
     );
-    expect(strip.querySelector("strong")?.textContent).toBe(
-      "2 rules can't run",
-    );
+    expect(strip.querySelector("strong")?.textContent).toBe("Needs access");
 
     fire(() => (strip.querySelector("button") as HTMLButtonElement).click());
     expect(onGrantAccess).toHaveBeenCalledTimes(1);
   });
 
-  it("puts hostnames and counts in the mono face", () => {
+  it("keeps the count in sans prose and renders the host in the data face", () => {
     const { strip } = mount(needsAccess);
-    const mono = [...strip.querySelectorAll(".mono")].map(
-      (node) => node.textContent,
-    );
-    expect(mono).toEqual(["2", "api.example.com", "2"]);
+    const data = [...strip.querySelectorAll(".mono")];
+    expect(data.map((part) => part.textContent)).toEqual(["api.example.com"]);
+    expect(data[0]?.textContent).not.toContain("2");
   });
 
   it("renders a single missing site without a rest count", () => {
@@ -74,7 +71,7 @@ describe("Annunciator states", () => {
       hosts: ["app.acme.dev"],
     });
     expect(strip.textContent).toBe(
-      "1 rule can't run. HeaderShim doesn't have access to app.acme.dev.Grant access",
+      "Needs access · 1 rule needs app.acme.devGrant access",
     );
   });
 
@@ -84,7 +81,7 @@ describe("Annunciator states", () => {
       ruleCount: 1,
       hosts: ["*://*/*"],
     });
-    expect(strip.textContent).toContain("access to all sites.");
+    expect(strip.textContent).toContain("needs all sites");
   });
 
   it("renders the out-of-sync health state without a verb", () => {
@@ -100,13 +97,13 @@ describe("Annunciator states", () => {
       1,
     );
     expect(strip.textContent).toBe(
-      "Live. 2 of 3 rules enabled · 1 temporary on this tab · 2 profiles active",
+      "On · 2 of 3 rules enabled · 1 temporary on this tab · 2 profiles on",
     );
   });
 
   it("states the active-profile count alongside a caution state", () => {
     const { strip } = mount(needsAccess, 0, 3);
-    expect(strip.textContent).toContain("3 profiles active");
+    expect(strip.textContent).toContain("3 profiles on");
   });
 
   it("reads live-with-no-rules honestly", () => {
@@ -116,7 +113,9 @@ describe("Annunciator states", () => {
       totalRuleCount: 0,
       profileCount: 1,
     });
-    expect(strip.textContent).toBe("Live. No rules yet.");
+    expect(strip.textContent).toBe("No rules yet");
+    expect(strip.querySelector("strong")).toBeNull();
+    expect(strip.getAttribute("data-live")).toBeNull();
   });
 
   it("never claims 'no rules yet' while a This-tab override is modifying traffic", () => {
@@ -125,13 +124,13 @@ describe("Annunciator states", () => {
       1,
     );
     expect(strip.textContent).toBe(
-      "Live. 0 of 2 rules enabled · 1 temporary on this tab",
+      "On · 0 of 2 rules enabled · 1 temporary on this tab",
     );
   });
 
   it("renders off when no profile is on", () => {
     const { strip } = mount({ kind: "off" });
-    expect(strip.textContent).toBe("Off. No profiles are on.");
+    expect(strip.textContent).toBe("Off · no profiles are on");
     expect(strip.querySelector("button")).toBeNull();
   });
 

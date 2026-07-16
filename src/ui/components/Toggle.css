@@ -47,14 +47,23 @@
   transform: translateX(16px);
 }
 
-/* A solid neutral track says the requested on-state is held, not running. */
+/* A blocked on-state is amber and carries a dot on the thumb, so the warning
+   does not depend on track color alone. */
 .sw.sw-blocked[aria-checked="true"]::before {
-  background: var(--sw-held);
+  background: var(--caution-lamp);
+}
+
+.sw.sw-blocked[aria-checked="true"]::after {
+  background: radial-gradient(
+    circle at center,
+    var(--caution) 0 2px,
+    var(--panel-1) 2.5px
+  );
 }
 
 /* A configured-on rule in an off profile is held, never painted as running. */
 .rule-row.inactive .sw[aria-checked="true"]::before {
-  background: var(--sw-held);
+  background: var(--sw-off);
 }
 
 .sw:disabled {

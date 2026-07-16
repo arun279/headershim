@@ -844,16 +844,16 @@ describe("profile operations", () => {
 });
 
 describe("enable semantics", () => {
-  it("activateProfile is the exclusive switch: target on, others off, focused", async () => {
+  it("focusProfile changes only which rules are shown", async () => {
     await seed([
       profile("p1"),
       profile("p2", { enabled: false }),
       profile("p3"),
     ]);
 
-    expect((await mutations.activateProfile("p2")).ok).toBe(true);
+    expect((await mutations.focusProfile("p2")).ok).toBe(true);
     const stored = await read();
-    expect(stored.profiles.map((p) => p.enabled)).toEqual([false, true, false]);
+    expect(stored.profiles.map((p) => p.enabled)).toEqual([true, false, true]);
     expect(stored.focusedProfileId).toBe("p2");
   });
 
@@ -913,14 +913,15 @@ describe("enable semantics", () => {
     expect(await read()).toEqual(doc);
   });
 
-  it("blocks the exclusive switch onto an oversized profile with the same error", async () => {
+  it("allows inspecting an oversized off profile without enabling it", async () => {
     await seed([
       profile("p1"),
       profile("p2", { enabled: false, rules: rules(4_501) }),
     ]);
-    expect(errorKind(await mutations.activateProfile("p2"))).toBe(
-      "enabled-rule-limit-exceeded",
-    );
+    expect((await mutations.focusProfile("p2")).ok).toBe(true);
+    const stored = await read();
+    expect(stored.focusedProfileId).toBe("p2");
+    expect(stored.profiles[1]?.enabled).toBe(false);
   });
 
   it("re-validates regex scopes when a profile enable brings them into the enabled set", async () => {

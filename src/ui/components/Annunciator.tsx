@@ -13,7 +13,7 @@ interface AnnunciatorProps {
   temporaryCount: number;
   activeProfileCount: number;
   onResume: () => void;
-  onGrantAccess: () => void;
+  onGrantAccess?: (() => void) | undefined;
 }
 
 /**
@@ -40,6 +40,8 @@ export function Annunciator({
   ];
   const assertive = caution && !alertedKinds.current.has(status.kind);
   const announcement = caution ? sentenceText(sentence) : "";
+  const live =
+    status.kind === "live" && (status.ruleCount > 0 || temporaryCount > 0);
 
   // The role swap alone cannot announce a caution present at the popup's first
   // render (AT ignores alerts already mounted), so push it through the root
@@ -56,18 +58,17 @@ export function Annunciator({
     <div
       class="annunciator"
       data-state={status.kind}
+      data-live={live ? "true" : undefined}
       role={assertive ? "alert" : "status"}
     >
-      <span class="lamp" aria-hidden="true">
-        {lampGlyph(status.kind)}
-      </span>
+      <span class="lamp" aria-hidden="true" />
       <p>{renderSentence(sentence)}</p>
       {status.kind === "paused" && (
         <Button kind="quiet" onClick={onResume}>
           {copy.actions.resume}
         </Button>
       )}
-      {status.kind === "needs-access" && (
+      {status.kind === "needs-access" && onGrantAccess !== undefined && (
         <Button kind="caution" onClick={onGrantAccess}>
           {copy.actions.grantAccess}
         </Button>
@@ -110,30 +111,20 @@ function hostLabel(host: string | undefined): string {
     : host;
 }
 
-// The state word leads, set off from the detail by a full stop; the renderer
-// bolds everything before the first break.
-const LEAD_BREAK = ". ";
-
-/** State word bold, hostnames and counts mono, per the annunciator grammar. */
+/** Only the leading state phrase is emphasized; machine strings stay mono. */
 function renderSentence(sentence: Sentence): ComponentChildren {
   const breakIndex = sentence.findIndex(
-    (part) => typeof part === "string" && part.includes(LEAD_BREAK),
+    (part) => typeof part === "string" && part.includes(" · "),
   );
-  if (breakIndex === -1) {
-    return renderParts(sentence);
-  }
+  if (breakIndex === -1) return renderParts(sentence);
 
   const broken = sentence[breakIndex] as string;
-  const at = broken.indexOf(LEAD_BREAK);
+  const at = broken.indexOf(" · ");
   const lead = [...sentence.slice(0, breakIndex), broken.slice(0, at)];
-  const rest = [
-    broken.slice(at + LEAD_BREAK.length),
-    ...sentence.slice(breakIndex + 1),
-  ];
+  const rest = [broken.slice(at), ...sentence.slice(breakIndex + 1)];
   return (
     <>
       <strong>{renderParts(lead)}</strong>
-      {LEAD_BREAK}
       {renderParts(rest)}
     </>
   );
@@ -152,34 +143,4 @@ function renderParts(parts: readonly SentencePart[]): ComponentChildren {
       />
     ),
   );
-}
-
-function lampGlyph(kind: SystemStatus["kind"]) {
-  switch (kind) {
-    case "paused":
-      return (
-        <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
-          <path d="M1.5 1h1.6v6H1.5zM4.9 1h1.6v6H4.9z" fill="var(--panel-0)" />
-        </svg>
-      );
-    case "needs-access":
-    case "out-of-sync":
-      return (
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M5 0.5 9.7 9H0.3Z" fill="var(--caution-bg)" />
-        </svg>
-      );
-    case "live":
-      return (
-        <svg width="6" height="6" viewBox="0 0 6 6" aria-hidden="true">
-          <circle cx="3" cy="3" r="3" fill="var(--ink-mute)" />
-        </svg>
-      );
-    case "off":
-      return (
-        <svg width="6" height="6" viewBox="0 0 6 6" aria-hidden="true">
-          <circle cx="3" cy="3" r="2.5" fill="none" stroke="var(--ink-mute)" />
-        </svg>
-      );
-  }
 }

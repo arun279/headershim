@@ -19,14 +19,19 @@ interface ProfileSwitcherProps {
   profiles: readonly Profile[];
   focusedProfileId: string;
   newProfileName: string;
-  /** Exclusive switch: this profile on, all others off. */
-  onActivate: (profileId: string) => void;
+  /** Changes only which profile's rules are shown. */
+  onFocusProfile: (profileId: string) => void;
+  /** Changes only whether this profile modifies traffic. */
+  onToggleProfile: (
+    profileId: string,
+    enabled: boolean,
+  ) => Promise<ProfileCommitOutcome>;
   onCreate: (
     name: string,
     duplicateCurrentRules: boolean,
   ) => Promise<ProfileCommitOutcome>;
   onRename: (profileId: string, name: string) => Promise<ProfileCommitOutcome>;
-  onEnable: (profileId: string) => Promise<ProfileCommitOutcome>;
+  onClone: (profileId: string) => Promise<ProfileCommitOutcome>;
   onManageProfiles: () => void;
   /** Focus the focused chip on mount (popup-open focus target). */
   autoFocus?: boolean;
@@ -36,16 +41,19 @@ export function ProfileSwitcher({
   profiles,
   focusedProfileId,
   newProfileName,
-  onActivate,
+  onFocusProfile,
+  onToggleProfile,
   onCreate,
   onRename,
-  onEnable,
+  onClone,
   onManageProfiles,
   autoFocus,
 }: ProfileSwitcherProps) {
   const chips = useRef<(HTMLButtonElement | null)[]>([]);
   const menuButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const newButton = useRef<HTMLButtonElement>(null);
+  const overflowButton = useRef<HTMLButtonElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
   const focusedIndex = Math.max(
     0,
     profiles.findIndex((profile) => profile.id === focusedProfileId),
@@ -53,11 +61,31 @@ export function ProfileSwitcher({
   const [roving, setRoving] = useState(focusedIndex);
   const [creating, setCreating] = useState(false);
   const [menuProfileId, setMenuProfileId] = useState<string | undefined>();
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
   const rovingIndex = Math.min(roving, profiles.length - 1);
 
   useEffect(() => {
     setRoving(focusedIndex);
   }, [focusedIndex]);
+
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    if (element === null) return;
+    const measure = () =>
+      setOverflowing(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    window.addEventListener("resize", measure);
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    observer?.observe(element);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [profiles]);
 
   // Popup-open focus placement only; later document changes update the tab
   // stop without moving the user's focus.
@@ -98,78 +126,92 @@ export function ProfileSwitcher({
     menuProfile === undefined ? -1 : profiles.indexOf(menuProfile);
 
   return (
-    <nav
-      class="profiles"
-      aria-label={copy.profiles.navLabel}
-      onKeyDown={onKeyDown}
-    >
-      {profiles.map((profile, index) => (
-        <div
-          class={[
-            "profile-chip",
-            profile.enabled ? "" : "off",
-            profile.id === focusedProfileId ? "current" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          key={profile.id}
-        >
-          <button
-            type="button"
-            class="chip"
-            aria-current={profile.id === focusedProfileId ? "true" : undefined}
-            tabIndex={index === rovingIndex ? 0 : -1}
-            ref={(chip) => {
-              chips.current[index] = chip;
-            }}
-            onClick={() => onActivate(profile.id)}
-            onFocus={() => setRoving(index)}
-          >
-            <span
-              class="chip-badge badge-glyph"
-              aria-hidden="true"
-              style={
-                profile.enabled
-                  ? { background: `var(--badge-${profile.color})` }
-                  : undefined
-              }
+    <nav class="profiles-shell" aria-label={copy.profiles.navLabel}>
+      <div class="profiles-viewport" ref={viewport}>
+        <div class="profiles">
+          {profiles.map((profile, index) => (
+            <div
+              class={[
+                "profile-chip",
+                profile.enabled ? "" : "off",
+                profile.id === focusedProfileId ? "current" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={profile.id}
             >
-              {profile.badgeText}
-            </span>
-            <ProfileName value={profile.name} class="chip-name" />
-            {!profile.enabled && (
-              <span class="silk" aria-hidden="true">
-                {copy.profiles.offTag}
-              </span>
-            )}
-            <span class="sr-only">
-              {copy.profiles.chipState(
-                profile.id === focusedProfileId,
-                profile.enabled,
-              )}
-            </span>
-          </button>
-          <button
-            type="button"
-            class="profile-menu-trigger"
-            aria-label={copy.profiles.actions(profile.name)}
-            aria-haspopup="dialog"
-            aria-expanded={menuProfileId === profile.id}
-            title={copy.profiles.actions(profile.name)}
-            ref={(button) => {
-              menuButtons.current[index] = button;
-            }}
-            onClick={() => {
-              setCreating(false);
-              setMenuProfileId((current) =>
-                current === profile.id ? undefined : profile.id,
-              );
-            }}
-          >
-            <span aria-hidden="true">⋯</span>
-          </button>
+              <button
+                type="button"
+                role="switch"
+                class="profile-lamp"
+                aria-checked={profile.enabled}
+                aria-label={copy.profiles.toggleLabel(
+                  profile.name,
+                  profile.enabled,
+                )}
+                title={copy.profiles.toggleLabel(profile.name, profile.enabled)}
+                onClick={() =>
+                  void onToggleProfile(profile.id, !profile.enabled)
+                }
+              />
+              <button
+                type="button"
+                class="chip"
+                aria-current={
+                  profile.id === focusedProfileId ? "true" : undefined
+                }
+                tabIndex={index === rovingIndex ? 0 : -1}
+                ref={(chip) => {
+                  chips.current[index] = chip;
+                }}
+                onClick={() => onFocusProfile(profile.id)}
+                onFocus={() => setRoving(index)}
+                onKeyDown={onKeyDown}
+              >
+                <span
+                  class="chip-badge badge-glyph"
+                  aria-hidden="true"
+                  style={{ background: `var(--badge-${profile.color})` }}
+                >
+                  {profile.badgeText}
+                </span>
+                <ProfileName value={profile.name} class="chip-name" />
+                {!profile.enabled && (
+                  <span class="silk" aria-hidden="true">
+                    {copy.profiles.offTag}
+                  </span>
+                )}
+                <span class="sr-only">
+                  {copy.profiles.chipState(
+                    profile.id === focusedProfileId,
+                    profile.enabled,
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                class="profile-menu-trigger"
+                aria-label={copy.profiles.actions(profile.name)}
+                aria-haspopup="dialog"
+                aria-expanded={menuProfileId === profile.id}
+                title={copy.profiles.actions(profile.name)}
+                ref={(button) => {
+                  menuButtons.current[index] = button;
+                }}
+                onClick={() => {
+                  setCreating(false);
+                  setOverflowOpen(false);
+                  setMenuProfileId((current) =>
+                    current === profile.id ? undefined : profile.id,
+                  );
+                }}
+              >
+                <span aria-hidden="true">⋯</span>
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
       <button
         type="button"
         class="new-profile-chip"
@@ -180,11 +222,31 @@ export function ProfileSwitcher({
         ref={newButton}
         onClick={() => {
           setMenuProfileId(undefined);
+          setOverflowOpen(false);
           setCreating((current) => !current);
         }}
       >
         <span aria-hidden="true">＋</span>
       </button>
+      {overflowing && (
+        <button
+          type="button"
+          class="all-profiles-trigger"
+          aria-label={copy.profiles.allProfiles}
+          aria-haspopup="dialog"
+          aria-expanded={overflowOpen}
+          title={copy.profiles.allProfiles}
+          ref={overflowButton}
+          onClick={() => {
+            setCreating(false);
+            setMenuProfileId(undefined);
+            setOverflowOpen((open) => !open);
+          }}
+        >
+          <span aria-hidden="true">⋯</span>
+          <span>{copy.profiles.allProfiles}</span>
+        </button>
+      )}
       {creating && (
         <CreateProfilePopover
           trigger={newButton}
@@ -204,12 +266,28 @@ export function ProfileSwitcher({
           profile={menuProfile}
           trigger={{ current: menuButtons.current[menuIndex] ?? null }}
           onRename={onRename}
-          onEnable={onEnable}
+          onClone={onClone}
+          onToggle={onToggleProfile}
           onManageProfiles={onManageProfiles}
           onClose={(restoreFocus = true) => {
             setMenuProfileId(undefined);
             if (restoreFocus) {
               queueMicrotask(() => menuButtons.current[menuIndex]?.focus());
+            }
+          }}
+        />
+      )}
+      {overflowOpen && (
+        <ProfileOverflowMenu
+          profiles={profiles}
+          focusedProfileId={focusedProfileId}
+          trigger={overflowButton}
+          onFocusProfile={onFocusProfile}
+          onToggleProfile={onToggleProfile}
+          onClose={(restoreFocus = true) => {
+            setOverflowOpen(false);
+            if (restoreFocus) {
+              queueMicrotask(() => overflowButton.current?.focus());
             }
           }}
         />
@@ -220,7 +298,6 @@ export function ProfileSwitcher({
 
 interface PopoverProps {
   trigger: { readonly current: HTMLButtonElement | null };
-  onManageProfiles: () => void;
   onClose: (restoreFocus?: boolean) => void;
 }
 
@@ -293,6 +370,7 @@ function CreateProfilePopover({
 }: PopoverProps & {
   initialName: string;
   onCreate: ProfileSwitcherProps["onCreate"];
+  onManageProfiles: ProfileSwitcherProps["onManageProfiles"];
 }) {
   const popover = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -377,13 +455,16 @@ function ProfileMenu({
   profile,
   trigger,
   onRename,
-  onEnable,
+  onClone,
+  onToggle,
   onManageProfiles,
   onClose,
 }: PopoverProps & {
   profile: Profile;
   onRename: ProfileSwitcherProps["onRename"];
-  onEnable: ProfileSwitcherProps["onEnable"];
+  onClone: ProfileSwitcherProps["onClone"];
+  onToggle: ProfileSwitcherProps["onToggleProfile"];
+  onManageProfiles: ProfileSwitcherProps["onManageProfiles"];
 }) {
   const popover = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -462,16 +543,24 @@ function ProfileMenu({
           >
             {copy.options.profiles.rename}
           </button>
-          {!profile.enabled && (
-            <button
-              type="button"
-              class="menu-item"
-              disabled={saving}
-              onClick={() => void runCommit(() => onEnable(profile.id))}
-            >
-              {copy.profiles.enableWithoutSwitching}
-            </button>
-          )}
+          <button
+            type="button"
+            class="menu-item"
+            disabled={saving}
+            onClick={() => void runCommit(() => onClone(profile.id))}
+          >
+            {copy.options.profiles.clone}
+          </button>
+          <button
+            type="button"
+            class="menu-item"
+            disabled={saving}
+            onClick={() =>
+              void runCommit(() => onToggle(profile.id, !profile.enabled))
+            }
+          >
+            {profile.enabled ? copy.profiles.turnOff : copy.profiles.turnOn}
+          </button>
           {error !== undefined && (
             <p class="profile-pop-error" role="alert">
               {error}
@@ -489,6 +578,82 @@ function ProfileMenu({
       >
         {copy.profiles.manage}
       </button>
+    </div>
+  );
+}
+
+function ProfileOverflowMenu({
+  profiles,
+  focusedProfileId,
+  trigger,
+  onFocusProfile,
+  onToggleProfile,
+  onClose,
+}: PopoverProps & {
+  profiles: readonly Profile[];
+  focusedProfileId: string;
+  onFocusProfile: ProfileSwitcherProps["onFocusProfile"];
+  onToggleProfile: ProfileSwitcherProps["onToggleProfile"];
+}) {
+  const popover = useRef<HTMLDivElement>(null);
+  const { error, runCommit, saving } = useProfileCommit(onClose);
+  useProfilePopover(popover, trigger, "end", undefined, onClose);
+
+  return (
+    <div
+      class="menu-pop profile-pop profile-overflow-pop"
+      popover="manual"
+      role="dialog"
+      aria-label={copy.profiles.allProfiles}
+      ref={popover}
+      onKeyDown={(event) =>
+        handlePopoverKeyDown(event, popover.current, onClose)
+      }
+    >
+      {profiles.map((profile) => (
+        <div class="profile-overflow-row" key={profile.id}>
+          <button
+            type="button"
+            class="menu-item profile-overflow-focus"
+            aria-current={profile.id === focusedProfileId ? "true" : undefined}
+            onClick={() => {
+              onFocusProfile(profile.id);
+              onClose();
+            }}
+          >
+            <span
+              class={
+                profile.enabled ? "profile-state-dot on" : "profile-state-dot"
+              }
+              aria-hidden="true"
+            />
+            <ProfileName value={profile.name} />
+          </button>
+          <button
+            type="button"
+            role="switch"
+            class="profile-overflow-toggle"
+            aria-checked={profile.enabled}
+            aria-label={copy.profiles.toggleLabel(
+              profile.name,
+              profile.enabled,
+            )}
+            disabled={saving}
+            onClick={() =>
+              void runCommit(() =>
+                onToggleProfile(profile.id, !profile.enabled),
+              )
+            }
+          >
+            {profile.enabled ? copy.profiles.onTag : copy.profiles.offTag}
+          </button>
+        </div>
+      ))}
+      {error !== undefined && (
+        <p class="profile-pop-error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

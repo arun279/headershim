@@ -40,7 +40,9 @@ export function decodeMatches(
     ),
   );
   const sessionRules = new Map(
-    overrides.map((override) => [override.num, override]),
+    overrides
+      .filter((override) => override.enabled)
+      .map((override) => [override.num, override]),
   );
 
   return rawMatches.flatMap((match): DecodedMatch[] => {

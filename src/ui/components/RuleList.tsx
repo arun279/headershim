@@ -9,7 +9,7 @@ import { dispatchRowCommand, rovingRuleRowProps } from "./ruleRowCommand";
 import "./RuleList.css";
 
 interface RuleListProps {
-  /** Enabled profiles in document order; empty ones render no group. */
+  /** Profiles being inspected; the popup passes only its focused profile. */
   profiles: readonly Profile[];
   /** Every profile, for the move-to-profile menu targets. */
   allProfiles: readonly Pick<Profile, "id" | "name">[];
@@ -31,6 +31,13 @@ interface RuleListProps {
   onDuplicate: (profileId: string, ruleId: string) => void;
   onMove: (profileId: string, ruleId: string, toProfileId: string) => void;
   onRegenerate: (profileId: string, ruleId: string) => void;
+  onUpdateValue?:
+    | ((
+        profileId: string,
+        rule: Profile["rules"][number],
+        value: string,
+      ) => Promise<boolean>)
+    | undefined;
   onUndoDelete: () => void;
 }
 
@@ -130,6 +137,7 @@ export function RuleList(props: RuleListProps) {
                 <RuleRow
                   key={rule.id}
                   rule={rule}
+                  active={profile.enabled}
                   missingHosts={missingHosts(missing)}
                   invalid={props.invalidRuleIds.has(rule.id)}
                   overridden={overridden.has(rule.id)}
@@ -177,6 +185,13 @@ export function RuleList(props: RuleListProps) {
                     props.onMove(profile.id, rule.id, toProfileId)
                   }
                   onRegenerate={() => props.onRegenerate(profile.id, rule.id)}
+                  onUpdateValue={
+                    props.onUpdateValue === undefined
+                      ? undefined
+                      : (value) =>
+                          props.onUpdateValue?.(profile.id, rule, value) ??
+                          Promise.resolve(false)
+                  }
                   onUndoDelete={props.onUndoDelete}
                 />
               );

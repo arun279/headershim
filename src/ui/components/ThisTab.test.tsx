@@ -5,7 +5,7 @@ import type { TabOverride } from "../../core/model";
 import { read as readSession, write } from "../../platform/session-store";
 import { tabOverride } from "../../test/dnr-harness";
 import { copy } from "../copy";
-import { fire, render, settle, typeInto } from "../test/render";
+import { fire, press, render, settle, typeInto } from "../test/render";
 import { ThisTab } from "./ThisTab";
 
 const override = (overrides: Partial<TabOverride> = {}): TabOverride =>
@@ -20,18 +20,18 @@ function mount(props: Partial<Parameters<typeof ThisTab>[0]> = {}) {
       host="app.example.com"
       overrides={[]}
       composing={false}
+      onOpenComposer={noop}
       onSaveAsRule={noop}
-      onCreateRule={noop}
       onCloseComposer={noop}
       {...props}
     />,
   );
 }
 
-function valueField(root: HTMLElement): HTMLInputElement {
+function valueField(root: HTMLElement): HTMLTextAreaElement {
   return root.querySelector(
-    '.this-tab-composer input[type="text"]:not([role])',
-  ) as HTMLInputElement;
+    ".this-tab-composer .compose-value-input",
+  ) as HTMLTextAreaElement;
 }
 
 async function submit(root: HTMLElement, header: string, value: string) {
@@ -45,23 +45,34 @@ async function submit(root: HTMLElement, header: string, value: string) {
 }
 
 describe("ThisTab", () => {
-  it("renders nothing until it has a row or an open composer", () => {
-    const root = mount();
-    expect(root.querySelector(".this-tab")).toBeNull();
+  it("always renders the host, one lifecycle caption, and the composer action", () => {
+    const onOpenComposer = vi.fn();
+    const root = mount({ onOpenComposer });
+    expect(root.querySelector(".this-tab-head")?.textContent).toContain(
+      "This tab · app.example.com",
+    );
+    expect(root.querySelector(".this-tab-lifecycle")?.textContent).toBe(
+      "clears when you close or leave this tab",
+    );
+    const add = [...root.querySelectorAll("button")].find(
+      (button) => button.textContent === "+ Temporary override",
+    ) as HTMLButtonElement;
+    fire(() => add.click());
+    expect(onOpenComposer).toHaveBeenCalledOnce();
   });
 
-  it("renders a temporary row with the header, value, and section summary", () => {
+  it("renders a redaction-safe row without per-row temporary lifecycle copy", () => {
     const root = mount({ overrides: [override()] });
-    expect(root.querySelector(".this-tab-head")?.textContent).toContain(
-      "app.example.com",
-    );
-    expect(root.querySelector(".this-tab-head")?.textContent).toContain(
-      "1 temporary",
-    );
     const row = root.querySelector(".this-tab-row") as HTMLElement;
     expect(row.textContent).toContain("x-debug-trace");
-    expect(row.textContent).toContain("Temporary");
-    expect(row.textContent).toContain("applies to");
+    expect(row.textContent).not.toContain("Temporary");
+    expect(row.textContent).not.toContain("clears when");
+
+    const secret = mount({
+      overrides: [override({ header: "x-service-token", value: "secret" })],
+    });
+    expect(secret.textContent).toContain("…redacted");
+    expect(secret.textContent).not.toContain("secret");
   });
 
   it("commits a new override from the composer into the session store", async () => {
@@ -161,35 +172,91 @@ describe("ThisTab", () => {
     expect(root.querySelector(".this-tab-composer")).toBeNull();
   });
 
-  it("promotes a row through Save as rule…", () => {
+  it("offers Edit value, Save as rule, and Delete from the row menu", () => {
     const onSaveAsRule = vi.fn();
     const row = override();
     const root = mount({ overrides: [row], onSaveAsRule });
 
-    const save = [...root.querySelectorAll("button")].find(
+    fire(() =>
+      (root.querySelector(".this-tab-menu-btn") as HTMLButtonElement).click(),
+    );
+    const menu = root.querySelector(".this-tab-menu") as HTMLElement;
+    expect(menu.getAttribute("popover")).toBe("manual");
+    expect(
+      [...menu.querySelectorAll('[role="menuitem"]')].map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["Edit value", "Save as rule…", "Delete"]);
+    const items = [
+      ...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+    ];
+    expect(document.activeElement).toBe(items[0]);
+    press(items[0] as HTMLButtonElement, "ArrowDown");
+    expect(document.activeElement).toBe(items[1]);
+    const save = [...menu.querySelectorAll("button")].find(
       (button) => button.textContent === "Save as rule…",
     ) as HTMLButtonElement;
     fire(() => save.click());
     expect(onSaveAsRule).toHaveBeenCalledWith(row);
   });
 
-  it("routes the standing honesty line's Create a rule action", () => {
-    const onCreateRule = vi.fn();
-    const root = mount({ overrides: [override()], onCreateRule });
-    const note = root.querySelector(".this-tab-note") as HTMLElement;
-    expect(note.textContent).toContain(
-      "Calling a different API from this page",
+  it("disables a temporary override without deleting it", async () => {
+    await write({ nextNum: 2, tabs: { 5: [override()] } });
+    const root = mount({ overrides: [override()] });
+    const toggle = root.querySelector(".this-tab-row .sw") as HTMLButtonElement;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fire(() => toggle.click());
+    await settle();
+
+    expect((await readSession()).tabs[5]?.[0]).toMatchObject({
+      enabled: false,
+      header: "x-debug-trace",
+    });
+  });
+
+  it("opens a masked empty secret editor and a complete non-secret editor", () => {
+    const plain = mount({
+      overrides: [override({ value: "complete-value-that-is-not-a-summary" })],
+    });
+    fire(() =>
+      (plain.querySelector(".rule-value-button") as HTMLButtonElement).click(),
     );
-    const create = note.querySelector("button") as HTMLButtonElement;
-    fire(() => create.click());
-    expect(onCreateRule).toHaveBeenCalledTimes(1);
+    const plainInput = plain.querySelector(
+      ".inline-value-input",
+    ) as HTMLInputElement;
+    expect(plainInput.type).toBe("text");
+    expect(plainInput.value).toBe("complete-value-that-is-not-a-summary");
+    expect(document.activeElement).toBe(plainInput);
+
+    const secret = mount({
+      overrides: [override({ header: "authorization", value: "Bearer token" })],
+    });
+    fire(() =>
+      (secret.querySelector(".rule-value-button") as HTMLButtonElement).click(),
+    );
+    const secretInput = secret.querySelector(
+      ".inline-value-input",
+    ) as HTMLInputElement;
+    expect(secretInput.type).toBe("password");
+    expect(secretInput.value).toBe("");
+    expect(secretInput.placeholder).toBe("Paste new value");
+    const cancel = secret.querySelector(
+      '.inline-value-action[aria-label="Cancel"]',
+    ) as HTMLButtonElement;
+    expect(cancel.querySelector("svg")).not.toBeNull();
+    expect(cancel.textContent).toBe("");
   });
 
   it("removes a row from the session store", async () => {
     await write({ nextNum: 2, tabs: { 5: [override()] } });
     const root = mount({ overrides: [override()] });
 
-    const remove = root.querySelector(".this-tab-remove") as HTMLButtonElement;
+    fire(() =>
+      (root.querySelector(".this-tab-menu-btn") as HTMLButtonElement).click(),
+    );
+    const remove = [...root.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Delete",
+    ) as HTMLButtonElement;
     fire(() => remove.click());
     await settle();
 
@@ -204,15 +271,17 @@ describe("ThisTab", () => {
         override({ num: 3, header: "x-c" }),
       ],
     });
-    const removes = [
-      ...root.querySelectorAll(".this-tab-remove"),
+    const menus = [
+      ...root.querySelectorAll(".this-tab-menu-btn"),
     ] as HTMLButtonElement[];
-    fire(() => removes[1]?.click());
+    fire(() => menus[1]?.click());
+    const remove = [...root.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Delete",
+    ) as HTMLButtonElement;
+    fire(() => remove.click());
 
     const rows = [...root.querySelectorAll(".this-tab-row")];
     expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement).toBe(
-      rows[2]?.querySelector(".save-as-rule"),
-    );
+    expect(document.activeElement).toBe(rows[2]?.querySelector(".sw"));
   });
 });

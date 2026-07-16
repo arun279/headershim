@@ -59,10 +59,16 @@ async function mount(
   return root;
 }
 
-function valueField(root: HTMLElement): HTMLInputElement {
+function valueField(root: HTMLElement): HTMLTextAreaElement {
   return root.querySelector(
-    '.this-tab-composer input[type="text"]:not([role])',
-  ) as HTMLInputElement;
+    ".this-tab-composer .compose-value-input",
+  ) as HTMLTextAreaElement;
+}
+
+function openTemporaryMenu(root: HTMLElement): void {
+  fire(() =>
+    (root.querySelector(".this-tab-menu-btn") as HTMLButtonElement).click(),
+  );
 }
 
 describe("popup This-tab wiring", () => {
@@ -114,7 +120,8 @@ describe("popup This-tab wiring", () => {
       tabs: { 5: [override()] },
     });
 
-    const save = [...root.querySelectorAll("button")].find(
+    openTemporaryMenu(root);
+    const save = [...root.querySelectorAll('[role="menuitem"]')].find(
       (button) => button.textContent === "Save as rule…",
     ) as HTMLButtonElement;
     fire(() => save.click());
@@ -143,7 +150,8 @@ describe("popup This-tab wiring", () => {
     await settle();
     expect(root.querySelector(".toast")?.textContent).toContain("Rule deleted");
 
-    const promote = [...root.querySelectorAll("button")].find(
+    openTemporaryMenu(root);
+    const promote = [...root.querySelectorAll('[role="menuitem"]')].find(
       (button) => button.textContent === "Save as rule…",
     ) as HTMLButtonElement;
     fire(() => promote.click());

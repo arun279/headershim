@@ -23,10 +23,9 @@ interface ScopeEditorProps {
   suggestedDomain?: string | undefined;
   onScope: (scope: ScopeDraft) => void;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
-  onCommit?: (() => void) | undefined;
 }
 
-const SEGMENTS = ["domains", "pattern", "regex"] as const;
+const SEGMENTS = ["domains", "pattern", "regex", "all"] as const;
 
 const GROUPS: readonly ResourceGroup[] = [
   "pages",
@@ -43,13 +42,17 @@ const GROUPS: readonly ResourceGroup[] = [
 
 /**
  * Scope = match type + resource types. The segmented control carries radio
- * semantics (arrows move and select); "All sites" is deliberately subordinate —
- * a text link, not a fourth segment. The resource-type disclosure names the
+ * semantics (arrows move and select); All sites is the fourth peer scope. The
+ * resource-type disclosure names the
  * anti-footgun default out loud: top-level pages are included until unchecked.
  */
 export function ScopeEditor(props: ScopeEditorProps) {
   const id = useId();
   const { scope } = props;
+  const subresourceOnly =
+    props.resourceTypes !== "all" &&
+    !props.resourceTypes.includes("pages") &&
+    !props.resourceTypes.includes("subframes");
 
   return (
     <>
@@ -74,22 +77,18 @@ export function ScopeEditor(props: ScopeEditorProps) {
                 invalid={props.error !== undefined}
                 removeLabel={copy.editor.removeDomain}
                 onChange={(domains) => props.onScope({ ...scope, domains })}
-                onEnter={props.onCommit}
               />
-              {props.suggestedDomain !== undefined &&
-                scope.domains.includes(props.suggestedDomain) && (
-                  <p class="editor-micro">{copy.editor.domainSuggestion}</p>
-                )}
-              <p class="editor-micro">{copy.editor.domainsHelper}</p>
-              <p class="editor-micro editor-request-target">
-                {copy.editor.requestTarget}
+              <p class="editor-micro">
+                {subresourceOnly
+                  ? copy.editor.requestTarget
+                  : copy.editor.domainsHelper}
               </p>
             </>
           )}
           {scope.type === "pattern" && (
             <>
               <input
-                class="field mono editor-commit-field"
+                class="field mono"
                 type="text"
                 aria-label={copy.editor.scopeType.pattern}
                 aria-invalid={props.error !== undefined ? true : undefined}
@@ -105,19 +104,19 @@ export function ScopeEditor(props: ScopeEditorProps) {
             </>
           )}
           {scope.type === "regex" && (
-            <input
-              class="field mono editor-commit-field"
-              type="text"
-              aria-label={copy.editor.scopeType.regex}
-              aria-invalid={props.error !== undefined ? true : undefined}
-              value={scope.regex}
-              onInput={(event) =>
-                props.onScope({ ...scope, regex: event.currentTarget.value })
-              }
-            />
-          )}
-          {(scope.type === "pattern" || scope.type === "regex") && (
-            <p class="editor-micro">{copy.editor.grantNote}</p>
+            <>
+              <input
+                class="field mono"
+                type="text"
+                aria-label={copy.editor.scopeType.regex}
+                aria-invalid={props.error !== undefined ? true : undefined}
+                value={scope.regex}
+                onInput={(event) =>
+                  props.onScope({ ...scope, regex: event.currentTarget.value })
+                }
+              />
+              <p class="editor-micro">{copy.editor.regexHint}</p>
+            </>
           )}
           {props.error !== undefined && (
             <p class="editor-error" role="alert">
@@ -150,33 +149,26 @@ function SegmentedType({
   // Native radios carry the whole radio-group contract — arrows move and
   // select, one tab stop — so the segment paint is just a label skin.
   return (
-    <>
-      <div class="segments" role="radiogroup" aria-labelledby={labelId}>
-        {SEGMENTS.map((segment) => (
-          <label
-            key={segment}
-            class={type === segment ? "segment checked" : "segment"}
-          >
-            <input
-              class="sr-only"
-              type="radio"
-              name={`${id}-scope-type`}
-              checked={type === segment}
-              onChange={() => onType(segment)}
-            />
-            {copy.editor.scopeType[segment]}
-          </label>
-        ))}
-      </div>
-      <button
-        type="button"
-        class="link-btn all-sites"
-        aria-pressed={type === "all"}
-        onClick={() => onType("all")}
-      >
-        {copy.editor.allSites}
-      </button>
-    </>
+    <div class="segments" role="radiogroup" aria-labelledby={labelId}>
+      {SEGMENTS.map((segment) => (
+        <label
+          key={segment}
+          class={type === segment ? "segment checked" : "segment"}
+        >
+          <input
+            class="sr-only"
+            type="radio"
+            name={`${id}-scope-type`}
+            value={segment}
+            checked={type === segment}
+            onChange={() => onType(segment)}
+          />
+          {segment === "all"
+            ? copy.editor.allSites
+            : copy.editor.scopeType[segment]}
+        </label>
+      ))}
+    </div>
   );
 }
 

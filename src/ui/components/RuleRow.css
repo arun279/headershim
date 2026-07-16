@@ -1,27 +1,23 @@
-/*
- * Grid [switch][dir 34px][content][overflow], gap 10px, min 48px. The 3px
- * left-edge slot is the state rail: trace when running, caution when held or
- * invalid, and neutral when off.
- */
 .rule-row {
   position: relative;
   display: grid;
-  grid-template-columns: auto 34px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   column-gap: 10px;
-  align-items: center;
-  min-height: 48px;
-  padding: 2px 0 2px 9px;
-  border-left: 3px solid var(--bezel);
+  align-items: start;
+  min-height: 56px;
+  padding: 10px 8px 10px 9px;
+  border-left: 3px solid transparent;
   background: var(--panel-1);
 }
 
 .rule-row.has-selection {
-  grid-template-columns: auto auto 34px minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
 }
 
 .rule-select {
   width: 16px;
   height: 16px;
+  margin-top: 2px;
   accent-color: var(--trace);
 }
 
@@ -29,29 +25,15 @@
   border-top: var(--hairline) solid var(--bezel);
 }
 
-.rule-row.running {
-  border-left-color: var(--trace);
-}
-
 .rule-row.blocked {
   border-left-color: var(--caution-lamp);
-  background: var(--panel-1);
 }
 
 .rule-row.invalid {
-  border-left-color: var(--caution-lamp);
-  background: var(--caution-bg);
+  border-left-color: var(--caution-edge);
 }
 
-/* Off: mute carries the state with the switch and neutral rail. */
-.rule-row.off .rule-line1 {
-  color: var(--ink-mute);
-}
-
-.rule-row.inactive {
-  border-left-color: var(--bezel-strong);
-}
-
+.rule-row.off .rule-line1,
 .rule-row.inactive .rule-line1,
 .rule-status-inactive {
   color: var(--ink-mute);
@@ -59,11 +41,6 @@
 
 .rule-status {
   color: var(--caution);
-  font-weight: 600;
-}
-
-.rule-row.blocked .rule-status {
-  color: var(--ink-mute);
   font-weight: 500;
 }
 
@@ -71,27 +48,79 @@
   vertical-align: -1px;
 }
 
+.rule-row > .sw {
+  margin-top: 1px;
+}
+
 .rule-menu-btn {
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
+  margin-top: -4px;
   font-family: var(--font-data);
+  font-size: 16px;
 }
 
 .rule-grant {
-  min-height: 24px;
+  min-height: 22px;
   margin-left: var(--sp-2);
-  padding: 0;
+  padding: 1px 8px;
+  border: var(--hairline) solid var(--caution-edge);
+  border-radius: var(--radius-inner);
+  color: var(--caution);
   font-size: 11px;
   font-weight: 600;
-  color: var(--caution);
-}
-
-.rule-grant::before {
-  content: "·";
-  margin-right: var(--sp-2);
-  color: var(--ink-mute);
 }
 
 .rule-menu {
   min-width: 160px;
+}
+
+.inline-value-editor {
+  min-width: 0;
+}
+
+.inline-value-line {
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+}
+
+.inline-value-line .rule-name {
+  flex: 0 1 34%;
+}
+
+.inline-value-input {
+  flex: 1 1 120px;
+  min-width: 80px;
+  height: 26px;
+  padding: 3px 7px;
+  outline: none;
+  background: var(--panel-2);
+  border: var(--hairline) solid var(--trace);
+  border-radius: var(--radius-inner);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.inline-value-input:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trace) 22%, transparent);
+}
+
+.inline-value-action {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-inner);
+  color: var(--ink-mute);
+}
+
+.inline-value-save {
+  background: var(--trace);
+  color: #fff;
+}
+
+.inline-value-action:disabled {
+  opacity: 0.55;
 }

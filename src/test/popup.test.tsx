@@ -59,7 +59,7 @@ function seededDoc(rules: Rule[]): StateDoc {
 }
 
 describe("popup App", () => {
-  it("renders first run as centered onboarding without active chrome", async () => {
+  it("renders first run with one primary action and quiet in-popup tools", async () => {
     const { root } = await mount(createV1Seed());
 
     expect(root.textContent).toContain(
@@ -74,18 +74,20 @@ describe("popup App", () => {
     expect(actions[0]?.classList.contains("primary")).toBe(true);
     expect(document.activeElement).not.toBe(actions[0]);
     expect(root.textContent).toContain(
-      "temporary, this tab only, gone on close",
+      "clears when you close or leave this tab",
     );
-    expect(root.querySelector(".profiles")).toBeNull();
+    expect(root.querySelector(".profiles")).not.toBeNull();
     expect(root.querySelector(".annunciator")).toBeNull();
     expect(root.querySelector(".popup")?.classList).toContain("first-run-mode");
     expect(root.querySelector(".foot")).toBeNull();
-    const theme = root.querySelector('.popup-head [aria-label="Theme"]');
+    const theme = root.querySelector(
+      '.popup-head [aria-label="Switch to dark theme"]',
+    );
     const options = root.querySelector('.popup-head [aria-label="Options"]');
     expect(theme).not.toBeNull();
     expect(options).not.toBeNull();
-    expect(theme?.querySelector(".gear-glyph")).toBeNull();
-    expect(options?.querySelector(".gear-glyph")).not.toBeNull();
+    expect(theme?.querySelector(".sliders-glyph")).toBeNull();
+    expect(options?.querySelector(".sliders-glyph")).not.toBeNull();
     expect(root.querySelector('.foot [aria-label="Options"]')).toBeNull();
 
     const popup = root.querySelector(".popup") as HTMLElement;
@@ -132,10 +134,14 @@ describe("popup App", () => {
     const { root, annunciator } = await mount(seededDoc([rule()]));
 
     expect(annunciator().textContent).toContain(
-      "1 rule can't run. HeaderShim doesn't have access to api.example.com.",
+      "Needs access · 1 rule needs api.example.com",
     );
     expect(annunciator().getAttribute("data-state")).toBe("needs-access");
+    expect(annunciator().querySelector("button")).toBeNull();
     expect(root.querySelector(".rule-row.blocked .sw")).not.toBeNull();
+    expect(root.querySelector(".rule-row .rule-grant")?.textContent).toBe(
+      "Grant",
+    );
     expect(root.querySelector(".rule-row.running")).toBeNull();
 
     await fakeBrowser.permissions.request({
@@ -144,7 +150,28 @@ describe("popup App", () => {
     await settle();
 
     expect(annunciator().getAttribute("data-state")).toBe("live");
-    expect(annunciator().textContent).toBe("Live. 1 of 1 rule enabled");
+    expect(annunciator().textContent).toBe("On · 1 of 1 rule enabled");
+  });
+
+  it("shows the status Grant action when the only blocked row scrolls off-screen", async () => {
+    const { root, annunciator, body } = await mount(seededDoc([rule()]));
+    const row = root.querySelector(".rule-row.blocked") as HTMLElement;
+    const viewportRect = rect(0, 100);
+    const rowRect = vi
+      .spyOn(row, "getBoundingClientRect")
+      .mockReturnValue(rect(120, 170));
+    vi.spyOn(body(), "getBoundingClientRect").mockReturnValue(viewportRect);
+
+    fire(() => body().dispatchEvent(new Event("scroll")));
+    await settle();
+    expect(annunciator().querySelector("button")?.textContent).toBe(
+      "Grant access",
+    );
+
+    rowRect.mockReturnValue(rect(20, 70));
+    fire(() => body().dispatchEvent(new Event("scroll")));
+    await settle();
+    expect(annunciator().querySelector("button")).toBeNull();
   });
 
   it("shows an ungranted pattern rule as blocked on both status surfaces", async () => {
@@ -155,7 +182,7 @@ describe("popup App", () => {
 
     expect(annunciator().getAttribute("data-state")).toBe("needs-access");
     expect(annunciator().textContent).toContain(
-      "1 rule can't run. HeaderShim doesn't have access to all sites.",
+      "Needs access · 1 rule needs all sites",
     );
     expect(root.querySelector(".rule-row.blocked .sw")).not.toBeNull();
     expect(root.querySelector(".rule-row.running")).toBeNull();
@@ -165,7 +192,16 @@ describe("popup App", () => {
   });
 
   it("hands off a single Reload-tab action after granting from the annunciator", async () => {
-    const { root, annunciator } = await mount(seededDoc([rule()]));
+    const { root, annunciator } = await mount(
+      seededDoc([
+        rule({
+          scope: {
+            type: "domains",
+            domains: ["api.example.com", "app.example.com"],
+          },
+        }),
+      ]),
+    );
     const grant = [...annunciator().querySelectorAll("button")].find(
       (button) => button.textContent === "Grant access",
     ) as HTMLButtonElement;
@@ -215,7 +251,7 @@ describe("popup App", () => {
 
     expect((await read()).settings.paused).toBe(true);
     expect(annunciator().textContent).toContain(
-      "Paused. No headers are being modified.",
+      "Paused · no headers are being modified",
     );
     expect(body().classList.contains("paused")).toBe(true);
     expect(root.querySelector(".profiles")?.classList.contains("paused")).toBe(
@@ -254,11 +290,10 @@ describe("popup App", () => {
   it("changes theme in place and persists the synchronous mirror", async () => {
     const { root } = await mount(createV1Seed());
     const themeButton = root.querySelector<HTMLButtonElement>(
-      '[aria-label="Theme"]',
+      '[aria-label="Switch to dark theme"]',
     );
     if (themeButton === null) throw new Error("no theme control");
     fire(() => themeButton.click());
-    fire(() => findButton(root, "Dark").click());
     await settle();
 
     expect({
@@ -268,7 +303,7 @@ describe("popup App", () => {
     }).toEqual({ stored: "dark", stamped: "dark", mirrored: "dark" });
   });
 
-  it("opens options from the header gear", async () => {
+  it("opens options from the header sliders control", async () => {
     const open = vi
       .spyOn(fakeBrowser.runtime, "openOptionsPage")
       .mockResolvedValue(undefined);
@@ -309,11 +344,11 @@ describe("popup App", () => {
     expect(root.textContent).toContain("Staging has no rules yet.");
     expect(root.textContent).toContain("Your other profiles are unchanged.");
     expect(document.activeElement?.textContent).not.toBe("Create a rule");
-    expect(annunciator().textContent).toBe("Live. No rules yet.");
+    expect(annunciator().textContent).toBe("No rules yet");
     expect(root.querySelector(".foot")).toBeNull();
   });
 
-  it("switches profiles exclusively from the chips even with Shift held", async () => {
+  it("focuses a profile from its chip without changing enablement", async () => {
     const base = createV1Seed();
     const first = base.profiles[0];
     if (first === undefined) {
@@ -350,8 +385,8 @@ describe("popup App", () => {
 
     const stored = await read();
     expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
-      false,
       true,
+      false,
     ]);
     expect(stored.focusedProfileId).toBe("p2");
   });
@@ -455,7 +490,7 @@ describe("popup App", () => {
     ][1] as HTMLButtonElement;
     fire(() => renamedMenu.click());
     const enable = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Enable without switching",
+      (button) => button.textContent === "Turn on",
     ) as HTMLButtonElement;
     fire(() => enable.click());
     await settle();
@@ -466,7 +501,7 @@ describe("popup App", () => {
       true,
     ]);
     expect(stored.focusedProfileId).toBe(first.id);
-    expect(annunciator().textContent).toContain("2 profiles active");
+    expect(annunciator().textContent).toContain("2 profiles on");
   });
 
   it("deep-links profile management from the chip menu", async () => {
@@ -483,6 +518,20 @@ describe("popup App", () => {
     expect(create.mock.calls[0]?.[0]?.url).toMatch(/options\.html#profiles$/);
   });
 });
+
+function rect(top: number, bottom: number): DOMRect {
+  return {
+    top,
+    bottom,
+    left: 0,
+    right: 460,
+    width: 460,
+    height: bottom - top,
+    x: 0,
+    y: top,
+    toJSON: () => ({}),
+  };
+}
 
 const twoRules = () =>
   seededDoc([
@@ -509,7 +558,7 @@ describe("popup rule list integration", () => {
     expect(rows[1]?.textContent).toContain("x-debug");
   });
 
-  it("Verify replaces List mode and returns focus to its trigger on close", async () => {
+  it("shows Test on this tab as a quiet link with an inline result", async () => {
     const { root } = await grantAndMount(twoRules());
     const trigger = root.querySelector(
       ".foot-verify button",
@@ -517,24 +566,20 @@ describe("popup rule list integration", () => {
     fire(() => trigger.click());
     await settle();
 
-    expect(root.querySelector(".verify-sheet")).not.toBeNull();
+    expect(trigger.textContent).toBe("Test on this tab");
+    expect(trigger.classList.contains("link-btn")).toBe(true);
+    expect(root.querySelector(".verify-sheet")).toBeNull();
+    expect(root.querySelector(".verify-inline-result")?.textContent).toBe(
+      "No matches in the last 5 minutes on this tab.",
+    );
     expect(root.querySelector(".profiles")).not.toBeNull();
-    expect(
-      root.querySelector('.popup-head [aria-label="Theme"]'),
-    ).not.toBeNull();
+    expect(root.querySelector(".popup-head .theme-toggle")).not.toBeNull();
     expect(
       root.querySelector('.popup-head [aria-label="Options"]'),
     ).not.toBeNull();
-    expect(root.querySelector(".annunciator")).toBeNull();
-    expect(root.querySelector(".foot")).toBeNull();
-
-    const close = root.querySelector(
-      ".verify-sheet .icon-btn",
-    ) as HTMLButtonElement;
-    fire(() => close.click());
-    await settle();
-    expect(root.querySelector(".verify-sheet")).toBeNull();
-    expect((document.activeElement as HTMLElement).textContent).toBe("Verify");
+    expect(root.querySelector(".annunciator")).not.toBeNull();
+    expect(root.querySelector(".foot")).not.toBeNull();
+    expect(root.querySelectorAll(".verify-inline-result")).toHaveLength(1);
   });
 
   it("toggles a rule from its switch, instantly and persistently", async () => {
@@ -677,8 +722,8 @@ describe("popup rule list integration", () => {
     await settle();
     let stored = await read();
     expect(stored.profiles.map((profile) => profile.enabled)).toEqual([
-      false,
       true,
+      false,
     ]);
     expect(stored.focusedProfileId).toBe("p2");
 
@@ -686,7 +731,7 @@ describe("popup rule list integration", () => {
       main.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "@",
-          code: "Digit1",
+          code: "Digit2",
           shiftKey: true,
           bubbles: true,
           cancelable: true,
@@ -783,7 +828,11 @@ describe("popup editor mode integration", () => {
     );
     expect((await read()).profiles[0]?.rules).toHaveLength(2);
 
-    press(chipInput, "Enter");
+    fire(() =>
+      (
+        root.querySelector(".editor-actions .primary") as HTMLButtonElement
+      ).click(),
+    );
     await settle();
 
     expect(root.querySelector(".rule-editor")).toBeNull();

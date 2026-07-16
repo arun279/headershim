@@ -39,16 +39,6 @@
   outline-color: var(--trace-ink);
 }
 
-/* Subordinate by design: all-sites routes through its own grant flow. */
-.all-sites {
-  margin-left: var(--sp-3);
-  font-size: 11px;
-}
-
-.all-sites[aria-pressed="true"] {
-  font-weight: 600;
-}
-
 .disclosure {
   display: inline-flex;
   align-items: center;

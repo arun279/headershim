@@ -36,11 +36,11 @@ export const copy = {
   },
 
   annunciator: {
-    paused: ["Paused. No headers are being modified."] as Sentence,
-    off: ["Off. No profiles are on."] as Sentence,
-    liveEmpty: ["Live. No rules yet."] as Sentence,
+    paused: ["Paused · no headers are being modified"] as Sentence,
+    off: ["Off · no profiles are on"] as Sentence,
+    liveEmpty: ["No rules yet"] as Sentence,
     outOfSync: [
-      "Out of sync. Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+      "Out of sync · Chrome rejected the last rule update. Any edit retries it.",
     ] as Sentence,
     // "N of M rules enabled" names the enabled/configured signal so it does not
     // read as a match score; the badge and Verify speak of matches instead.
@@ -49,13 +49,13 @@ export const copy = {
       totalCount: number,
       temporaryCount: number,
     ): Sentence => [
-      "Live. ",
-      data(enabledCount),
+      "On · ",
+      String(enabledCount),
       " of ",
-      data(totalCount),
+      String(totalCount),
       ` ${rules(totalCount)} enabled`,
       ...(temporaryCount > 0
-        ? [" · ", data(temporaryCount), " temporary on this tab"]
+        ? [" · ", String(temporaryCount), " temporary on this tab"]
         : []),
     ],
     needsAccess: (
@@ -63,34 +63,39 @@ export const copy = {
       host: string,
       moreSites: number,
     ): Sentence => [
-      data(ruleCount),
-      ` ${rules(ruleCount)} can't run. HeaderShim doesn't have access to `,
+      "Needs access · ",
+      String(ruleCount),
+      ` ${rules(ruleCount)} ${ruleCount === 1 ? "needs" : "need"} `,
       data(host),
       ...(moreSites > 0
-        ? [" and ", data(moreSites), ` more ${sites(moreSites)}`]
+        ? [" and ", String(moreSites), ` more ${sites(moreSites)}`]
         : []),
-      ".",
     ],
     activeProfiles: (count: number): Sentence => [
       " · ",
-      data(count),
-      " profiles active",
+      String(count),
+      " profiles on",
     ],
   },
 
   firstRun: {
     createRule: "Create your first rule",
     tryThisTab: "Try it on this tab",
-    tryThisTabSubline: "temporary, this tab only, gone on close",
+    tryThisTabSubline: "clears when you close or leave this tab",
     importFile: "Import from a file",
   },
 
   profiles: {
     navLabel: "Profiles",
+    allProfiles: "all profiles",
+    onTag: "on",
     offTag: "off",
     duplicateRules: "Duplicate this profile's rules",
     create: "Create profile",
-    enableWithoutSwitching: "Enable without switching",
+    turnOn: "Turn on",
+    turnOff: "Turn off",
+    toggleLabel: (name: string, on: boolean) =>
+      `Turn ${on ? "off" : "on"} profile: ${name}`,
     manage: "Manage profiles",
     actions: (name: string) => `Profile actions: ${name}`,
     saveError: "Could not save the profile. Try again.",
@@ -256,6 +261,8 @@ export const copy = {
       title: "Settings",
       theme: {
         label: "Theme",
+        switchToLight: "Switch to light theme",
+        switchToDark: "Switch to dark theme",
         options: { system: "System", light: "Light", dark: "Dark" },
       },
       badgeMode: {
@@ -272,11 +279,11 @@ export const copy = {
         data(commit),
       ],
       description: [
-        "HeaderShim adds, changes, and removes HTTP headers on the sites you choose. Write a rule, scope it to specific domains or a URL pattern, and it runs only where you say.",
-        "Group rules into profiles and switch between them when you need a different setup. Temporary overrides apply to a single tab and clear when you close it. Rules import and export as plain JSON, and HeaderShim reads ModHeader exports too.",
+        "HeaderShim adds, changes, and removes HTTP headers. Rules can be scoped to domains, URL patterns, regexes, or all sites.",
+        "Rules can be grouped into profiles. Temporary overrides apply to one tab until it navigates or closes. HeaderShim imports and exports JSON and can import ModHeader exports.",
       ],
       license:
-        "HeaderShim is open source under the MIT license, and comes with no warranty or guarantees.",
+        "HeaderShim is open source under the MIT license. It comes with no warranty or guarantees.",
       links: {
         repository: "Repository",
         repositoryUrl: "https://github.com/arun279/headershim",
@@ -294,11 +301,11 @@ export const copy = {
     newRule: "+ New rule",
     createRule: "Create a rule",
     saveChanges: "Save changes",
-    verify: "Verify",
+    testOnThisTab: "Test on this tab",
     resume: "Resume",
     grantAccess: "Grant access",
-    // activeTab reload handed to the user after a grant lands and in Verify's
-    // no-request state; there is no automatic reload (locus of control).
+    // activeTab reload handed to the user after a grant lands; there is no
+    // automatic reload (locus of control).
     reloadTab: "Reload tab",
     grantLater: "Grant later",
     discardRule: "Discard rule",
@@ -316,12 +323,11 @@ export const copy = {
   toast: {
     ruleCreated: "Rule created",
     changesSaved: "Changes saved",
-    ruleLive:
-      "Rule is live. Make a request on that site, then run Verify to confirm.",
+    ruleLive: "Access granted",
     activeOn: (host: string) => `Active on ${host}`,
     activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
-    // The grant-to-reload prompt when no single host can be named (annunciator /
-    // Verify Grant): confirms access landed and pairs with a Reload-tab action.
+    // The grant-to-reload prompt when the annunciator grant names no single
+    // site: confirms access landed and pairs with a Reload-tab action.
     accessGranted: "Access granted",
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
@@ -337,19 +343,16 @@ export const copy = {
     direction: { request: "request", response: "response" },
     operation: { set: "set", append: "append", remove: "remove" },
     redacted: "…redacted",
-    profileOff: "Profile off",
+    profileOffDetail: "This profile is off · its rules aren't running.",
     needsAccess: (host: string, moreSites: number): Sentence => [
       "Needs access · ",
       data(host),
       ...(moreSites > 0 ? [" +", data(moreSites)] : []),
     ],
-    // Silkscreen tag; stays sentence case in the DOM, uppercased via CSS only.
-    temporaryTag: "Temporary",
-    temporary: (host: string): Sentence => [
-      "applies to ",
-      data(host),
-      " requests in this tab",
-    ],
+    editValueHint: "Enter saves · Esc cancels",
+    pasteNewValue: "Paste new value",
+    temporarySwitchLabel: (header: string, on: boolean) =>
+      `Temporary override ${on ? "on" : "off"}: ${header}`,
     invalidRegex: "Invalid regex. Edit the scope to enable",
     // Announced after the ⋯ menu copies a (possibly truncated) value in full.
     valueCopied: "Value copied",
@@ -361,28 +364,19 @@ export const copy = {
   thisTab: {
     // Silkscreen section label; " · host · N temporary" follows it.
     sectionLabel: "This tab",
-    summary: (host: string, count: number): Sentence => [
-      " · ",
-      data(host),
-      " · ",
-      data(count),
-      " temporary",
-    ],
+    summary: (host: string): Sentence => [" · ", data(host)],
+    addOverride: "+ Temporary override",
     composerTitle: "New this-tab override",
     saveAsRule: "Save as rule…",
+    menuLabel: (header: string) => `Temporary override actions: ${header}`,
     remove: (header: string) => `Remove temporary override: ${header}`,
-    // Persistent honesty line under the section; "Create a rule"
-    // is the action button between the two spans.
-    standingBefore:
-      "Calling a different API from this page? That needs a saved rule and a one-click site grant. ",
-    standingAction: "Create a rule",
-    standingAfter: " pre-fills it.",
     // No web origin to bind to (chrome:// or store page).
     noHost: "Open the popup on a website to add a temporary override for it.",
   },
 
   menu: {
-    edit: "Edit",
+    edit: "Edit rule…",
+    editValue: "Edit value",
     copyValue: "Copy value",
     duplicate: "Duplicate",
     moveToProfile: "Move to profile",
@@ -437,6 +431,7 @@ export const copy = {
     labels: {
       direction: "Direction",
       operation: "Operation",
+      header: "Header",
       headerName: "Header name",
       value: "Value",
       scope: "Scope",
@@ -454,7 +449,6 @@ export const copy = {
     },
     allSites: "All sites",
     domainsHelper: "matches this domain and its subdomains",
-    domainSuggestion: "Suggested from this tab. Edit or remove it.",
     requestTarget:
       "Runs on requests to these hosts, which may differ from the page you are viewing.",
     addDomain: "+ add",
@@ -467,8 +461,7 @@ export const copy = {
       data("||example.com/api/"),
       " narrows it to /api/ paths",
     ] as Sentence,
-    grantNote:
-      "This rule needs all-sites access to run everywhere it could match. You can grant specific sites in Site access instead.",
+    regexHint: "Uses Chrome's RE2 syntax.",
     allTypes: "All types",
     includesPages: "Includes top-level pages",
     insert: "Insert",
@@ -540,7 +533,7 @@ export const copy = {
     patternInvalid:
       "Chrome's rule engine can't use this URL pattern. A pattern can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
     grantDeclined: (host: string) =>
-      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready. The rule starts working immediately.`,
+      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready.`,
     appendDisallowed: (name: string) =>
       `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
     ruleCap:
@@ -586,12 +579,8 @@ export const copy = {
   },
 
   verify: {
-    // The honest-limits footer.
-    limits:
-      "Chrome only reports rule matches from the last 5 minutes on this tab. DevTools' Network panel will not show header changes made by extensions (a known Chrome bug), so trust this panel or your server logs, not DevTools. Chrome's HTTP cache still passes through header rules. A site's service worker may bypass them when it generates a response or serves CacheStorage.",
-    // Verify leads with the most basic unmet precondition instead of the
-    // caching essay. blocked > no-request > matched, in that order.
-    // A grant gap is the headline, with Grant surfaced in the panel itself.
+    // A grant gap is the first unmet precondition. Otherwise the result states
+    // exactly what Chrome's five-minute match window can prove.
     blockedHeadline: (
       ruleCount: number,
       host: string,
@@ -605,34 +594,11 @@ export const copy = {
         : []),
       ".",
     ],
-    // Nothing fired and nothing is blocked: the tab has almost certainly not
-    // been requested since the last change, so lead with the reload, not cache.
-    noRequestHeadline: "No headers changed on this tab's last request.",
-    reloadHint: "Reload the tab, then run Verify again to see what fired.",
-    // The residual causes once a reload is ruled out. The caching/DevTools half
-    // lives in `limits`, so this names only what that footer does not.
-    stillNothing:
-      "Still nothing after a reload? A rule limited to certain resource types only fires on those requests, and requests another site starts need that site granted too. See Site access in options.",
-    // The has-matches headline. Counts of matches, phrased so it does not read as
-    // a configuration score; the per-rule list carries the tallies.
+    noMatchesHeadline: "No matches in the last 5 minutes on this tab.",
     matchedHeadline: (matched: number): Sentence => [
-      "Last request: ",
+      "Last 5 minutes: ",
       data(matched),
       " matched",
     ],
-    // Silkscreen heading; stays sentence case in the DOM, uppercased via CSS.
-    heading: "Verify · this tab",
-    regionLabel: "Verify results",
-    matchedLabel: "Rules that fired",
-    noMatchesLabel: "No matches",
-    close: "Close verify",
-    matchCount: (n: number) =>
-      n === 0 ? "no matches" : n === 1 ? "1 match" : `${n} matches`,
-    // Per-rule hints: only the statically determinable causes.
-    hints: {
-      disabled: "disabled",
-      "scope-excludes": "scope excludes this site",
-      "needs-access": "needs access",
-    } as const,
   },
 } as const;

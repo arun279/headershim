@@ -16,7 +16,21 @@ interface StoredSession {
 
 export async function read(): Promise<SessionState> {
   const stored = await browser.storage.session.get<StoredSession>(SESSION_KEY);
-  return stored.sessionState ?? { nextNum: 1, tabs: {} };
+  const session = stored.sessionState ?? { nextNum: 1, tabs: {} };
+  // Session data can survive an extension update. Overrides created before
+  // per-row toggles existed are on, matching their original behavior.
+  return {
+    ...session,
+    tabs: Object.fromEntries(
+      Object.entries(session.tabs).map(([tabId, rows]) => [
+        tabId,
+        rows.map((row) => ({
+          ...row,
+          enabled: (row as Partial<TabOverride>).enabled ?? true,
+        })),
+      ]),
+    ),
+  };
 }
 
 export function write(state: SessionState): Promise<void> {

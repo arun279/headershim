@@ -67,6 +67,7 @@ function sessionOverride(num: number): TabOverride {
     operation: "set",
     header: "x-session",
     value: `${num}`,
+    enabled: true,
   };
 }
 

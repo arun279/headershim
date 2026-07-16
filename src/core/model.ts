@@ -82,6 +82,7 @@ export interface TabOverride {
   operation: HeaderOp;
   header: string;
   value?: string;
+  enabled: boolean;
 }
 
 export type RuleDraft = Omit<Rule, "id" | "num">;

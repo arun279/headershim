@@ -1,11 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Rule } from "../../core/model";
 import type { VerifyReadout } from "../../core/verify";
-import { LiveRegionProvider } from "../a11y/LiveRegion";
-import { copy } from "../copy";
-import { fire, press, render } from "../test/render";
-import { VerifyPanel } from "./VerifyPanel";
+import { render } from "../test/render";
+import { VerifyResult } from "./VerifyPanel";
 
 function rule(id: string, header: string): Rule {
   return {
@@ -29,22 +27,9 @@ interface Blocked {
 }
 
 function mount(readout: VerifyReadout, blocked?: Blocked) {
-  const onClose = vi.fn();
-  const onGrant = vi.fn();
-  const onReload = vi.fn();
-  const root = render(
-    <LiveRegionProvider>
-      <VerifyPanel
-        readout={readout}
-        blocked={blocked}
-        onGrant={onGrant}
-        onReload={onReload}
-        onClose={onClose}
-      />
-    </LiveRegionProvider>,
-  );
-  const panel = root.querySelector(".verify-sheet") as HTMLElement;
-  return { root, panel, onClose, onGrant, onReload };
+  const root = render(<VerifyResult readout={readout} blocked={blocked} />);
+  const result = root.querySelector(".verify-inline-result") as HTMLElement;
+  return { root, result };
 }
 
 const twoMatched: VerifyReadout = {
@@ -56,134 +41,70 @@ const twoMatched: VerifyReadout = {
       count: 4,
     },
   ],
-  unmatched: [
-    {
-      profileId: "p",
-      rule: rule("r3", "x-feature-override"),
-      hint: "needs-access",
-    },
-  ],
-  total: 3,
 };
 
 const nothingFired: VerifyReadout = {
   matched: [],
-  unmatched: [{ profileId: "p", rule: rule("r1", "authorization") }],
-  total: 1,
 };
 
-describe("VerifyPanel readout", () => {
-  it("leads with the match count, per-rule tallies, and the static hint", () => {
-    const { panel } = mount(twoMatched);
-    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
-      "Last request: 2 matched",
-    );
-
-    const fired = [...panel.querySelectorAll(".verify-row:not(.unmatched)")];
-    expect(
-      fired.map((row) => row.querySelector(".verify-name")?.textContent),
-    ).toEqual(["authorization", "access-control-allow-origin"]);
-    expect(fired[0]?.querySelector(".verify-tally")?.textContent).toBe("×12");
-
-    const missed = panel.querySelector(".verify-row.unmatched") as HTMLElement;
-    expect(missed.textContent).toContain("x-feature-override");
-    expect(missed.querySelector(".verify-hint")?.textContent).toBe(
-      " · needs access",
-    );
-    expect(missed.querySelector(".verify-tally")?.textContent).toBe("×0");
+describe("VerifyResult", () => {
+  it("shows the matched-rule count in one short line", () => {
+    const { result } = mount(twoMatched);
+    expect(result.textContent).toBe("Last 5 minutes: 2 matched");
+    expect(result.children).toHaveLength(0);
   });
 
-  it("labels tallies for assistive tech and hides the lamp glyphs", () => {
-    const { panel } = mount(twoMatched);
-    expect(
-      panel
-        .querySelector(".verify-row .verify-tally")
-        ?.getAttribute("aria-label"),
-    ).toBe("12 matches");
-    expect(
-      panel
-        .querySelector(".verify-row.unmatched .verify-tally")
-        ?.getAttribute("aria-label"),
-    ).toBe("no matches");
-    for (const lamp of panel.querySelectorAll(".verify-lamp")) {
-      expect(lamp.getAttribute("aria-hidden")).toBe("true");
-    }
+  it("does not expand into per-rule tallies or unmatched guidance", () => {
+    const { root } = mount(twoMatched);
+    expect(root.querySelector(".verify-row")).toBeNull();
+    expect(root.textContent).not.toContain("authorization");
+    expect(root.textContent).not.toContain("needs access");
   });
 
-  it("carries the honest-limits footer verbatim", () => {
-    const { panel } = mount(twoMatched);
-    expect(panel.querySelector(".verify-limits")?.textContent).toBe(
-      copy.verify.limits,
+  it("keeps the result in the plain UI face", () => {
+    const { result } = mount(twoMatched);
+    expect(result.querySelector(".mono")).toBeNull();
+  });
+
+  it("exposes the complete line as a title when CSS truncates it", () => {
+    const { result } = mount(twoMatched);
+    expect(result.title).toBe(result.textContent);
+  });
+
+  it("states the honest match window when nothing fired", () => {
+    const { result } = mount(nothingFired);
+    expect(result.textContent).toBe(
+      "No matches in the last 5 minutes on this tab.",
     );
   });
 
-  it("leads with reload-to-test when nothing fired and nothing is blocked", () => {
-    const { panel, onReload } = mount(nothingFired);
-    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
-      copy.verify.noRequestHeadline,
-    );
-    expect(panel.querySelector(".verify-rows")).toBeNull();
-    expect(panel.querySelector(".verify-recover-hint")?.textContent).toBe(
-      copy.verify.reloadHint,
-    );
-    expect(panel.querySelector(".verify-guidance")?.textContent).toBe(
-      copy.verify.stillNothing,
-    );
-
-    const reload = [...panel.querySelectorAll("button")].find(
-      (button) => button.textContent === copy.actions.reloadTab,
-    ) as HTMLButtonElement;
-    fire(() => reload.click());
-    expect(onReload).toHaveBeenCalledTimes(1);
-  });
-
-  it("leads with the grant gap and surfaces Grant when a rule is blocked", () => {
-    const { panel, onGrant } = mount(nothingFired, {
+  it("leads with the grant precondition when a rule is blocked", () => {
+    const { result } = mount(nothingFired, {
       ruleCount: 1,
       host: "api.example.com",
       moreSites: 0,
     });
-    expect(panel.querySelector(".verify-summary")?.textContent).toBe(
+    expect(result.textContent).toBe(
       "1 rule can't run. Needs access to api.example.com.",
     );
-    // The caching essay never leads over the more basic precondition.
-    expect(panel.querySelector(".verify-rows")).toBeNull();
-    expect(panel.querySelector(".verify-guidance")).toBeNull();
-
-    const grant = [...panel.querySelectorAll("button")].find(
-      (button) => button.textContent === copy.actions.grantAccess,
-    ) as HTMLButtonElement;
-    fire(() => grant.click());
-    expect(onGrant).toHaveBeenCalledTimes(1);
   });
 
-  it("lists a no-match rule without a hint when no static cause is known", () => {
-    const { panel } = mount({
-      matched: [
-        { profileId: "p", rule: rule("r1", "authorization"), count: 2 },
-      ],
-      unmatched: [{ profileId: "p", rule: rule("r2", "x-trace-id") }],
-      total: 2,
+  it("counts additional blocked sites without adding controls", () => {
+    const { root, result } = mount(nothingFired, {
+      ruleCount: 2,
+      host: "api.example.com",
+      moreSites: 2,
     });
-    const missed = panel.querySelector(".verify-row.unmatched") as HTMLElement;
-    expect(missed.textContent).toContain("x-trace-id");
-    expect(missed.querySelector(".verify-hint")).toBeNull();
-  });
-
-  it("moves focus to the headline and announces it politely on open", () => {
-    const { root, panel } = mount(twoMatched);
-    expect(document.activeElement).toBe(panel.querySelector(".verify-summary"));
-    expect(root.querySelector(".sr-only")?.textContent).toBe(
-      "Last request: 2 matched",
+    expect(result.textContent).toBe(
+      "2 rules can't run. Needs access to api.example.com and 2 more sites.",
     );
+    expect(root.querySelector("button")).toBeNull();
   });
 
-  it("closes on the close control and on Escape", () => {
-    const { panel, onClose } = mount(twoMatched);
-    fire(() => (panel.querySelector(".icon-btn") as HTMLButtonElement).click());
-    expect(onClose).toHaveBeenCalledTimes(1);
-
-    press(panel, "Escape");
-    expect(onClose).toHaveBeenCalledTimes(2);
+  it("uses only its status live region to announce the on-demand result", () => {
+    const { root, result } = mount(twoMatched);
+    expect(result.getAttribute("role")).toBe("status");
+    expect(root.querySelectorAll('[role="status"]')).toHaveLength(1);
+    expect(root.querySelector(".sr-only")).toBeNull();
   });
 });

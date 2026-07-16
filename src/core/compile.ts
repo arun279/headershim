@@ -144,16 +144,17 @@ export function compileSession(
   overrides: readonly TabOverride[],
   paused: boolean,
 ): DnrRule[] {
-  if (overrides.length > MAX_SESSION_OVERRIDES) {
+  const enabledOverrides = overrides.filter((override) => override.enabled);
+  if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
-      `Cannot compile ${overrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
+      `Cannot compile ${enabledOverrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
     );
   }
   if (paused) {
     return [];
   }
 
-  return overrides.map((override, index) => ({
+  return enabledOverrides.map((override, index) => ({
     id: override.num,
     priority: SESSION_PRIORITY_TOP - index,
     action: headerAction(override),

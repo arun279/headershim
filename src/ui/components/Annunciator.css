@@ -1,62 +1,57 @@
-/* Master-caution strip: min 34px, may grow to two lines in caution state. */
 .annunciator {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 34px;
-  padding: 5px 12px;
+  gap: var(--sp-3);
+  min-height: 37px;
+  padding: 8px 12px;
   background: var(--panel-0);
   border-bottom: var(--hairline) solid var(--bezel);
 }
 
 .annunciator p {
   flex: 1;
-  font-size: 11.5px;
-  line-height: 1.35;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .annunciator strong {
   font-weight: 600;
 }
 
-.annunciator[data-state="paused"] {
-  background: var(--panel-1);
+.lamp {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sw-off);
+}
+
+.annunciator[data-live="true"] .lamp {
+  background: var(--advisory);
+}
+
+.annunciator[data-state="paused"] .lamp,
+.annunciator[data-state="needs-access"] .lamp,
+.annunciator[data-state="out-of-sync"] .lamp {
+  background: var(--caution-lamp);
 }
 
 .annunciator[data-state="needs-access"],
 .annunciator[data-state="out-of-sync"] {
-  background: var(--caution-bg);
-  border-bottom-color: var(--caution-edge);
-  color: var(--caution);
+  color: var(--ink);
 }
 
-.lamp {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  display: grid;
-  place-items: center;
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--bezel-strong);
-}
-
-.annunciator[data-state="paused"] .lamp {
-  background: var(--sw-off);
-  border: none;
-}
-
-.annunciator[data-state="needs-access"] .lamp,
-.annunciator[data-state="out-of-sync"] .lamp {
-  background: var(--caution-lamp);
-  border: none;
-}
-
-/* Resolving verb: compact outlined button per the strip anatomy. */
 .annunciator .btn {
   flex: none;
-  min-height: 28px;
-  padding: 4px 10px;
-  font-size: 12px;
+  min-height: 24px;
+  padding: 1px 4px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--trace);
+  font-size: 11.5px;
   font-weight: 600;
 }
