@@ -139,6 +139,19 @@ describe("popup This-tab overrides", () => {
     await act(async () => toggle.click());
     await settle();
     expect((await readSession()).tabs[5]?.[0]?.enabled).toBe(false);
+    expect(root.querySelector(".thistab .change-line.off")).not.toBeNull();
+    expect(
+      root.querySelector(
+        '[aria-label="Remove this-tab change: x-debug-trace"]',
+      ),
+    ).not.toBeNull();
+
+    const enable = root.querySelector(
+      '[aria-label="Turn on this-tab change: x-debug-trace"]',
+    ) as HTMLButtonElement;
+    await act(async () => enable.click());
+    await settle();
+    expect((await readSession()).tabs[5]?.[0]?.enabled).toBe(true);
   });
 
   it("removes an override from its row", async () => {

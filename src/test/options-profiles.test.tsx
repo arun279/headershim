@@ -60,6 +60,21 @@ function within(root: HTMLElement, selector: string): HTMLElement {
   return el;
 }
 
+async function mountTwoProfiles(): Promise<HTMLElement> {
+  await seed([
+    profile("p1", { name: "Alpha" }),
+    profile("p2", { name: "Beta" }),
+  ]);
+  return mount();
+}
+
+async function activateSecondProfile(root: HTMLElement): Promise<void> {
+  const beta = cards(root)[1];
+  if (beta === undefined) throw new Error("missing second profile");
+  fire(() => within(beta, '[role="switch"]').click());
+  await settle();
+}
+
 /** Opens the card, clicks one of its [Rename][Clone][Delete] actions. */
 function cardAction(root: HTMLElement, index: number, label: string): void {
   openCard(root, index);
@@ -261,21 +276,38 @@ describe("profile lifecycle", () => {
 
 describe("profile activation", () => {
   it("switches with one active id and no per-profile liveness bits", async () => {
-    await seed([
-      profile("p1", { name: "Alpha" }),
-      profile("p2", { name: "Beta" }),
-    ]);
-    const root = await mount();
-
-    const beta = cards(root)[1] as HTMLElement;
-    fire(() => within(beta, '[role="switch"]').click());
-    await settle();
+    const root = await mountTwoProfiles();
+    await activateSecondProfile(root);
 
     const stored = await read();
     expect(stored.activeProfileId).toBe("p2");
     for (const candidate of stored.profiles) {
       expect(candidate).not.toHaveProperty("enabled");
     }
+  });
+
+  it("moves the open detail panel to the newly active profile", async () => {
+    const root = await mountTwoProfiles();
+    await activateSecondProfile(root);
+
+    const [alphaAfter, betaAfter] = cards(root);
+    expect(alphaAfter?.classList.contains("open")).toBe(false);
+    expect(alphaAfter?.querySelector(".profile-detail")).toBeNull();
+    expect(betaAfter?.classList.contains("open")).toBe(true);
+    expect(betaAfter?.querySelector(".profile-detail")).not.toBeNull();
+  });
+
+  it("keeps the profile detail open when its active switch is turned off", async () => {
+    const root = await mountTwoProfiles();
+    const alpha = cards(root)[0];
+    if (alpha === undefined) throw new Error("missing first profile");
+
+    fire(() => within(alpha, '[role="switch"]').click());
+    await settle();
+
+    expect((await read()).activeProfileId).toBeUndefined();
+    expect(alpha.classList.contains("open")).toBe(true);
+    expect(alpha.querySelector(".profile-detail")).not.toBeNull();
   });
 });
 

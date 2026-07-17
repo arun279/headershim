@@ -97,6 +97,24 @@ const twoRules = () =>
     rule({ id: "rule-2", num: 2, header: "x-debug", value: "1" }),
   ]);
 
+async function turnOffOnlyRule(): Promise<HTMLElement> {
+  const { root } = await mount(seededDoc([rule()]), true);
+  const toggle = root.querySelector<HTMLButtonElement>(
+    '[aria-label="Turn off: x-env"]',
+  );
+  if (toggle === null) throw new Error("missing rule toggle");
+  await act(async () => toggle.click());
+  await settle();
+  return root;
+}
+
+function closeComposerWithEscape(root: HTMLElement): void {
+  const input = root.querySelector<HTMLInputElement>(".cin.name");
+  if (input === null) throw new Error("missing this-tab composer input");
+  press(input, "Escape");
+  expect(root.querySelector(".compose")).toBeNull();
+}
+
 describe("popup readout", () => {
   it("leads with the site and the one-fact status line", async () => {
     const { root, status } = await mount(twoRules(), true);
@@ -264,13 +282,35 @@ describe("popup readout", () => {
   });
 
   it("toggles a rule from its switch, instantly and persistently", async () => {
-    const { root } = await mount(seededDoc([rule()]), true);
-    const toggle = root.querySelector(
-      '[aria-label="Turn off: x-env"]',
-    ) as HTMLButtonElement;
-    await act(async () => toggle.click());
-    await settle();
+    await turnOffOnlyRule();
     expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
+  });
+
+  it("keeps the last disabled rule visible and focused for re-enabling", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const disable = root.querySelector<HTMLButtonElement>(
+      '[aria-label="Turn off: x-env"]',
+    );
+    if (disable === null) throw new Error("missing rule toggle");
+    disable.focus();
+    await act(async () => disable.click());
+    await settle();
+
+    const enable = root.querySelector<HTMLButtonElement>(
+      '[aria-label="Turn on: x-env"]',
+    );
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "0 changes on this tab",
+    );
+    expect(root.querySelector(".empty")).toBeNull();
+    expect(root.querySelector(".change-line.off")).not.toBeNull();
+    expect(enable).not.toBeNull();
+    expect(document.activeElement).toBe(enable);
+
+    await act(async () => enable?.click());
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(true);
+    expect(root.querySelector(".empty")).toBeNull();
   });
 
   it("shows an ungranted rule amber with a Grant that clears every surface", async () => {
@@ -524,6 +564,37 @@ describe("popup profile switch", () => {
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);
   });
+
+  it("uses Escape to close the picker without closing the popup", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const { root } = await mount(withSecond(), true);
+    const target = openPickerTarget(root);
+
+    press(target, "Escape");
+
+    expect(root.querySelector(".pop")).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector(".prof"));
+    expect(close).not.toHaveBeenCalled();
+    close.mockRestore();
+  });
+
+  it("uses Escape to close overlapping layers from newest to oldest", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const { root } = await mount(withSecond(), true);
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+    const target = openPickerTarget(root);
+
+    press(target, "Escape");
+
+    expect(root.querySelector(".pop")).toBeNull();
+    expect(root.querySelector(".compose")).not.toBeNull();
+    expect(close).not.toHaveBeenCalled();
+
+    closeComposerWithEscape(root);
+    expect(close).not.toHaveBeenCalled();
+    close.mockRestore();
+  });
 });
 
 describe("popup authoring entry points", () => {
@@ -547,6 +618,22 @@ describe("popup authoring entry points", () => {
     press(root.querySelector(".popup") as HTMLElement, "t");
     await settle();
     expect(root.querySelector(".compose")).not.toBeNull();
+  });
+
+  it("uses Escape to close the this-tab composer without closing the popup", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const { root } = await mount(seededDoc([rule()]), true);
+    const opener = root.querySelector<HTMLButtonElement>(".tab-btn");
+    if (opener === null) throw new Error("missing this-tab opener");
+    opener.focus();
+    fire(() => opener.click());
+    await settle();
+
+    expect(document.activeElement).toBe(root.querySelector(".cin.name"));
+    closeComposerWithEscape(root);
+    expect(document.activeElement).toBe(opener);
+    expect(close).not.toHaveBeenCalled();
+    close.mockRestore();
   });
 
   it("Escape closes the popup when no layer is open", async () => {

@@ -78,10 +78,13 @@ async function seedOneOfEachSeverity(): Promise<void> {
   ]);
 }
 
-describe("all rules by site", () => {
+describe("all rules", () => {
   it("groups rules by site and reads each in the severity grammar", async () => {
     await seedOneOfEachSeverity();
     const root = await mount();
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
 
     const hosts = [...root.querySelectorAll(".fleet-host")].map(
       (host) => host.textContent,
@@ -107,10 +110,13 @@ describe("all rules by site", () => {
     // rule wearing the live hue contradicts the reason printed beside it.
     const live = within(root, '.fleet-row.live [role="switch"]');
     const refused = within(root, '.fleet-row.refused [role="switch"]');
+    const needsAccess = within(root, '.fleet-row.needs-access [role="switch"]');
     expect(live.getAttribute("aria-checked")).toBe("true");
     expect(refused.getAttribute("aria-checked")).toBe("true");
+    expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
+    expect(needsAccess.className).toBe("sw sw-inert");
   });
 
   it("keeps the running tone off a configured-on rule in an off profile", async () => {
@@ -164,7 +170,7 @@ describe("all rules by site", () => {
     );
   });
 
-  it("switches to the by-header lens", async () => {
+  it("defaults to the by-header lens", async () => {
     await seed([
       profile("p1", {
         name: "Staging",
@@ -182,14 +188,27 @@ describe("all rules by site", () => {
     ]);
     const root = await mount();
 
+    const heads = () =>
+      [...root.querySelectorAll(".fleet-host")].map((head) => head.textContent);
+    // Both rules collapse under one header group.
+    expect(heads()).toEqual(["x-env"]);
+    expect(findButton(root, text.byHeader).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(findButton(root, text.bySite).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
+    expect(heads()).toEqual(["a.com", "b.com"]);
+
     fire(() => findButton(root, text.byHeader).click());
     await settle();
-
-    const heads = [...root.querySelectorAll(".fleet-host")].map(
-      (head) => head.textContent,
+    expect(heads()).toEqual(["x-env"]);
+    expect(findButton(root, text.byHeader).getAttribute("aria-pressed")).toBe(
+      "true",
     );
-    // Both rules collapse under one header group.
-    expect(heads).toEqual(["x-env"]);
   });
 
   it("toggles a rule off from its switch", async () => {
@@ -237,6 +256,9 @@ describe("all rules by site", () => {
       }),
     ]);
     const root = await mount();
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
 
     const rows = [...root.querySelectorAll(".fleet-row")];
     expect(rows).toHaveLength(2);

@@ -7,6 +7,11 @@ import type { MutationError } from "../../src/ui/state/mutations";
 
 type Restore = () => Promise<Result<unknown, MutationError>>;
 
+interface ToastState {
+  message: string;
+  nonce: number;
+}
+
 /**
  * The options pages' one toast channel. Every message also speaks through the
  * persistent polite region, since a freshly mounted role=status node with text
@@ -20,13 +25,12 @@ type Restore = () => Promise<Result<unknown, MutationError>>;
  */
 export function useToast() {
   const announce = useAnnounce();
-  const [toast, setToast] = useState<string | undefined>(undefined);
+  const [toast, setToast] = useState<ToastState | undefined>(undefined);
   const [restore, setRestore] = useState<Restore | undefined>(undefined);
 
   const raise = (message: string, undo: Restore | undefined) => {
     setRestore(() => undo);
-    setToast(message);
-    announce(message);
+    setToast({ message, nonce: announce(message) });
   };
   const show = (message: string) => raise(message, undefined);
   const showUndoable = (message: string, undo: Restore) => raise(message, undo);

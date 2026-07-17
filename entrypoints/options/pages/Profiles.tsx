@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
@@ -48,6 +48,12 @@ export function ProfilesPage({
     retireUndo,
   } = useToast();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (doc.activeProfileId !== undefined) {
+      setOpenId(doc.activeProfileId);
+    }
+  }, [doc.activeProfileId]);
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
@@ -180,12 +186,13 @@ export function ProfilesPage({
 
       {toast !== undefined && (
         <Toast
+          nonce={toast.nonce}
           onDismiss={dismiss}
           persist={toastAction !== undefined}
           actionLabel={toastAction?.label}
           onAction={toastAction?.run}
         >
-          {toast}
+          {toast.message}
         </Toast>
       )}
     </section>

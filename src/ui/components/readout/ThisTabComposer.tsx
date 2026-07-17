@@ -1,6 +1,7 @@
-import { useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import type { Direction, HeaderOp, TabOverride } from "../../../core/model";
 import type { Result } from "../../../core/result";
+import { useFocusTrap } from "../../a11y/focus";
 import { copy } from "../../copy";
 import {
   type HeaderFieldError,
@@ -12,6 +13,7 @@ import type {
   SessionMutationError,
 } from "../../state/session-mutations";
 import { parseHeaderLine } from "../headerLine";
+import { useEscapeDismiss } from "../usePopoverDismiss";
 import { OpGlyph, TabGlyph } from "./glyphs";
 
 /**
@@ -43,12 +45,19 @@ export function ThisTabComposer({
   onClose,
   onCommitted,
 }: ThisTabComposerProps) {
+  const composerRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLInputElement>(null);
   const [direction, setDirection] = useState<Direction>("request");
   const [operation, setOperation] = useState<HeaderOp>("set");
   const [header, setHeader] = useState("");
   const [value, setValue] = useState("");
   const [pastedLineSplit, setPastedLineSplit] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  useFocusTrap(composerRef, true, {
+    initialFocus: headerRef,
+    trapFocus: false,
+  });
+  useEscapeDismiss(true, onClose);
 
   const commit = () => {
     const empty = headerValueEmptyErrors({ operation, header, value });
@@ -77,7 +86,11 @@ export function ThisTabComposer({
   };
 
   return (
-    <section class="compose" aria-label={copy.readout.newChange}>
+    <section
+      ref={composerRef}
+      class="compose"
+      aria-label={copy.readout.newChange}
+    >
       <div class="c-tag silk">
         <TabGlyph />
         {copy.readout.thisTabTag}
@@ -113,13 +126,13 @@ export function ThisTabComposer({
       </div>
       <div class="cfields">
         <input
+          ref={headerRef}
           class="cin name mono"
           value={header}
           placeholder={copy.editor.placeholders.headerName}
           aria-label={copy.editor.labels.headerName}
           spellcheck={false}
           autocomplete="off"
-          autofocus
           onInput={(event) => {
             setPastedLineSplit(false);
             setHeader(event.currentTarget.value);

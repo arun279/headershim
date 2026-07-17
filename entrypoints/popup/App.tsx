@@ -93,8 +93,11 @@ type ReadyProps = Omit<
 /** A toast, and the one thing it can offer to do about what it just said. */
 interface PopupToast {
   message: string;
+  nonce: number;
   action?: { label: string; run: () => void };
 }
+
+type PopupToastInput = Omit<PopupToast, "nonce">;
 
 function Ready({
   doc,
@@ -114,9 +117,8 @@ function Ready({
 
   // Every toast also speaks through the persistent polite region: a freshly
   // mounted role=status node with text already present is not reliably read.
-  const raise = (next: PopupToast) => {
-    setToast(next);
-    announce(next.message);
+  const raise = (next: PopupToastInput) => {
+    setToast({ ...next, nonce: announce(next.message) });
   };
   const showToast = (message: string) => raise({ message });
   const reloadTab = () => {
@@ -349,6 +351,7 @@ function Ready({
   // action it was raised to offer.
   const toastNode = toast !== undefined && (
     <Toast
+      nonce={toast.nonce}
       onDismiss={() => setToast(undefined)}
       persist={toast.action !== undefined}
       actionLabel={toast.action?.label}
@@ -384,18 +387,19 @@ function Ready({
   // Bound once so the callbacks act on the token this render drew, not on
   // whatever the readout holds by the time the click lands.
   const token = readout.token;
-  const nothing =
-    !composing &&
-    token === undefined &&
-    readout.request.length === 0 &&
-    readout.response.length === 0 &&
-    readout.overrides.length === 0;
+  const hasRows =
+    token !== undefined ||
+    readout.request.length > 0 ||
+    readout.response.length > 0 ||
+    readout.overrides.length > 0;
+  const nothing = !composing && !hasRows;
 
   return (
     // tabIndex -1 lets a removed section land focus on the landmark, not <body>.
     <main class="popup" tabIndex={-1}>
       <ReadoutHead
         readout={readout}
+        hasRows={hasRows}
         profiles={doc.profiles}
         activeProfile={activeProfile}
         paused={paused}

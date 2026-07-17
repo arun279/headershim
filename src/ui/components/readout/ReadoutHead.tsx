@@ -8,6 +8,7 @@ import { ProfilePicker } from "./ProfilePicker";
 
 interface ReadoutHeadProps {
   readout: TabReadout;
+  hasRows: boolean;
   profiles: readonly Profile[];
   activeProfile: Profile | undefined;
   paused: boolean;
@@ -22,6 +23,7 @@ interface ReadoutHeadProps {
  */
 export function ReadoutHead({
   readout,
+  hasRows,
   profiles,
   activeProfile,
   paused,
@@ -30,7 +32,7 @@ export function ReadoutHead({
 }: ReadoutHeadProps) {
   const attention =
     readout.needsAccess > 0 || readout.refused > 0 || readout.outOfSync > 0;
-  const showGlance = readout.host !== undefined && readout.total > 0 && !paused;
+  const showGlance = readout.host !== undefined && hasRows && !paused;
 
   return (
     <header class="head">
@@ -58,10 +60,12 @@ export function ReadoutHead({
       {showGlance && (
         <div class="glance-wrap">
           <div class="glance">
-            <span
-              class={`lamp ${attention ? "warn" : "live"}`}
-              aria-hidden="true"
-            />
+            {readout.total > 0 && (
+              <span
+                class={`lamp ${attention ? "warn" : "live"}`}
+                aria-hidden="true"
+              />
+            )}
             <p class="status">{sentence(copy.readout.status(readout.total))}</p>
           </div>
           {(readout.needsAccess > 0 ||

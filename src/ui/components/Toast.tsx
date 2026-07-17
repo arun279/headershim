@@ -1,9 +1,10 @@
 import type { ComponentChildren } from "preact";
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import "./Toast.css";
 
 interface ToastProps {
   children: ComponentChildren;
+  nonce: number;
   actionLabel?: string | undefined;
   onAction?: (() => void) | undefined;
   onDismiss: () => void;
@@ -19,22 +20,26 @@ interface ToastProps {
 
 export function Toast({
   children,
+  nonce,
   actionLabel,
   onAction,
   onDismiss,
   duration = 6000,
   persist = false,
 }: ToastProps) {
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+
   useEffect(() => {
     if (persist) {
       return;
     }
-    const id = setTimeout(onDismiss, duration);
+    const id = setTimeout(() => dismissRef.current(), duration);
     return () => clearTimeout(id);
-  }, [onDismiss, duration, persist]);
+  }, [nonce, duration, persist]);
 
   return (
-    <div class="toast" role="status" aria-live="polite">
+    <div class="toast">
       <span class="toast-msg">{children}</span>
       {actionLabel !== undefined && (
         <button type="button" class="toast-action" onClick={onAction}>

@@ -54,7 +54,7 @@ export function RulesPage({
   mutations: Mutations;
 }) {
   const announce = useAnnounce();
-  const [lens, setLens] = useState<Lens>("site");
+  const [lens, setLens] = useState<Lens>("header");
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
   const {
     toast,
@@ -176,12 +176,13 @@ export function RulesPage({
   // closing under it, or its undo would vanish with the surface that raised it.
   const toastNode = toast !== undefined && (
     <Toast
+      nonce={toast.nonce}
       onDismiss={dismiss}
       persist={toastAction !== undefined}
       actionLabel={toastAction?.label}
       onAction={toastAction?.run}
     >
-      {toast}
+      {toast.message}
     </Toast>
   );
 

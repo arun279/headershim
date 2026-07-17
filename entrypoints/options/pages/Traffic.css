@@ -21,6 +21,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 15px;
+  cursor: default;
 }
 .tape-row + .tape-row {
   border-top: var(--hairline) solid var(--line2);
