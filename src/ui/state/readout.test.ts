@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GrantSnapshot } from "../../core/grants";
 import type { Profile, Rule, StateDoc, TabOverride } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
+import { copy } from "../copy";
 import { LIVE, OUT_OF_SYNC, PAUSED } from "../test/fixtures";
 import {
   previewSwitch,
@@ -374,6 +375,21 @@ describe("refusedReason", () => {
     expect(
       refusedReason(rule({ header: "x-env" }), SUPPORT_ALL),
     ).toBeUndefined();
+  });
+
+  it("maps append refusal separately from an invalid header name", () => {
+    expect(
+      refusedReason(
+        rule({ operation: "append", header: "content-type" }),
+        SUPPORT_ALL,
+      ),
+    ).toBe("append");
+    expect(copy.readout.refusedReason.append).toBe(
+      "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
+    );
+    expect(refusedReason(rule({ header: ":authority" }), SUPPORT_ALL)).toBe(
+      "header",
+    );
   });
 });
 

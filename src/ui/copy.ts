@@ -73,6 +73,8 @@ export const copy = {
     refusedReason: {
       host: "Chrome won't let extensions change the Host header",
       header: "Chrome won't accept this header name",
+      append:
+        "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
       value: "Chrome won't accept a line break in the value",
       pattern: "Chrome won't accept this URL pattern",
       regex: "Chrome won't accept this regular expression",
@@ -209,6 +211,7 @@ export const copy = {
         ` ${sites(siteCount)}`,
         ...(broad ? [" plus every site a pattern matches"] : []),
       ],
+      allReach: (scopeName: string): Sentence => ["reaches ", scopeName],
       broadReach: "reaches every matching site",
       sharedRule: (siteCount: number) =>
         `one shared rule · switch affects all ${siteCount} sites`,

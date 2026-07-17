@@ -238,6 +238,9 @@ describe("profile lifecycle", () => {
     expect(modal.querySelector(".modal-title")?.textContent).toBe(
       copy.options.profiles.deleteConfirm.title("Alpha"),
     );
+    expect(
+      findButton(modal, copy.options.profiles.deleteConfirm.confirm).className,
+    ).toBe("btn quiet");
     fire(() =>
       findButton(modal, copy.options.profiles.deleteConfirm.confirm).click(),
     );

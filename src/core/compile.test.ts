@@ -6,6 +6,7 @@ import {
   DYNAMIC_PRIORITY_TOP,
   dropUncompilable,
   SESSION_PRIORITY_TOP,
+  uncompilableReason,
 } from "./compile";
 import {
   MAX_ENABLED_RULES,
@@ -410,17 +411,17 @@ describe("dropping uncompilable rules", () => {
     expect(compiledIds(doc, supportAll)).toEqual([1, 2]);
   });
 
-  it("drops a disallowed request append without taking down its sibling", () => {
-    const doc = state([
-      profile("append", [
-        storedRule(1),
-        storedRule(2, {
-          operation: "append",
-          header: "x-feature-flags",
-        }),
-      ]),
-    ]);
+  it("distinguishes and drops a disallowed request append", () => {
+    const append = storedRule(2, {
+      operation: "append",
+      header: "content-type",
+    });
+    const doc = state([profile("append", [storedRule(1), append])]);
 
+    expect(uncompilableReason(append, supportAll)).toBe("append");
+    expect(
+      uncompilableReason(storedRule(3, { header: ":authority" }), supportAll),
+    ).toBe("header");
     expect(compiledIds(doc, supportAll)).toEqual([1]);
   });
 

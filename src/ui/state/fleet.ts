@@ -262,6 +262,8 @@ export interface HeaderGroup {
   readonly siteCount: number;
   /** True when any rule for this header reaches beyond named sites. */
   readonly broad: boolean;
+  /** True when any rule for this header reaches every site unconditionally. */
+  readonly allSites: boolean;
 }
 
 /**
@@ -276,11 +278,13 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
     .map(([headerKey, rules]) => {
       const sites = new Set<string>();
       let broad = false;
+      let allSites = false;
       for (const rule of rules) {
         if (rule.scope.kind === "domains") {
           for (const domain of rule.scope.domains) sites.add(domain);
         } else {
           broad = true;
+          if (rule.scope.kind === "all") allSites = true;
           for (const host of hostsOf(rule)) sites.add(host);
         }
       }
@@ -290,6 +294,7 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
         rules,
         siteCount: sites.size,
         broad,
+        allSites,
       };
     })
     .sort((a, b) => a.header.localeCompare(b.header));
@@ -306,6 +311,7 @@ export interface TapeRow {
   readonly provenance: FleetProvenance;
   /** Only the states that describe live traffic reach the tape. */
   readonly status: Exclude<LineStatus, "off" | "overridden">;
+  readonly refused?: RefusedReason;
 }
 
 const TAPE_ORDER: Record<TapeRow["status"], number> = {
@@ -340,6 +346,9 @@ export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
         secret: rule.secret,
         provenance: rule.provenance,
         status: rule.status,
+        ...(rule.status === "refused" && rule.refused !== undefined
+          ? { refused: rule.refused }
+          : {}),
       });
     }
   }

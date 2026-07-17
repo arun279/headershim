@@ -177,7 +177,7 @@ export function ProfilesPage({
             >
               {copy.actions.cancel}
             </button>
-            <Button kind="primary" onClick={() => deleteProfile(confirmDelete)}>
+            <Button kind="quiet" onClick={() => deleteProfile(confirmDelete)}>
               {text.deleteConfirm.confirm}
             </Button>
           </div>

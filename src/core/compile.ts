@@ -78,6 +78,7 @@ export function dropUncompilable(
 
 export type UncompilableReason =
   | "header"
+  | "append"
   | "value"
   | "pattern"
   | "regex"
@@ -99,13 +100,15 @@ export function uncompilableReason(
   // and a value with no line break. Kept to the shared grammar primitives (not
   // the full validateHeader) so this stays lean in the background bundle.
   const header = normalizeHeaderName(rule.header);
-  if (
-    !HTTP_TOKEN.test(header) ||
-    (rule.operation === "append" &&
-      rule.direction === "request" &&
-      classifyHeaderName(header).requestAppend !== "allowed")
-  ) {
+  if (!HTTP_TOKEN.test(header)) {
     return "header";
+  }
+  if (
+    rule.operation === "append" &&
+    rule.direction === "request" &&
+    classifyHeaderName(header).requestAppend !== "allowed"
+  ) {
+    return "append";
   }
   if (
     rule.operation !== "remove" &&

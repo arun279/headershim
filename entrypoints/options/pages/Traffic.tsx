@@ -92,19 +92,21 @@ function TapeLine({ row }: { row: TapeRow }) {
           class="tape-header"
         />
       </span>
-      <span class="tape-status">{statusLabel(row.status)}</span>
+      <span class="tape-status">{statusLabel(row)}</span>
     </li>
   );
 }
 
-function statusLabel(status: TapeRow["status"]): string {
-  switch (status) {
+function statusLabel(row: TapeRow): string {
+  switch (row.status) {
     case "live":
       return text.status.live;
     case "needs-access":
       return text.status.needsAccess;
     case "refused":
-      return text.status.refused;
+      return row.refused === undefined
+        ? text.status.refused
+        : copy.readout.refusedReason[row.refused];
     case "out-of-sync":
       return text.status.outOfSync;
     case "unconfirmed":

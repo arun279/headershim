@@ -211,6 +211,26 @@ describe("all rules", () => {
     );
   });
 
+  it("states all-sites reach unconditionally", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "authorization",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          rule({ header: "authorization", scope: { type: "all" } }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    expect(within(root, ".fleet-count").textContent).toBe(
+      `reaches ${text.scope.all}`,
+    );
+  });
+
   it("toggles a rule off from its switch", async () => {
     await seed(oneRule());
     const root = await mount();
@@ -356,5 +376,25 @@ describe("configured changes", () => {
     expect(root.querySelector(".tape-row.live")).not.toBeNull();
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
+  });
+
+  it("shows the append refusal reason from the compiler", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            operation: "append",
+            header: "content-type",
+            scope: { type: "all" },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+
+    expect(within(root, ".tape-status").textContent).toBe(
+      copy.readout.refusedReason.append,
+    );
   });
 });

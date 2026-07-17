@@ -380,9 +380,11 @@ function ByHeader({ fleet, onToggle, onGrant, onEdit }: LensProps) {
           <div class="fleet-group-head">
             <span class="fleet-host mono">{group.header}</span>
             <span class="fleet-count">
-              {group.broad && group.siteCount === 0
-                ? text.broadReach
-                : sentence(text.reaches(group.siteCount, group.broad))}
+              {group.allSites
+                ? sentence(text.allReach(text.scope.all))
+                : group.broad && group.siteCount === 0
+                  ? text.broadReach
+                  : sentence(text.reaches(group.siteCount, group.broad))}
             </span>
           </div>
           <div class="fleet-rows">
