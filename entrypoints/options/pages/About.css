@@ -1,8 +1,4 @@
-/* Base card recipe lives in App.css; About only narrows the measure. */
-.about-card {
-  max-width: 560px;
-}
-
+/* Base card recipe lives in App.css; About adds nothing to it. */
 .about-build {
   font-size: 13.5px;
   font-weight: 650;
@@ -13,6 +9,7 @@
 }
 
 .about-description {
+  max-width: 62ch;
   color: var(--ink2);
   font-size: 12.5px;
   line-height: 1.5;

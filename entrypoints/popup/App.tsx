@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
 import { availableProfileName } from "../../src/core/codec/headershim";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
-import { BADGE_COLORS, type Direction, type Rule } from "../../src/core/model";
+import {
+  BADGE_COLORS,
+  type Direction,
+  type TabOverride,
+} from "../../src/core/model";
 import { err, type Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
 import { originPatternForDomain } from "../../src/core/scope";
@@ -20,10 +24,12 @@ import {
   TabGlyph,
 } from "../../src/ui/components/readout/glyphs";
 import { ReadoutHead } from "../../src/ui/components/readout/ReadoutHead";
-import { ThisTabComposer } from "../../src/ui/components/readout/ThisTabComposer";
+import {
+  ThisTabComposer,
+  type ThisTabError,
+} from "../../src/ui/components/readout/ThisTabComposer";
 import { TokenHero } from "../../src/ui/components/readout/TokenHero";
 import { sentence } from "../../src/ui/components/sentence";
-import { ThemeControl } from "../../src/ui/components/ThemeControl";
 import { Toast } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
 import { copy } from "../../src/ui/copy";
@@ -35,6 +41,7 @@ import {
 import { computeReadout, type TabChange } from "../../src/ui/state/readout";
 import {
   addOverride,
+  type OverrideDraft,
   pruneForeignOrigins,
   removeOverride,
   setOverrideEnabled,
@@ -70,6 +77,7 @@ export function App() {
         doc={app.doc}
         status={app.status}
         grants={app.grants}
+        isRegexSupported={app.isRegexSupported}
         tabId={app.tabId}
         overrides={app.overrides}
       />
@@ -82,11 +90,22 @@ type ReadyProps = Omit<
   "phase" | "grantGaps"
 >;
 
-function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
+/** A toast, and the one thing it can offer to do about what it just said. */
+interface PopupToast {
+  message: string;
+  action?: { label: string; run: () => void };
+}
+
+function Ready({
+  doc,
+  status,
+  grants,
+  isRegexSupported,
+  tabId,
+  overrides,
+}: ReadyProps) {
   const announce = useAnnounce();
-  const [toast, setToast] = useState<
-    { message: string; reload?: boolean } | undefined
-  >(undefined);
+  const [toast, setToast] = useState<PopupToast | undefined>(undefined);
   const [addingTo, setAddingTo] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
@@ -95,14 +114,11 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
 
   // Every toast also speaks through the persistent polite region: a freshly
   // mounted role=status node with text already present is not reliably read.
-  const showToast = (message: string) => {
-    setToast({ message });
-    announce(message);
+  const raise = (next: PopupToast) => {
+    setToast(next);
+    announce(next.message);
   };
-  const showReloadToast = (message: string) => {
-    setToast({ message, reload: true });
-    announce(message);
-  };
+  const showToast = (message: string) => raise({ message });
   const reloadTab = () => {
     // A fresh gesture, so activeTab covers the reload with no new permission.
     void browser.tabs.reload();
@@ -132,6 +148,12 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
     void pruneForeignOrigins(tabId, tabDomain);
   }, [pruned, tabResolved, tabId, tabDomain]);
 
+  // An Undo outlives the render that armed it, so a write reads the rule as it
+  // stands when it commits: only the value moves, and an edit made elsewhere in
+  // between survives being undone.
+  const docRef = useRef(doc);
+  docRef.current = doc;
+
   const paused = status.kind === "paused";
   const activeProfile = useMemo(
     () => doc.profiles.find((profile) => profile.id === doc.activeProfileId),
@@ -140,13 +162,14 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
   const readout = useMemo(
     () =>
       computeReadout({
-        activeProfile,
+        doc,
         host: tabDomain,
         grants,
         overrides,
-        paused,
+        isRegexSupported,
+        status,
       }),
-    [activeProfile, tabDomain, grants, overrides, paused],
+    [doc, tabDomain, grants, overrides, isRegexSupported, status],
   );
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
@@ -195,11 +218,16 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
     // event refreshes every surface at once, and the page keeps its pre-grant
     // response, so the toast hands over a Reload-tab action rather than reloading.
     void requestPermissions([...(change.missing ?? [])]).then((granted) => {
-      if (granted) showReloadToast(copy.toast.accessGranted);
+      if (granted) {
+        raise({
+          message: copy.toast.accessGranted,
+          action: { label: copy.actions.reloadTab, run: reloadTab },
+        });
+      }
     });
   };
 
-  const editChangeValue = async (
+  const writeChangeValue = async (
     change: TabChange,
     value: string,
   ): Promise<boolean> => {
@@ -212,20 +240,12 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
       );
       return outcome.ok;
     }
-    const rule = doc.profiles
+    const rule = docRef.current.profiles
       .find((profile) => profile.id === change.profileId)
       ?.rules.find((candidate) => candidate.id === change.ruleId);
     if (rule === undefined || change.profileId === undefined) return false;
-    return updateRuleValue(change.profileId, rule, value);
-  };
-
-  const updateRuleValue = async (
-    profileId: string,
-    rule: Rule,
-    value: string,
-  ): Promise<boolean> => {
     const { id: _id, num: _num, generated: _generated, ...unchanged } = rule;
-    const outcome = await mutations.saveRule(profileId, rule.id, {
+    const outcome = await mutations.saveRule(change.profileId, rule.id, {
       ...unchanged,
       value,
     });
@@ -234,7 +254,28 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
       if (message !== undefined) showToast(message);
       return false;
     }
-    showToast(copy.toast.changesSaved);
+    return true;
+  };
+
+  // A value edit overwrites bytes that may be the only copy of a live
+  // credential, and the field opens empty for a secret, so one stray Enter can
+  // wipe it. Undo rides every commit rather than only the losses we predicted.
+  const editChangeValue = async (
+    change: TabChange,
+    value: string,
+  ): Promise<boolean> => {
+    const previous = change.value ?? "";
+    if (!(await writeChangeValue(change, value))) return false;
+    raise({
+      message: copy.toast.changesSaved,
+      action: {
+        label: copy.actions.undo,
+        run: () => {
+          void writeChangeValue(change, previous);
+          setToast(undefined);
+        },
+      },
+    });
     return true;
   };
 
@@ -244,42 +285,24 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
     }
   };
 
-  const swapToken = async (
-    change: TabChange,
-    value: string,
-  ): Promise<boolean> => {
-    if (change.source === "override" && change.overrideNum !== undefined) {
-      if (tabId === undefined) return false;
-      const outcome = await updateOverrideValue(
-        tabId,
-        change.overrideNum,
-        value,
-      );
-      return outcome.ok;
-    }
-    if (tabId === undefined || tabDomain === undefined) return false;
-    // The host grant fires inside this same gesture; the swap writes a this-tab
-    // override so the new value never becomes a permanent line on the card.
-    void requestPermissions([originPatternForDomain(tabDomain)]);
-    const outcome = await addOverride(tabId, tabDomain, {
-      direction: "request",
-      operation: "set",
-      header: change.header,
-      value,
-    });
-    return outcome.ok;
-  };
-
-  const submitThisTab = (draft: Parameters<typeof addOverride>[2]) => {
+  const submitThisTab = async (
+    draft: OverrideDraft,
+  ): Promise<Result<TabOverride, ThisTabError>> => {
     if (tabId === undefined || tabDomain === undefined) {
-      return Promise.resolve(
-        err({
-          kind: "name-required" as const,
-          copyId: HEADER_ERROR_COPY_IDS["name-required"],
-        }),
-      );
+      return err({
+        kind: "name-required" as const,
+        copyId: HEADER_ERROR_COPY_IDS["name-required"],
+      });
     }
-    void requestPermissions([originPatternForDomain(tabDomain)]);
+    // The request fires inside the commit gesture, and its answer decides the
+    // write: an override on a host Chrome will not let us touch applies to
+    // nothing, and this-tab lines have no needs-access reading to fall back on.
+    const granted = await requestPermissions([
+      originPatternForDomain(tabDomain),
+    ]);
+    if (!granted) {
+      return err({ kind: "grant-declined" as const, host: tabDomain });
+    }
     return addOverride(tabId, tabDomain, draft);
   };
 
@@ -322,6 +345,19 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
     }
   }, [addingTo, addingProfile]);
 
+  // Drawn once so no surface can render a toast that has quietly dropped the one
+  // action it was raised to offer.
+  const toastNode = toast !== undefined && (
+    <Toast
+      onDismiss={() => setToast(undefined)}
+      persist={toast.action !== undefined}
+      actionLabel={toast.action?.label}
+      onAction={toast.action?.run}
+    >
+      {toast.message}
+    </Toast>
+  );
+
   if (addingProfile !== undefined) {
     return (
       <main class="popup" tabIndex={-1}>
@@ -340,16 +376,17 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
           onGranted={() => showToast(copy.toast.ruleLive)}
           onClose={() => setAddingTo(undefined)}
         />
-        {toast !== undefined && (
-          <Toast onDismiss={() => setToast(undefined)}>{toast.message}</Toast>
-        )}
+        {toastNode}
       </main>
     );
   }
 
+  // Bound once so the callbacks act on the token this render drew, not on
+  // whatever the readout holds by the time the click lands.
+  const token = readout.token;
   const nothing =
     !composing &&
-    readout.token === undefined &&
+    token === undefined &&
     readout.request.length === 0 &&
     readout.response.length === 0 &&
     readout.overrides.length === 0;
@@ -371,22 +408,24 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
           {copy.readout.pausedBanner}
         </div>
       )}
-      <div class={paused ? "popup-body paused" : "popup-body"}>
+      {/* Pause is drawn where it is true: every line reads paused in the
+          readout's own grammar, and desaturating the region on top of that
+          would grey live controls with the platform's word for disabled. */}
+      <div class="popup-body">
         {composing && (
           <ThisTabComposer
-            host={tabDomain}
             onSubmit={submitThisTab}
             onClose={() => setComposing(false)}
             onCommitted={() => showToast(copy.toast.changesSaved)}
           />
         )}
-        {readout.token !== undefined && (
+        {token !== undefined && (
           <TokenHero
-            change={readout.token}
+            change={token}
             host={tabDomain}
             now={now}
-            onSwap={(value) => swapToken(readout.token as TabChange, value)}
-            onGrant={() => grantChange(readout.token as TabChange)}
+            onSwap={(value) => editChangeValue(token, value)}
+            onGrant={() => grantChange(token)}
           />
         )}
         {readout.overrides.length > 0 && (
@@ -414,10 +453,14 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
         {nothing && <ReadoutEmpty host={readout.host} onAdd={openAddChange} />}
       </div>
       <footer class="foot">
-        <button type="button" class="add" onClick={openAddChange}>
-          <PlusGlyph />
-          {copy.readout.addChange}
-        </button>
+        {/* The empty state carries the one Add; the footer's copy of it would
+            be the same button twice, 80px apart, offering the same thing. */}
+        {!nothing && (
+          <button type="button" class="add" onClick={openAddChange}>
+            <PlusGlyph />
+            {copy.readout.addChange}
+          </button>
+        )}
         {tabDomain !== undefined && (
           <button type="button" class="tab-btn" onClick={openComposer}>
             <TabGlyph />
@@ -425,10 +468,6 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
           </button>
         )}
         <span class="foot-sp" />
-        <ThemeControl
-          theme={doc.settings.theme}
-          onChange={(next) => run(mutations.setTheme(next))}
-        />
         <Button
           kind="ghost"
           label={copy.actions.options}
@@ -438,25 +477,14 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
         </Button>
         <span class="pause">
           <Toggle
-            checked={paused}
+            checked={!paused}
             label={copy.readout.pauseSwitch}
-            tone="paused"
-            onChange={(next) => run(mutations.setPaused(next))}
+            onChange={(next) => run(mutations.setPaused(!next))}
           />
           {paused ? copy.readout.pausedLabel : copy.readout.onLabel}
         </span>
       </footer>
-      {toast !== undefined && (
-        <Toast
-          onDismiss={() => setToast(undefined)}
-          actionLabel={
-            toast.reload === true ? copy.actions.reloadTab : undefined
-          }
-          onAction={toast.reload === true ? reloadTab : undefined}
-        >
-          {toast.message}
-        </Toast>
-      )}
+      {toastNode}
     </main>
   );
 }
@@ -477,13 +505,14 @@ function DirectionGroup({
   if (changes.length === 0) return null;
   return (
     <section class="group" aria-label={copy.readout.direction[direction]}>
+      {/* No count: the head already states the one total, and a second count
+          drawn over a different set of lines only ever disagrees with it. */}
       <div class="dir">
         <span class="ar mono" aria-hidden="true">
           {direction === "request" ? "→" : "←"}
         </span>
         <span class="t silk">{copy.readout.direction[direction]}</span>
         <span class="rule" aria-hidden="true" />
-        <span class="c mono">{changes.length}</span>
       </div>
       {changes.map((change) => (
         <ChangeLine
@@ -529,6 +558,7 @@ function ThisTabStrip({
   );
 }
 
+// One honest sentence and, where there is a site to change, one action.
 function ReadoutEmpty({
   host,
   onAdd,
@@ -543,11 +573,12 @@ function ReadoutEmpty({
           ? copy.readout.noHost
           : sentence(copy.readout.empty(host))}
       </p>
-      <button type="button" class="add" onClick={onAdd}>
-        <PlusGlyph />
-        {copy.readout.addChange}
-      </button>
-      {host !== undefined && <p class="perm">{copy.readout.emptyPermNote}</p>}
+      {host !== undefined && (
+        <button type="button" class="add" onClick={onAdd}>
+          <PlusGlyph />
+          {copy.readout.addChange}
+        </button>
+      )}
     </div>
   );
 }

@@ -42,11 +42,17 @@ export const HEADER_ERROR_COPY_IDS = {
   "request-append-not-allowed": "request-append-not-allowed",
 } as const satisfies Record<HeaderErrorClass, string>;
 
-export type HeaderAdvisoryClass = "network-managed" | "host-http2";
+export type HeaderAdvisoryClass =
+  | "network-managed"
+  | "host-http2"
+  | "credential"
+  | "security-response";
 
 export const HEADER_ADVISORY_COPY_IDS = {
   "network-managed": "header-network-managed",
   "host-http2": "header-host-http2",
+  credential: "header-credential",
+  "security-response": "header-security-response",
 } as const satisfies Record<HeaderAdvisoryClass, string>;
 
 export type HeaderValidationError =
@@ -84,7 +90,20 @@ type HeaderAdvisory =
   | {
       readonly kind: "host-http2";
       readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["host-http2"];
+    }
+  | {
+      readonly kind: "credential";
+      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["credential"];
+    }
+  | {
+      readonly kind: "security-response";
+      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["security-response"];
     };
+
+type SensitivityAdvisory = Extract<
+  HeaderAdvisory,
+  { kind: "credential" | "security-response" }
+>;
 
 export interface HeaderClassification {
   readonly requestAppend: "allowed" | "disallowed";
@@ -117,9 +136,46 @@ const NETWORK_MANAGED_HEADERS: ReadonlySet<string> = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+  "api-key",
+  "x-api-key",
+]);
+// Response headers a site sends to constrain what its own pages may do. A rule
+// that sets or removes one of these takes the protection away for as far as the
+// rule reaches; an append can only add a further constraint.
+const SECURITY_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "access-control-allow-credentials",
+  "access-control-allow-origin",
+  "content-security-policy",
+  "cross-origin-embedder-policy",
+  "cross-origin-opener-policy",
+  "cross-origin-resource-policy",
+  "permissions-policy",
+  "referrer-policy",
+  "strict-transport-security",
+  "x-content-type-options",
+  "x-frame-options",
+]);
 
 export function normalizeHeaderName(header: string): string {
   return header.trim().toLowerCase();
+}
+
+/**
+ * Whether a header carries a credential. The one list behind every surface that
+ * treats a value as a secret: the editor's advisory, the import review, and the
+ * redaction the popup and the rule lists apply.
+ */
+export function isSecretHeader(header: string): boolean {
+  const normalized = normalizeHeaderName(header);
+  return (
+    CREDENTIAL_HEADERS.has(normalized) ||
+    (normalized.startsWith("x-") && normalized.endsWith("-token"))
+  );
 }
 
 export function classifyHeaderName(header: string): HeaderClassification {
@@ -145,6 +201,38 @@ export function classifyHeaderName(header: string): HeaderClassification {
           ]
         : [],
   };
+}
+
+/**
+ * What a rule does to security, which the header name alone cannot answer:
+ * writing a credential the request then carries, or taking away a protection the
+ * site sent. `classifyHeaderName` answers the name-only half. Warn, never block:
+ * calling an API and un-framing a page are both legitimate.
+ */
+export function headerSensitivity(
+  input: HeaderInput,
+): readonly SensitivityAdvisory[] {
+  const header = normalizeHeaderName(input.header);
+  const advisories: SensitivityAdvisory[] = [];
+
+  if (input.operation !== "remove" && isSecretHeader(header)) {
+    advisories.push({
+      kind: "credential",
+      copyId: HEADER_ADVISORY_COPY_IDS.credential,
+    });
+  }
+  if (
+    input.direction === "response" &&
+    input.operation !== "append" &&
+    SECURITY_RESPONSE_HEADERS.has(header)
+  ) {
+    advisories.push({
+      kind: "security-response",
+      copyId: HEADER_ADVISORY_COPY_IDS["security-response"],
+    });
+  }
+
+  return advisories;
 }
 
 export function validateHeader(

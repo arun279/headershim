@@ -8,12 +8,12 @@ import { createV1Seed } from "../core/schema";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import { fire, press, render, settle, typeInto } from "../ui/test/render";
-import { THEME_CACHE_KEY } from "../ui/theme";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
+// activeTabDomain is a spy: a tab with no web origin is its own popup state.
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
-  activeTabDomain: () => Promise.resolve("api.example.com"),
+  activeTabDomain: vi.fn(() => Promise.resolve("api.example.com")),
 }));
 
 const ORIGIN = "*://*.api.example.com/*";
@@ -47,6 +47,33 @@ function seededDoc(rules: Rule[], extra: Profile[] = []): StateDoc {
     profiles: [{ ...profile, rules }, ...extra],
     nextRuleNum: 100,
   };
+}
+
+const SWAP_FROM = "Bearer opaque1234";
+const SWAP_TO = "Bearer rotated-9Zt1";
+
+function tokenDoc(): StateDoc {
+  return seededDoc([rule({ header: "authorization", value: SWAP_FROM })]);
+}
+
+/** A popup whose hero is a live token, with the swap already committed. */
+async function mountSwapped() {
+  const { root } = await mount(tokenDoc(), true);
+  fire(() => (root.querySelector(".token .swap") as HTMLButtonElement).click());
+  const field = root.querySelector(".swapfield input") as HTMLInputElement;
+  typeInto(field, SWAP_TO);
+  press(field, "Enter");
+  await settle();
+  return root;
+}
+
+/** Operate the Undo the toast is offering, and report what the rule holds. */
+async function undoThroughToast(root: Element) {
+  const undo = root.querySelector(".toast-action") as HTMLButtonElement;
+  expect(undo.textContent).toBe("Undo");
+  await act(async () => undo.click());
+  await settle();
+  return (await read()).profiles[0]?.rules[0]?.value;
 }
 
 async function mount(doc?: StateDoc, granted = false) {
@@ -121,41 +148,73 @@ describe("popup readout", () => {
     );
     expect(root.querySelector(".fresh-track")).not.toBeNull();
     expect(root.querySelector(".fresh-lab .tag")?.textContent).toBe("JWT");
+    // The bar carries the fraction and the countdown carries it in words. A
+    // third reading of the same fact is not a third fact.
+    expect(root.querySelector(".fresh-lab")?.textContent).not.toMatch(/%/);
   });
 
-  it("swaps a token through a masked, screen-share-safe field", async () => {
-    const { root } = await mount(
-      seededDoc([
-        rule({ header: "authorization", value: "Bearer opaque1234" }),
-      ]),
-      true,
-    );
+  it("swaps a token through a masked field, onto the rule carrying it", async () => {
+    const { root } = await mount(tokenDoc(), true);
     const swap = root.querySelector(".token .swap") as HTMLButtonElement;
     fire(() => swap.click());
 
     const field = root.querySelector(".swapfield input") as HTMLInputElement;
     expect(field.type).toBe("password");
-    expect(root.querySelector(".swapfield .safety")?.textContent).toContain(
-      "screen-share safe",
-    );
     // The resting masked value yields to a bare "on <host>" while swapping.
     expect(root.querySelector(".tk-val")).toBeNull();
 
-    typeInto(field, "Bearer rotated-9Zt1");
+    typeInto(field, SWAP_TO);
     press(field, "Enter");
     await settle();
 
-    // The swap writes a this-tab override; the persistent rule is untouched.
+    // A dead token is a fact about the rule, not about this tab: the swap
+    // rewrites the saved rule, so the next tab sends the token you just set.
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe(SWAP_TO);
     const session = await import("../platform/session-store").then((m) =>
       m.read(),
     );
-    expect(session.tabs[5]?.[0]).toMatchObject({
-      header: "authorization",
-      value: "Bearer rotated-9Zt1",
+    expect(session.tabs[5]).toBeUndefined();
+  });
+
+  it("hands back the old token from the swap toast", async () => {
+    expect(await undoThroughToast(await mountSwapped())).toBe(SWAP_FROM);
+  });
+
+  it("undoes the value it wrote without reverting an edit made meanwhile", async () => {
+    const root = await mountSwapped();
+
+    // The options page turns the same rule off while the Undo is still offered.
+    const doc = await read();
+    await act(async () => {
+      await write({
+        ...doc,
+        profiles: doc.profiles.map((profile) => ({
+          ...profile,
+          rules: profile.rules.map((candidate) => ({
+            ...candidate,
+            enabled: false,
+          })),
+        })),
+      });
     });
-    expect((await read()).profiles[0]?.rules[0]?.value).toBe(
-      "Bearer opaque1234",
+    await settle();
+
+    await act(async () =>
+      (root.querySelector(".toast-action") as HTMLButtonElement).click(),
     );
+    await settle();
+
+    // Undo hands back the token and nothing else: it is not a time machine for
+    // fields it never touched.
+    const after = (await read()).profiles[0]?.rules[0];
+    expect(after?.value).toBe(SWAP_FROM);
+    expect(after?.enabled).toBe(false);
+  });
+
+  it("keeps a raised Undo operable once the editor opens over it", async () => {
+    const root = await mountSwapped();
+    fire(() => (root.querySelector(".foot .add") as HTMLButtonElement).click());
+    expect(await undoThroughToast(root)).toBe(SWAP_FROM);
   });
 
   it("toggles a rule from its switch, instantly and persistently", async () => {
@@ -273,12 +332,54 @@ describe("popup readout", () => {
       "api.example.com",
     );
     expect(root.querySelector(".change-line")).toBeNull();
+    // The empty state owns the one action; the footer does not repeat it.
+    expect(root.querySelectorAll(".add")).toHaveLength(1);
+    expect(root.querySelector(".foot .add")).toBeNull();
+    expect(root.querySelector(".empty .add")).not.toBeNull();
   });
 
-  it("pauses to a banner and grayscaled body, then resumes", async () => {
-    const { root, body } = await mount(seededDoc([rule()]), true);
+  it("offers no change to add when there is no site to change", async () => {
+    const { activeTabDomain } = await import("../platform/tabs");
+    vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
+    const { root } = await mount(createV1Seed(), true);
+    expect(root.querySelector(".empty")?.textContent).toContain(
+      "Open the popup on a website",
+    );
+    expect(root.querySelectorAll(".add")).toHaveLength(0);
+    expect(root.querySelector(".tab-btn")).toBeNull();
+  });
+
+  it("reads the master switch on while running, the way every switch here does", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const master = root.querySelector(
+      '.foot [aria-label="All header changes"]',
+    ) as HTMLButtonElement;
+    const ruleSwitch = root.querySelector(
+      '[aria-label="Turn off: x-env"]',
+    ) as HTMLButtonElement;
+    // Running reads checked on both, so the two switches 10px apart cannot
+    // show the same fact with opposite knobs.
+    expect(root.querySelector(".foot .pause")?.textContent).toContain("On");
+    expect(master.getAttribute("aria-checked")).toBe("true");
+    expect(ruleSwitch.getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => master.click());
+    await settle();
+    expect((await read()).settings.paused).toBe(true);
+    expect(
+      (
+        root.querySelector(
+          '.foot [aria-label="All header changes"]',
+        ) as HTMLElement
+      ).getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(root.querySelector(".foot .pause")?.textContent).toContain("Paused");
+  });
+
+  it("pauses to a banner and paused lines, then resumes", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
     const pause = root.querySelector(
-      '[aria-label="Global pause"]',
+      '[aria-label="All header changes"]',
     ) as HTMLButtonElement;
     await act(async () => pause.click());
     await settle();
@@ -286,27 +387,13 @@ describe("popup readout", () => {
     expect(root.querySelector(".pausebar")?.textContent).toContain(
       "Everything paused",
     );
-    expect(body().classList.contains("paused")).toBe(true);
-    expect(root.querySelector(".foot")?.classList.contains("paused")).toBe(
-      false,
-    );
+    // Pause is drawn once, on the lines it is true of. Nothing dims the region
+    // on top of that: every control in it still writes.
+    expect(root.querySelector(".change-line.paused")).not.toBeNull();
+    expect(root.querySelector(".popup-body")?.className).toBe("popup-body");
     await act(async () => pause.click());
     await settle();
     expect((await read()).settings.paused).toBe(false);
-  });
-
-  it("switches theme in place and persists the mirror", async () => {
-    const { root } = await mount(createV1Seed(), true);
-    const theme = root.querySelector(
-      '[aria-label="Switch to dark theme"]',
-    ) as HTMLButtonElement;
-    fire(() => theme.click());
-    await settle();
-    expect({
-      stored: (await read()).settings.theme,
-      stamped: document.documentElement.getAttribute("data-theme"),
-      mirrored: localStorage.getItem(THEME_CACHE_KEY),
-    }).toEqual({ stored: "dark", stamped: "dark", mirrored: "dark" });
   });
 
   it("opens options from the footer gear", async () => {

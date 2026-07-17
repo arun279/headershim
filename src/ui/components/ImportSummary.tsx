@@ -1,6 +1,6 @@
 import { useId } from "preact/hooks";
 import type { ImportPlan } from "../../core/codec/headershim";
-import type { ModHeaderImportWarning } from "../../core/codec/modheader";
+import type { ImportPlanWarning } from "../../core/codec/modheader";
 import { copy } from "../copy";
 import { importWarningCopy } from "../state/import-warning-copy";
 import { Button } from "./Button";
@@ -8,7 +8,7 @@ import { sentence } from "./sentence";
 import "./ImportSummary.css";
 
 interface ImportSummaryProps {
-  readonly plan: ImportPlan<ModHeaderImportWarning>;
+  readonly plan: ImportPlan<ImportPlanWarning>;
   readonly applyError?: string | undefined;
   readonly onConvert: (warningIndex: number) => void;
   readonly onImport: () => void;

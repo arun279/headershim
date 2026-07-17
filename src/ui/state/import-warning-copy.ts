@@ -1,17 +1,27 @@
-import type { ModHeaderImportWarning } from "../../core/codec/modheader";
+import type { ImportPlanWarning } from "../../core/codec/modheader";
 import { copy, type Sentence } from "../copy";
 
 /**
- * Maps one mapping warning from an import plan to its display parts: a name
- * (the rule it concerns, or the dropped item it names) and the itemized
- * sentence shown beside it on the pre-apply summary.
+ * Maps one warning from an import plan to its display parts: a name (the rule it
+ * concerns, or the dropped item it names) and the itemized sentence shown beside
+ * it on the pre-apply summary.
  */
-export function importWarningCopy(warning: ModHeaderImportWarning): {
+export function importWarningCopy(warning: ImportPlanWarning): {
   readonly name: string;
   readonly detail: Sentence;
 } {
   const strings = copy.options.importExport.warnings;
   switch (warning.kind) {
+    case "credential":
+      return {
+        name: warning.ruleName,
+        detail: strings.credentialHeader(warning.header),
+      };
+    case "security-response":
+      return {
+        name: warning.ruleName,
+        detail: strings.securityResponseHeader(warning.header),
+      };
     case "request-append-degraded":
       return {
         name: warning.ruleName,

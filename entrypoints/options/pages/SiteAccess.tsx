@@ -15,10 +15,7 @@ import {
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { CheckGlyph, TriangleGlyph } from "../../../src/ui/components/glyphs";
-import {
-  TRUNCATION_LIMITS,
-  Truncate,
-} from "../../../src/ui/components/Truncate";
+import { Truncate } from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
 import "./SiteAccess.css";
 
@@ -43,6 +40,12 @@ export function SiteAccessPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
   const view = siteAccessView(doc, grants);
+  // Under the broad grant no rule can want for access, so a per-site list has
+  // nothing left to say; the narrow grants that outlived it are still revocable
+  // and keep the panel. Otherwise the page would answer "granted" and "nothing
+  // granted yet" in the same breath.
+  const showSites =
+    !grants.allSites || view.needed.length > 0 || view.granted.length > 0;
 
   // A grant or revocation reparents the row to the other group, unmounting the
   // button that was clicked; land focus on the stable page heading rather than
@@ -93,17 +96,9 @@ export function SiteAccessPage({
       class="wb-page site-access-page"
       aria-labelledby="site-access-title"
     >
-      <div>
-        <h1
-          class="wb-title"
-          id="site-access-title"
-          ref={titleRef}
-          tabIndex={-1}
-        >
-          {text.title}
-        </h1>
-        <p class="wb-sub">{text.subtitle}</p>
-      </div>
+      <h1 class="wb-title" id="site-access-title" ref={titleRef} tabIndex={-1}>
+        {text.title}
+      </h1>
 
       {grants.allSites && (
         <div class="sa-card sa-all-on">
@@ -119,42 +114,44 @@ export function SiteAccessPage({
         </div>
       )}
 
-      <div class="sa-card">
-        {view.needed.length > 0 && (
-          <SiteGroup
-            heading={text.neededHeading}
-            entries={view.needed}
-            glyph={
-              <span class="sa-glyph needed">
-                <TriangleGlyph />
-              </span>
-            }
-            count={text.usedBy}
-            action={text.grant}
-            actionLabel={text.grantLabel}
-            onAction={grant}
-          />
-        )}
-        {view.granted.length > 0 && (
-          <SiteGroup
-            heading={text.grantedHeading}
-            entries={view.granted}
-            glyph={
-              <span class="sa-glyph granted">
-                <CheckGlyph />
-              </span>
-            }
-            count={text.ruleCount}
-            action={text.revoke}
-            actionLabel={text.revokeLabel}
-            onAction={revoke}
-          />
-        )}
-        {view.needed.length === 0 && view.granted.length === 0 && (
-          <p class="sa-empty">{copy.emptyState.siteAccess}</p>
-        )}
-        {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
-      </div>
+      {showSites && (
+        <div class="sa-card">
+          {view.needed.length > 0 && (
+            <SiteGroup
+              heading={text.neededHeading}
+              entries={view.needed}
+              glyph={
+                <span class="sa-glyph needed">
+                  <TriangleGlyph />
+                </span>
+              }
+              count={text.usedBy}
+              action={text.grant}
+              actionLabel={text.grantLabel}
+              onAction={grant}
+            />
+          )}
+          {view.granted.length > 0 && (
+            <SiteGroup
+              heading={text.grantedHeading}
+              entries={view.granted}
+              glyph={
+                <span class="sa-glyph granted">
+                  <CheckGlyph />
+                </span>
+              }
+              count={text.ruleCount}
+              action={text.revoke}
+              actionLabel={text.revokeLabel}
+              onAction={revoke}
+            />
+          )}
+          {view.needed.length === 0 && view.granted.length === 0 && (
+            <p class="sa-empty">{copy.emptyState.siteAccess}</p>
+          )}
+          {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
+        </div>
+      )}
 
       {!grants.allSites && (
         <div class="sa-card sa-all-sites">
@@ -210,10 +207,12 @@ function SiteGroup({
         {entries.map((entry) => (
           <li key={entry.origin} class="sa-row">
             {glyph}
+            {/* The host you are approving is the row's whole subject, and the
+                registrable domain is in its tail: no character ceiling, and
+                the middle gives way before either end does. */}
             <Truncate
-              mode="end"
+              mode="middle"
               value={entry.domain}
-              maxChars={TRUNCATION_LIMITS.domain}
               class="mono sa-domain"
             />
             <span class="sa-count">{count(entry.ruleCount)}</span>

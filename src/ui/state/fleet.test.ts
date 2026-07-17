@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GrantSnapshot } from "../../core/grants";
-import type { Profile, Rule } from "../../core/model";
+import type { Profile, Rule, StateDoc } from "../../core/model";
+import { LIVE, OUT_OF_SYNC, PAUSED } from "../test/fixtures";
 import {
   type FleetInput,
   type FleetRule,
@@ -12,6 +13,7 @@ import {
 
 const ALL: GrantSnapshot = { origins: [], allSites: true };
 const NONE: GrantSnapshot = { origins: [], allSites: false };
+const SUPPORT_ALL = () => true;
 
 let seq = 0;
 const baseRule: Omit<Rule, "id" | "num"> = {
@@ -38,12 +40,26 @@ const profile = (overrides: Partial<Profile> = {}): Profile => ({
 });
 
 function projectFleet(
-  input: Omit<FleetInput, "activeProfileId"> & {
+  input: Omit<FleetInput, "doc" | "isRegexSupported"> & {
+    profiles: readonly Profile[];
     activeProfileId?: string | undefined;
+    isRegexSupported?: (regex: string) => boolean;
   },
 ): FleetRule[] {
   const activeProfileId = input.activeProfileId ?? input.profiles[0]?.id;
-  return projectFleetWithActive({ ...input, activeProfileId });
+  const doc: StateDoc = {
+    v: 1,
+    profiles: [...input.profiles],
+    activeProfileId,
+    nextRuleNum: 100,
+    settings: { paused: false, theme: "system", badgeMode: "count" },
+  };
+  return projectFleetWithActive({
+    doc,
+    grants: input.grants,
+    status: input.status,
+    isRegexSupported: input.isRegexSupported ?? SUPPORT_ALL,
+  });
 }
 
 function byKey(fleet: readonly FleetRule[], key: string): FleetRule {
@@ -57,7 +73,7 @@ describe("projectFleet status ladder", () => {
     const fleet = projectFleet({
       profiles: [profile({ rules: [rule({ id: "r" })] })],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const entry = byKey(fleet, "p1:r");
     expect(entry.status).toBe("live");
@@ -70,7 +86,7 @@ describe("projectFleet status ladder", () => {
     const fleet = projectFleet({
       profiles: [profile({ rules: [rule({ id: "r" })] })],
       grants: NONE,
-      paused: false,
+      status: LIVE,
     });
     const entry = byKey(fleet, "p1:r");
     expect(entry.status).toBe("needs-access");
@@ -81,10 +97,66 @@ describe("projectFleet status ladder", () => {
     const fleet = projectFleet({
       profiles: [profile({ rules: [rule({ id: "r", header: "host" })] })],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     expect(byKey(fleet, "p1:r").status).toBe("refused");
     expect(byKey(fleet, "p1:r").refused).toBe("host");
+  });
+
+  it("never reads live while Chrome has not taken the ruleset", () => {
+    const fleet = projectFleet({
+      profiles: [profile({ rules: [rule({ id: "r" })] })],
+      grants: ALL,
+      status: OUT_OF_SYNC,
+    });
+    expect(byKey(fleet, "p1:r").status).toBe("out-of-sync");
+  });
+
+  // Chrome settles each of these inside its own matcher, against a request URL
+  // no projection sees. The Workbench reads them the same way the popup does,
+  // so a rule can never be unconfirmed on one surface and live on the other.
+  it.each([
+    ["initiators", { initiators: ["app.test"] }],
+    [
+      "a pattern",
+      { scope: { type: "pattern" as const, pattern: "||x.test/", hosts: [] } },
+    ],
+    [
+      "a regex",
+      {
+        scope: {
+          type: "regex" as const,
+          regex: "^https://x\\.test/",
+          hosts: [],
+        },
+      },
+    ],
+  ])("declines to claim a rule fires when %s decides it per request", (_label, changes) => {
+    const fleet = projectFleet({
+      profiles: [profile({ rules: [rule({ id: "r", ...changes })] })],
+      grants: ALL,
+      status: LIVE,
+    });
+    expect(byKey(fleet, "p1:r").status).toBe("unconfirmed");
+  });
+
+  it("refuses a rule the compiler would drop from the batch", () => {
+    const fleet = projectFleet({
+      profiles: [
+        profile({
+          rules: [
+            rule({
+              id: "r",
+              scope: { type: "domains", domains: ["sürvice.test"] },
+            }),
+          ],
+        }),
+      ],
+      grants: ALL,
+      status: LIVE,
+    });
+    expect(byKey(fleet, "p1:r").status).toBe("refused");
+    expect(byKey(fleet, "p1:r").refused).toBe("domains");
   });
 
   it("reads a disabled rule off, and pause never shows off as paused", () => {
@@ -95,7 +167,7 @@ describe("projectFleet status ladder", () => {
         }),
       ],
       grants: ALL,
-      paused: true,
+      status: PAUSED,
     });
     expect(byKey(fleet, "p1:on").status).toBe("paused");
     expect(byKey(fleet, "p1:off").status).toBe("off");
@@ -106,7 +178,7 @@ describe("projectFleet status ladder", () => {
       profiles: [profile({ rules: [rule({ id: "r" })] })],
       activeProfileId: "missing",
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     expect(byKey(fleet, "p1:r").status).toBe("off");
   });
@@ -125,7 +197,7 @@ describe("projectFleet status ladder", () => {
     const fleet = projectFleet({
       profiles: [winner, loser],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const entry = byKey(fleet, "p2:l");
     expect(entry.status).toBe("off");
@@ -148,11 +220,33 @@ describe("projectFleet status ladder", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     expect(byKey(fleet, "p1:l").overriddenBy).toEqual({
       label: "environment default",
     });
+  });
+
+  it("does not let a compiler-dropped rule override a compiled rule", () => {
+    const fleet = projectFleet({
+      profiles: [
+        profile({
+          rules: [
+            rule({ id: "dropped", header: "x-env", value: "bad\nvalue" }),
+            rule({ id: "compiled", header: "x-env", value: "prod" }),
+          ],
+        }),
+      ],
+      grants: ALL,
+      status: LIVE,
+    });
+
+    expect(byKey(fleet, "p1:dropped").status).toBe("refused");
+    expect(byKey(fleet, "p1:compiled").status).toBe("live");
+    expect(tapeRows(groupBySite(fleet)).map((row) => row.header)).toEqual([
+      "x-env",
+      "x-env",
+    ]);
   });
 
   it("redacts secret values and drops the value for a remove", () => {
@@ -170,7 +264,7 @@ describe("projectFleet status ladder", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     expect(byKey(fleet, "p1:s").display).toBe("Bearer …redacted");
     expect(byKey(fleet, "p1:d").display).toBeUndefined();
@@ -191,7 +285,7 @@ describe("groupBySite", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const groups = groupBySite(fleet);
     expect(groups.map((group) => group.host)).toEqual(["a.com", "b.com"]);
@@ -213,7 +307,7 @@ describe("groupBySite", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const groups = groupBySite(fleet);
     const cross = groups.find((group) => group.kind === "cross-site");
@@ -242,7 +336,7 @@ describe("groupByHeader", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const groups = groupByHeader(fleet);
     expect(groups.map((group) => group.header)).toEqual([
@@ -261,7 +355,7 @@ describe("groupByHeader", () => {
         profile({ rules: [rule({ id: "r", scope: { type: "all" } })] }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     expect(groupByHeader(fleet)[0]?.broad).toBe(true);
   });
@@ -283,7 +377,7 @@ describe("tapeRows", () => {
         }),
       ],
       grants: ALL,
-      paused: false,
+      status: LIVE,
     });
     const rows = tapeRows(groupBySite(fleet));
     const statuses = rows.map((row) => row.status);
@@ -306,7 +400,7 @@ describe("tapeRows", () => {
         }),
       ],
       grants: NONE,
-      paused: false,
+      status: LIVE,
     });
     const rows = tapeRows(groupBySite(fleet));
     expect(rows[0]?.status).toBe("needs-access");

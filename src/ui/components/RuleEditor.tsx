@@ -1,4 +1,10 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
@@ -25,14 +31,28 @@ import { Button } from "./Button";
 import { handleEditorCommitKey } from "./editorKeys";
 import { CloseGlyph } from "./glyphs";
 import { HeaderFields } from "./HeaderFields";
-import { HeaderLineFields } from "./HeaderLineFields";
+import { HeaderNameInput } from "./HeaderNameInput";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
 import { useDraftState } from "./useDraftState";
+import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
+
+/** The profiles a rule can be authored into; the editor writes to the picked one. */
+export interface EditorProfile {
+  readonly id: string;
+  readonly name: string;
+}
 
 interface RuleEditorProps {
   profileName: string;
+  /**
+   * Every profile the rule may be saved into. Present on surfaces that author
+   * across profiles; the popup composes into the tab's own profile and omits it.
+   */
+  profiles?: readonly EditorProfile[] | undefined;
+  /** The profile the rule currently lives in; the select's initial choice. */
+  profileId?: string | undefined;
   /** Absent for a new rule. */
   rule?: Rule | undefined;
   /** Domain of the tab the popup opened on; pre-fills a new Domains scope. */
@@ -46,10 +66,17 @@ interface RuleEditorProps {
   grants: GrantSnapshot;
   /** Origin of the tab the popup opened on: the inferred initiator. */
   tabDomain?: string | undefined;
+  /** `profileId` is the picked profile, or undefined where no choice is offered. */
   onSave: (
     ruleId: string | undefined,
     draft: RuleDraft,
+    profileId: string | undefined,
   ) => Promise<Result<Rule, MutationError>>;
+  /**
+   * Deletes the rule being edited. Present only where an undo is offered: the
+   * editor asks nothing before calling it.
+   */
+  onDelete?: (() => void) | undefined;
   /** Fires the permission prompt after a successful save. */
   onRequestGrant: (origins: string[]) => Promise<boolean>;
   /** A grant landed: the sites named by the result message. */
@@ -76,6 +103,7 @@ interface Draft {
   scope: ScopeDraft;
   resourceTypes: ResourceGroup[] | "all";
   comment: string;
+  profileId: string | undefined;
 }
 
 interface FieldErrors {
@@ -100,11 +128,19 @@ export function RuleEditor(props: RuleEditorProps) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pastedLineSplit, setPastedLineSplit] = useState(false);
   const initialFocusRef = useRef<HTMLInputElement>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const fieldsRef = useRef<HTMLDivElement>(null);
   const previousCloseRequest = useRef(props.closeRequest);
   const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
-    () => initialDraft(props.rule, props.prefillDomain, props.prefill),
+    () =>
+      initialDraft(
+        props.rule,
+        props.prefillDomain,
+        props.prefill,
+        props.profileId,
+      ),
     () => setErrors({}),
   );
 
@@ -126,6 +162,7 @@ export function RuleEditor(props: RuleEditorProps) {
       const outcome = await props.onSave(
         props.rule?.id,
         grant?.draft ?? ruleDraft,
+        current.profileId,
       );
       if (!outcome.ok) {
         const mapped = mapError(outcome.error, current.scope.type);
@@ -190,6 +227,18 @@ export function RuleEditor(props: RuleEditorProps) {
     }
   }, [confirmDiscard]);
 
+  // A rejected commit leaves focus on the button that was rejected. Every field
+  // already marks itself aria-invalid, so the first one in document order is the
+  // first one on screen.
+  useLayoutEffect(() => {
+    if (Object.keys(errors).length === 0) {
+      return;
+    }
+    fieldsRef.current
+      ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      ?.focus();
+  }, [errors]);
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) {
       return;
@@ -236,7 +285,7 @@ export function RuleEditor(props: RuleEditorProps) {
   return (
     <Sheet
       label={title}
-      class="editor-sheet editor-sheet-with-footer"
+      class="editor-sheet"
       modal={props.modal ?? true}
       initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
@@ -250,7 +299,11 @@ export function RuleEditor(props: RuleEditorProps) {
       }
       pinned={
         <>
-          <AdvisorySlot header={draft.header} />
+          <AdvisorySlot
+            header={draft.header}
+            direction={draft.direction}
+            operation={draft.operation}
+          />
           <div class="editor-actions">
             {confirmDiscard ? (
               <>
@@ -271,6 +324,18 @@ export function RuleEditor(props: RuleEditorProps) {
               </>
             ) : (
               <>
+                {/* A draft that was never saved has nothing to delete; Cancel
+                    already discards it. */}
+                {props.onDelete !== undefined && props.rule !== undefined && (
+                  <button
+                    type="button"
+                    class="editor-delete"
+                    disabled={busy}
+                    onClick={props.onDelete}
+                  >
+                    {copy.editor.delete}
+                  </button>
+                )}
                 <button
                   type="button"
                   class="editor-cancel"
@@ -291,7 +356,7 @@ export function RuleEditor(props: RuleEditorProps) {
         </>
       }
     >
-      <div class="rule-editor">
+      <div class="rule-editor" ref={fieldsRef}>
         <HeaderFields
           idBase={id}
           draft={draft}
@@ -299,35 +364,71 @@ export function RuleEditor(props: RuleEditorProps) {
           update={update}
         />
 
-        <HeaderLineFields
-          header={draft.header}
-          value={draft.value}
-          remove={draft.operation === "remove"}
-          generated={draft.generated}
-          frozenAt={
-            draft.generated !== undefined &&
-            draft.generated.at === props.rule?.generated?.at
-              ? formatFrozenAt(draft.generated.at)
-              : undefined
-          }
-          generatedActions={false}
-          nameError={errors.name}
-          valueError={errors.value}
-          nameInputRef={(element) => {
+        <HeaderNameInput
+          value={draft.header}
+          error={errors.name}
+          autoFocus
+          inputRef={(element) => {
             initialFocusRef.current = element;
           }}
-          onHeaderInput={(header) =>
-            update((current) => ({ ...current, header }))
-          }
-          onValueInput={(value) =>
+          onInput={(header) => {
+            setPastedLineSplit(false);
+            update((current) => ({ ...current, header }));
+          }}
+          onPasteLine={(text) => {
+            const line = parseHeaderLine(text);
+            if (line === undefined) {
+              return false;
+            }
+            setPastedLineSplit(true);
             update((current) => ({
               ...current,
-              value,
+              header: line.name,
+              value: line.value,
               generated: undefined,
-            }))
-          }
-          onGenerate={generate}
+            }));
+            return true;
+          }}
         />
+
+        {pastedLineSplit && (
+          <p class="editor-micro" role="status">
+            {copy.editor.pastedLineSplit}
+          </p>
+        )}
+
+        {draft.operation !== "remove" && (
+          <ValueField
+            value={draft.value}
+            generated={draft.generated}
+            frozenAt={
+              draft.generated !== undefined &&
+              draft.generated.at === props.rule?.generated?.at
+                ? formatFrozenAt(draft.generated.at)
+                : undefined
+            }
+            error={errors.value}
+            onInput={(value) =>
+              update((current) => ({
+                ...current,
+                value,
+                generated: undefined,
+              }))
+            }
+            onGenerate={generate}
+          />
+        )}
+
+        {props.profiles !== undefined && draft.profileId !== undefined && (
+          <ProfileField
+            id={`${id}-profile`}
+            profiles={props.profiles}
+            profileId={draft.profileId}
+            onProfile={(profileId) =>
+              update((current) => ({ ...current, profileId }))
+            }
+          />
+        )}
 
         <ScopeEditor
           scope={draft.scope}
@@ -342,20 +443,6 @@ export function RuleEditor(props: RuleEditorProps) {
             update((current) => ({ ...current, resourceTypes }))
           }
         />
-
-        {draft.operation !== "remove" && (
-          <GeneratedValueDisclosure
-            id={`${id}-generated`}
-            generated={draft.generated}
-            frozenAt={
-              draft.generated !== undefined &&
-              draft.generated.at === props.rule?.generated?.at
-                ? formatFrozenAt(draft.generated.at)
-                : undefined
-            }
-            onGenerate={generate}
-          />
-        )}
 
         <CommentDisclosure
           id={`${id}-comment`}
@@ -423,67 +510,68 @@ function CommentDisclosure({
   );
 }
 
-function GeneratedValueDisclosure({
+/**
+ * Which profile the rule is saved in. Choosing a profile that is not running
+ * parks the rule there: it is authored and stored, and live traffic is untouched
+ * until that profile is switched on.
+ */
+function ProfileField({
   id,
-  generated,
-  frozenAt,
-  onGenerate,
+  profiles,
+  profileId,
+  onProfile,
 }: {
   id: string;
-  generated: Rule["generated"] | undefined;
-  frozenAt: string | undefined;
-  onGenerate: (kind: "uuid" | "timestamp") => void;
+  profiles: readonly EditorProfile[];
+  profileId: string;
+  onProfile: (profileId: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div class="editor-option">
-      <button
-        type="button"
-        class="disclosure"
-        aria-expanded={open}
-        aria-controls={open ? `${id}-panel` : undefined}
-        onClick={() => setOpen((current) => !current)}
+    <div class="editor-field">
+      <label class="editor-label" for={id}>
+        {copy.editor.labels.profile}
+      </label>
+      <select
+        id={id}
+        class="field editor-profile-select"
+        value={profileId}
+        onChange={(event) => onProfile(event.currentTarget.value)}
       >
-        <span>
-          {copy.editor.labels.generatedValue}
-          {generated === undefined
-            ? ""
-            : ` · ${copy.editor.generatedKind[generated.kind]}`}
-        </span>
-        <span
-          class={open ? "disclosure-chevron open" : "disclosure-chevron"}
-          aria-hidden="true"
-        >
-          ›
-        </span>
-      </button>
-      {open && (
-        <div class="generated-value-panel" id={`${id}-panel`}>
-          <div class="generated-value-actions">
-            <Button kind="quiet" onClick={() => onGenerate("uuid")}>
-              {copy.editor.insertUuid}
-            </Button>
-            <Button kind="quiet" onClick={() => onGenerate("timestamp")}>
-              {copy.editor.insertTimestamp}
-            </Button>
-          </div>
-          {generated !== undefined && (
-            <p class="editor-micro">
-              {frozenAt === undefined
-                ? copy.generatedValue.note
-                : copy.generatedValue.frozen(frozenAt)}
-            </p>
-          )}
-        </div>
-      )}
+        {profiles.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.name}
+          </option>
+        ))}
+      </select>
+      <p class="editor-micro">{copy.editor.profileHelper}</p>
     </div>
   );
+}
+
+/**
+ * A pasted `name: value` line, split at its first colon. Anything without a
+ * colon, or with nothing on either side of it, is not a header line and is left
+ * to paste as ordinary text.
+ */
+function parseHeaderLine(
+  text: string,
+): { name: string; value: string } | undefined {
+  const colon = text.indexOf(":");
+  if (colon <= 0) {
+    return undefined;
+  }
+  const name = text.slice(0, colon).trim();
+  const value = text.slice(colon + 1).trim();
+  return name === "" || value === "" || /\s/.test(name)
+    ? undefined
+    : { name, value };
 }
 
 function initialDraft(
   rule: Rule | undefined,
   prefillDomain: string | undefined,
   prefill: RuleDraft | undefined,
+  profileId: string | undefined,
 ): Draft {
   const source = rule ?? prefill;
   if (source === undefined) {
@@ -501,6 +589,7 @@ function initialDraft(
       },
       resourceTypes: "all",
       comment: "",
+      profileId,
     };
   }
   return {
@@ -518,6 +607,7 @@ function initialDraft(
     resourceTypes:
       source.resourceTypes === "all" ? "all" : [...source.resourceTypes],
     comment: source.comment ?? "",
+    profileId,
   };
 }
 

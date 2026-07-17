@@ -79,9 +79,6 @@ tests cover the application behavior on each side of the boundary:
 
 | Boundary | Runnable coverage |
 |---|---|
-| Toolbar gesture for `activeTab` | `verify-badge.spec.ts` proves `getMatchedRules` rejects without the gesture. `src/platform/verify.test.ts` proves the adapter resolves the active tab and queries with its explicit id. |
-| Verify tally attribution after edits | `src/core/matches.test.ts` attributes retained matches by stable rule number after insert, reorder, and toggle. `src/core/verify.test.ts` tallies the decoded matches and excludes deleted or session rules. |
-| Gesture quota exemption | This is a browser quota guarantee and has no HeaderShim branch or state transition to duplicate in a unit test. |
 | DNR handling of `Content-Length` | Chrome currently sends a DNR-set value over HTTP/1.1 even when it conflicts with the body length. Whether the browser sends, rewrites, or rejects that value has no HeaderShim branch or state transition, so the suite does not pin it. |
 | Global extension shortcuts | `src/test/background.test.ts` drives `toggle-pause` and `next-profile` through `commands.onCommand`. `keyboard.spec.ts` exercises the equivalent popup commands with real key events. Opening the popup for `_execute_action` is browser-owned. |
 | Destination-only access followed by initiator access | `src/core/grants.test.ts` proves the initiator is the remaining grant gap. `src/test/background.test.ts` proves grant changes refresh status with zero DNR rewrites. `grants.spec.ts` keeps the real missing-access 200 response and absent-header assertion. |

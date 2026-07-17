@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import type { RegexValidator } from "../core/codec/modheader";
 import type { DnrRule } from "../core/compile";
+import type { StateDoc } from "../core/model";
 import { err, ok } from "../core/result";
 
 export interface UpdateRulesOptions {
@@ -63,3 +64,26 @@ export const {
   isRegexSupported,
   setExtensionActionOptions,
 } = dnr;
+
+export async function resolveRegexSupport(
+  doc: StateDoc,
+): Promise<(regex: string) => boolean> {
+  const regexes = new Set<string>();
+  for (const profile of doc.profiles) {
+    if (profile.id !== doc.activeProfileId) continue;
+    for (const rule of profile.rules) {
+      if (rule.enabled && rule.scope.type === "regex") {
+        regexes.add(rule.scope.regex);
+      }
+    }
+  }
+  const supported = new Set<string>();
+  await Promise.all(
+    [...regexes].map(async (regex) => {
+      if ((await isRegexSupported(regex)).ok) {
+        supported.add(regex);
+      }
+    }),
+  );
+  return (regex) => supported.has(regex);
+}

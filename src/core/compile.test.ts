@@ -388,6 +388,28 @@ describe("dropping uncompilable rules", () => {
     expect(compiledIds(doc, supported)).toEqual([1, 6]);
   });
 
+  it("strips a rule whose domains Chrome would refuse", () => {
+    const doc = state([
+      profile("domains", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com", "a.example.com"] },
+        }),
+        // Chrome takes an entry like this verbatim, so dropping the rule would
+        // break one that works today.
+        storedRule(2, {
+          scope: { type: "domains", domains: ["EXAMPLE.com:8080"] },
+        }),
+        storedRule(3, {
+          scope: { type: "domains", domains: ["example.com", "exämple.com"] },
+        }),
+        // Chrome refuses an empty requestDomains list outright.
+        storedRule(4, { scope: { type: "domains", domains: [] } }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll)).toEqual([1, 2]);
+  });
+
   it("never removes disabled rules or touches disabled profiles", () => {
     const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
     const doc = state([

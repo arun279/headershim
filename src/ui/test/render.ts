@@ -50,6 +50,20 @@ export function typeInto(
   });
 }
 
+/** Pastes plain text into a field the way the clipboard delivers it. */
+export function pasteInto(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  text: string,
+): void {
+  act(() => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: () => text },
+    });
+    input.dispatchEvent(event);
+  });
+}
+
 /** Dispatches a focus departure from `from` towards `to` (null = nowhere). */
 export function focusOut(from: HTMLElement, to: EventTarget | null): void {
   act(() => {

@@ -1,11 +1,12 @@
 /*
- * The fleet reuses the popup's one grammar: a severity spine (teal live, amber a
- * grant away, red refused, grey-dashed at rest), the op glyph in the spine's
- * color, sans narrating and mono for every wire byte. Denser than the popup,
- * because the Workbench is where the whole fleet is read at once.
+ * The rule list reuses the popup's one grammar: a severity spine (teal live,
+ * amber a grant away, red refused, faint where only Chrome can settle it,
+ * grey-dashed at rest), the op glyph in the spine's color, sans narrating and
+ * mono for every wire byte. Denser than the popup, because this is where every
+ * rule is read at once.
  */
 
-.fleet-controls {
+.rules-controls {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -81,11 +82,15 @@
   border-radius: 0 3px 3px 0;
   background: var(--live);
 }
-.fleet-row.needs-access .spine {
+.fleet-row.needs-access .spine,
+.fleet-row.out-of-sync .spine {
   background: var(--amber);
 }
 .fleet-row.refused .spine {
   background: var(--stop);
+}
+.fleet-row.unconfirmed .spine {
+  background: var(--faint);
 }
 .fleet-row.off .spine,
 .fleet-row.overridden .spine,
@@ -105,11 +110,15 @@
   width: 16px;
   height: 16px;
 }
-.fleet-row.needs-access .op {
+.fleet-row.needs-access .op,
+.fleet-row.out-of-sync .op {
   color: var(--amber);
 }
 .fleet-row.refused .op {
   color: var(--stop);
+}
+.fleet-row.unconfirmed .op {
+  color: var(--faint);
 }
 .fleet-row.off .op,
 .fleet-row.overridden .op,
@@ -147,16 +156,18 @@
   color: var(--ink);
 }
 .fleet-open .to {
-  color: var(--faint);
+  color: var(--ink3);
   font-family: var(--font-data);
   font-size: 12px;
 }
+/* The value takes what the header leaves, and is measured against that: sized by
+   its own content it would measure itself, and settle a character short. */
 .fleet-open .v {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-data);
   font-size: 12.5px;
   color: var(--ink2);
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .fleet-row.off .fleet-open .k,
 .fleet-row.off .fleet-open .v,
@@ -193,6 +204,12 @@
 .fleet-open .why.stop .dot {
   background: var(--stop);
 }
+.fleet-open .why.amber {
+  color: var(--amber);
+}
+.fleet-open .why.amber .dot {
+  background: var(--amber);
+}
 .fleet-open .why.rest {
   color: var(--ink3);
 }
@@ -223,11 +240,15 @@
   padding: 6px 12px;
 }
 
-.fleet-empty {
-  padding: 40px 0;
-  text-align: center;
-  font-size: 14px;
-  color: var(--ink2);
+/* The empty state is the page's content, not a caption stranded above a void:
+   it fills the card the rule groups would have filled. */
+.rules-card-empty {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
 }
 
 .editor-loading {

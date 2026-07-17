@@ -2,6 +2,7 @@
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
+import { MAX_IMPORT_BYTES } from "../../entrypoints/options/pages/ImportExport";
 import modheaderFixture from "../core/codec/__fixtures__/modheader-profile.json";
 import { exportHeadershim } from "../core/codec/headershim";
 import type { Profile } from "../core/model";
@@ -35,13 +36,17 @@ async function mount(): Promise<HTMLElement> {
 }
 
 async function pick(root: HTMLElement, contents: string): Promise<void> {
+  await pickFile(
+    root,
+    new File([contents], "import.json", { type: "application/json" }),
+  );
+}
+
+async function pickFile(root: HTMLElement, file: File): Promise<void> {
   const input = root.querySelector<HTMLInputElement>('input[type="file"]');
   if (input === null) {
     throw new Error("no file input");
   }
-  const file = new File([contents], "import.json", {
-    type: "application/json",
-  });
   Object.defineProperty(input, "files", {
     configurable: true,
     value: { 0: file, length: 1, item: () => file },
@@ -112,6 +117,42 @@ describe("import failure modes", () => {
 
     expect(root.querySelector(".ie-error")?.textContent).toBe(
       copy.errors.importParse,
+    );
+    expect(summary(root)).toBeNull();
+    expect((await read()).profiles).toHaveLength(1);
+  });
+
+  it("refuses a file too large to read without reading it", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+    const file = new File(["{}"], "import.json", { type: "application/json" });
+    const readText = vi.fn();
+    Object.defineProperties(file, {
+      size: { value: MAX_IMPORT_BYTES + 1 },
+      text: { value: readText },
+    });
+
+    await pickFile(root, file);
+
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      copy.errors.importTooLarge,
+    );
+    expect(readText).not.toHaveBeenCalled();
+    expect((await read()).profiles).toHaveLength(1);
+  });
+
+  it("renders the unreadable copy when the picked file cannot be read", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+    const file = new File(["{}"], "import.json", { type: "application/json" });
+    Object.defineProperty(file, "text", {
+      value: () => Promise.reject(new DOMException("gone", "NotReadableError")),
+    });
+
+    await pickFile(root, file);
+
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      copy.errors.importUnreadable,
     );
     expect(summary(root)).toBeNull();
     expect((await read()).profiles).toHaveLength(1);

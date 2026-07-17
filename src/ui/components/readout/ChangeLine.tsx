@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { copy } from "../../copy";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
+import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
 import { OpGlyph } from "./glyphs";
 
 interface ChangeLineProps {
@@ -14,8 +15,9 @@ interface ChangeLineProps {
 
 /**
  * One change, in the one grammar: a severity spine (teal live, amber a grant
- * away, red refused, grey-dashed at rest), the operation glyph, and the wire
- * bytes. A live line is silent; only an exception adds a reason, said once.
+ * away or not applied yet, red refused, faint where only Chrome can settle the
+ * match, grey-dashed at rest), the operation glyph, and the wire bytes. A live
+ * line is silent; only an exception adds a reason, said once.
  */
 export function ChangeLine({
   change,
@@ -52,7 +54,12 @@ export function ChangeLine({
         ) : (
           <p class="say">
             <span class="verb">{copy.readout.verb[change.operation]}</span>{" "}
-            <span class="k">{change.header}</span>
+            <Truncate
+              mode="end"
+              value={change.header}
+              maxChars={TRUNCATION_LIMITS.header}
+              class="k"
+            />
             {change.display !== undefined && (
               <>
                 {" "}
@@ -66,10 +73,10 @@ export function ChangeLine({
                     aria-label={copy.readout.editValue(change.header)}
                     onClick={() => setEditing(true)}
                   >
-                    <span class="v">{change.display}</span>
+                    <ValueText value={change.display} />
                   </button>
                 ) : (
-                  <span class="v">{change.display}</span>
+                  <ValueText value={change.display} />
                 )}
               </>
             )}
@@ -82,10 +89,22 @@ export function ChangeLine({
               {copy.readout.overriddenBy(change.overriddenBy)}
             </p>
           )}
-        {change.status === "refused" && change.refused === "host" && (
+        {change.status === "refused" && change.refused !== undefined && (
           <p class="why stop">
             <span class="dot" aria-hidden="true" />
-            {copy.readout.refusedReason.host}
+            {copy.readout.refusedReason[change.refused]}
+          </p>
+        )}
+        {change.status === "out-of-sync" && (
+          <p class="why amber">
+            <span class="dot" aria-hidden="true" />
+            {copy.readout.outOfSyncReason}
+          </p>
+        )}
+        {change.status === "unconfirmed" && (
+          <p class="why rest">
+            <span class="dot" aria-hidden="true" />
+            {copy.readout.unconfirmedReason}
           </p>
         )}
       </div>
@@ -116,6 +135,18 @@ export function ChangeLine({
         )}
       </div>
     </div>
+  );
+}
+
+/** Middle mode: the tail is what tells one value from another. */
+function ValueText({ value }: { value: string }) {
+  return (
+    <Truncate
+      mode="middle"
+      value={value}
+      maxChars={TRUNCATION_LIMITS.value}
+      class="v"
+    />
   );
 }
 

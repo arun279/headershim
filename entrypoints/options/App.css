@@ -131,17 +131,6 @@
   letter-spacing: -0.02em;
   color: var(--ink);
 }
-.wb-sub {
-  margin-top: 6px;
-  max-width: 62ch;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ink2);
-}
-.wb-sub .mono {
-  color: var(--ink);
-}
-
 /* Segmented lens/tab control, shared by the fleet and any two-way switch. */
 .seg {
   display: inline-flex;

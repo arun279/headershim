@@ -13,7 +13,6 @@ import { ProfileList } from "../../../src/ui/components/ProfileList";
 import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { Toast } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
-import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../useToast";
 import "./Profiles.css";
@@ -22,7 +21,8 @@ const text = copy.options.profiles;
 
 /**
  * Profile management: create, rename, clone, delete (confirm + undo), reorder,
- * badge editing, and activation. Rules themselves live in the Fleet.
+ * badge editing, and activation. Deleting a profile takes every rule in it, so
+ * that one keeps its confirmation where a rule delete needs only an undo.
  */
 export function ProfilesPage({
   doc,
@@ -39,16 +39,20 @@ export function ProfilesPage({
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
-  const { toast, show: showToast, flash, dismiss } = useToast();
-  const [undo, setUndo] = useState<
-    { profile: Profile; index: number } | undefined
-  >(undefined);
+  const {
+    toast,
+    action: toastAction,
+    showUndoable,
+    flash,
+    dismiss,
+    retireUndo,
+  } = useToast();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
       if (outcome.ok) {
-        setUndo(undefined);
+        retireUndo();
       } else {
         flash(outcome.error);
       }
@@ -71,7 +75,7 @@ export function ProfilesPage({
       })
       .then((outcome) => {
         if (outcome.ok) {
-          setUndo(undefined);
+          retireUndo();
           setOpenId(outcome.value.id);
         } else {
           flash(outcome.error);
@@ -82,7 +86,7 @@ export function ProfilesPage({
   const clone = (profileId: string) =>
     void mutations.cloneProfile(profileId).then((outcome) => {
       if (outcome.ok) {
-        setUndo(undefined);
+        retireUndo();
         setOpenId(outcome.value.id);
       } else {
         flash(outcome.error);
@@ -96,22 +100,11 @@ export function ProfilesPage({
         flash(outcome.error);
         return;
       }
-      setUndo({ ...outcome.value });
-      showToast(copy.toast.profileDeleted(profile.name));
+      const { profile: deleted, index } = outcome.value;
+      showUndoable(copy.toast.profileDeleted(profile.name), () =>
+        mutations.restoreProfile(deleted, index),
+      );
       titleRef.current?.focus();
-    });
-  };
-
-  const runUndo = () => {
-    if (undo === undefined) return;
-    void mutations.restoreProfile(undo.profile, undo.index).then((outcome) => {
-      setUndo(undefined);
-      const message = outcome.ok ? undefined : blockedCommitCopy(outcome.error);
-      if (message === undefined) {
-        dismiss();
-      } else {
-        showToast(message);
-      }
     });
   };
 
@@ -122,7 +115,6 @@ export function ProfilesPage({
           <h1 class="wb-title" id="profiles-title" ref={titleRef} tabIndex={-1}>
             {text.title}
           </h1>
-          <p class="wb-sub">{copy.options.profiles.subtitle}</p>
           {shouldShowRuleCountWarning(enabledRuleCount) && (
             <p class="rule-counter">
               {copy.errors.ruleCounter(enabledRuleCount)}
@@ -189,9 +181,9 @@ export function ProfilesPage({
       {toast !== undefined && (
         <Toast
           onDismiss={dismiss}
-          persist={undo !== undefined}
-          actionLabel={undo !== undefined ? copy.actions.undo : undefined}
-          onAction={undo !== undefined ? runUndo : undefined}
+          persist={toastAction !== undefined}
+          actionLabel={toastAction?.label}
+          onAction={toastAction?.run}
         >
           {toast}
         </Toast>

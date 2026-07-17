@@ -1,11 +1,19 @@
 /**
  * The popup's one question, answered as data: what is HeaderShim doing to the
  * tab in front of you, and how live is each change. A pure projection over the
- * active profile, the active host, the grant snapshot, and this-tab overrides
- * — it renders the same severity ladder core/status already computes, one line
- * at a time, and never invents a state the model does not hold.
+ * active profile, the active host, the grant snapshot, and this-tab overrides.
+ * It computes nothing the engine already computes: the system status comes from
+ * core/status, "will Chrome run this" from the compiler's own gate, collisions
+ * from core/conflicts. Where Chrome decides inside its own matcher, the line
+ * says so rather than guessing, so it never claims a fact it did not compute.
  */
 
+import {
+  dropUncompilable,
+  settlesPerRequest,
+  type UncompilableReason,
+  uncompilableReason,
+} from "../../core/compile";
 import { findOverriddenRules } from "../../core/conflicts";
 import type { GrantSnapshot } from "../../core/grants";
 import { missingGrants } from "../../core/grants";
@@ -15,18 +23,31 @@ import type {
   HeaderOp,
   Profile,
   Rule,
+  Scope,
+  StateDoc,
   TabOverride,
 } from "../../core/model";
+import type { SystemStatus } from "../../core/status";
 import { headerValueSummary, isSecretHeader } from "../secret";
 
 /** Per-line health, in the same order the severity spine reads it. */
-type LineStatus =
+export type LineStatus =
   | "live"
+  | "unconfirmed"
   | "needs-access"
   | "refused"
   | "overridden"
+  | "out-of-sync"
   | "off"
   | "paused";
+
+export type RefusedReason = "host" | UncompilableReason;
+
+/**
+ * Whether a rule's conditions reach the tab in front of you. `unknown` is a
+ * real answer, and the only honest one where Chrome decides per request.
+ */
+type Reach = "yes" | "no" | "unknown";
 
 export interface TabChange {
   /** Stable key for rendering, focus, and tests. */
@@ -48,14 +69,14 @@ export interface TabChange {
   /** The winning rule's label, when this line lost a same-header collision. */
   readonly overriddenBy?: string;
   /** Why Chrome refuses this line, when its status is refused. */
-  readonly refused?: "host";
+  readonly refused?: RefusedReason;
   /** Origins to grant, when this line needs access. */
   readonly missing?: readonly string[];
 }
 
 export interface TabReadout {
   readonly host: string | undefined;
-  /** Every persistent change that reaches this tab, including the token line. */
+  /** Every change that reaches this tab, including token and override lines. */
   readonly total: number;
   readonly request: readonly TabChange[];
   readonly response: readonly TabChange[];
@@ -66,59 +87,74 @@ export interface TabReadout {
   readonly needsAccess: number;
   readonly refused: number;
   readonly overridden: number;
+  /** Lines only Chrome can settle, counted so the head can own the doubt. */
+  readonly unconfirmed: number;
+  /** Lines Chrome has not taken yet; nonzero means nothing on screen is live. */
+  readonly outOfSync: number;
 }
 
 export interface ReadoutInput {
-  readonly activeProfile: Profile | undefined;
+  readonly doc: StateDoc;
   readonly host: string | undefined;
   readonly grants: GrantSnapshot;
   readonly overrides: readonly TabOverride[];
-  readonly paused: boolean;
+  readonly isRegexSupported: (regex: string) => boolean;
+  /** The one system-status ladder, so no line disagrees with the badge. */
+  readonly status: SystemStatus;
 }
 
 export function computeReadout({
-  activeProfile,
+  doc,
   host,
   grants,
   overrides,
-  paused,
+  isRegexSupported,
+  status,
 }: ReadoutInput): TabReadout {
+  const paused = status.kind === "paused";
+  const outOfSync = status.kind === "out-of-sync";
   const overrideLines = overrides.map((override) =>
-    overrideChange(override, paused),
+    overrideChange(override, paused, outOfSync),
+  );
+  const activeProfile = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
   );
 
   if (host === undefined) {
     return {
       host,
-      total: 0,
       request: [],
       response: [],
       overrides: overrideLines,
-      needsAccess: 0,
-      refused: 0,
-      overridden: 0,
+      ...summarize(overrideLines),
     };
   }
 
-  // Every rule in the active profile that reaches this host, in precedence
+  // Every rule in the active profile that could reach this host, in precedence
   // order, so an earlier rule shadows a later one exactly as compilation does.
-  const applying: { profile: Profile; rule: Rule }[] = [];
+  // A rule Chrome settles per request is carried with its doubt, never dropped
+  // from the list and never counted as a match.
+  const applying: { profile: Profile; rule: Rule; reach: Reach }[] = [];
   if (activeProfile !== undefined) {
     const profile = activeProfile;
     for (const rule of profile.rules) {
-      if (ruleAppliesToHost(rule, host)) {
-        applying.push({ profile, rule });
+      const reach = ruleReach(rule, host);
+      if (reach !== "no") {
+        applying.push({ profile, rule, reach });
       }
     }
   }
 
+  const compilableProfile = dropUncompilable(
+    doc,
+    isRegexSupported,
+  ).profiles.find((profile) => profile.id === doc.activeProfileId);
+  const compilableRules = compilableProfile?.rules ?? [];
   const overriddenBy = new Map<string, string>();
   const rulesById = new Map<string, Rule>();
-  for (const { rule } of applying) {
-    rulesById.set(rule.id, rule);
-  }
+  for (const rule of compilableRules) rulesById.set(rule.id, rule);
   for (const { ruleId, shadowedByRuleId } of findOverriddenRules(
-    applying.map(({ rule }) => rule),
+    compilableRules,
   )) {
     const winner = rulesById.get(shadowedByRuleId);
     if (winner !== undefined) {
@@ -126,22 +162,21 @@ export function computeReadout({
     }
   }
 
-  const changes = applying.map(({ profile, rule }) =>
+  const changes = applying.map(({ profile, rule, reach }) =>
     ruleChange(profile, rule, {
       grants,
       paused,
+      outOfSync,
+      reach,
       overriddenBy: overriddenBy.get(rule.id),
+      isRegexSupported,
     }),
   );
 
   // The credential hero prefers a live this-tab swap over the stored rule, so a
   // Swap reads back as the value it just set; otherwise it is the rule itself.
-  // Under pause nothing runs and an off token is not live, so neither is a hero.
   const heroable = (change: TabChange) =>
-    !paused &&
-    isAuthorizationToken(change) &&
-    change.status !== "off" &&
-    change.status !== "overridden";
+    isAuthorizationToken(change) && HERO_STATUS.includes(change.status);
   const overrideToken = overrideLines.find(heroable);
   const ruleTokenIndex = changes.findIndex(heroable);
   const token =
@@ -157,20 +192,47 @@ export function computeReadout({
   );
   return {
     host,
-    // "N changes on this tab" counts what is running or trying to; a turned-off
-    // line still renders so it can be turned back on, but it is not a change.
-    total: changes.filter(
-      (change) => change.status !== "off" && change.status !== "overridden",
-    ).length,
     request: listed.filter((change) => change.direction === "request"),
     response: listed.filter((change) => change.direction === "response"),
     ...(token === undefined ? {} : { token }),
     overrides: listedOverrides,
+    ...summarize([...changes, ...overrideLines]),
+  };
+}
+
+type ReadoutSummary = Pick<
+  TabReadout,
+  | "total"
+  | "needsAccess"
+  | "refused"
+  | "overridden"
+  | "unconfirmed"
+  | "outOfSync"
+>;
+
+function summarize(changes: readonly TabChange[]): ReadoutSummary {
+  return {
+    total: changes.filter(
+      (change) => change.status !== "off" && change.status !== "overridden",
+    ).length,
     needsAccess: changes.filter((c) => c.status === "needs-access").length,
     refused: changes.filter((c) => c.status === "refused").length,
     overridden: changes.filter((c) => c.status === "overridden").length,
+    unconfirmed: changes.filter((c) => c.status === "unconfirmed").length,
+    outOfSync: changes.filter((c) => c.status === "out-of-sync").length,
   };
 }
+
+/**
+ * Where the credential card can state its own line's state and stay honest: it
+ * reads live plainly, marks a needs-access line, and draws a paused one
+ * at rest. Being the hero is a placement, not a claim to be running, so pausing
+ * moves the card to its resting reading rather than restructuring the popup
+ * around the same rules. The states it has no reading for stay in the list,
+ * where the line carries the full reason; and a line that lost its header to
+ * another rule is never the hero, because the winner is what the tab sends.
+ */
+const HERO_STATUS: readonly LineStatus[] = ["live", "needs-access", "paused"];
 
 function isAuthorizationToken(change: TabChange): boolean {
   return (
@@ -187,17 +249,22 @@ function ruleChange(
   context: {
     grants: GrantSnapshot;
     paused: boolean;
+    outOfSync: boolean;
+    reach: Reach;
     overriddenBy: string | undefined;
+    isRegexSupported: (regex: string) => boolean;
   },
 ): TabChange {
-  const refused = refusedReason(rule);
+  const refused = refusedReason(rule, context.isRegexSupported);
   const missing = rule.enabled ? missingGrants(rule, context.grants) : [];
   const status = lineStatus({
+    running: rule.enabled,
     paused: context.paused,
-    enabled: rule.enabled,
+    outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
     needsAccess: missing.length > 0,
+    perRequest: context.reach === "unknown",
   });
   const secret = isSecretHeader(rule.header);
   const display =
@@ -225,12 +292,23 @@ function ruleChange(
   };
 }
 
-function overrideChange(override: TabOverride, paused: boolean): TabChange {
-  const status: LineStatus = paused
-    ? "paused"
-    : override.enabled
-      ? "live"
-      : "off";
+function overrideChange(
+  override: TabOverride,
+  paused: boolean,
+  outOfSync: boolean,
+): TabChange {
+  // A this-tab override compiles to a tabIds + requestDomains condition on the
+  // tab it was made from: nothing here is granted, refused, or settled per
+  // request, so only the ladder's global rungs can move it off live.
+  const status = lineStatus({
+    running: override.enabled,
+    paused,
+    outOfSync,
+    overridden: false,
+    refused: false,
+    needsAccess: false,
+    perRequest: false,
+  });
   const display =
     override.operation === "remove"
       ? undefined
@@ -250,32 +328,53 @@ function overrideChange(override: TabOverride, paused: boolean): TabChange {
   };
 }
 
-function lineStatus(flags: {
+/**
+ * The one severity ladder every projected line reads, popup and Workbench
+ * alike, so the same rule can never carry two different states on two surfaces.
+ */
+export function lineStatus(flags: {
+  /** The rule is switched on and its profile is the active one. */
+  running: boolean;
   paused: boolean;
-  enabled: boolean;
+  outOfSync: boolean;
   overridden: boolean;
   refused: boolean;
   needsAccess: boolean;
+  perRequest: boolean;
 }): LineStatus {
+  // A rule that is switched off, or sits in an inactive profile, is off
+  // regardless of pause; only a rule that would otherwise run reads as paused.
+  if (!flags.running) return "off";
   if (flags.paused) return "paused";
-  if (!flags.enabled) return "off";
+  // Chrome has not taken the current ruleset, so what is applied is unknown —
+  // the same precedence core/status gives it, one line at a time.
+  if (flags.outOfSync) return "out-of-sync";
   if (flags.overridden) return "overridden";
   if (flags.refused) return "refused";
   if (flags.needsAccess) return "needs-access";
+  if (flags.perRequest) return "unconfirmed";
   return "live";
 }
 
 /**
- * A rule Chrome will not apply, known from the header alone. The Host header is
- * the honest case: extensions cannot change the authority on the HTTP/2
- * connections most sites use, so the rule is enabled yet refused.
+ * Why Chrome will not run this rule, or undefined when it will. The Host header
+ * is the classifier's case: extensions cannot change the authority on the
+ * HTTP/2 connections most sites use, so the rule is enabled yet refused. Every
+ * other reason is the compiler's own, read from the gate that actually drops
+ * the rule, so a line can never claim to run something Chrome never received.
  */
-export function refusedReason(rule: Rule): "host" | undefined {
-  return classifyHeaderName(rule.header).advisories.some(
-    (advisory) => advisory.kind === "host-http2",
-  )
-    ? "host"
-    : undefined;
+export function refusedReason(
+  rule: Rule,
+  isRegexSupported: (regex: string) => boolean,
+): RefusedReason | undefined {
+  if (
+    classifyHeaderName(rule.header).advisories.some(
+      (advisory) => advisory.kind === "host-http2",
+    )
+  ) {
+    return "host";
+  }
+  return uncompilableReason(rule, isRegexSupported);
 }
 
 export interface SwitchPreview {
@@ -301,10 +400,13 @@ export function previewSwitch(
   if (host === undefined) {
     return { drops: [], adds: [] };
   }
+  // A rule Chrome settles per request is kept in the diff: the preview owes you
+  // every header the switch could move, and only Chrome can rule one out.
+  const mayReach = (rule: Rule) => ruleReach(rule, host) !== "no";
   const current = new Set<string>();
   if (from !== undefined) {
     for (const rule of from.rules) {
-      if (rule.enabled && ruleAppliesToHost(rule, host)) {
+      if (rule.enabled && mayReach(rule)) {
         current.add(normalizeHeaderName(rule.header));
       }
     }
@@ -312,7 +414,7 @@ export function previewSwitch(
   const targetKeys = new Set<string>();
   const adds: { header: string; display?: string }[] = [];
   for (const rule of to.rules) {
-    if (!rule.enabled || !ruleAppliesToHost(rule, host)) continue;
+    if (!rule.enabled || !mayReach(rule)) continue;
     const key = normalizeHeaderName(rule.header);
     targetKeys.add(key);
     if (!current.has(key) && !adds.some((add) => add.header === rule.header)) {
@@ -332,7 +434,7 @@ export function previewSwitch(
       const key = normalizeHeaderName(rule.header);
       if (
         rule.enabled &&
-        ruleAppliesToHost(rule, host) &&
+        mayReach(rule) &&
         !targetKeys.has(key) &&
         !drops.includes(rule.header)
       ) {
@@ -350,21 +452,21 @@ function ruleLabel(rule: Rule): string {
     : comment;
 }
 
-function ruleAppliesToHost(rule: Rule, host: string): boolean {
-  switch (rule.scope.type) {
-    case "all":
-      return true;
-    case "domains":
-      return rule.scope.domains.some((domain) => hostUnder(host, domain));
-    case "pattern":
-    case "regex":
-      // A pattern/regex with no persisted hosts is broad (all sites); one that
-      // recorded hosts applies where it was granted.
-      return (
-        rule.scope.hosts.length === 0 ||
-        rule.scope.hosts.some((named) => hostUnder(host, named))
-      );
+function ruleReach(rule: Rule, host: string): Reach {
+  const scoped = scopeReach(rule.scope, host);
+  return scoped === "yes" && settlesPerRequest(rule) ? "unknown" : scoped;
+}
+
+/**
+ * What the scope alone rules out, before Chrome's matcher gets a say. Only a
+ * named-domain list answers "no" from here; every other scope can reach this
+ * tab, and settlesPerRequest decides whether that is knowable.
+ */
+function scopeReach(scope: Scope, host: string): "yes" | "no" {
+  if (scope.type !== "domains") {
+    return "yes";
   }
+  return scope.domains.some((domain) => hostUnder(host, domain)) ? "yes" : "no";
 }
 
 function hostUnder(host: string, domain: string): boolean {

@@ -19,10 +19,14 @@ interface HeaderNameInputProps {
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
-  /** Removes the outer field chrome when joined to the value as one header. */
-  composed?: boolean;
   inputRef?: ((element: HTMLInputElement | null) => void) | undefined;
   onInput: (raw: string) => void;
+  /**
+   * Offers pasted text to the editor before it lands: a whole `name: value`
+   * line belongs across both fields, not in this one. True means the editor
+   * took it.
+   */
+  onPasteLine?: ((text: string) => boolean) | undefined;
 }
 
 /**
@@ -31,7 +35,9 @@ interface HeaderNameInputProps {
  * Enter bubble to commit the rule); Esc closes the list first and only then
  * reaches the editor. Match counts are announced politely. Under the field:
  * the case-honesty microline. Header advisories render in the editor's pinned
- * caution band so they remain visible at the save decision.
+ * caution band so they remain visible at the save decision. A pasted
+ * `name: value` line is handed to the editor, which splits it across its two
+ * fields rather than failing this one's token grammar on the colon.
  */
 export function HeaderNameInput(props: HeaderNameInputProps) {
   const id = useId();
@@ -95,46 +101,19 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   ].join(" ");
 
   return (
-    <div
-      class={props.composed === true ? "compose-name-control" : "editor-field"}
-    >
-      <label
-        class={props.composed === true ? "sr-only" : "editor-label"}
-        for={`${id}-input`}
-      >
+    <div class="editor-field">
+      <label class="editor-label" for={`${id}-input`}>
         {copy.editor.labels.headerName}
       </label>
-      <div
-        class={
-          props.composed === true
-            ? "editor-control combobox compose-control"
-            : "editor-control combobox"
-        }
-      >
+      <div class="editor-control combobox">
         <input
           id={`${id}-input`}
           ref={(element) => {
             inputRef.current = element;
             props.inputRef?.(element);
           }}
-          class={
-            props.composed === true
-              ? "compose-input compose-name-input mono"
-              : "field mono"
-          }
-          size={
-            props.composed === true
-              ? Math.max(
-                  copy.editor.placeholders.headerName.length,
-                  props.value.length,
-                )
-              : undefined
-          }
-          placeholder={
-            props.composed === true
-              ? copy.editor.placeholders.headerName
-              : undefined
-          }
+          class="field mono"
+          placeholder={copy.editor.placeholders.headerName}
           type="text"
           role="combobox"
           aria-expanded={open}
@@ -193,6 +172,13 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
                   setOpen(false);
                 }
                 return;
+            }
+          }}
+          onPaste={(event) => {
+            const text = event.clipboardData?.getData("text/plain") ?? "";
+            if (props.onPasteLine?.(text) === true) {
+              event.preventDefault();
+              setOpen(false);
             }
           }}
           onBlur={() => {

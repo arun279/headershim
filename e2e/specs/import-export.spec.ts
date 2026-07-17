@@ -8,8 +8,8 @@ import {
   type HeadershimEnvelope,
 } from "../../src/core/codec/headershim";
 import {
+  type ImportPlanWarning,
   importModHeader,
-  type ModHeaderImportWarning,
   type RegexValidator,
 } from "../../src/core/codec/modheader";
 import {
@@ -182,7 +182,9 @@ test("an export round-trips through the options UI to an equivalent state, off",
 // The thirteen ModHeader warning kinds the fixture is built to produce; four of
 // them (tab/tab-group/window/time) deliberately share one copy string, so rows
 // are matched on their distinct name plus detail, not the detail alone.
-const WARNING_KINDS: readonly ModHeaderImportWarning["kind"][] = [
+const WARNING_KINDS: readonly ImportPlanWarning["kind"][] = [
+  "credential",
+  "security-response",
   "request-append-degraded",
   "dynamic-token",
   "cookie-semantics-degraded",
@@ -217,7 +219,7 @@ test("a ModHeader import surfaces every warning class on the summary", async ({
   const raw = await readFile(ALL_WARNINGS_FIXTURE, "utf8");
   const rejectLookaround: RegexValidator = async (pattern) =>
     /\(\?[=!<]/.test(pattern) ? err(undefined) : ok(undefined);
-  const decoded = await importModHeader(raw, [], rejectLookaround);
+  const decoded = await importModHeader(JSON.parse(raw), [], rejectLookaround);
   if (!decoded.ok) {
     throw new Error(`fixture failed to decode: ${decoded.error.kind}`);
   }

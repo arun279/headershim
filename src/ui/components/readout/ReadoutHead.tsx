@@ -2,6 +2,7 @@ import type { Profile } from "../../../core/model";
 import { copy } from "../../copy";
 import type { TabReadout } from "../../state/readout";
 import { sentence } from "../sentence";
+import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
 import { GlobeGlyph } from "./glyphs";
 import { ProfilePicker } from "./ProfilePicker";
 
@@ -27,7 +28,8 @@ export function ReadoutHead({
   onSwitchProfile,
   onNewProfile,
 }: ReadoutHeadProps) {
-  const attention = readout.needsAccess > 0 || readout.refused > 0;
+  const attention =
+    readout.needsAccess > 0 || readout.refused > 0 || readout.outOfSync > 0;
   const showGlance = readout.host !== undefined && readout.total > 0 && !paused;
 
   return (
@@ -35,7 +37,14 @@ export function ReadoutHead({
       <div class="head-top">
         <span class="site">
           <GlobeGlyph />
-          <span class="host mono">{readout.host ?? copy.app.name}</span>
+          {/* Middle mode: the registrable domain sits in the tail, and it is
+              the whole point of the row. */}
+          <Truncate
+            mode="middle"
+            value={readout.host ?? copy.app.name}
+            maxChars={TRUNCATION_LIMITS.domain}
+            class="host mono"
+          />
         </span>
         <ProfilePicker
           profiles={profiles}
@@ -57,8 +66,15 @@ export function ReadoutHead({
           </div>
           {(readout.needsAccess > 0 ||
             readout.refused > 0 ||
+            readout.outOfSync > 0 ||
+            readout.unconfirmed > 0 ||
             readout.overridden > 0) && (
             <p class="substatus">
+              {readout.outOfSync > 0 && (
+                <span class="seg amber">
+                  {copy.readout.outOfSync(readout.outOfSync)}
+                </span>
+              )}
               {readout.needsAccess > 0 && (
                 <span class="seg amber">
                   {copy.readout.needsAccess(readout.needsAccess)}
@@ -67,6 +83,11 @@ export function ReadoutHead({
               {readout.refused > 0 && (
                 <span class="seg stop">
                   {copy.readout.refused(readout.refused)}
+                </span>
+              )}
+              {readout.unconfirmed > 0 && (
+                <span class="seg rest">
+                  {copy.readout.unconfirmed(readout.unconfirmed)}
                 </span>
               )}
               {readout.overridden > 0 && (

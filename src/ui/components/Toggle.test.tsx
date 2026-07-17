@@ -19,14 +19,19 @@ describe("Toggle", () => {
 
   it("reflects the off state", () => {
     const root = render(
-      <Toggle checked={false} label="Global pause" onChange={() => {}} />,
+      <Toggle checked={false} label="All header changes" onChange={() => {}} />,
     );
     expect(getSwitch(root).getAttribute("aria-checked")).toBe("false");
   });
 
-  it("marks a checked Pause switch for the stopped-state color", () => {
+  it("marks an on-but-paused switch for the stopped-state color", () => {
     const root = render(
-      <Toggle checked label="Global pause" tone="paused" onChange={() => {}} />,
+      <Toggle
+        checked
+        label="Turn off: authorization"
+        tone="paused"
+        onChange={() => {}}
+      />,
     );
     expect(getSwitch(root).classList.contains("sw-paused")).toBe(true);
   });
@@ -46,7 +51,7 @@ describe("Toggle", () => {
   it("reports the flipped value on activation", () => {
     const onChange = vi.fn();
     const root = render(
-      <Toggle checked={false} label="Global pause" onChange={onChange} />,
+      <Toggle checked={false} label="All header changes" onChange={onChange} />,
     );
     fire(() => getSwitch(root).click());
     expect(onChange).toHaveBeenCalledWith(true);

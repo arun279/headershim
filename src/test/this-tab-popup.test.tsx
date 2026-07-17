@@ -47,20 +47,24 @@ async function mount(
   return root;
 }
 
+// Opens the composer on a fresh popup and commits x-a: 42 through it.
+async function composeChange(): Promise<HTMLElement> {
+  const root = await mount(createV1Seed());
+  press(root.querySelector(".popup") as HTMLElement, "t");
+  await settle();
+  expect(root.querySelector(".compose")).not.toBeNull();
+  typeInto(root.querySelector(".cin.name") as HTMLInputElement, "x-a");
+  typeInto(root.querySelector(".cin.val") as HTMLInputElement, "42");
+  await act(async () => {
+    (root.querySelector(".compose .commit") as HTMLButtonElement).click();
+  });
+  await settle();
+  return root;
+}
+
 describe("popup This-tab overrides", () => {
   it("opens the composer with t and commits a this-tab change", async () => {
-    const root = await mount(createV1Seed());
-    press(root.querySelector(".popup") as HTMLElement, "t");
-    await settle();
-    expect(root.querySelector(".compose")).not.toBeNull();
-
-    typeInto(root.querySelector(".cin.name") as HTMLInputElement, "x-a");
-    typeInto(root.querySelector(".cin.val") as HTMLInputElement, "42");
-    await act(async () => {
-      (root.querySelector(".compose .commit") as HTMLButtonElement).click();
-    });
-    await settle();
-
+    const root = await composeChange();
     expect(root.querySelector(".compose")).toBeNull();
     expect((await readSession()).tabs[5]).toMatchObject([
       { header: "x-a", value: "42", originHost: "app.example.com" },
@@ -68,6 +72,19 @@ describe("popup This-tab overrides", () => {
     const strip = root.querySelector(".thistab") as HTMLElement;
     expect(strip.textContent).toContain("This tab only");
     expect(strip.querySelector(".change-line .k")?.textContent).toBe("x-a");
+  });
+
+  it("writes nothing when the host grant is declined", async () => {
+    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValue(false);
+    const root = await composeChange();
+    // Nothing stored, so no row can read live while applying to nothing; the
+    // draft stays put and says why.
+    expect((await readSession()).tabs[5]).toBeUndefined();
+    expect(root.querySelector(".thistab")).toBeNull();
+    expect(root.querySelector(".c-error")?.textContent).toContain(
+      "needs access to app.example.com",
+    );
+    expect(root.querySelector(".compose")).not.toBeNull();
   });
 
   it("reports a header the composer cannot use inline", async () => {

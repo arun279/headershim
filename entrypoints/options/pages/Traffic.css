@@ -1,7 +1,7 @@
 /*
- * The receipt: a dense monospace ledger of what HeaderShim is set to stamp,
- * with the exceptions (refused, skipped) surfaced first. Color is doubled by a
- * glyph and a word on every line, so no state rests on hue alone.
+ * A dense monospace list of every change the compiled ruleset carries, the
+ * exceptions first. Color is doubled by a glyph and a word on every line, so no
+ * state rests on hue alone.
  */
 
 .tape {
@@ -9,20 +9,6 @@
   border-radius: 11px;
   background: var(--panel);
   overflow: hidden;
-}
-.tape-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 10px 15px;
-  background: var(--raise);
-  border-bottom: var(--hairline) solid var(--line);
-}
-.tape-secrets {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: var(--ink3);
-  font-style: italic;
 }
 
 .tape-list {
@@ -59,27 +45,33 @@
 .tape-row.refused .tape-mark {
   color: var(--stop);
 }
+.tape-row.out-of-sync .tape-mark {
+  color: var(--amber);
+}
+.tape-row.unconfirmed .tape-mark {
+  color: var(--faint);
+}
 .tape-row.paused .tape-mark {
   color: var(--faint);
 }
 
-.tape-host {
+/* Both fill their column so Truncate measures the column and not itself. */
+.tape-row .tape-host {
+  display: block;
   font-size: 12px;
   color: var(--ink2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .tape-stamp {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.tape-row .tape-header {
+  flex: 1;
 }
 .tape-op {
   width: 14px;
@@ -108,13 +100,18 @@
 .tape-row.refused .tape-status {
   color: var(--stop);
 }
+.tape-row.out-of-sync .tape-status {
+  color: var(--amber);
+}
+.tape-row.unconfirmed .tape-status {
+  color: var(--ink3);
+}
 .tape-row.paused .tape-status {
   color: var(--ink3);
 }
 
 .tape-empty {
-  padding: 36px 15px;
-  text-align: center;
-  font-size: 13.5px;
-  color: var(--ink2);
+  display: grid;
+  place-items: center;
+  min-height: 240px;
 }

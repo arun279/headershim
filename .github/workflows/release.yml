@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag to upload to the Chrome Web Store
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -20,7 +14,6 @@ concurrency:
 
 jobs:
   check:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +30,6 @@ jobs:
       - run: pnpm check
 
   e2e:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,7 +53,6 @@ jobs:
       - run: pnpm e2e
 
   build-and-release:
-    if: github.event_name == 'push'
     needs: [check, e2e]
     runs-on: ubuntu-latest
     permissions:
@@ -106,45 +97,3 @@ jobs:
             .output/*.zip \
             .output/SHA256SUMS \
             "$BUNDLE_PATH"
-
-  publish-cws:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
-      CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
-      CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
-      CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      RELEASE_TAG: ${{ inputs.tag }}
-    steps:
-      - name: Skip unconfigured Chrome Web Store upload
-        if: >-
-          env.CWS_CLIENT_ID == '' ||
-          env.CWS_CLIENT_SECRET == '' ||
-          env.CWS_REFRESH_TOKEN == '' ||
-          env.CWS_EXTENSION_ID == ''
-        run: echo "CWS publish secrets are not configured; skipping upload. Configure CWS_CLIENT_ID/CWS_CLIENT_SECRET/CWS_REFRESH_TOKEN/CWS_EXTENSION_ID to enable this step."
-      # Uploads a draft version only; publishing remains a manual CWS dashboard action.
-      - name: Upload to the Chrome Web Store
-        if: >-
-          env.CWS_CLIENT_ID != '' &&
-          env.CWS_CLIENT_SECRET != '' &&
-          env.CWS_REFRESH_TOKEN != '' &&
-          env.CWS_EXTENSION_ID != ''
-        run: |
-          mkdir release-assets
-          gh release download "$RELEASE_TAG" --pattern '*.zip' --dir release-assets
-          zip_paths=(release-assets/*.zip)
-          if [[ ${#zip_paths[@]} -ne 1 || ! -f "${zip_paths[0]}" ]]; then
-            echo "Expected exactly one zip release asset." >&2
-            exit 1
-          fi
-          npx --yes chrome-webstore-upload-cli@3.3.0 upload \
-            --source "${zip_paths[0]}" \
-            --extension-id "$CWS_EXTENSION_ID" \
-            --client-id "$CWS_CLIENT_ID" \
-            --client-secret "$CWS_CLIENT_SECRET" \
-            --refresh-token "$CWS_REFRESH_TOKEN"

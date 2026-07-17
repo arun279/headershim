@@ -20,6 +20,17 @@ async function mount(profiles: Profile[]): Promise<HTMLElement> {
   return root;
 }
 
+/** One profile whose single rule wants api.example.com and nothing else. */
+function apiRuleOnly(): Profile[] {
+  return [
+    profile("p1", {
+      rules: [
+        rule({ scope: { type: "domains", domains: ["api.example.com"] } }),
+      ],
+    }),
+  ];
+}
+
 function grantOrigins(...domains: string[]): Promise<boolean> {
   return fakeBrowser.permissions.request({
     origins: domains.map(originPatternForDomain),
@@ -120,13 +131,7 @@ describe("options site access", () => {
 
   it("revokes in one click and returns a still-needed origin to the loud group", async () => {
     await grantOrigins("api.example.com");
-    const root = await mount([
-      profile("p1", {
-        rules: [
-          rule({ scope: { type: "domains", domains: ["api.example.com"] } }),
-        ],
-      }),
-    ]);
+    const root = await mount(apiRuleOnly());
 
     fire(() => rowButton(root, text.revokeLabel("api.example.com")).click());
     await settle();
@@ -140,13 +145,7 @@ describe("options site access", () => {
   });
 
   it("reflects a grant made outside the page without a reload", async () => {
-    const root = await mount([
-      profile("p1", {
-        rules: [
-          rule({ scope: { type: "domains", domains: ["api.example.com"] } }),
-        ],
-      }),
-    ]);
+    const root = await mount(apiRuleOnly());
 
     expect(group(root, text.neededHeading).textContent).toContain(
       "api.example.com",
@@ -232,18 +231,30 @@ describe("options site access", () => {
 
   it("hides needed rows while all-sites access is on", async () => {
     await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
-    const root = await mount([
-      profile("p1", {
-        rules: [
-          rule({ scope: { type: "domains", domains: ["api.example.com"] } }),
-        ],
-      }),
-    ]);
+    const root = await mount(apiRuleOnly());
 
     expect(root.querySelector(`ul[aria-label="${text.neededHeading}"]`)).toBe(
       null,
     );
-    expect(root.textContent).toContain(copy.emptyState.siteAccess);
+    // Under the broad grant there is nothing per-site left to say, so the panel
+    // goes with its rows rather than answering "nothing granted yet" directly
+    // under "All-sites access is on".
+    expect(root.querySelector(".sa-card")?.textContent).toContain(
+      text.allSites.on,
+    );
+    expect(root.textContent).not.toContain(copy.emptyState.siteAccess);
+  });
+
+  it("keeps narrow grants revocable while all-sites access stands", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
+    const root = await mount(apiRuleOnly());
+
+    expect(group(root, text.grantedHeading).textContent).toContain(
+      "api.example.com",
+    );
   });
 
   it("announces that a narrow revoke leaves all-sites access standing", async () => {

@@ -274,7 +274,7 @@ test("plain Enter stays in a field while the commit chord saves", {
   await expect(page.locator(".rule-editor")).toBeVisible();
   const value = page.getByRole("textbox", { name: copy.editor.labels.value });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
-  await expect(value).toHaveClass(/\bcompose-value-input\b/);
+  await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("not-yet-committed");
   await page.keyboard.press("Enter");
   await expect(page.locator(".rule-editor")).toBeVisible();
@@ -377,10 +377,10 @@ test("options rules can be created and edited from the keyboard", {
 }, async ({ context, extensionId, serviceWorker }) => {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html#profiles`);
+  await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
 
   const newRule = page.getByRole("button", {
-    name: copy.options.rules.new,
+    name: copy.options.allRules.newRule,
   });
   await expect(newRule).toBeVisible();
   await newRule.focus();
@@ -430,9 +430,9 @@ test("options rules can be created and edited from the keyboard", {
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("created");
   // All-sites access is statically granted in this build, so the saved rule is
   // able to run rather than blocked.
-  const row = page.locator(".rule-row").first();
-  await expect(row).not.toHaveClass(/\bblocked\b/);
-  await row.focus();
+  const row = page.locator(".fleet-row").first();
+  await expect(row).toHaveClass(/\blive\b/);
+  await row.locator(".fleet-open").focus();
   await page.keyboard.press("Enter");
 
   const editDialog = page.getByRole("dialog", {

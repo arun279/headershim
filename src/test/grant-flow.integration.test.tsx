@@ -41,8 +41,15 @@ function installDnr() {
       fake.updateSessionRules(options),
     ),
     // The background re-validates every enabled regex against RE2 before it
-    // compiles, so the reconcile pass needs this seam wired too.
-    isRegexSupported: vi.fn((regex: string) => fake.isRegexSupported(regex)),
+    // compiles, so the reconcile pass needs this seam wired too. It is the one
+    // handler whose browser shape is not the adapter's: Chrome answers with
+    // {isSupported}, and the adapter is what turns that into a Result.
+    isRegexSupported: vi.fn(async ({ regex }: { regex: string }) => {
+      const outcome = await fake.isRegexSupported(regex);
+      return outcome.ok
+        ? { isSupported: true }
+        : { isSupported: false, reason: outcome.error };
+    }),
   };
   Object.assign(fakeBrowser.declarativeNetRequest, handlers);
   return { fake, ...handlers };
@@ -76,15 +83,22 @@ function seed(scope: Scope): StateDoc {
   };
 }
 
+const LINE_STATUSES = [
+  "needs-access",
+  "live",
+  "unconfirmed",
+  "refused",
+  "out-of-sync",
+  "overridden",
+  "off",
+  "paused",
+] as const;
+
 // The one change reads its health straight off the severity spine.
 const state = (root: HTMLElement): string | undefined => {
   const line = root.querySelector(".change-line");
   if (line === null) return undefined;
-  return line.classList.contains("needs-access")
-    ? "needs-access"
-    : line.classList.contains("live")
-      ? "live"
-      : undefined;
+  return LINE_STATUSES.find((status) => line.classList.contains(status));
 };
 
 async function grant(origin: string) {
@@ -103,8 +117,16 @@ async function revoke(origin: string) {
 
 const ORIGIN = "*://*.api.acme.dev/*";
 
-const SCOPES: { name: string; scope: Scope }[] = [
-  { name: "domains", scope: { type: "domains", domains: ["api.acme.dev"] } },
+// `granted` is what the spine reads once the grant lands. Only a domains scope
+// resolves to a match the popup can confirm; a pattern or regex is matched by
+// Chrome against the request URL, so the line states the doubt instead of
+// claiming a match it never computed.
+const SCOPES: { name: string; scope: Scope; granted: string }[] = [
+  {
+    name: "domains",
+    scope: { type: "domains", domains: ["api.acme.dev"] },
+    granted: "live",
+  },
   {
     name: "pattern",
     scope: {
@@ -112,6 +134,7 @@ const SCOPES: { name: string; scope: Scope }[] = [
       pattern: "||api.acme.dev^",
       hosts: ["api.acme.dev"],
     },
+    granted: "unconfirmed",
   },
   {
     name: "regex",
@@ -120,10 +143,11 @@ const SCOPES: { name: string; scope: Scope }[] = [
       regex: "^https://api\\.acme\\.dev/",
       hosts: ["api.acme.dev"],
     },
+    granted: "unconfirmed",
   },
 ];
 
-describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
+describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
   it("declines loud, grant clears every surface with zero DNR writes, revoke re-lights", async () => {
     const setBadge = vi.spyOn(browser.action, "setBadgeBackgroundColor");
     background.main();
@@ -132,6 +156,13 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
 
     const root = render(<App />);
     await settle();
+
+    // Ground truth first: the rule really did reach Chrome's ruleset. Every
+    // claim below is about a rule the engine holds, not one the compiler
+    // quietly dropped from the batch while a surface kept describing it.
+    expect(await dnr.fake.getDynamicRules()).toMatchObject([
+      { action: { requestHeaders: [{ header: "x-env", value: "staging" }] } },
+    ]);
 
     // A rule the user believes is running but can't: loud on the spine and badge.
     expect(state(root)).toBe("needs-access");
@@ -143,7 +174,7 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope }) => {
 
     // The grant clears the loud state without recompiling a single rule.
     await grant(ORIGIN);
-    expect(state(root)).toBe("live");
+    expect(state(root)).toBe(granted);
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
     expect(setBadge).toHaveBeenCalled();

@@ -29,6 +29,10 @@ export default defineConfig({
     define: {
       __COMMIT__: JSON.stringify(commitHash()),
     },
+    // Vite's preload polyfill fetches each module it warms, and it is the only
+    // fetch() the bundle would contain. connect-src 'none' blocks it at runtime,
+    // so drop the polyfill rather than ship a call that can only fail.
+    build: { modulePreload: { polyfill: false } },
   }),
   manifest: {
     // The single display name (chrome://extensions, the install prompt, the
@@ -48,6 +52,15 @@ export default defineConfig({
     ],
     ...(e2eHostAccess ? { host_permissions: ["*://*/*"] } : {}),
     optional_host_permissions: ["*://*/*"],
+    // HeaderShim reads and writes headers through declarativeNetRequest and
+    // never talks to a network endpoint itself. connect-src 'none' is the
+    // browser-enforced form of that: it blocks fetch, XHR, WebSocket,
+    // EventSource, and sendBeacon from every extension page and the worker.
+    // The rest matches Chrome's default extension_pages policy.
+    content_security_policy: {
+      extension_pages:
+        "script-src 'self'; object-src 'self'; connect-src 'none';",
+    },
     // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
     // while paused and clears back to this on exit.
     action: { default_title: BRAND_NAME },

@@ -13,11 +13,18 @@ import type {
 } from "../../state/session-mutations";
 import { OpGlyph, TabGlyph } from "./glyphs";
 
+/**
+ * A this-tab change lives or dies with the host grant it rides on, so the
+ * decline is one of the ways the commit can fail, alongside the store's own.
+ */
+export type ThisTabError =
+  | SessionMutationError
+  | { readonly kind: "grant-declined"; readonly host: string };
+
 interface ThisTabComposerProps {
-  host: string | undefined;
   onSubmit: (
     draft: OverrideDraft,
-  ) => Promise<Result<TabOverride, SessionMutationError>>;
+  ) => Promise<Result<TabOverride, ThisTabError>>;
   onClose: () => void;
   onCommitted: () => void;
 }
@@ -31,7 +38,6 @@ const OPERATIONS: readonly HeaderOp[] = ["set", "append", "remove"];
  * the wire bytes. The host grant fires inside the same commit.
  */
 export function ThisTabComposer({
-  host,
   onSubmit,
   onClose,
   onCommitted,
@@ -40,12 +46,12 @@ export function ThisTabComposer({
   const [operation, setOperation] = useState<HeaderOp>("set");
   const [header, setHeader] = useState("");
   const [value, setValue] = useState("");
-  const [errors, setErrors] = useState<HeaderFieldError | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
 
   const commit = () => {
     const empty = headerValueEmptyErrors({ operation, header, value });
     if (empty !== undefined) {
-      setErrors(empty);
+      setError(firstMessage(empty));
       return;
     }
     const draft: OverrideDraft = {
@@ -59,9 +65,11 @@ export function ThisTabComposer({
         onCommitted();
         onClose();
       } else if (outcome.error.kind === "session-override-limit-exceeded") {
-        setErrors({ value: copy.errors.sessionCap });
+        setError(copy.errors.sessionCap);
+      } else if (outcome.error.kind === "grant-declined") {
+        setError(copy.errors.thisTabDeclined(outcome.error.host));
       } else {
-        setErrors(headerErrorToFieldError(outcome.error));
+        setError(firstMessage(headerErrorToFieldError(outcome.error)));
       }
     });
   };
@@ -131,27 +139,27 @@ export function ThisTabComposer({
           </span>
         )}
       </div>
-      {errors !== undefined && (
+      {error !== undefined && (
         <p class="c-error" role="alert">
-          {errors.name ?? errors.value ?? errors.operation}
+          {error}
         </p>
       )}
       <div class="cfoot">
-        {host !== undefined && (
-          <span class="grantnote">
-            <TabGlyph />
-            {copy.readout.thisTabClears}
-          </span>
-        )}
         <button type="button" class="btng" onClick={onClose}>
           {copy.actions.cancel}
         </button>
         <button type="button" class="commit" onClick={commit}>
-          {copy.readout.addChange} <span class="kbd mono">↵</span>
+          {copy.readout.addThisTab} <span class="kbd mono">↵</span>
         </button>
       </div>
     </section>
   );
+}
+
+// The composer has one error line, in field order: the shared field-error copy
+// arrives keyed by field, and the first one set is the one that speaks.
+function firstMessage(fields: HeaderFieldError): string | undefined {
+  return fields.name ?? fields.value ?? fields.operation;
 }
 
 function commitOnEnter(commit: () => void) {

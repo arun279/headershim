@@ -16,11 +16,15 @@
   align-items: center;
   gap: 10px;
 }
+/* The site takes the row's leftover width and hands it to the host, so the
+   truncation primitive measures the room it really has rather than the width of
+   the text it already drew. */
 .site {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-width: 0;
+  flex: 1;
 }
 .site .glb {
   width: 15px;
@@ -29,12 +33,11 @@
   color: var(--ink3);
 }
 .host {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   letter-spacing: -0.01em;
 }
 
@@ -234,10 +237,6 @@
   height: 1px;
   background: var(--hair);
 }
-.dir .c {
-  font-size: 10.5px;
-  color: var(--ink3);
-}
 
 /* ---------------- change line: one severity spine ---------------- */
 .change-line {
@@ -263,11 +262,17 @@
   border-radius: 0 3px 3px 0;
   background: var(--live);
 }
-.change-line.needs-access .spine {
+.change-line.needs-access .spine,
+.change-line.out-of-sync .spine {
   background: var(--amber);
 }
 .change-line.refused .spine {
   background: var(--stop);
+}
+/* Neither live nor at rest: solid so it is not read as off, faint so it makes
+   no claim about a match only Chrome can settle. */
+.change-line.unconfirmed .spine {
+  background: var(--faint);
 }
 .change-line.off .spine,
 .change-line.overridden .spine,
@@ -288,11 +293,15 @@
   width: 16px;
   height: 16px;
 }
-.change-line.needs-access .op {
+.change-line.needs-access .op,
+.change-line.out-of-sync .op {
   color: var(--amber);
 }
 .change-line.refused .op {
   color: var(--stop);
+}
+.change-line.unconfirmed .op {
+  color: var(--faint);
 }
 .change-line.off .op,
 .change-line.overridden .op,
@@ -302,34 +311,45 @@
 .line-body {
   min-width: 0;
 }
+/* Each variable-length part clips itself through the truncation primitive; the
+   row only has to stay on one line and refuse to grow past its column. */
 .say {
   font-size: 13.5px;
   line-height: 1.4;
   color: var(--ink);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 5px;
 }
 .say .verb {
+  flex: none;
   color: var(--ink2);
   font-weight: 400;
   font-size: 12.5px;
 }
+/* The header never takes more than about half the row. Left to its natural
+   width it starves the value to nothing and the arrow points at blank space; a
+   header that admits it was cut is the cheaper loss, and it says so through the
+   primitive's own ellipsis. */
 .say .k {
+  max-width: 55%;
   font-family: var(--font-data);
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
 }
 .say .to {
-  color: var(--faint);
+  flex: none;
+  color: var(--ink3);
   font-family: var(--font-data);
   font-size: 12px;
 }
+/* The value takes what the header leaves, and is measured against that. */
 .say .v {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-data);
   font-size: 13px;
   color: var(--ink2);
@@ -356,10 +376,12 @@
 .v-edit {
   display: inline-flex;
   align-items: baseline;
+  flex: 1;
   min-width: 0;
   padding: 0;
   background: none;
   border: none;
+  text-align: left;
 }
 .v-edit .v {
   border-bottom: 1px dashed transparent;
@@ -397,6 +419,12 @@
 }
 .why.stop .dot {
   background: var(--stop);
+}
+.why.amber {
+  color: var(--amber);
+}
+.why.amber .dot {
+  background: var(--amber);
 }
 .why.rest {
   color: var(--ink3);
@@ -481,10 +509,17 @@
   min-width: 0;
   flex: 1;
 }
+/* The header name is a wire byte here exactly as it is on a change line, so it
+   is drawn in the same language: mono, as stored. Silkscreening it into a
+   micro-label would style the user's own data as furniture. */
 .tk-label {
   display: flex;
   align-items: center;
   gap: 7px;
+  font-family: var(--font-data);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
 }
 .tk-val {
   font-size: 16px;
@@ -499,7 +534,7 @@
   font-weight: 500;
 }
 .tk-val .dots {
-  color: var(--faint);
+  color: var(--ink3);
   letter-spacing: 0.14em;
   margin: 0 4px;
 }
@@ -625,6 +660,8 @@
   gap: 9px;
   align-items: center;
 }
+/* Primary commits hold their width: a shrunk label wraps mid-phrase and leaves
+   the button taller than the Cancel it sits beside. */
 .btnp,
 .commit {
   font: 650 12px var(--font-ui);
@@ -635,8 +672,6 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-.btnp {
   flex: none;
 }
 .kbd {
@@ -654,21 +689,6 @@
   border-radius: var(--r-chip);
   padding: 8px 13px;
 }
-.safety {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 10.5px;
-  color: var(--ink3);
-  margin-left: auto;
-}
-.safety svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  color: var(--live);
-}
-
 /* ---------------- this-tab strip: dashed, clearly temporary ---------------- */
 .thistab {
   margin: 11px 13px 4px;
@@ -802,23 +822,8 @@
 .cfoot {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   padding: 11px 13px;
   border-top: var(--hairline) solid var(--hair);
-}
-.cfoot .grantnote {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--ink3);
-}
-.cfoot .grantnote svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  color: var(--live);
-}
-.cfoot .btng {
-  margin-left: auto;
 }

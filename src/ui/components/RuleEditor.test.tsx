@@ -5,7 +5,14 @@ import type { Rule, RuleDraft } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
-import { fire, press, render, settle, typeInto } from "../test/render";
+import {
+  fire,
+  pasteInto,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../test/render";
 import { RuleEditor } from "./RuleEditor";
 
 const rule = (overrides: Partial<Rule> = {}): Rule => ({
@@ -28,8 +35,12 @@ function mount(
   props: Partial<Parameters<typeof RuleEditor>[0]> = {},
   saveOutcome: { ok: true } | { error: MutationError } = { ok: true },
 ) {
-  const onSave = vi.fn(async (_ruleId: string | undefined, draft: RuleDraft) =>
-    "error" in saveOutcome ? err(saveOutcome.error) : ok(rule(draft)),
+  const onSave = vi.fn(
+    async (
+      _ruleId: string | undefined,
+      draft: RuleDraft,
+      _profileId: string | undefined,
+    ) => ("error" in saveOutcome ? err(saveOutcome.error) : ok(rule(draft))),
   );
   const onRequestGrant = vi.fn(async () => true);
   const onGranted = vi.fn();
@@ -69,10 +80,12 @@ function mount(
       root.querySelector(".domain-chip-input") as HTMLInputElement,
     operationInput: (operation: string) =>
       root.querySelector(
-        `.operation-segments input[value="${operation}"]`,
+        `.editor-segments input[value="${operation}"]`,
       ) as HTMLInputElement,
     saveButton: () =>
       root.querySelector(".editor-actions .primary") as HTMLButtonElement,
+    profileSelect: () =>
+      root.querySelector(".editor-profile-select") as HTMLSelectElement | null,
     errors: () =>
       [...root.querySelectorAll(".editor-error")].map(
         (node) => node.textContent,
@@ -126,15 +139,26 @@ async function fillAndCommit(
 ) {
   typeInto(ctx.nameInput(), header);
   typeInto(ctx.valueInput(), "v1");
+  await saveDraft(ctx);
+}
+
+async function saveDraft(ctx: ReturnType<typeof mount>) {
   fire(() => ctx.saveButton().click());
   await settle();
 }
 
-function openGeneratedValue(ctx: ReturnType<typeof mount>): void {
-  const disclosure = [...ctx.root.querySelectorAll(".disclosure")].find(
-    (button) => button.textContent?.includes(copy.editor.labels.generatedValue),
-  ) as HTMLButtonElement;
-  fire(() => disclosure.click());
+function deleteButton(
+  ctx: ReturnType<typeof mount>,
+): HTMLButtonElement | undefined {
+  return [...ctx.root.querySelectorAll(".editor-actions button")].find(
+    (button) => button.textContent === copy.editor.delete,
+  ) as HTMLButtonElement | undefined;
+}
+
+function openInsertMenu(ctx: ReturnType<typeof mount>): void {
+  fire(() =>
+    (ctx.root.querySelector(".insert-btn") as HTMLButtonElement).click(),
+  );
 }
 
 async function commitEditedValue(
@@ -161,11 +185,6 @@ describe("RuleEditor commit model", () => {
   it("renders the new-rule sheet with an explicit Create rule action", () => {
     const ctx = mount();
     const { root } = ctx;
-    expect(
-      root
-        .querySelector(".editor-sheet")
-        ?.classList.contains("editor-sheet-with-footer"),
-    ).toBe(true);
     expect(root.querySelector(".sheet-head")?.textContent).toContain(
       "New rule · Default",
     );
@@ -188,9 +207,6 @@ describe("RuleEditor commit model", () => {
       copy.editor.placeholders.headerName,
     );
     expect(ctx.valueInput().placeholder).toBe(copy.editor.placeholders.value);
-    expect(ctx.nameInput().size).toBe(
-      copy.editor.placeholders.headerName.length,
-    );
   });
 
   it("lands focus in the header field the moment it opens", () => {
@@ -203,38 +219,87 @@ describe("RuleEditor commit model", () => {
     expect(ctx.root.textContent).toContain(copy.editor.domainsHelper);
   });
 
-  it("sizes the composed header name from its content without separating the seam", () => {
+  it("hands focus to the first rejected field when a submit is refused", async () => {
+    // The rejection is useless while focus sits on the button that raised it:
+    // whoever cannot see the errors has to hunt for what to fix. A real click
+    // focuses the button it lands on, so start focus where the browser leaves it.
+    const ctx = mount();
+    ctx.saveButton().focus();
+    fire(() => ctx.saveButton().click());
+    await settle();
+
+    expect(ctx.errors()).toContain(copy.errors.headerNameRequired);
+    expect(ctx.errors()).toContain(copy.errors.valueRequired);
+    expect(document.activeElement).toBe(ctx.nameInput());
+  });
+
+  it("skips a valid field to focus the one that was actually rejected", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    fire(() => ctx.saveButton().click());
+    await settle();
+
+    expect(ctx.errors()).toContain(copy.errors.valueRequired);
+    expect(document.activeElement).toBe(ctx.valueInput());
+  });
+
+  it("keeps the header name and its value in two separately labelled fields", () => {
     const ctx = mount({ rule: rule() });
-    const name = ctx.nameInput();
-    expect(name.size).toBe("authorization".length);
+    expect(ctx.nameInput().value).toBe("authorization");
+    expect(ctx.valueInput().value).toBe("Bearer staging");
 
-    typeInto(name, "access-control-allow-origin");
-    expect(name.size).toBe("access-control-allow-origin".length);
-    expect(
-      name.closest(".compose-name-control")?.nextElementSibling?.classList,
-    ).toContain("header-seam");
+    const labelOf = (field: HTMLElement) =>
+      ctx.root.querySelector(`label[for="${field.id}"]`)?.textContent;
+    expect(labelOf(ctx.nameInput())).toBe(copy.editor.labels.headerName);
+    expect(labelOf(ctx.valueInput())).toBe(copy.editor.labels.value);
+    expect(ctx.nameInput().closest(".editor-field")).not.toBe(
+      ctx.valueInput().closest(".editor-field"),
+    );
+  });
 
-    typeInto(ctx.valueInput(), "v".repeat(60));
-    expect(
-      (
-        ctx.valueInput().closest(".compose-value-control") as HTMLElement
-      ).style.getPropertyValue("--compose-value-width"),
-    ).toBe("60ch");
+  it("splits a pasted `name: value` line across both fields", async () => {
+    const ctx = mount();
+    pasteInto(ctx.nameInput(), "Authorization: Bearer eyJhbGciOi.J9");
+
+    expect(ctx.nameInput().value).toBe("Authorization");
+    expect(ctx.valueInput().value).toBe("Bearer eyJhbGciOi.J9");
+    expect(ctx.root.textContent).toContain(copy.editor.pastedLineSplit);
+
+    await saveDraft(ctx);
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      expect.objectContaining({
+        header: "Authorization",
+        value: "Bearer eyJhbGciOi.J9",
+      }),
+      undefined,
+    );
+  });
+
+  it("does not split a paste that carries no header line", () => {
+    const ctx = mount();
+    pasteInto(ctx.nameInput(), "x-request-id");
+    expect(ctx.valueInput().value).toBe("");
+    expect(ctx.root.textContent).not.toContain(copy.editor.pastedLineSplit);
   });
 
   it("commits from the explicit primary action with the draft as typed", async () => {
     const ctx = mount();
     await fillAndCommit(ctx, "X-Custom");
-    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(undefined, {
-      direction: "request",
-      operation: "set",
-      header: "X-Custom",
-      value: "v1",
-      scope: { type: "domains", domains: ["api.example.com"] },
-      resourceTypes: "all",
-      initiators: [],
-      enabled: true,
-    });
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      {
+        direction: "request",
+        operation: "set",
+        header: "X-Custom",
+        value: "v1",
+        scope: { type: "domains", domains: ["api.example.com"] },
+        resourceTypes: "all",
+        initiators: [],
+        enabled: true,
+      },
+      undefined,
+    );
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
@@ -361,6 +426,7 @@ describe("RuleEditor commit model", () => {
         initiators: ["app.example.com"],
         enabled: false,
       }),
+      undefined,
     );
     expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("edit");
   });
@@ -394,6 +460,7 @@ describe("RuleEditor commit model", () => {
           domains: ["api.example.com", "cdn.example.com"],
         },
       }),
+      undefined,
     );
   });
 
@@ -414,6 +481,7 @@ describe("RuleEditor commit model", () => {
     expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
       undefined,
       expect.objectContaining({ comment: "staging token" }),
+      undefined,
     );
   });
 
@@ -515,6 +583,57 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
   });
 });
 
+describe("RuleEditor delete", () => {
+  it("offers no delete while there is no saved rule to delete", () => {
+    const ctx = mount({ onDelete: vi.fn() });
+    expect(deleteButton(ctx)).toBeUndefined();
+  });
+
+  it("deletes on the first click, with nothing to confirm", () => {
+    const onDelete = vi.fn();
+    const ctx = mount({ rule: rule(), onDelete });
+    fire(() => (deleteButton(ctx) as HTMLButtonElement).click());
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(ctx.root.textContent).not.toContain(
+      copy.editor.discardConfirm.title,
+    );
+  });
+});
+
+describe("RuleEditor profile choice", () => {
+  const PROFILES = [
+    { id: "p1", name: "Staging auth" },
+    { id: "p2", name: "Prod read-only" },
+  ];
+
+  it("says nothing about profiles when there is no choice to make", () => {
+    const ctx = mount({ rule: rule() });
+    expect(ctx.profileSelect()).toBeNull();
+  });
+
+  it("saves the rule into the picked profile", async () => {
+    const ctx = mount({
+      rule: rule(),
+      profiles: PROFILES,
+      profileId: "p1",
+    });
+    const select = ctx.profileSelect() as HTMLSelectElement;
+    expect(select.value).toBe("p1");
+
+    fire(() => {
+      select.value = "p2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await saveDraft(ctx);
+
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      "r1",
+      expect.objectContaining({ header: "authorization" }),
+      "p2",
+    );
+  });
+});
+
 describe("RuleEditor advisories and value field", () => {
   it("pins the caution advisory directly above the save bar", () => {
     const ctx = mount();
@@ -536,17 +655,20 @@ describe("RuleEditor advisories and value field", () => {
 
   it("inserts a generated UUID literal with the frozen note, regenerates, and clears on hand edit", () => {
     const ctx = mount();
-    expect(ctx.root.querySelector(".insert-btn")).toBeNull();
-    openGeneratedValue(ctx);
-    const uuid = [...ctx.root.querySelectorAll("button")].find(
-      (button) => button.textContent === copy.editor.insertUuid,
+    openInsertMenu(ctx);
+    const uuid = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === copy.editor.insertUuid,
     ) as HTMLButtonElement;
     fire(() => uuid.click());
     const first = ctx.valueInput().value;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(ctx.root.textContent).toContain(copy.generatedValue.note);
 
-    fire(() => uuid.click());
+    openInsertMenu(ctx);
+    const again = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === copy.editor.insertUuid,
+    ) as HTMLButtonElement;
+    fire(() => again.click());
     expect(ctx.valueInput().value).not.toBe(first);
 
     typeInto(ctx.valueInput(), "hand-edited");
@@ -560,7 +682,6 @@ describe("RuleEditor advisories and value field", () => {
         generated: { kind: "uuid", at: "2026-07-12T14:03:27.000Z" },
       }),
     });
-    openGeneratedValue(ctx);
     expect(ctx.root.textContent).toContain(
       copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
     );
@@ -598,6 +719,7 @@ describe("RuleEditor grant moment", () => {
     expect(differs.onSave).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ initiators: ["app.example.com"] }),
+      undefined,
     );
 
     const sameOrigin = mount({
@@ -612,6 +734,7 @@ describe("RuleEditor grant moment", () => {
     expect(sameOrigin.onSave).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ initiators: [] }),
+      undefined,
     );
   });
 
@@ -629,6 +752,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onSave).toHaveBeenCalledWith(
       "r1",
       expect.objectContaining({ initiators: [] }),
+      undefined,
     );
   });
 
@@ -692,6 +816,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onSave).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ scope: { type: "all" } }),
+      undefined,
     );
     expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
     expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
@@ -765,6 +890,7 @@ describe("RuleEditor grant moment", () => {
           hosts: ["api.acme.dev"],
         },
       }),
+      undefined,
     );
     expect(ctx.onGranted).toHaveBeenCalledOnce();
   });
@@ -785,6 +911,7 @@ describe("RuleEditor grant moment", () => {
       expect.objectContaining({
         scope: expect.objectContaining({ hosts: ["api.acme.dev"] }),
       }),
+      undefined,
     );
   });
 
@@ -850,6 +977,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onSave).toHaveBeenCalledWith(
       undefined,
       expect.objectContaining({ initiators: ["app.example.com"] }),
+      undefined,
     );
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });

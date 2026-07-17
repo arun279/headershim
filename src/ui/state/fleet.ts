@@ -4,11 +4,13 @@
  * site" answers "what does HeaderShim do to this domain"; "by header" answers
  * "where does this one header reach" and is the home for cross-site rules. The
  * traffic receipt is the same projection flattened to the stamps actually live,
- * skipped, or refused right now. Nothing here recomputes match behavior: it
- * reads the model, the grant snapshot, and the refused classifier the engine
- * already owns, and never claims a state the model does not hold.
+ * skipped, or refused right now. Nothing here recomputes match behavior: the
+ * severity ladder, the refused classifier and the per-request test are the same
+ * ones the popup readout reads, so a rule cannot carry one state here and
+ * another there.
  */
 
+import { dropUncompilable, settlesPerRequest } from "../../core/compile";
 import { findOverriddenRules } from "../../core/conflicts";
 import { type GrantSnapshot, missingGrants } from "../../core/grants";
 import { normalizeHeaderName } from "../../core/headers";
@@ -18,18 +20,16 @@ import type {
   HeaderOp,
   Profile,
   Rule,
+  StateDoc,
 } from "../../core/model";
+import type { SystemStatus } from "../../core/status";
 import { headerValueSummary, isSecretHeader } from "../secret";
-import { refusedReason } from "./readout";
-
-/** Per-rule health, in the order the severity spine reads it. */
-type FleetStatus =
-  | "live"
-  | "needs-access"
-  | "refused"
-  | "overridden"
-  | "off"
-  | "paused";
+import {
+  type LineStatus,
+  lineStatus,
+  type RefusedReason,
+  refusedReason,
+} from "./readout";
 
 interface FleetProvenance {
   readonly profileId: string;
@@ -59,15 +59,14 @@ export interface FleetRule {
   readonly header: string;
   /** Normalized header, the grouping key for the by-header lens. */
   readonly headerKey: string;
-  readonly value?: string;
   /** The redacted reading shown on the line; undefined for a remove. */
   readonly display?: string;
   readonly secret: boolean;
   readonly enabled: boolean;
   readonly profileEnabled: boolean;
-  readonly status: FleetStatus;
+  readonly status: LineStatus;
   readonly overriddenBy?: Overrider;
-  readonly refused?: "host";
+  readonly refused?: RefusedReason;
   readonly missing?: readonly string[];
   readonly scope: FleetScope;
   /** How many distinct sites this rule names; 0 when its reach is broad. */
@@ -77,25 +76,27 @@ export interface FleetRule {
 }
 
 export interface FleetInput {
-  readonly profiles: readonly Profile[];
-  readonly activeProfileId: string | undefined;
+  readonly doc: StateDoc;
   readonly grants: GrantSnapshot;
-  readonly paused: boolean;
+  readonly isRegexSupported: (regex: string) => boolean;
+  /** The one system-status ladder, so no row disagrees with the badge. */
+  readonly status: SystemStatus;
 }
 
 /** Every rule in every profile, in profile then rule order, projected once. */
 export function projectFleet({
-  profiles,
-  activeProfileId,
+  doc,
   grants,
-  paused,
+  isRegexSupported,
+  status,
 }: FleetInput): FleetRule[] {
   // Collisions are resolved across the live set exactly as the compiled ruleset
   // does: enabled rules of the active profile, in order, so an earlier one
   // shadows a later one.
+  const compilable = dropUncompilable(doc, isRegexSupported);
   const live: { profile: Profile; rule: Rule }[] = [];
-  for (const profile of profiles) {
-    if (profile.id !== activeProfileId) continue;
+  for (const profile of compilable.profiles) {
+    if (profile.id !== compilable.activeProfileId) continue;
     for (const rule of profile.rules) {
       if (rule.enabled) live.push({ profile, rule });
     }
@@ -115,13 +116,15 @@ export function projectFleet({
     }
   }
 
-  return profiles.flatMap((profile) =>
+  return doc.profiles.flatMap((profile) =>
     profile.rules.map((rule) =>
       fleetRule(profile, rule, {
         grants,
-        paused,
-        active: profile.id === activeProfileId,
+        paused: status.kind === "paused",
+        outOfSync: status.kind === "out-of-sync",
+        active: profile.id === doc.activeProfileId,
         overriddenBy: overriddenBy.get(rule.id),
+        isRegexSupported,
       }),
     ),
   );
@@ -133,19 +136,23 @@ function fleetRule(
   context: {
     grants: GrantSnapshot;
     paused: boolean;
+    outOfSync: boolean;
     active: boolean;
     overriddenBy: Overrider | undefined;
+    isRegexSupported: (regex: string) => boolean;
   },
 ): FleetRule {
-  const refused = refusedReason(rule);
+  const refused = refusedReason(rule, context.isRegexSupported);
   const running = context.active && rule.enabled;
   const missing = running ? missingGrants(rule, context.grants) : [];
-  const status = fleetStatus({
+  const status = lineStatus({
     running,
     paused: context.paused,
+    outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
     needsAccess: missing.length > 0,
+    perRequest: settlesPerRequest(rule),
   });
   const display =
     rule.operation === "remove"
@@ -165,7 +172,6 @@ function fleetRule(
     operation: rule.operation,
     header: rule.header,
     headerKey: normalizeHeaderName(rule.header),
-    ...(rule.value === undefined ? {} : { value: rule.value }),
     ...(display === undefined ? {} : { display }),
     secret: isSecretHeader(rule.header),
     enabled: rule.enabled,
@@ -182,23 +188,6 @@ function fleetRule(
     siteCount: siteCount(rule),
     crossSite: rule.scope.type !== "domains",
   };
-}
-
-function fleetStatus(flags: {
-  running: boolean;
-  paused: boolean;
-  overridden: boolean;
-  refused: boolean;
-  needsAccess: boolean;
-}): FleetStatus {
-  // A disabled rule (or one in an off profile) is off regardless of pause; only
-  // a rule that would otherwise run reads as paused.
-  if (!flags.running) return "off";
-  if (flags.paused) return "paused";
-  if (flags.overridden) return "overridden";
-  if (flags.refused) return "refused";
-  if (flags.needsAccess) return "needs-access";
-  return "live";
 }
 
 function ruleLabel(rule: Rule): string {
@@ -318,14 +307,16 @@ export interface TapeRow {
   readonly secret: boolean;
   readonly provenance: FleetProvenance;
   /** Only the states that describe live traffic reach the tape. */
-  readonly status: "live" | "needs-access" | "refused" | "paused";
+  readonly status: Exclude<LineStatus, "off" | "overridden">;
 }
 
 const TAPE_ORDER: Record<TapeRow["status"], number> = {
   refused: 0,
-  "needs-access": 1,
-  live: 2,
-  paused: 3,
+  "out-of-sync": 1,
+  "needs-access": 2,
+  unconfirmed: 3,
+  live: 4,
+  paused: 5,
 };
 
 /**

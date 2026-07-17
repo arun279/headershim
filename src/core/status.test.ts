@@ -84,22 +84,13 @@ describe("computeStatus precedence", () => {
     expect(status).toMatchObject({ hosts: ["*://*/*"] });
   });
 
-  it("counts enabled rules in the active profile only", () => {
+  it("is live when a profile is active", () => {
     const status = computeStatus({
-      doc: doc([
-        profile("p1", [rule(1), rule(2, false)]),
-        profile("p2", [rule(3)]),
-        profile("p3", [rule(4)]),
-      ]),
+      doc: doc([profile("p1", [rule(1), rule(2, false)]), profile("p2", [])]),
       grantGaps: [],
       reconcileError: false,
     });
-    expect(status).toEqual({
-      kind: "live",
-      ruleCount: 1,
-      totalRuleCount: 2,
-      profileCount: 1,
-    });
+    expect(status).toEqual({ kind: "live" });
   });
 
   it("is off when no profile is active", () => {

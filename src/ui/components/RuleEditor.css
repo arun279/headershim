@@ -19,17 +19,11 @@
   animation: editor-in var(--t-med) var(--ease);
 }
 
-/* The sticky action bar is 50px tall. Extra trailing space lets the final
-   editor control scroll completely above it inside the capped sheet region. */
-.editor-sheet-with-footer .sheet-body {
-  padding-bottom: 64px;
-}
-
 .editor-primary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
-  gap: var(--sp-5);
+  gap: var(--sp-4) var(--sp-5);
 }
 
 .editor-primary-field {
@@ -73,109 +67,15 @@
   font-family: var(--font-data);
 }
 
-.editor-radios {
-  display: flex;
-  gap: 14px;
-  min-height: 28px;
-}
-
-.editor-radio {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-height: 24px;
-  font-size: 12.5px;
-}
-
-.editor-radio input {
-  accent-color: var(--trace);
-}
-
-.operation-segments .segment {
+.editor-segments .segment {
   min-width: 58px;
   justify-content: center;
   padding: 4px 10px;
   font-size: 12.5px;
 }
 
-.header-line-field {
-  margin-top: var(--sp-5);
-}
-
-.header-compose {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: start;
-  gap: var(--sp-2) 0;
-  padding: 8px 10px;
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--bezel-strong);
-  border-radius: var(--radius-outer);
-}
-
-.header-compose.remove {
-  display: block;
-}
-
-.header-compose:focus-within {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 22%, transparent);
-}
-
-.compose-name-control,
-.compose-value-control,
-.compose-control {
-  min-width: 0;
-}
-
-.compose-name-control {
-  flex: none;
-  max-width: 100%;
-}
-
-.compose-value-control {
-  flex: 1 1 var(--compose-value-width, 24ch);
-  max-width: 100%;
-}
-
-.compose-input {
-  width: 100%;
-  min-width: 0;
-  padding: 2px 0;
-  color: var(--ink);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-
-.compose-input:focus-visible {
-  outline: none;
-}
-
-.compose-input::placeholder {
-  color: var(--ink-mute);
-  opacity: 0.65;
-  font-weight: 400;
-}
-
-.compose-name-input {
-  field-sizing: content;
-  width: auto;
-  min-width: 1ch;
-  max-width: 100%;
-  font-weight: 500;
-}
-
-.header-seam {
-  flex: none;
-  margin-right: var(--sp-2);
-  padding: 2px 0;
-  color: var(--ink-mute);
-  font-family: var(--font-data);
-  font-size: 12.5px;
-  line-height: 1.45;
+.editor-profile-select {
+  min-height: 30px;
 }
 
 .editor-micro {
@@ -191,11 +91,6 @@
   line-height: 1.4;
   font-weight: 600;
   color: var(--caution);
-}
-
-.header-compose .editor-micro,
-.header-compose .editor-error {
-  margin-top: var(--sp-2);
 }
 
 .editor-error-global {
@@ -219,16 +114,6 @@
 
 .editor-option .field {
   margin-top: var(--sp-2);
-}
-
-.generated-value-panel {
-  padding: var(--sp-2) var(--sp-3) 0;
-}
-
-.generated-value-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
 }
 
 .editor-request-target {
@@ -255,14 +140,23 @@
   background: var(--panel-2);
 }
 
+/* Destructive, so it sits apart from the two actions that keep the rule. It
+   asks nothing: the toast it raises carries the undo. */
+.editor-delete {
+  margin-right: auto;
+  min-height: 30px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--radius-outer);
+  color: var(--stop);
+  font-weight: 600;
+}
+
+.editor-delete:hover:not(:disabled) {
+  background: var(--stop-soft);
+}
+
 .discard-title {
   margin-right: auto;
   font-size: 12px;
   color: var(--caution);
-}
-
-@media (max-width: 360px) {
-  .editor-primary-grid {
-    grid-template-columns: 1fr;
-  }
 }

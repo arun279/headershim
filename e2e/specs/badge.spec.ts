@@ -57,8 +57,6 @@ function needsAccessDoc(): StateDoc {
   ]);
 }
 
-// ── Badge state machine end-to-end ──────────────────────────────────────────
-
 test("count mode engages the Chrome-managed count badge", async ({
   context,
   echoServers,
@@ -158,31 +156,4 @@ test("needs-access outranks content mode with the amber can't-run badge and no s
   await expect.poll(() => getBadgeColor(serviceWorker)).toEqual(AMBER);
   expect(await getBadgeText(serviceWorker, tabId)).toBe("");
   expect(await getBadgeText(serviceWorker)).toBe("");
-});
-
-// ── Verify service (cases 11, 12) ───────────────────────────────────────────
-
-// The gate premise, confirmed on the wire: without a gesture-granted activeTab
-// (and with the declarativeNetRequestFeedback permission barred by policy),
-// getMatchedRules rejects. This is why Verify is a per-tab, on-demand,
-// gesture-driven feature rather than a live console — and why the tally, quota,
-// and popup-gesture halves below can only run behind a real gesture.
-test("getMatchedRules rejects without a gesture-granted activeTab", async ({
-  context,
-  echoServers,
-  serviceWorker,
-}) => {
-  const page = await context.newPage();
-  await page.goto(`${echoServers.h1Url}/verify`);
-  const tabId = await activeTabId(serviceWorker);
-
-  const rejected = await serviceWorker.evaluate(async (id: number) => {
-    try {
-      await chrome.declarativeNetRequest.getMatchedRules({ tabId: id });
-      return false;
-    } catch {
-      return true;
-    }
-  }, tabId);
-  expect(rejected).toBe(true);
 });

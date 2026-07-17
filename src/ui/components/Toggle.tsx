@@ -2,7 +2,10 @@ import "./Toggle.css";
 
 interface ToggleProps {
   checked: boolean;
-  /** Names the thing switched, e.g. "Rule on: authorization" or "Global pause". */
+  /**
+   * Names the thing switched, e.g. "Turn off: authorization" or "All header
+   * changes". Checked always means that thing is on, never that it is stopped.
+   */
   label: string;
   onChange: (next: boolean) => void;
   disabled?: boolean;

@@ -2,14 +2,16 @@ import type { JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { detectImportFormat } from "../../../src/core/codec/detect";
 import {
+  draftRuleName,
   exportHeadershim,
   type ImportError,
   type ImportPlan,
   importHeadershim,
 } from "../../../src/core/codec/headershim";
-import type { ModHeaderImportWarning } from "../../../src/core/codec/modheader";
+import type { ImportPlanWarning } from "../../../src/core/codec/modheader";
+import { MAX_DOC_BYTES } from "../../../src/core/limits";
 import type { RuleDraft, StateDoc } from "../../../src/core/model";
-import { err, ok, type Result } from "../../../src/core/result";
+import { err, type Result } from "../../../src/core/result";
 import { isRegexSupported } from "../../../src/platform/dnr";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
@@ -19,7 +21,13 @@ import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
 import "./ImportExport.css";
 
-type Plan = ImportPlan<ModHeaderImportWarning>;
+type Plan = ImportPlan<ImportPlanWarning>;
+
+// An export pretty-prints the doc it came from, so a legitimate file is larger
+// than the storage budget that bounds what any import can end up applying. Cap
+// the read at a multiple of that budget: no file a real export produced is
+// refused, and a file big enough to freeze the tab is never read at all.
+export const MAX_IMPORT_BYTES = 4 * MAX_DOC_BYTES;
 
 /**
  * Import & export. A picked file is detected, decoded, and shown as a pre-apply
@@ -58,7 +66,19 @@ export function ImportExportPage({
       return;
     }
     clear();
-    const built = await buildPlan(await file.text(), doc);
+    if (file.size > MAX_IMPORT_BYTES) {
+      setImportError(copy.errors.importTooLarge);
+      return;
+    }
+    let raw: string;
+    try {
+      raw = await file.text();
+    } catch {
+      // A picked file can still be gone or unreadable by the time it is read.
+      setImportError(copy.errors.importUnreadable);
+      return;
+    }
+    const built = await buildPlan(raw, doc);
     if (built.ok) {
       setPlan(built.value);
     } else {
@@ -96,12 +116,9 @@ export function ImportExportPage({
       class="wb-page import-export-page"
       aria-labelledby="import-export-title"
     >
-      <div>
-        <h1 class="wb-title" id="import-export-title" tabIndex={-1}>
-          {text.title}
-        </h1>
-        <p class="wb-sub">{text.subtitle}</p>
-      </div>
+      <h1 class="wb-title" id="import-export-title" tabIndex={-1}>
+        {text.title}
+      </h1>
 
       <div class="ie-block">
         <h2 class="silk ie-block-label">{text.importHeading}</h2>
@@ -185,19 +202,15 @@ async function buildPlan(
   }
 
   switch (detectImportFormat(parsed)) {
-    case "headershim": {
-      const result = importHeadershim(raw, doc.profiles);
-      return result.ok
-        ? ok({ profiles: result.value.profiles, warnings: [] })
-        : result;
-    }
+    case "headershim":
+      return importHeadershim(parsed, doc.profiles);
     case "modheader": {
       // The ModHeader decoder is the page's only heavy dependency and is needed
       // only when a ModHeader file is actually picked, so it loads on demand.
       const { importModHeader } = await import(
         "../../../src/core/codec/modheader"
       );
-      return importModHeader(raw, doc.profiles, isRegexSupported);
+      return importModHeader(parsed, doc.profiles, isRegexSupported);
     }
     case "unknown":
       return err({ kind: "unrecognized-format" });
@@ -241,7 +254,7 @@ function convert(plan: Plan, warningIndex: number): Plan {
     rules: profile.rules.map((rule) => {
       if (
         frozen ||
-        draftName(rule) !== warning.ruleName ||
+        draftRuleName(rule) !== warning.ruleName ||
         rule.value === undefined
       ) {
         return rule;
@@ -298,12 +311,6 @@ function freezeTokens(
     value,
     ...(pure === undefined ? {} : { generated: { kind: pure, at } }),
   };
-}
-
-// The mapping's rule name, reconstructed from the draft: its comment, else the
-// header (matching how the ModHeader decoder names each mapped rule).
-function draftName(rule: RuleDraft): string {
-  return rule.comment?.trim() || rule.header;
 }
 
 function download(filename: string, contents: string): void {

@@ -72,24 +72,40 @@ export const copy = {
     overriddenBy: (winner: string) => `overridden by ${winner}`,
     refusedReason: {
       host: "Chrome won't let extensions change the Host header",
+      header: "Chrome won't accept this header name",
+      value: "Chrome won't accept a line break in the value",
+      pattern: "Chrome won't accept this URL pattern",
+      regex: "Chrome won't accept this regular expression",
+      domains: "Chrome won't accept this rule's sites",
     },
+    // A rule whose match Chrome settles per request, against a URL this popup
+    // never sees. Saying "live" here would draw a fact it cannot know.
+    unconfirmedReason: "Only Chrome can tell whether this matches here",
+    // The ruleset Chrome is running is not the one on screen, so no line can
+    // claim to be live until the two agree again.
+    outOfSyncReason: "Chrome hasn't taken this rule yet",
+    unconfirmed: (count: number) => `${count} unconfirmed`,
+    outOfSync: (count: number) => `${count} not applied yet`,
     details: "Details",
     grant: "Grant",
     ruleToggle: (header: string, on: boolean) =>
       `${on ? "Turn off" : "Turn on"}: ${header}`,
     editValue: (header: string) => `Edit ${header} value`,
+    // Two different permanences, so two different words: the footer opens a
+    // saved rule, the composer commits a change that dies with the tab.
     addChange: "Add a change",
+    addThisTab: "Add to this tab",
     justThisTab: "Just this tab",
-    pauseSwitch: "Global pause",
+    pauseSwitch: "All header changes",
     onLabel: "On",
     pausedLabel: "Paused",
-    pausedBanner: "Everything paused. Resume restores this exact state.",
+    pausedBanner:
+      "Everything paused. Switching back on restores this exact state.",
     empty: (host: string): Sentence => [
       "HeaderShim isn't changing anything on ",
       data(host),
       ".",
     ],
-    emptyPermNote: "Chrome asks to allow this site when you do.",
     noHost: "Open the popup on a website to see what HeaderShim does there.",
     thisTabTag: "This tab only",
     thisTabClears: "clears when you close the tab",
@@ -123,18 +139,20 @@ export const copy = {
     opaque: "opaque token · no expiry to read",
     expiresIn: (remainingMs: number) =>
       remainingMs <= 0 ? "expired" : `expires in ${duration(remainingMs)}`,
-    lifeLeft: (fraction: number) =>
-      `${Math.round(fraction * 100)}% of its life left`,
     warnNote: "swap before it lapses",
     valueLabel: (header: string) => header,
     swap: "Swap",
     swapOn: (host: string): Sentence => ["on ", data(host)],
     pasteLabel: "Paste the new token",
-    pasteReplaces: "replaces the token on this tab",
+    // Where the new bytes land, said before you commit them: a swap rewrites
+    // whichever change is carrying the token, and those two live different lives.
+    pasteReplaces: {
+      rule: "replaces the token on the saved rule",
+      override: "replaces the token on this tab",
+    },
     pasteAria: "New token value",
     replace: "Replace",
     cancel: "Cancel",
-    safe: "screen-share safe",
   },
 
   profiles: {
@@ -157,25 +175,23 @@ export const copy = {
   // The full-tab options surface: frame, profile management, and bulk actions.
   options: {
     nav: {
-      label: "Workbench",
+      label: "Sections",
       groupRules: "Rules",
       groupManage: "Manage",
-      fleet: "Fleet",
+      allRules: "All rules",
       profiles: "Profiles",
       importExport: "Import & export",
       siteAccess: "Site access",
-      traffic: "Traffic",
+      traffic: "What runs",
       settings: "Settings",
       about: "About",
     },
     version: (version: string) => `v${version}`,
 
-    // The fleet: every rule across every profile, in one severity grammar,
-    // grouped by the site it lands on or the header it carries.
-    fleet: {
-      title: "Fleet",
-      subtitle:
-        "Every rule across your profiles, in one place. Grouping by header is the home for cross-site rules: one header across many sites is one edit, with its reach shown.",
+    // Every rule across every profile, in one severity grammar, grouped by the
+    // site it lands on or the header it carries.
+    allRules: {
+      title: "All rules",
       lensLabel: "Group rules",
       bySite: "By site",
       byHeader: "By header",
@@ -191,9 +207,13 @@ export const copy = {
         "reaches ",
         data(siteCount),
         ` ${sites(siteCount)}`,
-        ...(broad ? [" and beyond"] : []),
+        ...(broad ? [" plus every site a pattern matches"] : []),
       ],
       broadReach: "reaches every matching site",
+      // A rule named for several domains is drawn once per domain; its own row
+      // says how far the switch on it actually reaches.
+      alsoOn: (others: number) =>
+        others === 1 ? "also on 1 other site" : `also on ${others} other sites`,
       scope: {
         all: "all sites",
         pattern: "URL pattern",
@@ -205,24 +225,22 @@ export const copy = {
       },
       editRule: (header: string) => `Edit rule: ${header}`,
       profileOff: "its profile is off",
-      empty: "No rules yet. Add one to see it here.",
+      empty: "No rules yet.",
       emptyProfileOff:
         "Every profile is off. Turn one on to see its rules run.",
     },
 
-    // The receipt: the live proof under the fleet's honest-status claims. It
-    // reflects the compiled state, never the wire, so it can be trusted.
+    // Every change the compiled ruleset carries, and where each one stands. It
+    // reads that ruleset, never the wire, so no line here may speak of a
+    // request: none has been observed, and one may never be made.
     traffic: {
-      title: "Traffic",
-      subtitle:
-        "Every header stamp HeaderShim is set to apply right now, and every one it is skipping or refusing. Read from the live rules, never from the wire.",
-      secretsNote: "secrets never recorded",
-      colHost: "Site",
-      colStamp: "Stamp",
+      title: "What runs",
       status: {
         live: "live",
-        needsAccess: "skipped · not granted",
+        unconfirmed: "only Chrome can say",
+        needsAccess: "not granted",
         refused: "refused by Chrome",
+        outOfSync: "not applied yet",
         paused: "paused",
       },
       crossSiteHost: "cross-site",
@@ -230,8 +248,6 @@ export const copy = {
     },
     profiles: {
       title: "Profiles",
-      subtitle:
-        "One profile runs at a time by default. Turning one on turns the rest off; rules themselves live in the Fleet.",
       new: "+ New",
       newProfile: "New profile",
       listLabel: "Profiles",
@@ -272,19 +288,10 @@ export const copy = {
       },
     },
     rules: {
-      sectionLabel: (name: string) => `Rules in ${name}`,
-      new: "+ New rule",
       loadingEditor: "Loading rule editor…",
-      enable: "Enable",
-      disable: "Disable",
-      move: "Move",
-      moveTo: (name: string) => `Move to ${name}`,
-      delete: "Delete",
     },
     importExport: {
       title: "Import & export",
-      subtitle:
-        "Move profiles and rules as JSON. HeaderShim reads its own exports and ModHeader profile exports.",
       importHeading: "Import",
       instruction:
         "HeaderShim JSON or ModHeader export, detected automatically.",
@@ -316,6 +323,16 @@ export const copy = {
       imported: (count: number) =>
         `Imported ${count} ${profiles(count)}, turned off. Turn them on when you're ready.`,
       warnings: {
+        credentialHeader: (header: string): Sentence => [
+          "Carries a credential in ",
+          data(header),
+          ". Check where this rule reaches before you turn it on.",
+        ],
+        securityResponseHeader: (header: string): Sentence => [
+          "Changes ",
+          data(header),
+          ", a protection sites send. Check where this rule reaches before you turn it on.",
+        ],
         appendDegraded: (header: string): Sentence => [
           "Chrome only allows appending to a fixed set of request headers, and ",
           data(header),
@@ -343,8 +360,6 @@ export const copy = {
     },
     siteAccess: {
       title: "Site access",
-      subtitle:
-        "The sites HeaderShim can reach. It asks one site at a time; grant what your rules need, revoke any grant here.",
       neededHeading: "Needed but not granted",
       grantedHeading: "Granted",
       usedBy: (count: number) => `used by ${count} ${rules(count)}`,
@@ -377,11 +392,8 @@ export const copy = {
     },
     settings: {
       title: "Settings",
-      subtitle: "How the Workbench and popup look.",
       theme: {
         label: "Theme",
-        switchToLight: "Switch to light theme",
-        switchToDark: "Switch to dark theme",
         options: { system: "System", light: "Light", dark: "Dark" },
       },
       shortcuts: "Keyboard shortcuts",
@@ -512,6 +524,10 @@ export const copy = {
     heading: (mode: "new" | "edit", profile: string) =>
       `${mode === "new" ? "New rule" : "Edit rule"} · ${profile}`,
     close: "Close editor",
+    delete: "Delete rule",
+    // The editor writes into whichever profile is picked here, so a rule can be
+    // authored into one that is not running without touching live traffic.
+    profileHelper: "The profile this rule is saved in",
     discardConfirm: {
       title: "Discard this rule?",
       keepEditing: "Keep editing",
@@ -520,18 +536,20 @@ export const copy = {
     labels: {
       direction: "Direction",
       operation: "Operation",
-      header: "Header",
       headerName: "Header name",
       value: "Value",
+      profile: "Profile",
       scope: "Scope",
       comment: "Comment",
-      generatedValue: "Generated value",
       resourceTypes: "Resource types",
     },
     placeholders: {
-      headerName: "name",
-      value: "value",
+      headerName: "authorization",
+      value: "Bearer …",
     },
+    // A pasted `name: value` line lands split across the two fields rather than
+    // failing the name's token grammar on the colon.
+    pastedLineSplit: "Pasted header split into name and value.",
     direction: { request: "Request", response: "Response" },
     operation: { set: "Set", append: "Append", remove: "Remove" },
     savedAs: (name: string): Sentence => ["saved as ", data(name)],
@@ -601,6 +619,10 @@ export const copy = {
       "Chrome's rule engine can't use this URL pattern. A pattern can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
     grantDeclined: (host: string) =>
       `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready.`,
+    // A this-tab change has no life beyond the grant, so a decline leaves
+    // nothing to save: the draft stays here rather than becoming a dead row.
+    thisTabDeclined: (host: string) =>
+      `Not added. A this-tab change needs access to ${host}, and you declined. Add it again when you're ready to allow it.`,
     appendDisallowed: (name: string) =>
       `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
     ruleCap:
@@ -619,6 +641,10 @@ export const copy = {
       `This file was exported by a newer HeaderShim (format ${fileVersion}; this version reads up to ${supportedVersion}). Update HeaderShim, then import again. Nothing was changed.`,
     importUnrecognized:
       "This file is valid JSON but isn't a HeaderShim or ModHeader export, so nothing was imported and nothing was changed. HeaderShim reads its own exports and ModHeader profile exports only.",
+    importTooLarge:
+      "This file is far larger than any export HeaderShim can hold, so it wasn't read and nothing was changed. Check you picked the right file.",
+    importUnreadable:
+      "This file couldn't be read, so nothing was imported and nothing was changed. If it moved or changed since you picked it, pick it again.",
     headerNotModifiable:
       "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1. For most modern sites that isn't possible.",
     headerNameRequired: "Every rule needs a header name. Type one to save.",
@@ -643,5 +669,9 @@ export const copy = {
     managedHeader:
       "Chrome's network stack manages this header itself; a rule here usually has no effect.",
     host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
+    credential:
+      "This header carries a credential. Everything this rule reaches will be sent it, so keep the scope as narrow as the job needs.",
+    securityResponse:
+      "Sites send this header to protect the pages they serve. Changing it turns that protection off wherever this rule reaches, for as long as it's on.",
   },
 } as const;

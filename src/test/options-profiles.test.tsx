@@ -80,7 +80,7 @@ describe("workbench frame", () => {
     expect(root.querySelector(".wb-version")?.textContent).toMatch(/^v/);
     const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
     expect(links.map((link) => link.textContent)).toEqual([
-      copy.options.nav.fleet,
+      copy.options.nav.allRules,
       copy.options.nav.profiles,
       copy.options.nav.siteAccess,
       copy.options.nav.traffic,

@@ -20,7 +20,6 @@ describe("copy", () => {
     );
     expect(copy.token.expiresIn(8 * 60_000)).toBe("expires in 8m");
     expect(copy.token.opaque).toBe("opaque token · no expiry to read");
-    expect(copy.token.lifeLeft(0.38)).toBe("38% of its life left");
   });
 
   it("builds host-bound toasts, grants, and errors", () => {
@@ -71,8 +70,10 @@ describe("copy", () => {
     expect(copy.readout.refusedReason.host).toBe(
       "Chrome won't let extensions change the Host header",
     );
+    // Names the control the footer actually has, not a "Resume" that never
+    // appears on any surface.
     expect(copy.readout.pausedBanner).toBe(
-      "Everything paused. Resume restores this exact state.",
+      "Everything paused. Switching back on restores this exact state.",
     );
     expect(copy.app.tagline).toBe(
       "Add, change, and remove HTTP headers on the sites you choose.",

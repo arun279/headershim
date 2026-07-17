@@ -130,19 +130,18 @@ export function TabGlyph() {
   );
 }
 
+/** A toothed wheel: a solid body, so it never reads as a ringed sun. */
 export function GearGlyph() {
   return (
     <svg
       width="16"
       height="16"
       viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.4"
+      fill="currentColor"
+      fill-rule="evenodd"
       aria-hidden="true"
     >
-      <circle cx="8" cy="8" r="2.1" />
-      <path d="M8 1.5v1.7M8 12.8v1.7M14.5 8h-1.7M3.2 8H1.5M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2M12.6 12.6l-1.2-1.2M4.6 4.6 3.4 3.4" />
+      <path d="M6.7 3L6.9 0.8L9.1 0.8L9.3 3A5.2 5.2 0 0 1 10.7 3.5L12.3 2.1L13.9 3.7L12.5 5.3A5.2 5.2 0 0 1 13 6.7L15.2 6.9L15.2 9.1L13 9.3A5.2 5.2 0 0 1 12.5 10.7L13.9 12.3L12.3 13.9L10.7 12.5A5.2 5.2 0 0 1 9.3 13L9.1 15.2L6.9 15.2L6.7 13A5.2 5.2 0 0 1 5.3 12.5L3.7 13.9L2.1 12.3L3.5 10.7A5.2 5.2 0 0 1 3 9.3L0.8 9.1L0.8 6.9L3 6.7A5.2 5.2 0 0 1 3.5 5.3L2.1 3.7L3.7 2.1L5.3 3.5A5.2 5.2 0 0 1 6.7 3ZM8 5.5A2.5 2.5 0 1 0 8 10.5A2.5 2.5 0 1 0 8 5.5Z" />
     </svg>
   );
 }
@@ -173,21 +172,6 @@ export function ClockGlyph() {
     >
       <circle cx="8" cy="8" r="6" />
       <path d="M8 4.6V8l2.4 1.6" />
-    </svg>
-  );
-}
-
-export function ShieldGlyph() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      aria-hidden="true"
-    >
-      <path d="M8 1.5l5.5 2v4c0 3.4-2.3 5.6-5.5 7-3.2-1.4-5.5-3.6-5.5-7v-4z" />
-      <path d="M5.6 8l1.7 1.7L10.6 6" />
     </svg>
   );
 }

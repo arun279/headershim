@@ -74,18 +74,19 @@ if (manifest.web_accessible_resources !== undefined) {
 if (manifest.sandbox !== undefined) {
   violations.push("sandbox must be absent");
 }
-if (manifest.content_security_policy !== undefined) {
-  const csp = JSON.stringify(manifest.content_security_policy);
-  if (/https?:\/\//.test(csp)) {
-    violations.push(
-      "content_security_policy must not reference remote sources",
-    );
-  }
-  if (/unsafe-eval|wasm-unsafe-eval|unsafe-inline/.test(csp)) {
-    violations.push(
-      "content_security_policy must not weaken the no-eval posture (unsafe-eval, wasm-unsafe-eval, unsafe-inline)",
-    );
-  }
+// connect-src 'none' is what makes "HeaderShim never talks to the network" a
+// browser-enforced fact rather than a claim. Match it exactly: a subset check
+// passes while a directive is silently dropped, and this policy previously
+// inspected a key the built manifest did not even have.
+const REQUIRED_CSP =
+  "script-src 'self'; object-src 'self'; connect-src 'none';";
+if (manifest.content_security_policy?.extension_pages !== REQUIRED_CSP) {
+  violations.push(
+    `content_security_policy.extension_pages must be exactly "${REQUIRED_CSP}" (found: ${JSON.stringify(manifest.content_security_policy?.extension_pages)})`,
+  );
+}
+if (manifest.content_security_policy?.sandbox !== undefined) {
+  violations.push("content_security_policy.sandbox must be absent");
 }
 
 // The options surface is a full-width management page; it must open in a real

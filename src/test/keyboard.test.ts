@@ -1,10 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import {
-  listNavCommand,
   type PopupCommands,
   popupKeyHandler,
-  rowCommand,
 } from "../../entrypoints/popup/keyboard";
 
 function commands() {
@@ -110,52 +108,5 @@ describe("popupKeyHandler", () => {
     const event = keydown({ key: "n" });
     handler(event);
     expect(event.defaultPrevented).toBe(false);
-  });
-});
-
-describe("rowCommand", () => {
-  it.each([
-    ["Enter", "edit"],
-    [" ", "toggle"],
-    ["g", "grant"],
-    ["Delete", "delete"],
-    ["Backspace", "delete"],
-    ["ContextMenu", "menu"],
-  ] as const)("%s → %s", (key, expected) => {
-    expect(rowCommand(keydown({ key }))).toBe(expected);
-  });
-
-  it("Shift+F10 opens the menu for keyboards without a ContextMenu key", () => {
-    expect(rowCommand(keydown({ key: "F10", shiftKey: true }))).toBe("menu");
-    expect(rowCommand(keydown({ key: "F10" }))).toBeUndefined();
-  });
-
-  it("ignores other and modified keys", () => {
-    expect(rowCommand(keydown({ key: "a" }))).toBeUndefined();
-    expect(
-      rowCommand(keydown({ key: "Enter", ctrlKey: true })),
-    ).toBeUndefined();
-    expect(rowCommand(keydown({ key: " ", shiftKey: true }))).toBeUndefined();
-    expect(
-      rowCommand(keydown({ key: "F10", shiftKey: true, altKey: true })),
-    ).toBeUndefined();
-  });
-});
-
-describe("listNavCommand", () => {
-  it.each([
-    ["ArrowUp", "up"],
-    ["ArrowDown", "down"],
-    ["Home", "first"],
-    ["End", "last"],
-  ] as const)("%s → %s", (key, expected) => {
-    expect(listNavCommand(keydown({ key }))).toBe(expected);
-  });
-
-  it("ignores other and modified keys", () => {
-    expect(listNavCommand(keydown({ key: "PageDown" }))).toBeUndefined();
-    expect(
-      listNavCommand(keydown({ key: "ArrowDown", altKey: true })),
-    ).toBeUndefined();
   });
 });

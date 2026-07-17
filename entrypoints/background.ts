@@ -17,7 +17,7 @@ import { applyBadge } from "../src/platform/badge";
 import {
   getDynamicRules,
   getSessionRules,
-  isRegexSupported,
+  resolveRegexSupport,
   updateDynamicRules,
   updateSessionRules,
 } from "../src/platform/dnr";
@@ -139,26 +139,7 @@ export default defineBackground(() => {
   // batch. Distinct regexes only; the common case (none, or all already valid)
   // stays cheap.
   async function compilableDoc(doc: StateDoc): Promise<StateDoc> {
-    const regexes = new Set<string>();
-    for (const profile of doc.profiles) {
-      if (profile.id !== doc.activeProfileId) {
-        continue;
-      }
-      for (const rule of profile.rules) {
-        if (rule.enabled && rule.scope.type === "regex") {
-          regexes.add(rule.scope.regex);
-        }
-      }
-    }
-    const supported = new Set<string>();
-    await Promise.all(
-      [...regexes].map(async (regex) => {
-        if ((await isRegexSupported(regex)).ok) {
-          supported.add(regex);
-        }
-      }),
-    );
-    return dropUncompilable(doc, (regex) => supported.has(regex));
+    return dropUncompilable(doc, await resolveRegexSupport(doc));
   }
 
   async function flagReconcileError(value: boolean): Promise<void> {

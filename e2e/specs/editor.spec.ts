@@ -149,7 +149,7 @@ test("Create rule is the only pointer action that saves a draft", {
     name: copy.editor.labels.value,
   });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
-  await expect(value).toHaveClass(/\bcompose-value-input\b/);
+  await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("created");
   await editor
     .locator("label.segment", { hasText: copy.editor.allSites })
@@ -203,7 +203,7 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
     name: copy.editor.labels.value,
   });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
-  await expect(value).toHaveClass(/\bcompose-value-input\b/);
+  await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("chord");
   await editor
     .locator("label.segment", { hasText: copy.editor.allSites })

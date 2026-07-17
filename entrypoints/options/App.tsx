@@ -10,9 +10,9 @@ import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
 import { applyTheme } from "../../src/ui/theme";
 import { AboutPage } from "./pages/About";
-import { FleetPage } from "./pages/Fleet";
 import { ImportExportPage } from "./pages/ImportExport";
 import { ProfilesPage } from "./pages/Profiles";
+import { RulesPage } from "./pages/Rules";
 import { SettingsPage } from "./pages/Settings";
 import { SiteAccessPage } from "./pages/SiteAccess";
 import { TrafficPage } from "./pages/Traffic";
@@ -23,7 +23,7 @@ const mutations = createMutations({ validateRegex: isRegexSupported });
 const VERSION = browser.runtime.getManifest().version;
 
 type SectionId =
-  | "fleet"
+  | "rules"
   | "profiles"
   | "site-access"
   | "traffic"
@@ -44,7 +44,7 @@ const GROUPS: readonly NavGroup[] = [
   {
     label: copy.options.nav.groupRules,
     sections: [
-      { id: "fleet", label: copy.options.nav.fleet },
+      { id: "rules", label: copy.options.nav.allRules },
       { id: "profiles", label: copy.options.nav.profiles },
     ],
   },
@@ -93,7 +93,7 @@ export function App() {
             <Wordmark />
             <span class="wb-version mono">{copy.options.version(VERSION)}</span>
           </div>
-          <WorkbenchNav current={section} />
+          <SectionNav current={section} />
         </div>
         <main class="wb-main">
           {app.phase === "initializing" ? (
@@ -104,10 +104,12 @@ export function App() {
                 message={copy.errors.newerStore(app.foundVersion, CURRENT)}
               />
             </div>
-          ) : section === "fleet" ? (
-            <FleetPage
+          ) : section === "rules" ? (
+            <RulesPage
               doc={app.doc}
               grants={app.grants}
+              status={app.status}
+              isRegexSupported={app.isRegexSupported}
               mutations={mutations}
             />
           ) : section === "profiles" ? (
@@ -115,7 +117,12 @@ export function App() {
           ) : section === "site-access" ? (
             <SiteAccessPage doc={app.doc} grants={app.grants} />
           ) : section === "traffic" ? (
-            <TrafficPage doc={app.doc} grants={app.grants} />
+            <TrafficPage
+              doc={app.doc}
+              grants={app.grants}
+              status={app.status}
+              isRegexSupported={app.isRegexSupported}
+            />
           ) : section === "import-export" ? (
             <ImportExportPage doc={app.doc} mutations={mutations} />
           ) : section === "settings" ? (
@@ -129,7 +136,7 @@ export function App() {
   );
 }
 
-function WorkbenchNav({ current }: { current: SectionId }) {
+function SectionNav({ current }: { current: SectionId }) {
   const links = useRef<(HTMLAnchorElement | null)[]>([]);
   const currentIndex = Math.max(
     0,
@@ -203,7 +210,7 @@ function currentSection(): SectionId {
   const id = window.location.hash.replace(/^#/, "");
   return SECTIONS.some((entry) => entry.id === id)
     ? (id as SectionId)
-    : "fleet";
+    : "rules";
 }
 
 function useHashRoute(): SectionId {

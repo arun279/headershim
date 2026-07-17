@@ -46,27 +46,21 @@ test("a popup-created profile becomes active without reloading", async ({
   });
   const url = page.url();
 
+  // The popup's profiles live behind the picker, so the New profile action is
+  // reachable only once it is open.
   await page
-    .getByRole("button", { name: copy.options.profiles.newName, exact: true })
+    .getByRole("button", { name: copy.readout.switcher.chipLabel, exact: true })
     .click();
-  const dialog = page.getByRole("dialog", {
-    name: copy.options.profiles.newName,
-  });
-  await expect(dialog).toBeVisible();
-  await dialog
-    .getByRole("textbox", { name: copy.options.profiles.nameLabel })
-    .fill("Staging");
-  await dialog.getByRole("button", { name: copy.profiles.create }).click();
-
-  const staging = page.locator(".profile-chip", { hasText: "Staging" });
-  await expect(staging.locator(".chip")).toHaveAttribute(
-    "aria-current",
-    "true",
-  );
-  await expect(staging).not.toHaveClass(/\boff\b/);
-  await expect(
-    page.locator(".profile-chip", { hasText: "Default" }),
-  ).toHaveClass(/\boff\b/);
+  await page
+    .getByRole("button", {
+      name: copy.readout.switcher.newProfile,
+      exact: true,
+    })
+    .click();
+  // The popup names the profile itself, so the picker reads back the new one as
+  // active with no naming step in between.
+  const created = copy.options.profiles.newName;
+  await expect(page.locator(".prof .lbl")).toHaveText(created);
   expect(page.url()).toBe(url);
   expect(
     await page.evaluate(
@@ -82,62 +76,12 @@ test("a popup-created profile becomes active without reloading", async ({
       return doc.profiles.find((profile) => profile.id === doc.activeProfileId)
         ?.name;
     })
-    .toBe("Staging");
+    .toBe(created);
   const doc = await readState(serviceWorker);
   expect(
     doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.name,
-  ).toBe("Staging");
+  ).toBe(created);
   expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
-});
-
-test("the popup theme control updates the current page in place", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
-  const seed = createV1Seed();
-  await seedState(serviceWorker, {
-    ...seed,
-    settings: { ...seed.settings, theme: "light" },
-  });
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  const marker = await page.evaluate(() => {
-    const value = crypto.randomUUID();
-    (
-      window as Window & { __headershimThemeMarker?: string }
-    ).__headershimThemeMarker = value;
-    return value;
-  });
-  const url = page.url();
-
-  const themeToggle = page.getByRole("button", {
-    name: copy.options.settings.theme.switchToDark,
-    exact: true,
-  });
-  await expect(themeToggle).toHaveAttribute("aria-pressed", "false");
-  await themeToggle.click();
-
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(
-    page.getByRole("button", {
-      name: copy.options.settings.theme.switchToLight,
-      exact: true,
-    }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".popup-head")).toBeVisible();
-  expect(page.url()).toBe(url);
-  expect(
-    await page.evaluate(
-      () =>
-        (window as Window & { __headershimThemeMarker?: string })
-          .__headershimThemeMarker,
-    ),
-  ).toBe(marker);
-  await expect
-    .poll(() => readState(serviceWorker).then((doc) => doc.settings.theme))
-    .toBe("dark");
 });
 
 test("the popup options button opens the options workspace", async ({
@@ -160,5 +104,5 @@ test("the popup options button opens the options workspace", async ({
   expect(optionsUrl.protocol).toBe("chrome-extension:");
   expect(optionsUrl.host).toBe(extensionId);
   expect(optionsUrl.pathname).toBe("/options.html");
-  await expect(options.locator(".profiles-workspace")).toBeVisible();
+  await expect(options.getByRole("main")).toBeVisible();
 });

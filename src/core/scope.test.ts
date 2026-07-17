@@ -3,6 +3,7 @@ import type { ResourceGroup } from "./model";
 import {
   DNR_RESOURCE_TYPES,
   expandResourceTypes,
+  isDomainSupported,
   originPatternForDomain,
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
@@ -138,5 +139,40 @@ describe("urlFilter grammar", () => {
   it("rejects a wildcard immediately after the domain anchor", () => {
     const result = validateUrlFilter("||*.example.com");
     expect(result).toEqual({ ok: false, error: "domain-anchor-wildcard" });
+  });
+});
+
+describe("requestDomains grammar", () => {
+  // Chrome refuses exactly one thing in a requestDomains entry, and takes the
+  // rest verbatim however unlikely it is to ever match a request. The gate is
+  // pinned to that, so it can never drop a rule Chrome would have run.
+  it.each([
+    ["example.com", "the ordinary case"],
+    ["a.b.example.com", "sub-domains"],
+    ["xn--bcher-kva.de", "an internationalized domain, as punycode"],
+    ["localhost", "a single label"],
+    ["1.2.3.4", "an IPv4"],
+    ["[2001:db8::1]", "a bracketed IPv6"],
+    ["EXAMPLE.com", "uppercase, which Chrome stores as given"],
+    ["example.com:8080", "a port, which Chrome stores as given"],
+    ["example.com/api", "a path, which Chrome stores as given"],
+    ["*.example.com", "a wildcard, which Chrome stores as given"],
+    ["example..com", "an empty label, which Chrome stores as given"],
+    ["exa mple.com", "a space, which Chrome stores as given"],
+  ])("accepts %s (%s)", (domain) => {
+    expect(isDomainSupported(domain)).toBe(true);
+  });
+
+  it.each([
+    ["ex\u00e4mple.com", "a non-ASCII character"],
+    ["ex\u00a0ample.com", "a non-breaking space"],
+    ["a\u{1f600}.com", "an astral character, which arrives as surrogates"],
+  ])("rejects a domain carrying %s (%s)", (domain) => {
+    expect(isDomainSupported(domain)).toBe(false);
+  });
+
+  it("draws the boundary at U+0080, exactly where Chrome draws it", () => {
+    expect(isDomainSupported("a\u007f.com")).toBe(true);
+    expect(isDomainSupported("a\u0080.com")).toBe(false);
   });
 });

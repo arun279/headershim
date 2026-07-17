@@ -1,33 +1,25 @@
 /**
- * Credential-header detection and redaction, shared by every surface that shows
- * a header value. A secret value is never printed in the clear: list summaries
- * show a scheme word plus a redaction marker, and the popup masks it to a tail.
+ * Secret-value redaction, shared by every surface that shows a header value. A
+ * secret value is never printed in the clear: list summaries show a scheme word
+ * plus a redaction marker, and the popup masks it to a tail. Which headers count
+ * is core's `isSecretHeader`, the same list the editor advisory and the import
+ * review read, so no surface can disagree about what a secret is.
  */
 
+import { isSecretHeader } from "../core/headers";
 import { copy } from "./copy";
 
-const SECRET_HEADERS = new Set([
-  "authorization",
-  "proxy-authorization",
-  "cookie",
-  "set-cookie",
-  "api-key",
-  "x-api-key",
-]);
-
-export function isSecretHeader(header: string): boolean {
-  const normalized = header.toLowerCase();
-  return (
-    SECRET_HEADERS.has(normalized) ||
-    (normalized.startsWith("x-") && normalized.endsWith("-token"))
-  );
-}
+export { isSecretHeader };
 
 export function headerValueSummary(
   header: string,
   value: string | undefined,
 ): string | undefined {
-  if (value === undefined || !isSecretHeader(header)) return value;
+  // An empty value has nothing to withhold, and a redaction marker there would
+  // draw a secret that does not exist.
+  if (value === undefined || value === "" || !isSecretHeader(header)) {
+    return value;
+  }
   const scheme = /^(basic|bearer|digest|negotiate)\s+/i.exec(value)?.[1];
   return scheme === undefined
     ? copy.rules.redacted

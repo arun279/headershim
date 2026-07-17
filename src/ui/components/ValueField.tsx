@@ -15,10 +15,6 @@ interface ValueFieldProps {
   /** Formatted freeze time when the generated value is the one already saved. */
   frozenAt?: string | undefined;
   error?: string | undefined;
-  /** Joins this control to HeaderNameInput inside the header composer. */
-  composed?: boolean;
-  /** Keeps generated-value actions out of baseline chrome when false. */
-  generatedActions?: boolean | undefined;
   onInput: (value: string) => void;
   onGenerate?: ((kind: "uuid" | "timestamp") => void) | undefined;
 }
@@ -26,7 +22,10 @@ interface ValueFieldProps {
 /**
  * Value input with the Insert menu for generated values. Inserting writes the
  * actual string — never a token — and the note under the field says exactly
- * what that means: frozen at save, not per request.
+ * what that means: frozen at save, not per request. The field grows with its
+ * content so a long credential reads from its start, and a pasted value is
+ * trimmed of the surrounding whitespace the clipboard adds: that is a clipboard
+ * artifact, not something the user typed.
  */
 export function ValueField(props: ValueFieldProps) {
   const id = useId();
@@ -38,42 +37,18 @@ export function ValueField(props: ValueFieldProps) {
   ].join(" ");
 
   return (
-    <div
-      class={props.composed === true ? "compose-value-control" : "editor-field"}
-      style={
-        props.composed === true
-          ? `--compose-value-width: ${Math.max(24, Math.min(60, props.value.length))}ch`
-          : undefined
-      }
-    >
-      <label
-        class={props.composed === true ? "sr-only" : "editor-label"}
-        for={`${id}-input`}
-      >
+    <div class="editor-field">
+      <label class="editor-label" for={`${id}-input`}>
         {copy.editor.labels.value}
       </label>
-      <div
-        class={
-          props.composed === true
-            ? "editor-control compose-control"
-            : "editor-control"
-        }
-      >
+      <div class="editor-control">
         <div class="value-row">
           <textarea
             id={`${id}-input`}
-            class={
-              props.composed === true
-                ? "compose-input compose-value-input mono"
-                : "field mono value-input"
-            }
-            rows={props.composed === true ? 1 : 4}
+            class="field mono value-input"
+            rows={2}
             wrap="soft"
-            placeholder={
-              props.composed === true
-                ? copy.editor.placeholders.value
-                : undefined
-            }
+            placeholder={copy.editor.placeholders.value}
             value={props.value}
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
@@ -95,7 +70,8 @@ export function ValueField(props: ValueFieldProps) {
             }}
             onPaste={(event) => {
               const pasted = event.clipboardData?.getData("text/plain") ?? "";
-              if (!/\r|\n/.test(pasted)) {
+              const cleaned = stripLineBreaks(pasted.trim());
+              if (cleaned === pasted) {
                 return;
               }
               event.preventDefault();
@@ -103,17 +79,16 @@ export function ValueField(props: ValueFieldProps) {
               const start = field.selectionStart;
               const end = field.selectionEnd;
               props.onInput(
-                `${props.value.slice(0, start)}${stripLineBreaks(pasted)}${props.value.slice(end)}`,
+                `${props.value.slice(0, start)}${cleaned}${props.value.slice(end)}`,
               );
-              setNewlineRemoved(true);
+              setNewlineRemoved(/\r|\n/.test(pasted.trim()));
             }}
           />
-          {props.onGenerate !== undefined &&
-            props.generatedActions !== false && (
-              <InsertMenu onGenerate={props.onGenerate} />
-            )}
+          {props.onGenerate !== undefined && (
+            <InsertMenu onGenerate={props.onGenerate} />
+          )}
         </div>
-        {props.generated !== undefined && props.generatedActions !== false && (
+        {props.generated !== undefined && (
           <p class="editor-micro" id={`${id}-note`}>
             {props.frozenAt === undefined
               ? copy.generatedValue.note

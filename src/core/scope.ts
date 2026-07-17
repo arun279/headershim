@@ -73,6 +73,12 @@ export function originPatternForDomain(domain: string): string {
   return `*://*.${domain}/*`;
 }
 
+// Chrome refuses a non-ASCII urlFilter or requestDomains entry outright, naming
+// the offending key and failing the update. Any code unit at or above U+0080 is
+// non-ASCII (astral chars surface as surrogates, also >= U+0080), so this flags
+// exactly the > 0x7f case.
+const NON_ASCII = /[\u0080-\uffff]/;
+
 export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
 
 // A non-empty urlFilter that breaks Chrome's grammar is not rejected per-rule —
@@ -83,13 +89,26 @@ export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
 export function validateUrlFilter(
   pattern: string,
 ): Result<void, UrlFilterError> {
-  // Any code unit at or above U+0080 is non-ASCII (astral chars surface as
-  // surrogates, also >= U+0080), so this flags exactly the > 0x7f case.
-  if (/[\u0080-\uffff]/.test(pattern)) {
+  if (NON_ASCII.test(pattern)) {
     return err("non-ascii");
   }
   if (pattern.startsWith("||*")) {
     return err("domain-anchor-wildcard");
   }
   return ok(undefined);
+}
+
+// requestDomains carries the same atomic-batch hazard as urlFilter, so gate it
+// at the same two points: one entry Chrome refuses fails the whole update and
+// freezes the live ruleset at its last-good revision.
+//
+// Chrome refuses exactly one thing in an entry — a non-ASCII character — and
+// takes everything else verbatim. An uppercase, ported, pathed or wildcarded
+// entry is stored unchanged and simply never matches a request, so this gate
+// stays as narrow as Chrome's: anything stricter would drop a rule Chrome would
+// have run, which is the same lie pointed the other way. The empty list Chrome
+// also refuses is a property of the list rather than an entry, and is checked
+// where the list is.
+export function isDomainSupported(domain: string): boolean {
+  return !NON_ASCII.test(domain);
 }

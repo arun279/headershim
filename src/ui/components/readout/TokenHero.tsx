@@ -3,7 +3,8 @@ import { copy } from "../../copy";
 import type { TabChange } from "../../state/readout";
 import { maskToken, tokenFreshness } from "../../token";
 import { sentence } from "../sentence";
-import { ClockGlyph, KeyGlyph, ShieldGlyph } from "./glyphs";
+import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
+import { ClockGlyph, KeyGlyph } from "./glyphs";
 
 interface TokenHeroProps {
   change: TabChange;
@@ -43,8 +44,12 @@ export function TokenHero({
           <KeyGlyph />
         </span>
         <div class="tk-main">
-          <div class="tk-label silk">
-            <span>{copy.token.valueLabel(change.header)}</span>
+          <div class="tk-label">
+            <Truncate
+              mode="end"
+              value={copy.token.valueLabel(change.header)}
+              maxChars={TRUNCATION_LIMITS.header}
+            />
           </div>
           {swapping ? (
             <div class="tk-swaptarget">
@@ -81,6 +86,7 @@ export function TokenHero({
       {swapping ? (
         <SwapField
           header={change.header}
+          source={change.source}
           onReplace={async (next) => {
             const outcome = await onSwap(next);
             if (outcome !== false) setSwapping(false);
@@ -104,13 +110,7 @@ export function TokenHero({
                 <span class={`lead${fresh.warn ? " warn" : ""}`}>
                   {copy.token.expiresIn(fresh.remainingMs)}
                 </span>
-                <span class="rt mono">
-                  {fresh.fraction !== undefined
-                    ? copy.token.lifeLeft(fresh.fraction)
-                    : fresh.warn
-                      ? copy.token.warnNote
-                      : ""}
-                </span>
+                {fresh.warn && <span class="rt">{copy.token.warnNote}</span>}
               </div>
             </>
           ) : (
@@ -127,10 +127,12 @@ export function TokenHero({
 
 function SwapField({
   header,
+  source,
   onReplace,
   onCancel,
 }: {
   header: string;
+  source: TabChange["source"];
   onReplace: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -139,7 +141,7 @@ function SwapField({
     <div class="swapfield">
       <div class="lab">
         <span>{copy.token.pasteLabel}</span>
-        <span class="r">{copy.token.pasteReplaces}</span>
+        <span class="r">{copy.token.pasteReplaces[source]}</span>
       </div>
       <input
         class="mono"
@@ -167,10 +169,6 @@ function SwapField({
         <button type="button" class="btng" onClick={onCancel}>
           {copy.token.cancel}
         </button>
-        <span class="safety">
-          <ShieldGlyph />
-          {copy.token.safe}
-        </span>
       </div>
       <span class="sr-only">{copy.token.valueLabel(header)}</span>
     </div>

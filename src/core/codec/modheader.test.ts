@@ -5,8 +5,8 @@ import { err, ok } from "../result";
 import { detectImportFormat } from "./detect";
 import type { ImportPlan } from "./headershim";
 import {
+  type ImportPlanWarning,
   importModHeader,
-  type ModHeaderImportWarning,
   nearestBadgeColor,
   type RegexValidator,
 } from "./modheader";
@@ -26,9 +26,9 @@ async function importFixture(
   fixture = PROFILE_URL,
   validateRegex = acceptRegex,
   existingProfiles: readonly Profile[] = [],
-): Promise<ImportPlan<ModHeaderImportWarning>> {
+): Promise<ImportPlan<ImportPlanWarning>> {
   const result = await importModHeader(
-    readFileSync(fixture, "utf8"),
+    JSON.parse(readFileSync(fixture, "utf8")),
     existingProfiles,
     validateRegex,
   );
@@ -38,7 +38,7 @@ async function importFixture(
   return result.value;
 }
 
-function onlyProfile(plan: ImportPlan<ModHeaderImportWarning>) {
+function onlyProfile(plan: ImportPlan<ImportPlanWarning>) {
   const profile = plan.profiles[0];
   if (profile === undefined) {
     throw new Error("fixture must contain a profile");
@@ -47,7 +47,7 @@ function onlyProfile(plan: ImportPlan<ModHeaderImportWarning>) {
 }
 
 function ruleWithComment(
-  plan: ImportPlan<ModHeaderImportWarning>,
+  plan: ImportPlan<ImportPlanWarning>,
   comment: string,
 ): RuleDraft {
   const rule = onlyProfile(plan).rules.find(
@@ -59,12 +59,12 @@ function ruleWithComment(
   return rule;
 }
 
-function warningsOfKind<Kind extends ModHeaderImportWarning["kind"]>(
-  plan: ImportPlan<ModHeaderImportWarning>,
+function warningsOfKind<Kind extends ImportPlanWarning["kind"]>(
+  plan: ImportPlan<ImportPlanWarning>,
   kind: Kind,
-): Extract<ModHeaderImportWarning, { kind: Kind }>[] {
+): Extract<ImportPlanWarning, { kind: Kind }>[] {
   return plan.warnings.filter(
-    (warning): warning is Extract<ModHeaderImportWarning, { kind: Kind }> =>
+    (warning): warning is Extract<ImportPlanWarning, { kind: Kind }> =>
       warning.kind === kind,
   );
 }
@@ -190,6 +190,27 @@ describe("ModHeader import", () => {
     ]);
   });
 
+  it("itemizes sensitive rules the same way a HeaderShim file is itemized", async () => {
+    const plan = await importFixture();
+
+    expect(warningsOfKind(plan, "credential")).toEqual([
+      {
+        kind: "credential",
+        ruleName: "literal token header",
+        header: "authorization",
+      },
+      { kind: "credential", ruleName: "preview cookie", header: "cookie" },
+      { kind: "credential", ruleName: "theme cookie", header: "set-cookie" },
+    ]);
+    expect(warningsOfKind(plan, "security-response")).toEqual([
+      {
+        kind: "security-response",
+        ruleName: "api policy",
+        header: "content-security-policy",
+      },
+    ]);
+  });
+
   it("maps URL filters to regex scope and disables rules rejected by the validator", async () => {
     const accepted = await importFixture();
     expect(ruleWithComment(accepted, "disable caching").scope).toEqual({
@@ -219,14 +240,17 @@ describe("ModHeader import", () => {
   });
 
   it("defaults to the all scope when no URL filter is enabled", async () => {
-    const raw = JSON.stringify([
-      {
-        title: "Unscoped",
-        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
-        urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
-      },
-    ]);
-    const result = await importModHeader(raw, [], acceptRegex);
+    const result = await importModHeader(
+      [
+        {
+          title: "Unscoped",
+          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+          urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
+        },
+      ],
+      [],
+      acceptRegex,
+    );
     if (!result.ok) {
       throw new Error(`fixture import failed: ${result.error.kind}`);
     }
@@ -243,14 +267,13 @@ describe("ModHeader import", () => {
   });
 
   it("combines multiple URL filters into one alternation and validates it", async () => {
-    const profile = (urlFilters: { enabled: boolean; urlRegex: string }[]) =>
-      JSON.stringify([
-        {
-          title: "Combined",
-          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
-          urlFilters,
-        },
-      ]);
+    const profile = (urlFilters: { enabled: boolean; urlRegex: string }[]) => [
+      {
+        title: "Combined",
+        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+        urlFilters,
+      },
+    ];
     const combined = "(?:^https://a\\.example/)|(?:^https://b\\.example/)";
 
     const validateRegex = vi.fn<RegexValidator>(async () => ok(undefined));
@@ -419,23 +442,15 @@ describe("ModHeader import", () => {
   it("detects the format and returns typed errors without partial plans", async () => {
     const parsed: unknown = JSON.parse(readFileSync(PROFILE_URL, "utf8"));
     expect(detectImportFormat(parsed)).toBe("modheader");
-    await expect(importModHeader("{bad", [], acceptRegex)).resolves.toEqual({
-      ok: false,
-      error: { kind: "parse-failure" },
-    });
     await expect(
-      importModHeader(
-        JSON.stringify({ title: "single object" }),
-        [],
-        acceptRegex,
-      ),
+      importModHeader({ title: "single object" }, [], acceptRegex),
     ).resolves.toEqual({
       ok: false,
       error: { kind: "unrecognized-format" },
     });
     await expect(
       importModHeader(
-        JSON.stringify([{ title: "Malformed", headers: [null] }]),
+        [{ title: "Malformed", headers: [null] }],
         [],
         acceptRegex,
       ),

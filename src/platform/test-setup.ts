@@ -57,7 +57,6 @@ Object.assign(fakeBrowser.permissions, {
 });
 
 Object.assign(fakeBrowser.declarativeNetRequest, {
-  getMatchedRules: async () => ({ rulesMatchedInfo: [] }),
   setExtensionActionOptions: async () => undefined,
 });
 

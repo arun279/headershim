@@ -1,4 +1,10 @@
 import type { Profile, Rule, StateDoc } from "../../core/model";
+import type { SystemStatus } from "../../core/status";
+
+/** The system states the popup and Workbench projections branch on. */
+export const LIVE: SystemStatus = { kind: "live" };
+export const PAUSED: SystemStatus = { kind: "paused" };
+export const OUT_OF_SYNC: SystemStatus = { kind: "out-of-sync" };
 
 let seq = 0;
 

@@ -4,13 +4,20 @@ import {
   type GrantSnapshot,
 } from "../../../src/core/grants";
 import type { StateDoc } from "../../../src/core/model";
+import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
+import { EmptyState } from "../../../src/ui/components/EmptyState";
 import { OpGlyph, PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
 import { sentence } from "../../../src/ui/components/sentence";
 import { Toast } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
+import {
+  TRUNCATION_LIMITS,
+  Truncate,
+} from "../../../src/ui/components/Truncate";
+import { toneForStatus } from "../../../src/ui/components/toggleTone";
 import { copy } from "../../../src/ui/copy";
 import {
   type FleetRule,
@@ -20,34 +27,45 @@ import {
 } from "../../../src/ui/state/fleet";
 import type { Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../useToast";
-import "./Fleet.css";
+import "./Rules.css";
 
-const text = copy.options.fleet;
+const text = copy.options.allRules;
 
 type Lens = "site" | "header";
 type Editing = { profileId: string; ruleId: string | undefined };
 
 /**
- * The fleet: every rule across every profile, in one severity grammar. Grouping
- * by site answers "what lands here"; grouping by header answers "where does this
- * one header reach", the home for cross-site rules. Authoring reuses the shared
+ * Every rule across every profile, in one severity grammar. Grouping by site
+ * answers "what lands here"; grouping by header answers "where does this one
+ * header reach", the home for cross-site rules. Authoring reuses the shared
  * RuleEditor inline.
  */
-export function FleetPage({
+export function RulesPage({
   doc,
   grants,
+  status,
+  isRegexSupported,
   mutations,
 }: {
   doc: StateDoc;
   grants: GrantSnapshot;
+  status: SystemStatus;
+  isRegexSupported: (regex: string) => boolean;
   mutations: Mutations;
 }) {
   const announce = useAnnounce();
   const [lens, setLens] = useState<Lens>("site");
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
-  const { toast, show: showToast, flash, dismiss } = useToast();
+  const {
+    toast,
+    action: toastAction,
+    show: showToast,
+    showUndoable,
+    flash,
+    dismiss,
+  } = useToast();
   // The editor is the options page's one heavy dependency; load it on demand so
-  // it never sits in the initial Workbench bundle.
+  // it never sits in the initial bundle.
   const [Editor, setEditor] =
     useState<
       typeof import("../../../src/ui/components/RuleEditor").RuleEditor
@@ -59,10 +77,10 @@ export function FleetPage({
   }, []);
 
   const fleet = projectFleet({
-    profiles: doc.profiles,
-    activeProfileId: doc.activeProfileId,
+    doc,
     grants,
-    paused: doc.settings.paused,
+    isRegexSupported,
+    status,
   });
 
   const editProfile =
@@ -91,6 +109,46 @@ export function FleetPage({
         if (!outcome.ok) flash(outcome.error);
       });
 
+  // Saving into another profile is two settled steps, not one: the rule is
+  // written where it already lives, so a rejected header is reported before
+  // anything moves, and only a clean save relocates it.
+  const save = async (
+    ruleId: string | undefined,
+    draft: Parameters<Mutations["saveRule"]>[2],
+    profileId: string | undefined,
+    fromProfileId: string,
+  ) => {
+    const target = profileId ?? fromProfileId;
+    if (ruleId === undefined) {
+      return mutations.saveRule(target, undefined, draft);
+    }
+    const saved = await mutations.saveRule(fromProfileId, ruleId, draft);
+    if (!saved.ok || target === fromProfileId) {
+      return saved;
+    }
+    const moved = await mutations.moveRuleToProfile(
+      fromProfileId,
+      ruleId,
+      target,
+    );
+    return moved.ok ? saved : moved;
+  };
+
+  // No confirmation: the toast carries the whole rule back, and asking first
+  // would tax every delete to soften the rare one.
+  const deleteRule = (profileId: string, ruleId: string) =>
+    void mutations.deleteRule(profileId, ruleId).then((outcome) => {
+      if (!outcome.ok) {
+        flash(outcome.error);
+        return;
+      }
+      const { rule, index } = outcome.value;
+      setEditing(undefined);
+      showUndoable(copy.toast.ruleDeleted, () =>
+        mutations.restoreRule(profileId, rule, index),
+      );
+    });
+
   const grant = (rule: FleetRule) => {
     const origins = rule.missing ?? [];
     void requestPermissions([...origins]).then((allowed) => {
@@ -114,10 +172,23 @@ export function FleetPage({
     }
   };
 
+  // One node for both branches: the delete toast has to survive the editor
+  // closing under it, or its undo would vanish with the surface that raised it.
+  const toastNode = toast !== undefined && (
+    <Toast
+      onDismiss={dismiss}
+      persist={toastAction !== undefined}
+      actionLabel={toastAction?.label}
+      onAction={toastAction?.run}
+    >
+      {toast}
+    </Toast>
+  );
+
   if (editing !== undefined && editProfile !== undefined) {
     return (
-      <section class="wb-page" aria-labelledby="fleet-title">
-        <h1 class="wb-title" id="fleet-title" tabIndex={-1}>
+      <section class="wb-page" aria-labelledby="rules-title">
+        <h1 class="wb-title" id="rules-title" tabIndex={-1}>
           {text.title}
         </h1>
         {Editor === undefined ? (
@@ -128,11 +199,18 @@ export function FleetPage({
           <Editor
             key={`${editProfile.id}:${editing.ruleId ?? "new"}`}
             profileName={editProfile.name}
+            profiles={doc.profiles}
+            profileId={editProfile.id}
             rule={editingRule}
             grants={grants}
             modal={false}
-            onSave={(ruleId, draft) =>
-              mutations.saveRule(editProfile.id, ruleId, draft)
+            onSave={(ruleId, draft, profileId) =>
+              save(ruleId, draft, profileId, editProfile.id)
+            }
+            onDelete={
+              editingRule === undefined
+                ? undefined
+                : () => deleteRule(editProfile.id, editingRule.id)
             }
             onRequestGrant={requestPermissions}
             onGrantDeclined={(host) =>
@@ -155,7 +233,7 @@ export function FleetPage({
             onClose={() => setEditing(undefined)}
           />
         )}
-        {toast !== undefined && <Toast onDismiss={dismiss}>{toast}</Toast>}
+        {toastNode}
       </section>
     );
   }
@@ -166,43 +244,54 @@ export function FleetPage({
   const empty = fleet.length === 0;
 
   return (
-    <section class="wb-page" aria-labelledby="fleet-title">
+    <section class="wb-page" aria-labelledby="rules-title">
       <div class="wb-head">
-        <div>
-          <h1 class="wb-title" id="fleet-title" tabIndex={-1}>
-            {text.title}
-          </h1>
-          <p class="wb-sub">{text.subtitle}</p>
-        </div>
-        <div class="fleet-controls">
-          <fieldset class="seg">
-            <legend class="sr-only">{text.lensLabel}</legend>
-            <button
-              type="button"
-              aria-pressed={lens === "site"}
-              onClick={() => setLens("site")}
-            >
-              {text.bySite}
+        <h1 class="wb-title" id="rules-title" tabIndex={-1}>
+          {text.title}
+        </h1>
+        {/* Nothing to group and nothing to add to: with no rules the empty
+            state carries the one action, so the head carries neither. */}
+        {!empty && (
+          <div class="rules-controls">
+            <fieldset class="seg">
+              <legend class="sr-only">{text.lensLabel}</legend>
+              <button
+                type="button"
+                aria-pressed={lens === "site"}
+                onClick={() => setLens("site")}
+              >
+                {text.bySite}
+              </button>
+              <button
+                type="button"
+                aria-pressed={lens === "header"}
+                onClick={() => setLens("header")}
+              >
+                {text.byHeader}
+              </button>
+            </fieldset>
+            <button type="button" class="wb-primary" onClick={newRule}>
+              <PlusGlyph />
+              {text.newRule}
             </button>
-            <button
-              type="button"
-              aria-pressed={lens === "header"}
-              onClick={() => setLens("header")}
-            >
-              {text.byHeader}
-            </button>
-          </fieldset>
-          <button type="button" class="wb-primary" onClick={newRule}>
-            <PlusGlyph />
-            {text.newRule}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {empty ? (
-        <p class="fleet-empty">
-          {noProfilesOn ? text.emptyProfileOff : text.empty}
-        </p>
+        <div class="rules-card rules-card-empty">
+          <EmptyState
+            message={noProfilesOn ? text.emptyProfileOff : text.empty}
+            actions={
+              noProfilesOn ? undefined : (
+                <button type="button" class="wb-primary" onClick={newRule}>
+                  <PlusGlyph />
+                  {text.newRule}
+                </button>
+              )
+            }
+          />
+        </div>
       ) : lens === "site" ? (
         <BySite
           fleet={fleet}
@@ -219,7 +308,7 @@ export function FleetPage({
         />
       )}
 
-      {toast !== undefined && <Toast onDismiss={dismiss}>{toast}</Toast>}
+      {toastNode}
     </section>
   );
 }
@@ -349,7 +438,12 @@ function FleetRow({
               <span class="to" aria-hidden="true">
                 {copy.readout.to}
               </span>{" "}
-              <span class="v">{rule.display}</span>
+              <Truncate
+                mode="middle"
+                value={rule.display}
+                maxChars={TRUNCATION_LIMITS.value}
+                class="v"
+              />
             </>
           )}
         </span>
@@ -364,7 +458,7 @@ function FleetRow({
         <Toggle
           checked={rule.enabled}
           label={copy.rules.switchLabel(rule.header, rule.enabled)}
-          tone={rule.status === "paused" ? "paused" : undefined}
+          tone={toneForStatus(rule.status)}
           onChange={(next) => onToggle(rule, next)}
         />
       </div>
@@ -387,11 +481,27 @@ function FleetWhy({
       </span>
     );
   }
-  if (rule.status === "refused" && rule.refused === "host") {
+  if (rule.status === "refused" && rule.refused !== undefined) {
     return (
       <span class="why stop">
         <span class="dot" aria-hidden="true" />
-        {copy.readout.refusedReason.host}
+        {copy.readout.refusedReason[rule.refused]}
+      </span>
+    );
+  }
+  if (rule.status === "out-of-sync") {
+    return (
+      <span class="why amber">
+        <span class="dot" aria-hidden="true" />
+        {copy.readout.outOfSyncReason}
+      </span>
+    );
+  }
+  if (rule.status === "unconfirmed") {
+    return (
+      <span class="why rest">
+        <span class="dot" aria-hidden="true" />
+        {copy.readout.unconfirmedReason}
       </span>
     );
   }
@@ -407,6 +517,12 @@ function FleetWhy({
   }
   if (showScope) {
     return <span class="fleet-scope mono">{scopeLabel(rule)}</span>;
+  }
+  // One rule named for several domains is drawn under each of them, so this row
+  // is a projection and its switch reaches every one. Say so, or the switch
+  // claims a blast radius of one and silently has several.
+  if (rule.siteCount > 1) {
+    return <span class="fleet-scope">{text.alsoOn(rule.siteCount - 1)}</span>;
   }
   return null;
 }

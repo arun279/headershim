@@ -28,6 +28,17 @@ function Probe() {
   );
 }
 
+function RegexProbe() {
+  const app = useAppState();
+  return (
+    <output>
+      {app.phase === "ready"
+        ? String(app.isRegexSupported("(?=unsupported)"))
+        : app.phase}
+    </output>
+  );
+}
+
 function probe(root: HTMLElement) {
   const output = root.querySelector("output") as HTMLElement;
   return {
@@ -146,5 +157,27 @@ describe("useAppState", () => {
     const view = probe(render(<Probe />));
     await settle();
     expect(view.text()).toBe("live:1");
+  });
+
+  it("resolves each active regex once and exposes browser support synchronously", async () => {
+    const checkRegex = vi.fn(async ({ regex }: { regex: string }) => ({
+      isSupported: regex !== "(?=unsupported)",
+    }));
+    Object.assign(fakeBrowser.declarativeNetRequest, {
+      isRegexSupported: checkRegex,
+    });
+    const invalid = rule({
+      scope: { type: "regex", regex: "(?=unsupported)", hosts: [] },
+    });
+    await write(
+      doc({
+        rules: [invalid, { ...invalid, id: "rule-2", num: 2 }],
+      }),
+    );
+
+    const root = render(<RegexProbe />);
+    await settle();
+    expect(root.querySelector("output")?.textContent).toBe("false");
+    expect(checkRegex).toHaveBeenCalledTimes(1);
   });
 });
