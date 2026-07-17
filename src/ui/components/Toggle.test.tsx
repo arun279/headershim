@@ -48,6 +48,18 @@ describe("Toggle", () => {
     expect(getSwitch(root).classList.contains("sw-blocked")).toBe(true);
   });
 
+  it("marks an inert checked switch so it does not look live", () => {
+    const root = render(
+      <Toggle
+        checked
+        label="Rule on: x-test"
+        tone="inert"
+        onChange={() => {}}
+      />,
+    );
+    expect(getSwitch(root).classList.contains("sw-inert")).toBe(true);
+  });
+
   it("reports the flipped value on activation", () => {
     const onChange = vi.fn();
     const root = render(

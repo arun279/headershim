@@ -101,7 +101,7 @@ export type Freshness =
 
 /** The share of a JWT's life left, below which the countdown turns amber. */
 const WARN_FRACTION = 0.15;
-/** The absolute window left, below which any countdown turns amber. */
+/** The absolute window for countdowns that have no issued-at time. */
 const WARN_MS = 15 * 60 * 1000;
 
 export function tokenFreshness(value: string, now: number): Freshness {
@@ -117,8 +117,9 @@ export function tokenFreshness(value: string, now: number): Freshness {
       : undefined;
   const warn =
     expired ||
-    remainingMs <= WARN_MS ||
-    (fraction !== undefined && fraction <= WARN_FRACTION);
+    (fraction === undefined
+      ? remainingMs <= WARN_MS
+      : fraction <= WARN_FRACTION);
   return {
     kind: "countdown",
     remainingMs: Math.max(0, remainingMs),

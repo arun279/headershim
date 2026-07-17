@@ -8,12 +8,15 @@ import type { LineStatus } from "../state/readout";
  */
 export function toneForStatus(
   status: LineStatus,
-): "paused" | "blocked" | undefined {
+): "paused" | "blocked" | "inert" | undefined {
   switch (status) {
     case "paused":
       return "paused";
     case "refused":
       return "blocked";
+    case "off":
+    case "overridden":
+      return "inert";
     default:
       return undefined;
   }

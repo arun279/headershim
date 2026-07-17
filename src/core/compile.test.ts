@@ -410,6 +410,20 @@ describe("dropping uncompilable rules", () => {
     expect(compiledIds(doc, supportAll)).toEqual([1, 2]);
   });
 
+  it("drops a disallowed request append without taking down its sibling", () => {
+    const doc = state([
+      profile("append", [
+        storedRule(1),
+        storedRule(2, {
+          operation: "append",
+          header: "x-feature-flags",
+        }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll)).toEqual([1]);
+  });
+
   it("never removes disabled rules or touches disabled profiles", () => {
     const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
     const doc = state([

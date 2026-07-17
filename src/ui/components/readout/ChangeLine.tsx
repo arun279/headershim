@@ -3,6 +3,7 @@ import { copy } from "../../copy";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
 import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
+import { toneForStatus } from "../toggleTone";
 import { OpGlyph } from "./glyphs";
 
 interface ChangeLineProps {
@@ -54,12 +55,7 @@ export function ChangeLine({
         ) : (
           <p class="say">
             <span class="verb">{copy.readout.verb[change.operation]}</span>{" "}
-            <Truncate
-              mode="end"
-              value={change.header}
-              maxChars={TRUNCATION_LIMITS.header}
-              class="k"
-            />
+            <Truncate mode="end" value={change.header} class="k" />
             {change.display !== undefined && (
               <>
                 {" "}
@@ -128,7 +124,7 @@ export function ChangeLine({
             <Toggle
               checked={change.enabled}
               label={toggleLabel}
-              tone={change.status === "paused" ? "paused" : undefined}
+              tone={toneForStatus(change.status)}
               onChange={onToggle}
             />
           </>

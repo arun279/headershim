@@ -7,6 +7,7 @@
  */
 
 import { isSecretHeader } from "../core/headers";
+import type { Rule } from "../core/model";
 import { copy } from "./copy";
 
 export { isSecretHeader };
@@ -24,4 +25,16 @@ export function headerValueSummary(
   return scheme === undefined
     ? copy.rules.redacted
     : `${scheme} ${copy.rules.redacted}`;
+}
+
+export function ruleValueSummary(
+  rule: Pick<Rule, "generated" | "header" | "value">,
+): string | undefined {
+  if (
+    (rule.value === undefined || rule.value === "") &&
+    rule.generated !== undefined
+  ) {
+    return copy.rules.generated(copy.editor.generatedKind[rule.generated.kind]);
+  }
+  return headerValueSummary(rule.header, rule.value);
 }

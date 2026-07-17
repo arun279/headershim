@@ -17,8 +17,8 @@ interface ToggleProps {
   ariaDisabled?: boolean | undefined;
   /** -1 inside roving-tabindex composites; the owning row carries the tab stop. */
   tabIndex?: number;
-  /** Checked controls that are paused or blocked must not use the running tone. */
-  tone?: "paused" | "blocked" | undefined;
+  /** Checked controls that are paused, blocked, or inert do not look live. */
+  tone?: "paused" | "blocked" | "inert" | undefined;
 }
 
 export function Toggle({

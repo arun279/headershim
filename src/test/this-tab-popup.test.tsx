@@ -10,7 +10,8 @@ import {
   write as writeSession,
 } from "../platform/session-store";
 import { write } from "../platform/store";
-import { press, render, settle, typeInto } from "../ui/test/render";
+import { copy } from "../ui/copy";
+import { pasteInto, press, render, settle, typeInto } from "../ui/test/render";
 
 // The popup's tab is pinned so This-tab writes bind to a known origin.
 vi.mock("../platform/tabs", () => ({
@@ -72,6 +73,27 @@ describe("popup This-tab overrides", () => {
     const strip = root.querySelector(".thistab") as HTMLElement;
     expect(strip.textContent).toContain("This tab only");
     expect(strip.querySelector(".change-line .k")?.textContent).toBe("x-a");
+  });
+
+  it("splits a pasted header line across the composer fields", async () => {
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+
+    pasteInto(
+      root.querySelector(".cin.name") as HTMLInputElement,
+      "Authorization: Bearer eyJhbGciOi.J9",
+    );
+
+    expect((root.querySelector(".cin.name") as HTMLInputElement).value).toBe(
+      "Authorization",
+    );
+    expect((root.querySelector(".cin.val") as HTMLInputElement).value).toBe(
+      "Bearer eyJhbGciOi.J9",
+    );
+    expect(root.querySelector(".c-note")?.textContent).toBe(
+      copy.editor.pastedLineSplit,
+    );
   });
 
   it("writes nothing when the host grant is declined", async () => {

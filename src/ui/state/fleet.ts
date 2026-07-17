@@ -23,7 +23,7 @@ import type {
   StateDoc,
 } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
-import { headerValueSummary, isSecretHeader } from "../secret";
+import { isSecretHeader, ruleValueSummary } from "../secret";
 import {
   type LineStatus,
   lineStatus,
@@ -155,9 +155,7 @@ function fleetRule(
     perRequest: settlesPerRequest(rule),
   });
   const display =
-    rule.operation === "remove"
-      ? undefined
-      : headerValueSummary(rule.header, rule.value);
+    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
   return {
     key: `${profile.id}:${rule.id}`,
     profileId: profile.id,

@@ -32,6 +32,7 @@ import { handleEditorCommitKey } from "./editorKeys";
 import { CloseGlyph } from "./glyphs";
 import { HeaderFields } from "./HeaderFields";
 import { HeaderNameInput } from "./HeaderNameInput";
+import { parseHeaderLine } from "./headerLine";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
 import { useDraftState } from "./useDraftState";
@@ -546,25 +547,6 @@ function ProfileField({
       <p class="editor-micro">{copy.editor.profileHelper}</p>
     </div>
   );
-}
-
-/**
- * A pasted `name: value` line, split at its first colon. Anything without a
- * colon, or with nothing on either side of it, is not a header line and is left
- * to paste as ordinary text.
- */
-function parseHeaderLine(
-  text: string,
-): { name: string; value: string } | undefined {
-  const colon = text.indexOf(":");
-  if (colon <= 0) {
-    return undefined;
-  }
-  const name = text.slice(0, colon).trim();
-  const value = text.slice(colon + 1).trim();
-  return name === "" || value === "" || /\s/.test(name)
-    ? undefined
-    : { name, value };
 }
 
 function initialDraft(

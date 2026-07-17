@@ -85,6 +85,20 @@ describe("tokenFreshness", () => {
     });
   });
 
+  it("matches a short-lived token's warning tone to its remaining fill", () => {
+    const value = `Bearer ${jwt({ iat: 0, exp: (10 * 60_000) / 1000 })}`;
+    expect(tokenFreshness(value, 2 * 60_000)).toMatchObject({
+      kind: "countdown",
+      fraction: 0.8,
+      warn: false,
+    });
+    expect(tokenFreshness(value, 9 * 60_000)).toMatchObject({
+      kind: "countdown",
+      fraction: 0.1,
+      warn: true,
+    });
+  });
+
   it("reports an expired token with zero remaining", () => {
     const fresh = tokenFreshness(`Bearer ${jwt({ exp: -60 })}`, 0);
     expect(fresh).toMatchObject({

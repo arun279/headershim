@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { copy } from "./copy";
-import { headerValueSummary } from "./secret";
+import { headerValueSummary, ruleValueSummary } from "./secret";
 
 describe("headerValueSummary", () => {
   it("redacts a secret value, keeping the scheme word readable", () => {
@@ -22,5 +22,15 @@ describe("headerValueSummary", () => {
 
   it("does not redact an empty value, which withholds nothing", () => {
     expect(headerValueSummary("authorization", "")).toBe("");
+  });
+
+  it("labels generated metadata when its literal value is absent", () => {
+    expect(
+      ruleValueSummary({
+        header: "x-trace-id",
+        value: "",
+        generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
+      }),
+    ).toBe(copy.rules.generated(copy.editor.generatedKind.uuid));
   });
 });

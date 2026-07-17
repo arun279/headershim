@@ -349,6 +349,11 @@ function BySite({ fleet, onToggle, onGrant, onEdit }: LensProps) {
                 key={rule.key}
                 rule={rule}
                 showScope={group.kind === "cross-site"}
+                sharedSites={
+                  group.kind === "domain" && rule.siteCount > 1
+                    ? rule.siteCount
+                    : undefined
+                }
                 onToggle={onToggle}
                 onGrant={onGrant}
                 onEdit={onEdit}
@@ -400,12 +405,14 @@ function ByHeader({ fleet, onToggle, onGrant, onEdit }: LensProps) {
 function FleetRow({
   rule,
   showScope,
+  sharedSites,
   onToggle,
   onGrant,
   onEdit,
 }: {
   rule: FleetRule;
   showScope: boolean;
+  sharedSites?: number | undefined;
   onToggle: (rule: FleetRule, next: boolean) => void;
   onGrant: (rule: FleetRule) => void;
   onEdit: (editing: Editing) => void;
@@ -447,7 +454,7 @@ function FleetRow({
             </>
           )}
         </span>
-        <FleetWhy rule={rule} showScope={showScope} />
+        <FleetWhy rule={rule} showScope={showScope} sharedSites={sharedSites} />
       </button>
       <div class="line-control">
         {rule.status === "needs-access" && (
@@ -457,7 +464,7 @@ function FleetRow({
         )}
         <Toggle
           checked={rule.enabled}
-          label={copy.rules.switchLabel(rule.header, rule.enabled)}
+          label={copy.rules.switchLabel(rule.header, rule.enabled, sharedSites)}
           tone={toneForStatus(rule.status)}
           onChange={(next) => onToggle(rule, next)}
         />
@@ -469,9 +476,11 @@ function FleetRow({
 function FleetWhy({
   rule,
   showScope,
+  sharedSites,
 }: {
   rule: FleetRule;
   showScope: boolean;
+  sharedSites: number | undefined;
 }) {
   if (rule.status === "overridden" && rule.overriddenBy !== undefined) {
     return (
@@ -518,11 +527,8 @@ function FleetWhy({
   if (showScope) {
     return <span class="fleet-scope mono">{scopeLabel(rule)}</span>;
   }
-  // One rule named for several domains is drawn under each of them, so this row
-  // is a projection and its switch reaches every one. Say so, or the switch
-  // claims a blast radius of one and silently has several.
-  if (rule.siteCount > 1) {
-    return <span class="fleet-scope">{text.alsoOn(rule.siteCount - 1)}</span>;
+  if (sharedSites !== undefined) {
+    return <span class="fleet-scope">{text.sharedRule(sharedSites)}</span>;
   }
   return null;
 }

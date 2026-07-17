@@ -113,6 +113,20 @@ describe("all rules by site", () => {
     expect(refused.className).toBe("sw sw-blocked");
   });
 
+  it("keeps the running tone off a configured-on rule in an off profile", async () => {
+    const active = profile("p1", { name: "Active" });
+    const inactive = profile("p2", {
+      name: "Inactive",
+      rules: [rule({ header: "x-held" })],
+    });
+    await seed([active, inactive]);
+    const root = await mount();
+
+    const row = within(root, ".fleet-row.off");
+    expect(row.textContent).toContain(text.profileOff);
+    expect(row.querySelector('[role="switch"]')?.className).toBe("sw sw-inert");
+  });
+
   it("truncates a long value to the ceiling every surface shares", async () => {
     const value = "a".repeat(600);
     await seed([
@@ -128,6 +142,26 @@ describe("all rules by site", () => {
       TRUNCATION_LIMITS.value,
     );
     expect(rendered.title).toBe(value);
+  });
+
+  it("renders generated metadata in place of an absent literal value", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-trace-id",
+            value: "",
+            generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    expect(within(root, ".fleet-open .v").textContent).toBe(
+      copy.rules.generated(copy.editor.generatedKind.uuid),
+    );
   });
 
   it("switches to the by-header lens", async () => {
@@ -207,7 +241,10 @@ describe("all rules by site", () => {
     const rows = [...root.querySelectorAll(".fleet-row")];
     expect(rows).toHaveLength(2);
     for (const row of rows) {
-      expect(row.textContent).toContain(text.alsoOn(1));
+      expect(row.textContent).toContain(text.sharedRule(2));
+      expect(
+        row.querySelector('[role="switch"]')?.getAttribute("aria-label"),
+      ).toBe(copy.rules.switchLabel("x-env", true, 2));
     }
   });
 
@@ -224,7 +261,7 @@ describe("all rules by site", () => {
       }),
     ]);
     const root = await mount();
-    expect(root.textContent).not.toContain(text.alsoOn(1));
+    expect(root.textContent).not.toContain(text.sharedRule(2));
   });
 
   it("puts the one action in the empty state and nowhere else", async () => {
@@ -264,7 +301,7 @@ describe("rule delete", () => {
   });
 });
 
-describe("what runs", () => {
+describe("configured changes", () => {
   it("lists live and refused stamps and never carries a value", async () => {
     await fakeBrowser.permissions.request({
       origins: [originPatternForDomain("api.example.com")],
@@ -288,6 +325,9 @@ describe("what runs", () => {
     ]);
     const root = await mount("#traffic");
 
+    expect(root.querySelector("#traffic-title")?.textContent).toBe(
+      copy.options.traffic.title,
+    );
     const rows = [...root.querySelectorAll(".tape-row")];
     expect(rows.length).toBe(2);
     expect(root.querySelector(".tape-row.refused")).not.toBeNull();

@@ -182,7 +182,7 @@ export const copy = {
       profiles: "Profiles",
       importExport: "Import & export",
       siteAccess: "Site access",
-      traffic: "What runs",
+      traffic: "Configured changes",
       settings: "Settings",
       about: "About",
     },
@@ -210,10 +210,8 @@ export const copy = {
         ...(broad ? [" plus every site a pattern matches"] : []),
       ],
       broadReach: "reaches every matching site",
-      // A rule named for several domains is drawn once per domain; its own row
-      // says how far the switch on it actually reaches.
-      alsoOn: (others: number) =>
-        others === 1 ? "also on 1 other site" : `also on ${others} other sites`,
+      sharedRule: (siteCount: number) =>
+        `one shared rule · switch affects all ${siteCount} sites`,
       scope: {
         all: "all sites",
         pattern: "URL pattern",
@@ -234,7 +232,7 @@ export const copy = {
     // reads that ruleset, never the wire, so no line here may speak of a
     // request: none has been observed, and one may never be made.
     traffic: {
-      title: "What runs",
+      title: "Configured changes",
       status: {
         live: "live",
         unconfirmed: "only Chrome can say",
@@ -462,12 +460,13 @@ export const copy = {
 
   rules: {
     listLabel: "Rules",
-    switchLabel: (header: string, on: boolean) =>
-      `Rule ${on ? "on" : "off"}: ${header}`,
+    switchLabel: (header: string, on: boolean, siteCount?: number) =>
+      `Rule ${on ? "on" : "off"}: ${header}${siteCount === undefined ? "" : `; affects all ${siteCount} sites`}`,
     menuLabel: (header: string) => `Rule actions: ${header}`,
     direction: { request: "request", response: "response" },
     operation: { set: "set", append: "append", remove: "remove" },
     redacted: "…redacted",
+    generated: (kind: string) => `${kind} · generated`,
     profileOffDetail: "This profile is off · its rules aren't running.",
     needsAccess: (host: string, moreSites: number): Sentence => [
       "Needs access · ",

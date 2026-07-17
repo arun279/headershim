@@ -118,6 +118,34 @@ describe("popup readout", () => {
     expect(line.querySelector(".why")).toBeNull();
   });
 
+  it("renders generated metadata in place of an absent literal value", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule({
+          header: "x-trace-id",
+          value: "",
+          generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
+        }),
+      ]),
+      true,
+    );
+
+    expect(root.querySelector(".change-line .v")?.textContent).toBe(
+      copy.rules.generated(copy.editor.generatedKind.uuid),
+    );
+  });
+
+  it("lets a header name use the row before truncating", async () => {
+    const header = "x-this-header-name-can-use-the-whole-available-row";
+    const { value: _value, ...removal } = rule({
+      header,
+      operation: "remove",
+    });
+    const { root } = await mount(seededDoc([removal]), true);
+
+    expect(root.querySelector(".change-line .k")?.textContent).toBe(header);
+  });
+
   it("lifts an authorization rule into the masked token hero", async () => {
     const { root } = await mount(
       seededDoc([
@@ -151,6 +179,24 @@ describe("popup readout", () => {
     // The bar carries the fraction and the countdown carries it in words. A
     // third reading of the same fact is not a third fact.
     expect(root.querySelector(".fresh-lab")?.textContent).not.toMatch(/%/);
+  });
+
+  it("does not tell an expired token to be swapped before it lapses", async () => {
+    const payload = btoa(JSON.stringify({ iat: -120, exp: -60 }))
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
+    const { root } = await mount(
+      seededDoc([
+        rule({ header: "authorization", value: `Bearer h.${payload}.s` }),
+      ]),
+      true,
+    );
+
+    expect(root.querySelector(".fresh-lab")?.textContent).toContain("expired");
+    expect(root.querySelector(".fresh-lab")?.textContent).not.toContain(
+      copy.token.warnNote,
+    );
   });
 
   it("swaps a token through a masked field, onto the rule carrying it", async () => {

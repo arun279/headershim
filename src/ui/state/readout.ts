@@ -28,7 +28,11 @@ import type {
   TabOverride,
 } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
-import { headerValueSummary, isSecretHeader } from "../secret";
+import {
+  headerValueSummary,
+  isSecretHeader,
+  ruleValueSummary,
+} from "../secret";
 
 /** Per-line health, in the same order the severity spine reads it. */
 export type LineStatus =
@@ -268,9 +272,7 @@ function ruleChange(
   });
   const secret = isSecretHeader(rule.header);
   const display =
-    rule.operation === "remove"
-      ? undefined
-      : headerValueSummary(rule.header, rule.value);
+    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
   return {
     key: `${profile.id}:${rule.id}`,
     source: "rule",
@@ -419,9 +421,7 @@ export function previewSwitch(
     targetKeys.add(key);
     if (!current.has(key) && !adds.some((add) => add.header === rule.header)) {
       const display =
-        rule.operation === "remove"
-          ? undefined
-          : headerValueSummary(rule.header, rule.value);
+        rule.operation === "remove" ? undefined : ruleValueSummary(rule);
       adds.push({
         header: rule.header,
         ...(display === undefined ? {} : { display }),

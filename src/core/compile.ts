@@ -1,4 +1,4 @@
-import { HTTP_TOKEN, normalizeHeaderName } from "./headers";
+import { classifyHeaderName, HTTP_TOKEN, normalizeHeaderName } from "./headers";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -100,9 +100,10 @@ export function uncompilableReason(
   // the full validateHeader) so this stays lean in the background bundle.
   const header = normalizeHeaderName(rule.header);
   if (
-    header.length === 0 ||
-    header.startsWith(":") ||
-    !HTTP_TOKEN.test(header)
+    !HTTP_TOKEN.test(header) ||
+    (rule.operation === "append" &&
+      rule.direction === "request" &&
+      classifyHeaderName(header).requestAppend !== "allowed")
   ) {
     return "header";
   }

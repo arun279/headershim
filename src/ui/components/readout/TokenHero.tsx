@@ -110,7 +110,9 @@ export function TokenHero({
                 <span class={`lead${fresh.warn ? " warn" : ""}`}>
                   {copy.token.expiresIn(fresh.remainingMs)}
                 </span>
-                {fresh.warn && <span class="rt">{copy.token.warnNote}</span>}
+                {fresh.warn && !fresh.expired && (
+                  <span class="rt">{copy.token.warnNote}</span>
+                )}
               </div>
             </>
           ) : (

@@ -11,6 +11,7 @@ import type {
   OverrideDraft,
   SessionMutationError,
 } from "../../state/session-mutations";
+import { parseHeaderLine } from "../headerLine";
 import { OpGlyph, TabGlyph } from "./glyphs";
 
 /**
@@ -46,6 +47,7 @@ export function ThisTabComposer({
   const [operation, setOperation] = useState<HeaderOp>("set");
   const [header, setHeader] = useState("");
   const [value, setValue] = useState("");
+  const [pastedLineSplit, setPastedLineSplit] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
   const commit = () => {
@@ -118,7 +120,20 @@ export function ThisTabComposer({
           spellcheck={false}
           autocomplete="off"
           autofocus
-          onInput={(event) => setHeader(event.currentTarget.value)}
+          onInput={(event) => {
+            setPastedLineSplit(false);
+            setHeader(event.currentTarget.value);
+          }}
+          onPaste={(event) => {
+            const text = event.clipboardData?.getData("text/plain") ?? "";
+            const line = parseHeaderLine(text);
+            if (line !== undefined) {
+              event.preventDefault();
+              setHeader(line.name);
+              setValue(line.value);
+              setPastedLineSplit(true);
+            }
+          }}
           onKeyDown={commitOnEnter(commit)}
         />
         {operation !== "remove" && (
@@ -139,6 +154,11 @@ export function ThisTabComposer({
           </span>
         )}
       </div>
+      {pastedLineSplit && (
+        <p class="c-note" role="status">
+          {copy.editor.pastedLineSplit}
+        </p>
+      )}
       {error !== undefined && (
         <p class="c-error" role="alert">
           {error}

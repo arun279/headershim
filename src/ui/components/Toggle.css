@@ -61,6 +61,10 @@
   );
 }
 
+.sw.sw-inert[aria-checked="true"]::before {
+  background: var(--sw-off);
+}
+
 /* A configured-on rule in an off profile is held, never painted as running. */
 .rule-row.inactive .sw[aria-checked="true"]::before {
   background: var(--sw-off);
