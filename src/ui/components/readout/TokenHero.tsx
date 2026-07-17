@@ -4,7 +4,6 @@ import type { TabChange } from "../../state/readout";
 import { maskToken, tokenFreshness } from "../../token";
 import { sentence } from "../sentence";
 import { ClockGlyph, KeyGlyph, ShieldGlyph } from "./glyphs";
-import { ProfileBadge } from "./ProfileBadge";
 
 interface TokenHeroProps {
   change: TabChange;
@@ -46,13 +45,6 @@ export function TokenHero({
         <div class="tk-main">
           <div class="tk-label silk">
             <span>{copy.token.valueLabel(change.header)}</span>
-            {change.provenance !== undefined && (
-              <ProfileBadge
-                text={change.provenance.badgeText}
-                color={change.provenance.color}
-                size={14}
-              />
-            )}
           </div>
           {swapping ? (
             <div class="tk-swaptarget">

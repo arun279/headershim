@@ -34,7 +34,6 @@ export function profile(id: string, overrides: Partial<Profile> = {}): Profile {
     name: id,
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
     rules: [],
     ...overrides,
   };
@@ -47,7 +46,7 @@ export function stateDoc(
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: seq + 1,
     settings: { paused: false, theme: "system", badgeMode: "count" },
     ...overrides,

@@ -11,6 +11,7 @@ import "./ProfileList.css";
 
 interface ProfileListProps {
   profiles: readonly Profile[];
+  activeProfileId: string | undefined;
   /** The expanded card, whose badge and rules are open for editing. */
   openProfileId: string | undefined;
   onOpen: (profileId: string) => void;
@@ -77,6 +78,7 @@ export function ProfileList(props: ProfileListProps) {
         <ProfileCard
           key={profile.id}
           profile={profile}
+          active={profile.id === props.activeProfileId}
           open={profile.id === props.openProfileId}
           setsize={profiles.length}
           posinset={profiles.indexOf(profile) + 1}
@@ -111,6 +113,7 @@ export function ProfileList(props: ProfileListProps) {
 
 interface ProfileCardProps {
   profile: Profile;
+  active: boolean;
   open: boolean;
   setsize: number;
   posinset: number;
@@ -210,13 +213,13 @@ function ProfileCard(props: ProfileCardProps) {
           >
             <span
               class={
-                profile.enabled
+                props.active
                   ? "profile-badge badge-glyph"
                   : "profile-badge badge-glyph off"
               }
               aria-hidden="true"
               style={
-                profile.enabled
+                props.active
                   ? { background: `var(--badge-${profile.color})` }
                   : undefined
               }
@@ -230,11 +233,8 @@ function ProfileCard(props: ProfileCardProps) {
           {copy.options.profiles.ruleCount(profile.rules.length)}
         </span>
         <Toggle
-          checked={profile.enabled}
-          label={copy.options.profiles.toggleLabel(
-            profile.name,
-            profile.enabled,
-          )}
+          checked={props.active}
+          label={copy.options.profiles.toggleLabel(profile.name, props.active)}
           onChange={props.onToggle}
         />
       </div>

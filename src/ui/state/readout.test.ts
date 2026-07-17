@@ -30,7 +30,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     name: "Default",
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
     rules: [],
     ...overrides,
   };
@@ -62,7 +61,7 @@ describe("computeReadout", () => {
     const readout = computeReadout({
       ...base,
       host: undefined,
-      enabledProfiles: [],
+      activeProfile: undefined,
     });
     expect(readout.total).toBe(0);
     expect(readout.request).toHaveLength(0);
@@ -72,18 +71,16 @@ describe("computeReadout", () => {
   it("groups live changes by direction and counts them", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [
-        profile({
-          rules: [
-            rule({ header: "x-env" }),
-            rule({
-              header: "x-frame-options",
-              direction: "response",
-              operation: "remove",
-            }),
-          ],
-        }),
-      ],
+      activeProfile: profile({
+        rules: [
+          rule({ header: "x-env" }),
+          rule({
+            header: "x-frame-options",
+            direction: "response",
+            operation: "remove",
+          }),
+        ],
+      }),
     });
     expect(readout.total).toBe(2);
     expect(readout.request.map((c) => c.header)).toEqual(["x-env"]);
@@ -94,11 +91,9 @@ describe("computeReadout", () => {
   it("lifts the authorization rule into the token and redacts its value", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [
-        profile({
-          rules: [rule({ header: "authorization", value: "Bearer secret" })],
-        }),
-      ],
+      activeProfile: profile({
+        rules: [rule({ header: "authorization", value: "Bearer secret" })],
+      }),
     });
     expect(readout.token?.header).toBe("authorization");
     expect(readout.token?.value).toBe("Bearer secret");
@@ -112,7 +107,7 @@ describe("computeReadout", () => {
     const readout = computeReadout({
       ...base,
       grants: NONE,
-      enabledProfiles: [profile({ rules: [rule()] })],
+      activeProfile: profile({ rules: [rule()] }),
     });
     expect(readout.request[0]?.status).toBe("needs-access");
     expect(readout.request[0]?.missing).toEqual(["*://*.api.example.com/*"]);
@@ -122,52 +117,58 @@ describe("computeReadout", () => {
   it("marks a Host rule refused, honestly and enabled", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [
-        profile({ rules: [rule({ header: "host", value: "x" })] }),
-      ],
+      activeProfile: profile({
+        rules: [rule({ header: "host", value: "x" })],
+      }),
     });
     expect(readout.request[0]?.status).toBe("refused");
     expect(readout.request[0]?.refused).toBe("host");
     expect(readout.refused).toBe(1);
   });
 
-  it("names the winning profile when two enabled profiles collide", () => {
+  it("marks a same-profile collision overridden using the shared primitive", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [
-        profile({
-          id: "p-a",
-          name: "Staging auth",
-          rules: [rule({ header: "x-env" })],
-        }),
-        profile({
-          id: "p-b",
-          name: "CORS dev",
-          rules: [rule({ header: "x-env", value: "prod" })],
-        }),
-      ],
+      activeProfile: profile({
+        rules: [
+          rule({ header: "x-env", comment: "staging environment" }),
+          rule({ header: "x-env", value: "prod" }),
+        ],
+      }),
     });
-    expect(readout.multiProfile).toBe(true);
     const loser = readout.request.find((c) => c.status === "overridden");
-    expect(loser?.overriddenBy).toBe("Staging auth");
-    expect(loser?.provenance?.name).toBe("CORS dev");
+    expect(loser?.overriddenBy).toBe("staging environment");
     expect(readout.overridden).toBe(1);
+    expect(readout.total).toBe(1);
+  });
+
+  it("never promotes an overridden authorization rule into the token hero", () => {
+    const winner = rule({ header: "authorization", value: "Bearer winner" });
+    const loser = rule({ header: "authorization", value: "Bearer loser" });
+    const readout = computeReadout({
+      ...base,
+      activeProfile: profile({ rules: [winner, loser] }),
+    });
+
+    expect(readout.token?.ruleId).toBe(winner.id);
+    expect(
+      readout.request.find((change) => change.ruleId === loser.id)?.status,
+    ).toBe("overridden");
+    expect(readout.total).toBe(1);
   });
 
   it("renders a disabled rule off, uncounted, and never as the token", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [
-        profile({
-          rules: [
-            rule({
-              header: "authorization",
-              value: "Bearer x",
-              enabled: false,
-            }),
-          ],
-        }),
-      ],
+      activeProfile: profile({
+        rules: [
+          rule({
+            header: "authorization",
+            value: "Bearer x",
+            enabled: false,
+          }),
+        ],
+      }),
     });
     expect(readout.token).toBeUndefined();
     expect(readout.request[0]?.status).toBe("off");
@@ -178,11 +179,9 @@ describe("computeReadout", () => {
     const readout = computeReadout({
       ...base,
       paused: true,
-      enabledProfiles: [
-        profile({
-          rules: [rule({ header: "authorization", value: "Bearer x" })],
-        }),
-      ],
+      activeProfile: profile({
+        rules: [rule({ header: "authorization", value: "Bearer x" })],
+      }),
     });
     expect(readout.token).toBeUndefined();
     expect(readout.request[0]?.status).toBe("paused");
@@ -191,7 +190,7 @@ describe("computeReadout", () => {
   it("lifts a this-tab authorization swap into the token, out of the strip", () => {
     const readout = computeReadout({
       ...base,
-      enabledProfiles: [],
+      activeProfile: undefined,
       overrides: [
         override({ num: 7, header: "authorization", value: "Bearer swapped" }),
         override({ num: 8, header: "x-flag", value: "1" }),
@@ -211,14 +210,12 @@ describe("refusedReason", () => {
 
 describe("previewSwitch", () => {
   it("diffs the target profile against what is live now on this tab", () => {
-    const from = [
-      profile({
-        rules: [
-          rule({ header: "authorization", value: "Bearer x" }),
-          rule({ header: "x-env" }),
-        ],
-      }),
-    ];
+    const from = profile({
+      rules: [
+        rule({ header: "authorization", value: "Bearer x" }),
+        rule({ header: "x-env" }),
+      ],
+    });
     const to = profile({
       id: "p-target",
       name: "Prod read-only",
@@ -230,7 +227,7 @@ describe("previewSwitch", () => {
   });
 
   it("is empty without a host", () => {
-    expect(previewSwitch([], profile(), undefined)).toEqual({
+    expect(previewSwitch(undefined, profile(), undefined)).toEqual({
       drops: [],
       adds: [],
     });

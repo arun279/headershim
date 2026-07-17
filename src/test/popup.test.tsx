@@ -209,7 +209,7 @@ describe("popup readout", () => {
     );
   });
 
-  it("names the winning profile on an overridden line", async () => {
+  it("names the winning same-profile rule on an overridden line", async () => {
     const first = createV1Seed().profiles[0];
     if (first === undefined) throw new Error("no seed profile");
     const { root } = await mount(
@@ -220,20 +220,13 @@ describe("popup readout", () => {
             ...first,
             id: "p-a",
             name: "Staging auth",
-            rules: [rule({ header: "x-env" })],
-          },
-          {
-            id: "p-b",
-            name: "CORS dev",
-            badgeText: "CO",
-            color: "green",
-            enabled: true,
             rules: [
+              rule({ header: "x-env", comment: "staging environment" }),
               rule({ id: "rule-2", num: 2, header: "x-env", value: "prod" }),
             ],
           },
         ],
-        focusedProfileId: "p-a",
+        activeProfileId: "p-a",
         nextRuleNum: 100,
       },
       true,
@@ -242,10 +235,9 @@ describe("popup readout", () => {
       line.classList.contains("overridden"),
     );
     expect(overridden?.querySelector(".why.rest")?.textContent).toContain(
-      "overridden by Staging auth",
+      "overridden by staging environment",
     );
-    // Provenance badges appear once more than one profile is on.
-    expect(root.querySelector(".change-line .badge-glyph")).not.toBeNull();
+    expect(root.querySelector(".change-line .badge-glyph")).toBeNull();
   });
 
   it("edits a plain value inline and commits it", async () => {
@@ -341,7 +333,6 @@ describe("popup profile switch", () => {
           name: "Prod read-only",
           badgeText: "PR",
           color: "green",
-          enabled: false,
           rules: [
             rule({ id: "r2", num: 2, header: "x-read-only", value: "1" }),
           ],
@@ -357,14 +348,16 @@ describe("popup profile switch", () => {
     ) as HTMLButtonElement;
   };
 
-  it("switches profiles exclusively from the picker", async () => {
+  it("switches profiles with one active id from the picker", async () => {
     const { root } = await mount(withSecond(), true);
     const target = openPickerTarget(root);
     await act(async () => target.click());
     await settle();
     const stored = await read();
-    expect(stored.profiles.map((p) => p.enabled)).toEqual([false, true]);
-    expect(stored.focusedProfileId).toBe("p2");
+    expect(stored.activeProfileId).toBe("p2");
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
   it("previews the local diff before a switch commits", async () => {
@@ -380,10 +373,11 @@ describe("popup profile switch", () => {
       "x-read-only",
     );
     // No commit happened from the preview alone.
-    expect((await read()).profiles[0]?.enabled).toBe(true);
+    const stored = await read();
+    expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
   });
 
-  it("creates a new exclusive profile from the picker", async () => {
+  it("creates and activates a new profile from the picker", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
     await act(async () => {
@@ -392,7 +386,10 @@ describe("popup profile switch", () => {
     await settle();
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.profiles.map((p) => p.enabled)).toEqual([false, true]);
+    expect(stored.activeProfileId).toBe(stored.profiles[1]?.id);
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 });
 

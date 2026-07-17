@@ -70,7 +70,6 @@ const HEADERSHIM = JSON.stringify({
       name: "Staging auth",
       badge: "SA",
       color: "blue",
-      enabled: true,
       rules: [
         {
           direction: "request",
@@ -165,7 +164,6 @@ describe("import failure modes", () => {
             name: "Huge",
             badge: "HU",
             color: "blue",
-            enabled: true,
             rules: [
               {
                 direction: "request",
@@ -213,10 +211,8 @@ describe("import summary and apply", () => {
     expect(summary(root)).toBeNull();
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.profiles[1]).toMatchObject({
-      name: "Staging auth",
-      enabled: false,
-    });
+    expect(stored.profiles[1]).toMatchObject({ name: "Staging auth" });
+    expect(stored.profiles[1]).not.toHaveProperty("enabled");
   });
 
   it("cancels a pending import, leaving the store untouched", async () => {

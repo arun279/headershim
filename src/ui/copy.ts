@@ -62,8 +62,8 @@ export const copy = {
       count === 1 ? "1 refused by Chrome" : `${count} refused by Chrome`,
     overridden: (count: number) =>
       count === 1
-        ? "1 overridden by another profile"
-        : `${count} overridden by another profile`,
+        ? "1 overridden by another rule"
+        : `${count} overridden by another rule`,
     liveLabel: "Running",
     attentionLabel: "Needs attention",
     direction: { request: "Request", response: "Response" },
@@ -98,7 +98,6 @@ export const copy = {
       `${on ? "Turn off" : "Turn on"} this-tab change: ${header}`,
     switcher: {
       chipLabel: "Switch profile",
-      chipMulti: (count: number) => `${count} profiles on`,
       title: "Switch profile",
       select: (name: string) => `Switch to ${name}`,
       // Consequence first: the local diff a switch would apply to this tab.
@@ -143,7 +142,6 @@ export const copy = {
     allProfiles: "all profiles",
     onTag: "on",
     offTag: "off",
-    duplicateRules: "Duplicate this profile's rules",
     create: "Create profile",
     turnOn: "Turn on",
     turnOff: "Turn off",
@@ -206,7 +204,6 @@ export const copy = {
         ],
       },
       editRule: (header: string) => `Edit rule: ${header}`,
-      overriddenHere: "overridden by a rule above",
       profileOff: "its profile is off",
       empty: "No rules yet. Add one to see it here.",
       emptyProfileOff:
@@ -278,9 +275,6 @@ export const copy = {
       sectionLabel: (name: string) => `Rules in ${name}`,
       new: "+ New rule",
       loadingEditor: "Loading rule editor…",
-      selectAll: "Select all rules",
-      selected: (count: number) => `${count} ${rules(count)} selected`,
-      selectRule: (header: string) => `Select rule: ${header}`,
       enable: "Enable",
       disable: "Disable",
       move: "Move",
@@ -478,17 +472,6 @@ export const copy = {
     overridden: "overridden by a rule above",
     initiatorNote:
       "requests started by other pages also need those pages granted",
-  },
-
-  menu: {
-    edit: "Edit rule…",
-    editValue: "Edit value",
-    copyValue: "Copy value",
-    duplicate: "Duplicate",
-    moveToProfile: "Move to profile",
-    regenerateValue: "Regenerate value",
-    undoLastDelete: "Undo last delete",
-    delete: "Delete",
   },
 
   emptyState: {

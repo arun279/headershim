@@ -70,7 +70,6 @@ function roundTripDoc(): StateDoc {
       name: "Staging",
       badgeText: "ST",
       color: "blue",
-      enabled: true,
     }),
     rules: [staging, disabled],
   };
@@ -79,14 +78,13 @@ function roundTripDoc(): StateDoc {
       name: "Local",
       badgeText: "LO",
       color: "teal",
-      enabled: false,
     }),
     rules: [local],
   };
   return {
     ...doc,
     profiles: [stagingProfile, localProfile],
-    focusedProfileId: stagingProfile.id,
+    activeProfileId: stagingProfile.id,
   };
 }
 
@@ -160,9 +158,10 @@ test("an export round-trips through the options UI to an equivalent state, off",
       "Staging",
       "Local",
     ]);
-    for (const profile of imported.profiles.slice(1)) {
-      expect(profile.enabled).toBe(false);
-    }
+    expect(imported.activeProfileId).toBe(imported.profiles[0]?.id);
+    expect(imported.profiles.every((profile) => !("enabled" in profile))).toBe(
+      true,
+    );
 
     const before = exportedByName(original);
     const after = exportedByName(imported);
@@ -171,9 +170,9 @@ test("an export round-trips through the options UI to an equivalent state, off",
       if (expected === undefined) {
         throw new Error(`original is missing ${name}`);
       }
-      // Everything survives except the deliberate off-on-import: rules, their
-      // own enabled flags, scopes, operations, badge, and color are identical.
-      expect(after.get(name)).toEqual({ ...expected, enabled: false });
+      // Rules, their enabled flags, scopes, operations, badge, and color are
+      // identical; importing does not change the active profile.
+      expect(after.get(name)).toEqual(expected);
     }
   } finally {
     await rm(scratch, { recursive: true, force: true });

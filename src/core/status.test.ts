@@ -18,15 +18,15 @@ function rule(num: number, enabled = true): Rule {
   };
 }
 
-function profile(id: string, enabled: boolean, rules: Rule[] = []): Profile {
-  return { id, name: id, badgeText: "DE", color: "indigo", enabled, rules };
+function profile(id: string, rules: Rule[] = []): Profile {
+  return { id, name: id, badgeText: "DE", color: "indigo", rules };
 }
 
 function doc(profiles: Profile[], paused = false): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: 100,
     settings: { paused, theme: "system", badgeMode: "count" },
   };
@@ -43,7 +43,7 @@ describe("computeStatus precedence", () => {
 
   it("puts paused above everything", () => {
     const status = computeStatus({
-      doc: doc([profile("p1", true, [rule(1)])], true),
+      doc: doc([profile("p1", [rule(1)])], true),
       grantGaps: gaps,
       reconcileError: true,
     });
@@ -52,7 +52,7 @@ describe("computeStatus precedence", () => {
 
   it("puts a failed reconcile above a missing grant", () => {
     const status = computeStatus({
-      doc: doc([profile("p1", true, [rule(1)])]),
+      doc: doc([profile("p1", [rule(1)])]),
       grantGaps: gaps,
       reconcileError: true,
     });
@@ -61,7 +61,7 @@ describe("computeStatus precedence", () => {
 
   it("reports needs-access with the affected rule count and hosts", () => {
     const status = computeStatus({
-      doc: doc([profile("p1", true, [rule(1), rule(2)])]),
+      doc: doc([profile("p1", [rule(1), rule(2)])]),
       grantGaps: [
         gap("r1", ["*://*.api.example.com/*", "*://*.app.example.com/*"]),
         gap("r2", ["*://*.api.example.com/*"]),
@@ -77,34 +77,34 @@ describe("computeStatus precedence", () => {
 
   it("passes through origins that are not per-domain patterns", () => {
     const status = computeStatus({
-      doc: doc([profile("p1", true, [rule(1)])]),
+      doc: doc([profile("p1", [rule(1)])]),
       grantGaps: [gap("r1", ["*://*/*"])],
       reconcileError: false,
     });
     expect(status).toMatchObject({ hosts: ["*://*/*"] });
   });
 
-  it("counts enabled rules across enabled profiles only", () => {
+  it("counts enabled rules in the active profile only", () => {
     const status = computeStatus({
       doc: doc([
-        profile("p1", true, [rule(1), rule(2, false)]),
-        profile("p2", true, [rule(3)]),
-        profile("p3", false, [rule(4)]),
+        profile("p1", [rule(1), rule(2, false)]),
+        profile("p2", [rule(3)]),
+        profile("p3", [rule(4)]),
       ]),
       grantGaps: [],
       reconcileError: false,
     });
     expect(status).toEqual({
       kind: "live",
-      ruleCount: 2,
-      totalRuleCount: 3,
-      profileCount: 2,
+      ruleCount: 1,
+      totalRuleCount: 2,
+      profileCount: 1,
     });
   });
 
-  it("is off when no profile is enabled", () => {
+  it("is off when no profile is active", () => {
     const status = computeStatus({
-      doc: doc([profile("p1", false, [rule(1)])]),
+      doc: { ...doc([profile("p1", [rule(1)])]), activeProfileId: undefined },
       grantGaps: [],
       reconcileError: false,
     });

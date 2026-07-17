@@ -14,7 +14,6 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     name: "Default",
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
     rules: [],
     ...overrides,
   };
@@ -24,7 +23,7 @@ function doc(overrides: Partial<StateDoc> = {}): StateDoc {
   return {
     v: 1,
     profiles: [profile()],
-    focusedProfileId: "profile-1",
+    activeProfileId: "profile-1",
     nextRuleNum: 1,
     settings: { paused: false, theme: "system", badgeMode: "count" },
     ...overrides,
@@ -121,7 +120,7 @@ describe("planBadge precedence", () => {
     expect(both).toEqual(needs);
   });
 
-  it("uses Chrome-managed count text on the focused profile color in count mode", () => {
+  it("uses Chrome-managed count text on the active profile color in count mode", () => {
     expect(planBadge(input({ doc: doc() })).state).toEqual({
       kind: "count",
       backgroundColor: BADGE_PALETTE.indigo,
@@ -129,7 +128,7 @@ describe("planBadge precedence", () => {
     });
   });
 
-  it("paints the focused profile initials in initials mode without per-tab markers", () => {
+  it("paints the active profile initials in initials mode without per-tab markers", () => {
     const initials = doc({ settings: settings({ badgeMode: "initials" }) });
 
     expect(planBadge(input({ doc: initials, overrideTabIds: [4, 9] }))).toEqual(
@@ -146,9 +145,9 @@ describe("planBadge precedence", () => {
     );
   });
 
-  it("shows an empty neutral badge with a per-tab T marker on override tabs when no profile is enabled", () => {
+  it("shows an empty neutral badge with a per-tab T marker when no profile is active", () => {
     const disabled = doc({
-      profiles: [profile({ enabled: false })],
+      activeProfileId: undefined,
       settings: settings({ badgeMode: "initials" }),
     });
 
@@ -169,8 +168,8 @@ describe("planBadge precedence", () => {
     );
   });
 
-  it("leaves the count to Chrome on a neutral background when no profile is enabled", () => {
-    const disabled = doc({ profiles: [profile({ enabled: false })] });
+  it("leaves the count to Chrome on a neutral background when no profile is active", () => {
+    const disabled = doc({ activeProfileId: undefined });
 
     expect(planBadge(input({ doc: disabled, overrideTabIds: [4] }))).toEqual({
       state: { kind: "count", backgroundColor: NEUTRAL_GREY, textColor: WHITE },
@@ -188,17 +187,17 @@ describe("planBadge single-winner precedence across the input space", () => {
     for (const needsAccess of bits) {
       for (const reconcileError of bits) {
         for (const badgeMode of modes) {
-          for (const enabled of bits) {
+          for (const active of bits) {
             for (const withOverrides of bits) {
               const overrideTabIds = withOverrides ? [4, 9] : [];
-              const label = `paused=${paused} needs=${needsAccess} reconcile=${reconcileError} mode=${badgeMode} enabled=${enabled} overrides=${withOverrides}`;
+              const label = `paused=${paused} needs=${needsAccess} reconcile=${reconcileError} mode=${badgeMode} active=${active} overrides=${withOverrides}`;
               const cantRun = needsAccess || reconcileError;
 
               it(`resolves a single winner: ${label}`, () => {
                 const plan = planBadge(
                   input({
                     doc: doc({
-                      profiles: [profile({ enabled })],
+                      activeProfileId: active ? "profile-1" : undefined,
                       settings: settings({ paused, badgeMode }),
                     }),
                     needsAccess,
@@ -217,7 +216,7 @@ describe("planBadge single-winner precedence across the input space", () => {
                 // initials mode alone; it never bleeds under a global state.
                 if (plan.state.kind === "manual") {
                   expect(plan.state.text).toBe(
-                    !paused && !cantRun && badgeMode === "initials" && enabled
+                    !paused && !cantRun && badgeMode === "initials" && active
                       ? "DE"
                       : "",
                   );
@@ -229,7 +228,7 @@ describe("planBadge single-winner precedence across the input space", () => {
                   !paused &&
                     !cantRun &&
                     badgeMode === "initials" &&
-                    !enabled &&
+                    !active &&
                     withOverrides
                     ? [
                         { tabId: 4, text: "T" },
@@ -244,7 +243,7 @@ describe("planBadge single-winner precedence across the input space", () => {
                     ? PAUSED_GREY
                     : cantRun
                       ? CANT_RUN_AMBER
-                      : enabled
+                      : active
                         ? BADGE_PALETTE.indigo
                         : NEUTRAL_GREY,
                 );

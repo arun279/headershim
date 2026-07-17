@@ -72,23 +72,23 @@ function planFace({
     return globalBadge(CANT_RUN_FILL);
   }
 
-  const focused = doc.profiles.some((profile) => profile.enabled)
-    ? doc.profiles.find((profile) => profile.id === doc.focusedProfileId)
-    : undefined;
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
   const backgroundColor =
-    focused === undefined ? NEUTRAL_FILL : BADGE_PALETTE[focused.color];
+    active === undefined ? NEUTRAL_FILL : BADGE_PALETTE[active.color];
 
   if (doc.settings.badgeMode === "count") {
-    // Count is Chrome-managed per tab: an enabled profile paints its matches
-    // everywhere, and with none enabled only This-tab overrides increment it.
+    // Count is Chrome-managed per tab: the active profile paints its matches
+    // everywhere, and with none active only This-tab overrides increment it.
     return {
       state: { kind: "count", backgroundColor, textColor: WHITE },
       tabBadges: [],
     };
   }
 
-  if (focused === undefined) {
-    // No enabled profile: the badge is empty and neutral, except tabs holding a
+  if (active === undefined) {
+    // No active profile: the badge is empty and neutral, except tabs holding a
     // This-tab override carry a temporary "T" so modified traffic is never
     // invisible.
     return {
@@ -99,7 +99,7 @@ function planFace({
   return {
     state: {
       kind: "manual",
-      text: focused.badgeText,
+      text: active.badgeText,
       backgroundColor,
       textColor: WHITE,
     },

@@ -22,8 +22,7 @@ const text = copy.options.profiles;
 
 /**
  * Profile management: create, rename, clone, delete (confirm + undo), reorder,
- * badge editing, and enable. Enabling is exclusive by default, matching the
- * popup's one-profile-at-a-time model; rules themselves live in the Fleet.
+ * badge editing, and activation. Rules themselves live in the Fleet.
  */
 export function ProfilesPage({
   doc,
@@ -33,7 +32,10 @@ export function ProfilesPage({
   mutations: Mutations;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const [openId, setOpenId] = useState(doc.focusedProfileId);
+  const [openId, setOpenId] = useState(
+    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.id ??
+      doc.profiles[0]?.id,
+  );
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
@@ -53,27 +55,10 @@ export function ProfilesPage({
     });
   };
 
-  const enabledRuleCount = doc.profiles
-    .filter((profile) => profile.enabled)
-    .reduce(
-      (total, profile) =>
-        total + profile.rules.filter((rule) => rule.enabled).length,
-      0,
-    );
-
-  // Exclusive by default: turning a profile on switches to it and turns the
-  // rest off; turning it off simply disables it. Enable the target first so no
-  // frame is ever all-off.
-  const exclusiveEnable = (profileId: string) =>
-    void (async () => {
-      await mutations.setProfileEnabled(profileId, true, true);
-      for (const profile of doc.profiles) {
-        if (profile.id !== profileId && profile.enabled) {
-          await mutations.setProfileEnabled(profile.id, false, false);
-        }
-      }
-      setUndo(undefined);
-    })();
+  const enabledRuleCount =
+    doc.profiles
+      .find((profile) => profile.id === doc.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled).length ?? 0;
 
   const create = () => {
     void mutations
@@ -153,12 +138,11 @@ export function ProfilesPage({
       <div class="profiles-card">
         <ProfileList
           profiles={doc.profiles}
+          activeProfileId={doc.activeProfileId}
           openProfileId={openId}
           onOpen={setOpenId}
           onToggle={(id, enabled) =>
-            enabled
-              ? exclusiveEnable(id)
-              : run(mutations.setProfileEnabled(id, false))
+            run(mutations.activateProfile(enabled ? id : undefined))
           }
           onReorder={(id, toIndex) =>
             run(mutations.reorderProfile(id, toIndex))

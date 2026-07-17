@@ -133,20 +133,20 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
   }, [pruned, tabResolved, tabId, tabDomain]);
 
   const paused = status.kind === "paused";
-  const enabledProfiles = useMemo(
-    () => doc.profiles.filter((profile) => profile.enabled),
+  const activeProfile = useMemo(
+    () => doc.profiles.find((profile) => profile.id === doc.activeProfileId),
     [doc],
   );
   const readout = useMemo(
     () =>
       computeReadout({
-        enabledProfiles,
+        activeProfile,
         host: tabDomain,
         grants,
         overrides,
         paused,
       }),
-    [enabledProfiles, tabDomain, grants, overrides, paused],
+    [activeProfile, tabDomain, grants, overrides, paused],
   );
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
@@ -159,16 +159,7 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
   };
 
   const switchProfile = (targetId: string) => {
-    void (async () => {
-      // Enable and focus the target first so a profile is never briefly all-off,
-      // then drop the rest: an exclusive switch composed from the fixed store.
-      await mutations.setProfileEnabled(targetId, true, true);
-      for (const profile of enabledProfiles) {
-        if (profile.id !== targetId) {
-          await mutations.setProfileEnabled(profile.id, false, false);
-        }
-      }
-    })();
+    run(mutations.activateProfile(targetId));
   };
 
   const newProfile = () => {
@@ -183,7 +174,6 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
           BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
           BADGE_COLORS[0],
         enabled: true,
-        exclusive: true,
       }),
     );
   };
@@ -295,7 +285,7 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
 
   const openAddChange = () => {
     setComposing(false);
-    setAddingTo(doc.focusedProfileId);
+    setAddingTo((activeProfile ?? doc.profiles[0])?.id);
   };
   const openComposer = () => {
     if (tabDomain === undefined) return;
@@ -370,7 +360,7 @@ function Ready({ doc, status, grants, tabId, overrides }: ReadyProps) {
       <ReadoutHead
         readout={readout}
         profiles={doc.profiles}
-        enabledProfiles={enabledProfiles}
+        activeProfile={activeProfile}
         paused={paused}
         onSwitchProfile={switchProfile}
         onNewProfile={newProfile}

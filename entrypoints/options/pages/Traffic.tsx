@@ -28,6 +28,7 @@ export function TrafficPage({
 }) {
   const fleet = projectFleet({
     profiles: doc.profiles,
+    activeProfileId: doc.activeProfileId,
     grants,
     paused: doc.settings.paused,
   });

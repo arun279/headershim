@@ -6,7 +6,7 @@ describe("copy", () => {
     expect(sentenceText(copy.readout.status(1))).toBe("1 change on this tab");
     expect(sentenceText(copy.readout.status(4))).toBe("4 changes on this tab");
     expect(copy.readout.needsAccess(2)).toBe("2 needs access");
-    expect(copy.readout.overridden(1)).toBe("1 overridden by another profile");
+    expect(copy.readout.overridden(1)).toBe("1 overridden by another rule");
     expect(copy.readout.refused(3)).toBe("3 refused by Chrome");
     expect(copy.readout.overriddenBy("Staging auth")).toBe(
       "overridden by Staging auth",

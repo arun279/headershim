@@ -307,7 +307,6 @@ async function mapProfile(
       name,
       badgeText: normalizeBadgeText(source.shortTitle ?? source.title),
       color: nearestBadgeColor(source.backgroundColor),
-      enabled: false,
       rules: mappings.map(({ rule }) =>
         scopeResult.value.invalidPatterns.length === 0
           ? rule

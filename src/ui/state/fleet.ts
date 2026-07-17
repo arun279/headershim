@@ -38,10 +38,8 @@ interface FleetProvenance {
   readonly color: BadgeColor;
 }
 
-/** The winner of a same-header collision, and whether it is the rule's own profile. */
 interface Overrider {
-  readonly name: string;
-  readonly sameProfile: boolean;
+  readonly label: string;
 }
 
 type FleetScope =
@@ -80,6 +78,7 @@ export interface FleetRule {
 
 export interface FleetInput {
   readonly profiles: readonly Profile[];
+  readonly activeProfileId: string | undefined;
   readonly grants: GrantSnapshot;
   readonly paused: boolean;
 }
@@ -87,32 +86,31 @@ export interface FleetInput {
 /** Every rule in every profile, in profile then rule order, projected once. */
 export function projectFleet({
   profiles,
+  activeProfileId,
   grants,
   paused,
 }: FleetInput): FleetRule[] {
   // Collisions are resolved across the live set exactly as the compiled ruleset
-  // does: enabled rules of enabled profiles, in order, so an earlier one shadows
-  // a later one. The Workbench surfaces same-profile shadows too, because that
-  // is an authoring choice the author is here to see.
+  // does: enabled rules of the active profile, in order, so an earlier one
+  // shadows a later one.
   const live: { profile: Profile; rule: Rule }[] = [];
   for (const profile of profiles) {
-    if (!profile.enabled) continue;
+    if (profile.id !== activeProfileId) continue;
     for (const rule of profile.rules) {
       if (rule.enabled) live.push({ profile, rule });
     }
   }
-  const owner = new Map<string, Profile>();
-  for (const { profile, rule } of live) owner.set(rule.id, profile);
+  const rulesById = new Map<string, Rule>();
+  for (const { rule } of live) rulesById.set(rule.id, rule);
 
   const overriddenBy = new Map<string, Overrider>();
   for (const { ruleId, shadowedByRuleId } of findOverriddenRules(
     live.map(({ rule }) => rule),
   )) {
-    const winner = owner.get(shadowedByRuleId);
+    const winner = rulesById.get(shadowedByRuleId);
     if (winner !== undefined) {
       overriddenBy.set(ruleId, {
-        name: winner.name,
-        sameProfile: winner.id === owner.get(ruleId)?.id,
+        label: ruleLabel(winner),
       });
     }
   }
@@ -122,6 +120,7 @@ export function projectFleet({
       fleetRule(profile, rule, {
         grants,
         paused,
+        active: profile.id === activeProfileId,
         overriddenBy: overriddenBy.get(rule.id),
       }),
     ),
@@ -134,11 +133,12 @@ function fleetRule(
   context: {
     grants: GrantSnapshot;
     paused: boolean;
+    active: boolean;
     overriddenBy: Overrider | undefined;
   },
 ): FleetRule {
   const refused = refusedReason(rule);
-  const running = profile.enabled && rule.enabled;
+  const running = context.active && rule.enabled;
   const missing = running ? missingGrants(rule, context.grants) : [];
   const status = fleetStatus({
     running,
@@ -169,7 +169,7 @@ function fleetRule(
     ...(display === undefined ? {} : { display }),
     secret: isSecretHeader(rule.header),
     enabled: rule.enabled,
-    profileEnabled: profile.enabled,
+    profileEnabled: context.active,
     status,
     // The collision winner is named only where the loser is actually running;
     // an off rule is off, not overridden.
@@ -199,6 +199,13 @@ function fleetStatus(flags: {
   if (flags.refused) return "refused";
   if (flags.needsAccess) return "needs-access";
   return "live";
+}
+
+function ruleLabel(rule: Rule): string {
+  const comment = rule.comment?.trim();
+  return comment === undefined || comment.length === 0
+    ? `${rule.header} rule`
+    : comment;
 }
 
 function fleetScope(rule: Rule): FleetScope {

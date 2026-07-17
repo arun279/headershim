@@ -50,7 +50,6 @@ function profileSet(): StateDoc {
       name: "Default",
       badgeText: "DE",
       color: "indigo",
-      enabled: true,
       rules: [
         storedRule(
           "rule-domains",
@@ -80,7 +79,6 @@ function profileSet(): StateDoc {
       name: "Staging",
       badgeText: "S",
       color: "slate",
-      enabled: false,
       rules: [
         storedRule(
           "rule-regex",
@@ -120,7 +118,7 @@ function profileSet(): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: 5,
     settings: { paused: true, theme: "dark", badgeMode: "initials" },
   };
@@ -135,11 +133,10 @@ function targetDoc(): StateDoc {
         name: "Existing",
         badgeText: "EX",
         color: "blue",
-        enabled: true,
         rules: [],
       },
     ],
-    focusedProfileId: "profile-existing",
+    activeProfileId: "profile-existing",
     nextRuleNum: 50,
     settings: { paused: false, theme: "light", badgeMode: "count" },
   };
@@ -161,7 +158,6 @@ function withoutStorageIdentity(profile: Profile): unknown {
     name: profile.name,
     badgeText: profile.badgeText,
     color: profile.color,
-    enabled: profile.enabled,
     rules: profile.rules.map(({ id: _id, num: _num, ...rule }) => rule),
   };
 }
@@ -226,9 +222,7 @@ describe("headershim import", () => {
     const original = profileSet();
     const { applied } = importExported(original);
     const imported = applied.profiles.slice(1).map(withoutStorageIdentity);
-    const expected = original.profiles.map((profile) =>
-      withoutStorageIdentity({ ...profile, enabled: false }),
-    );
+    const expected = original.profiles.map(withoutStorageIdentity);
 
     expect(imported).toEqual(expected);
   });
@@ -252,15 +246,17 @@ describe("headershim import", () => {
     expect(applied.nextRuleNum).toBe(54);
   });
 
-  it("turns imported profiles off while preserving every rule enabled flag", () => {
+  it("leaves imported profiles inactive while preserving every rule enabled flag", () => {
     const original = profileSet();
     const { plan, applied } = importExported(original);
 
-    expect(plan.profiles.map(({ enabled }) => enabled)).toEqual([false, false]);
-    expect(applied.profiles.slice(1).map(({ enabled }) => enabled)).toEqual([
-      false,
-      false,
-    ]);
+    expect(plan.profiles.every((profile) => !("enabled" in profile))).toBe(
+      true,
+    );
+    expect(applied.activeProfileId).toBe("profile-existing");
+    expect(
+      applied.profiles.slice(1).every((profile) => !("enabled" in profile)),
+    ).toBe(true);
     expect(
       applied.profiles
         .slice(1)
@@ -285,7 +281,7 @@ describe("headershim import", () => {
 
     expect(target).toEqual(snapshot);
     expect(result.value).toEqual(planSnapshot);
-    expect(applied.focusedProfileId).toBe(target.focusedProfileId);
+    expect(applied.activeProfileId).toBe(target.activeProfileId);
     expect(applied.settings).toBe(target.settings);
     expect(result.value.warnings).toEqual([]);
   });
@@ -397,7 +393,6 @@ describe("headershim import", () => {
       { ...valid, profiles: [{ ...profile, name: "x".repeat(49) }] },
       { ...valid, profiles: [{ ...profile, badge: "ABC" }] },
       { ...valid, profiles: [{ ...profile, color: "amber" }] },
-      { ...valid, profiles: [{ ...profile, enabled: 1 }] },
       { ...valid, profiles: [{ ...profile, rules: null }] },
       { ...valid, profiles: [{ ...profile, rules: [null] }] },
       withRule(valid, { direction: "both" }),

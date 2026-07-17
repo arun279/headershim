@@ -8,7 +8,7 @@ import { ProfilePicker } from "./ProfilePicker";
 interface ReadoutHeadProps {
   readout: TabReadout;
   profiles: readonly Profile[];
-  enabledProfiles: readonly Profile[];
+  activeProfile: Profile | undefined;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
   onNewProfile: () => void;
@@ -22,7 +22,7 @@ interface ReadoutHeadProps {
 export function ReadoutHead({
   readout,
   profiles,
-  enabledProfiles,
+  activeProfile,
   paused,
   onSwitchProfile,
   onNewProfile,
@@ -39,7 +39,7 @@ export function ReadoutHead({
         </span>
         <ProfilePicker
           profiles={profiles}
-          enabledProfiles={enabledProfiles}
+          activeProfile={activeProfile}
           host={readout.host}
           onSwitch={onSwitchProfile}
           onNewProfile={onNewProfile}

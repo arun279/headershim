@@ -108,10 +108,10 @@ describe("background lifecycle", () => {
     expect(doc.profiles).toHaveLength(1);
     expect(doc.profiles[0]).toMatchObject({
       name: "Default",
-      enabled: true,
       rules: [],
     });
-    expect(doc.focusedProfileId).toBe(doc.profiles[0]?.id);
+    expect(doc.activeProfileId).toBe(doc.profiles[0]?.id);
+    expect(doc.profiles[0]).not.toHaveProperty("enabled");
     expect(await quarantinedValue()).toBeUndefined();
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
@@ -394,7 +394,6 @@ describe("background lifecycle", () => {
       name: "Imported",
       badgeText: "IM",
       color: "teal",
-      enabled: false,
     });
 
     await Promise.all([
@@ -583,10 +582,7 @@ describe("background lifecycle", () => {
     const seed = createV1Seed();
     const neutral: StateDoc = {
       ...seed,
-      profiles: seed.profiles.map((profile) => ({
-        ...profile,
-        enabled: false,
-      })),
+      activeProfileId: undefined,
       settings: { ...seed.settings, badgeMode: "initials" },
     };
 
@@ -610,46 +606,36 @@ describe("background lifecycle", () => {
     expect(await browser.action.getBadgeText({ tabId })).toBe("T");
   });
 
-  it("switches to the next profile exclusively on command", async () => {
+  it("switches to the next profile with one active id on command", async () => {
     start();
     const seed = createV1Seed();
     const staging = createProfile({
       name: "Staging",
       badgeText: "ST",
       color: "blue",
-      enabled: false,
     });
     const qa = createProfile({
       name: "QA",
       badgeText: "QA",
       color: "teal",
-      enabled: true,
     });
     await writeState({ ...seed, profiles: [...seed.profiles, staging, qa] });
     await settle();
 
     await triggerCommand("next-profile");
     let doc = await readState();
-    expect(doc.focusedProfileId).toBe(staging.id);
-    expect(doc.profiles.map((profile) => profile.enabled)).toEqual([
-      false,
-      true,
-      false,
-    ]);
+    expect(doc.activeProfileId).toBe(staging.id);
+    expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 
     await triggerCommand("next-profile");
     await triggerCommand("next-profile");
     doc = await readState();
-    expect(doc.focusedProfileId).toBe(seed.focusedProfileId);
-    expect(doc.profiles.map((profile) => profile.enabled)).toEqual([
-      true,
-      false,
-      false,
-    ]);
+    expect(doc.activeProfileId).toBe(seed.activeProfileId);
+    expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
   });
 
   // The next-profile command writes state without the commit guard, so an
-  // imported disabled profile can carry an enabled rule Chrome rejects (a bad
+  // imported inactive profile can carry an enabled rule Chrome rejects (a bad
   // urlFilter, a CRLF value) that would sink the whole atomic batch when the
   // command enables it. The reconcile drops that one rule from the compiled set,
   // so the profile's other rules still apply and the ruleset never freezes.
@@ -660,7 +646,6 @@ describe("background lifecycle", () => {
       name: "Imported",
       badgeText: "IM",
       color: "plum",
-      enabled: false,
     });
     const good: Rule = {
       id: "good",
@@ -693,8 +678,8 @@ describe("background lifecycle", () => {
     await settle();
 
     const doc = await readState();
-    // The command enables the profile and preserves both rules on disk …
-    expect(doc.profiles.at(-1)?.enabled).toBe(true);
+    // The command activates the profile and preserves both rules on disk …
+    expect(doc.activeProfileId).toBe(imported.id);
     expect(doc.profiles.at(-1)?.rules.map((rule) => rule.id)).toEqual([
       "good",
       "bad",

@@ -46,7 +46,7 @@ export interface DnrRule {
 // An untrusted writer can seed the enabled set with a rule Chrome rejects: a
 // ModHeader/headershim import preserves each rule's enabled flag and scope
 // verbatim (no header/urlFilter/regex grammar check), and the next-profile
-// command enables a stored profile without passing the commit guard. compileDynamic
+// command activates a stored profile without passing the commit guard. compileDynamic
 // would emit that rule and updateDynamicRules would reject the whole atomic batch,
 // freezing the live ruleset at its last-good revision until the user finds the one
 // bad rule. Dropping every uncompilable rule from the compiled input before it
@@ -61,7 +61,7 @@ export function dropUncompilable(
   return {
     ...state,
     profiles: state.profiles.map((profile) =>
-      profile.enabled
+      profile.id === state.activeProfileId
         ? {
             ...profile,
             rules: profile.rules.filter(
@@ -106,9 +106,10 @@ function isCompilable(
 }
 
 export function compileDynamic(state: StateDoc): DnrRule[] {
-  const enabledRules = state.profiles.flatMap((profile) =>
-    profile.enabled ? profile.rules.filter((rule) => rule.enabled) : [],
-  );
+  const enabledRules =
+    state.profiles
+      .find((profile) => profile.id === state.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled) ?? [];
   if (enabledRules.length > MAX_ENABLED_RULES) {
     throw new RangeError(
       `Cannot compile ${enabledRules.length} enabled rules; the limit is ${MAX_ENABLED_RULES}`,

@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { GrantSnapshot } from "../../core/grants";
 import type { Profile, Rule } from "../../core/model";
 import {
+  type FleetInput,
   type FleetRule,
   groupByHeader,
   groupBySite,
-  projectFleet,
+  projectFleet as projectFleetWithActive,
   tapeRows,
 } from "./fleet";
 
@@ -32,10 +33,18 @@ const profile = (overrides: Partial<Profile> = {}): Profile => ({
   name: "Staging",
   badgeText: "ST",
   color: "blue",
-  enabled: true,
   rules: [],
   ...overrides,
 });
+
+function projectFleet(
+  input: Omit<FleetInput, "activeProfileId"> & {
+    activeProfileId?: string | undefined;
+  },
+): FleetRule[] {
+  const activeProfileId = input.activeProfileId ?? input.profiles[0]?.id;
+  return projectFleetWithActive({ ...input, activeProfileId });
+}
 
 function byKey(fleet: readonly FleetRule[], key: string): FleetRule {
   const found = fleet.find((entry) => entry.key === key);
@@ -94,14 +103,15 @@ describe("projectFleet status ladder", () => {
 
   it("reads every rule in an off profile as off", () => {
     const fleet = projectFleet({
-      profiles: [profile({ enabled: false, rules: [rule({ id: "r" })] })],
+      profiles: [profile({ rules: [rule({ id: "r" })] })],
+      activeProfileId: "missing",
       grants: ALL,
       paused: false,
     });
     expect(byKey(fleet, "p1:r").status).toBe("off");
   });
 
-  it("names the winning profile when another profile overrides a header", () => {
+  it("never reports a collision across an inactive profile", () => {
     const winner = profile({
       id: "p1",
       name: "Base",
@@ -118,16 +128,21 @@ describe("projectFleet status ladder", () => {
       paused: false,
     });
     const entry = byKey(fleet, "p2:l");
-    expect(entry.status).toBe("overridden");
-    expect(entry.overriddenBy).toEqual({ name: "Base", sameProfile: false });
+    expect(entry.status).toBe("off");
+    expect(entry.overriddenBy).toBeUndefined();
   });
 
-  it("flags a same-profile shadow as overridden by its own profile", () => {
+  it("names the winning same-profile rule", () => {
     const fleet = projectFleet({
       profiles: [
         profile({
           rules: [
-            rule({ id: "w", header: "x-env", scope: { type: "all" } }),
+            rule({
+              id: "w",
+              header: "x-env",
+              comment: "environment default",
+              scope: { type: "all" },
+            }),
             rule({ id: "l", header: "x-env" }),
           ],
         }),
@@ -135,7 +150,9 @@ describe("projectFleet status ladder", () => {
       grants: ALL,
       paused: false,
     });
-    expect(byKey(fleet, "p1:l").overriddenBy?.sameProfile).toBe(true);
+    expect(byKey(fleet, "p1:l").overriddenBy).toEqual({
+      label: "environment default",
+    });
   });
 
   it("redacts secret values and drops the value for a remove", () => {

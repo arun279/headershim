@@ -61,12 +61,11 @@ function doc(profileOverrides: Partial<Profile> = {}): StateDoc {
         name: "Default",
         badgeText: "DE",
         color: "indigo",
-        enabled: true,
         rules: [],
         ...profileOverrides,
       },
     ],
-    focusedProfileId: "p1",
+    activeProfileId: "p1",
     nextRuleNum: 10,
     settings: { paused: false, theme: "system", badgeMode: "count" },
   };

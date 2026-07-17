@@ -26,10 +26,7 @@ function withSettings(doc: StateDoc, settings: Partial<StateDoc["settings"]>) {
 }
 
 function allProfilesOff(doc: StateDoc): StateDoc {
-  return {
-    ...doc,
-    profiles: doc.profiles.map((profile) => ({ ...profile, enabled: false })),
-  };
+  return { ...doc, activeProfileId: undefined };
 }
 
 function tabOverride(tabId: number, originHost: string): TabOverride {
@@ -71,7 +68,7 @@ test("count mode engages the Chrome-managed count badge", async ({
   await page.goto(`${echoServers.h1Url}/count`);
   const tabId = await activeTabId(serviceWorker);
 
-  // The seed ships count mode with the Default profile enabled.
+  // The seed ships count mode with the Default profile active.
   await seedState(serviceWorker, createV1Seed());
 
   await expect
@@ -92,7 +89,7 @@ test("initials mode paints the focused profile's badge text", async ({
   expect(await getBadgeColor(serviceWorker)).toEqual(INDIGO);
 });
 
-test("a This-tab override marks its tab with T when no profile is enabled", async ({
+test("a This-tab override marks its tab with T when no profile is active", async ({
   context,
   echoServers,
   serviceWorker,

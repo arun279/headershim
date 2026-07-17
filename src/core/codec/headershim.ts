@@ -55,7 +55,6 @@ interface ExportedProfile {
   readonly name: string;
   readonly badge: string;
   readonly color: BadgeColor;
-  readonly enabled: boolean;
   readonly rules: readonly ExportedRule[];
 }
 
@@ -70,7 +69,6 @@ export interface ImportedProfile {
   readonly name: string;
   readonly badgeText: string;
   readonly color: BadgeColor;
-  readonly enabled: false;
   readonly rules: readonly RuleDraft[];
 }
 
@@ -206,7 +204,6 @@ export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
       name: importedProfile.name,
       badgeText: importedProfile.badgeText,
       color: importedProfile.color,
-      enabled: false,
     });
     const rules = [];
 
@@ -230,7 +227,6 @@ function exportProfile(profile: Profile): ExportedProfile {
     name: profile.name,
     badge: profile.badgeText,
     color: profile.color,
-    enabled: profile.enabled,
     rules: profile.rules.map(exportRule),
   };
 }
@@ -292,7 +288,6 @@ function createImportPlan(
       name: availableProfileName(exported.name, existingProfiles, profiles),
       badgeText: exported.badge,
       color: exported.color,
-      enabled: false,
       rules: exported.rules.map(importRuleDraft),
     });
   }
@@ -409,14 +404,13 @@ function isExportedProfile(value: unknown): value is ExportedProfile {
     return false;
   }
 
-  const { name, badge, color, enabled, rules } = value;
+  const { name, badge, color, rules } = value;
   return (
     typeof name === "string" &&
     isProfileNameAvailable([], name) &&
     typeof badge === "string" &&
     normalizeBadgeText(badge) === badge &&
     isOneOf(color, BADGE_COLORS) &&
-    typeof enabled === "boolean" &&
     Array.isArray(rules) &&
     rules.every(isExportedRule)
   );

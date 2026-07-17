@@ -12,7 +12,7 @@ import { fire, render, settle } from "../ui/test/render";
 const text = copy.options.fleet;
 
 async function seed(profiles: Profile[]): Promise<void> {
-  await write(stateDoc(profiles, { focusedProfileId: profiles[0]?.id ?? "" }));
+  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id }));
 }
 
 async function mount(hash = "#fleet") {

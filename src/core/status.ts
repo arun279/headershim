@@ -16,9 +16,9 @@ export type SystemStatus =
     }
   | {
       readonly kind: "live";
-      /** Enabled rules in enabled profiles — the numerator of "N of M enabled". */
+      /** Enabled rules in the active profile — the numerator of "N of M enabled". */
       readonly ruleCount: number;
-      /** All rules in enabled profiles — the denominator; the configured total. */
+      /** All rules in the active profile — the denominator; the configured total. */
       readonly totalRuleCount: number;
       readonly profileCount: number;
     }
@@ -51,22 +51,17 @@ export function computeStatus({
     };
   }
 
-  const enabled = doc.profiles.filter((profile) => profile.enabled);
-  if (enabled.length === 0) {
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  if (active === undefined) {
     return { kind: "off" };
   }
   return {
     kind: "live",
-    ruleCount: enabled.reduce(
-      (count, profile) =>
-        count + profile.rules.filter((rule) => rule.enabled).length,
-      0,
-    ),
-    totalRuleCount: enabled.reduce(
-      (count, profile) => count + profile.rules.length,
-      0,
-    ),
-    profileCount: enabled.length,
+    ruleCount: active.rules.filter((rule) => rule.enabled).length,
+    totalRuleCount: active.rules.length,
+    profileCount: 1,
   };
 }
 

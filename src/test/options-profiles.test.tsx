@@ -9,9 +9,9 @@ import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 async function seed(
   profiles: Profile[],
-  focusedProfileId = profiles[0]?.id ?? "",
+  activeProfileId = profiles[0]?.id,
 ): Promise<void> {
-  await write(stateDoc(profiles, { focusedProfileId }));
+  await write(stateDoc(profiles, { activeProfileId }));
 }
 
 async function mount(hash = "#profiles") {
@@ -259,11 +259,11 @@ describe("profile lifecycle", () => {
   });
 });
 
-describe("profile enablement", () => {
-  it("switches exclusively: turning one on turns the rest off", async () => {
+describe("profile activation", () => {
+  it("switches with one active id and no per-profile liveness bits", async () => {
     await seed([
-      profile("p1", { name: "Alpha", enabled: true }),
-      profile("p2", { name: "Beta", enabled: false }),
+      profile("p1", { name: "Alpha" }),
+      profile("p2", { name: "Beta" }),
     ]);
     const root = await mount();
 
@@ -272,10 +272,10 @@ describe("profile enablement", () => {
     await settle();
 
     const stored = await read();
-    expect(stored.profiles.find((p) => p.name === "Beta")?.enabled).toBe(true);
-    expect(stored.profiles.find((p) => p.name === "Alpha")?.enabled).toBe(
-      false,
-    );
+    expect(stored.activeProfileId).toBe("p2");
+    for (const candidate of stored.profiles) {
+      expect(candidate).not.toHaveProperty("enabled");
+    }
   });
 });
 

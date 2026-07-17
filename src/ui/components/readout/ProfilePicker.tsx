@@ -9,7 +9,7 @@ import { ProfileBadge } from "./ProfileBadge";
 
 interface ProfilePickerProps {
   profiles: readonly Profile[];
-  enabledProfiles: readonly Profile[];
+  activeProfile: Profile | undefined;
   host: string | undefined;
   onSwitch: (profileId: string) => void;
   onNewProfile: () => void;
@@ -22,7 +22,7 @@ interface ProfilePickerProps {
  */
 export function ProfilePicker({
   profiles,
-  enabledProfiles,
+  activeProfile,
   host,
   onSwitch,
   onNewProfile,
@@ -37,7 +37,6 @@ export function ProfilePicker({
     if (restoreFocus) trigger.current?.focus();
   });
 
-  const solo = enabledProfiles.length === 1 ? enabledProfiles[0] : undefined;
   const preview =
     previewId === undefined
       ? undefined
@@ -54,15 +53,17 @@ export function ProfilePicker({
         aria-label={copy.readout.switcher.chipLabel}
         onClick={() => setOpen((value) => !value)}
       >
-        {solo !== undefined ? (
+        {activeProfile !== undefined ? (
           <>
-            <ProfileBadge text={solo.badgeText} color={solo.color} size={16} />
-            <span class="lbl">{solo.name}</span>
+            <ProfileBadge
+              text={activeProfile.badgeText}
+              color={activeProfile.color}
+              size={16}
+            />
+            <span class="lbl">{activeProfile.name}</span>
           </>
         ) : (
-          <span class="lbl">
-            {copy.readout.switcher.chipMulti(enabledProfiles.length)}
-          </span>
+          <span class="lbl">{copy.profiles.offTag}</span>
         )}
         <ChevronGlyph />
       </button>
@@ -72,7 +73,7 @@ export function ProfilePicker({
           <div class="pop-h silk">{copy.readout.switcher.title}</div>
           <div class="pop-list">
             {profiles.map((profile) => {
-              const on = profile.enabled;
+              const on = profile.id === activeProfile?.id;
               return (
                 <button
                   type="button"
@@ -105,11 +106,7 @@ export function ProfilePicker({
             })}
           </div>
           {preview !== undefined && (
-            <SwitchPreviewPanel
-              from={enabledProfiles}
-              to={preview}
-              host={host}
-            />
+            <SwitchPreviewPanel from={activeProfile} to={preview} host={host} />
           )}
           <button type="button" class="popt new" onClick={onNewProfile}>
             <PlusGlyph />
@@ -126,7 +123,7 @@ function SwitchPreviewPanel({
   to,
   host,
 }: {
-  from: readonly Profile[];
+  from: Profile | undefined;
   to: Profile;
   host: string | undefined;
 }) {

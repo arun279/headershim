@@ -60,6 +60,7 @@ export function FleetPage({
 
   const fleet = projectFleet({
     profiles: doc.profiles,
+    activeProfileId: doc.activeProfileId,
     grants,
     paused: doc.settings.paused,
   });
@@ -106,8 +107,7 @@ export function FleetPage({
 
   const newRule = () => {
     const target =
-      doc.profiles.find((profile) => profile.id === doc.focusedProfileId) ??
-      doc.profiles.find((profile) => profile.enabled) ??
+      doc.profiles.find((profile) => profile.id === doc.activeProfileId) ??
       doc.profiles[0];
     if (target !== undefined) {
       setEditing({ profileId: target.id, ruleId: undefined });
@@ -160,7 +160,9 @@ export function FleetPage({
     );
   }
 
-  const noProfilesOn = !doc.profiles.some((profile) => profile.enabled);
+  const noProfilesOn = !doc.profiles.some(
+    (profile) => profile.id === doc.activeProfileId,
+  );
   const empty = fleet.length === 0;
 
   return (
@@ -381,9 +383,7 @@ function FleetWhy({
     return (
       <span class="why rest">
         <span class="dot" aria-hidden="true" />
-        {rule.overriddenBy.sameProfile
-          ? text.overriddenHere
-          : copy.readout.overriddenBy(rule.overriddenBy.name)}
+        {copy.readout.overriddenBy(rule.overriddenBy.label)}
       </span>
     );
   }

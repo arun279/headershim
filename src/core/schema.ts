@@ -76,13 +76,12 @@ export function createV1Seed(): StateDoc {
     name: "Default",
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
   });
 
   return {
     v: CURRENT,
     profiles: [profile],
-    focusedProfileId: profile.id,
+    activeProfileId: profile.id,
     nextRuleNum: 1,
     settings: {
       paused: false,
@@ -113,13 +112,13 @@ function isStateDoc(value: unknown): value is StateDoc {
     return false;
   }
 
-  const { v, profiles, focusedProfileId, nextRuleNum, settings } = value;
+  const { v, profiles, activeProfileId, nextRuleNum, settings } = value;
   if (
     v !== CURRENT ||
     !Array.isArray(profiles) ||
     profiles.length === 0 ||
     !profiles.every(isProfile) ||
-    typeof focusedProfileId !== "string" ||
+    (activeProfileId !== undefined && typeof activeProfileId !== "string") ||
     typeof nextRuleNum !== "number" ||
     !Number.isSafeInteger(nextRuleNum) ||
     nextRuleNum < 1 ||
@@ -135,7 +134,6 @@ function isStateDoc(value: unknown): value is StateDoc {
 
   return (
     hasUniqueValues(profileIds) &&
-    profileIds.includes(focusedProfileId) &&
     profiles.every((profile) =>
       isProfileNameAvailable(profiles, profile.name, profile.id),
     ) &&
@@ -150,7 +148,7 @@ function isProfile(value: unknown): value is Profile {
     return false;
   }
 
-  const { id, name, badgeText, color, enabled, rules } = value;
+  const { id, name, badgeText, color, rules } = value;
   return (
     typeof id === "string" &&
     id.length > 0 &&
@@ -159,7 +157,6 @@ function isProfile(value: unknown): value is Profile {
     typeof badgeText === "string" &&
     normalizeBadgeText(badgeText) === badgeText &&
     isOneOf(color, BADGE_COLORS) &&
-    typeof enabled === "boolean" &&
     Array.isArray(rules) &&
     rules.every(isRule)
   );

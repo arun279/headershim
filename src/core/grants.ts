@@ -78,15 +78,16 @@ export function docMissingGrants(
   doc: StateDoc,
   granted: GrantSnapshot,
 ): RuleGrantGap[] {
-  return doc.profiles.flatMap((profile) =>
-    profile.enabled
-      ? profile.rules.flatMap((rule) => {
-          const missing = rule.enabled ? missingGrants(rule, granted) : [];
-          return missing.length === 0
-            ? []
-            : [{ profileId: profile.id, ruleId: rule.id, missing }];
-        })
-      : [],
+  const profile = doc.profiles.find(
+    (candidate) => candidate.id === doc.activeProfileId,
+  );
+  return (
+    profile?.rules.flatMap((rule) => {
+      const missing = rule.enabled ? missingGrants(rule, granted) : [];
+      return missing.length === 0
+        ? []
+        : [{ profileId: profile.id, ruleId: rule.id, missing }];
+    }) ?? []
   );
 }
 
@@ -146,17 +147,15 @@ export function siteAccessView(
       .sort(byDomain),
     initiatorNote:
       !granted.allSites &&
-      doc.profiles.some(
-        (profile) =>
-          profile.enabled &&
-          profile.rules.some(
-            (rule) =>
-              rule.enabled &&
-              rule.initiators.length === 0 &&
-              rule.scope.type !== "all" &&
-              subresourceScopedRule(rule),
-          ),
-      ),
+      doc.profiles
+        .find((profile) => profile.id === doc.activeProfileId)
+        ?.rules.some(
+          (rule) =>
+            rule.enabled &&
+            rule.initiators.length === 0 &&
+            rule.scope.type !== "all" &&
+            subresourceScopedRule(rule),
+        ) === true,
   };
 }
 

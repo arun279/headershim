@@ -1,7 +1,7 @@
 /**
  * The popup's one question, answered as data: what is HeaderShim doing to the
  * tab in front of you, and how live is each change. A pure projection over the
- * enabled profiles, the active host, the grant snapshot, and this-tab overrides
+ * active profile, the active host, the grant snapshot, and this-tab overrides
  * — it renders the same severity ladder core/status already computes, one line
  * at a time, and never invents a state the model does not hold.
  */
@@ -11,7 +11,6 @@ import type { GrantSnapshot } from "../../core/grants";
 import { missingGrants } from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
 import type {
-  BadgeColor,
   Direction,
   HeaderOp,
   Profile,
@@ -28,12 +27,6 @@ type LineStatus =
   | "overridden"
   | "off"
   | "paused";
-
-interface Provenance {
-  readonly name: string;
-  readonly badgeText: string;
-  readonly color: BadgeColor;
-}
 
 export interface TabChange {
   /** Stable key for rendering, focus, and tests. */
@@ -52,14 +45,12 @@ export interface TabChange {
   /** The rule's real on/off, kept through pause so the toggle stays honest. */
   readonly enabled: boolean;
   readonly status: LineStatus;
-  /** The winning profile's name, when this line lost a same-header collision. */
+  /** The winning rule's label, when this line lost a same-header collision. */
   readonly overriddenBy?: string;
   /** Why Chrome refuses this line, when its status is refused. */
   readonly refused?: "host";
   /** Origins to grant, when this line needs access. */
   readonly missing?: readonly string[];
-  /** Provenance, shown only when more than one profile is enabled. */
-  readonly provenance?: Provenance;
 }
 
 export interface TabReadout {
@@ -75,11 +66,10 @@ export interface TabReadout {
   readonly needsAccess: number;
   readonly refused: number;
   readonly overridden: number;
-  readonly multiProfile: boolean;
 }
 
 export interface ReadoutInput {
-  readonly enabledProfiles: readonly Profile[];
+  readonly activeProfile: Profile | undefined;
   readonly host: string | undefined;
   readonly grants: GrantSnapshot;
   readonly overrides: readonly TabOverride[];
@@ -87,13 +77,12 @@ export interface ReadoutInput {
 }
 
 export function computeReadout({
-  enabledProfiles,
+  activeProfile,
   host,
   grants,
   overrides,
   paused,
 }: ReadoutInput): TabReadout {
-  const multiProfile = enabledProfiles.length > 1;
   const overrideLines = overrides.map((override) =>
     overrideChange(override, paused),
   );
@@ -108,14 +97,14 @@ export function computeReadout({
       needsAccess: 0,
       refused: 0,
       overridden: 0,
-      multiProfile,
     };
   }
 
-  // Every enabled rule that reaches this host, in profile then rule order, so
-  // an earlier profile shadows a later one exactly as the compiled ruleset does.
+  // Every rule in the active profile that reaches this host, in precedence
+  // order, so an earlier rule shadows a later one exactly as compilation does.
   const applying: { profile: Profile; rule: Rule }[] = [];
-  for (const profile of enabledProfiles) {
+  if (activeProfile !== undefined) {
+    const profile = activeProfile;
     for (const rule of profile.rules) {
       if (ruleAppliesToHost(rule, host)) {
         applying.push({ profile, rule });
@@ -124,18 +113,16 @@ export function computeReadout({
   }
 
   const overriddenBy = new Map<string, string>();
-  const owner = new Map<string, Profile>();
-  for (const { profile, rule } of applying) {
-    owner.set(rule.id, profile);
+  const rulesById = new Map<string, Rule>();
+  for (const { rule } of applying) {
+    rulesById.set(rule.id, rule);
   }
   for (const { ruleId, shadowedByRuleId } of findOverriddenRules(
-    applying.filter(({ rule }) => rule.enabled).map(({ rule }) => rule),
+    applying.map(({ rule }) => rule),
   )) {
-    const winner = owner.get(shadowedByRuleId);
-    // Only a cross-profile collision reads as "overridden by another profile";
-    // a same-profile shadow is an authoring choice the Workbench surfaces.
-    if (winner !== undefined && winner.id !== owner.get(ruleId)?.id) {
-      overriddenBy.set(ruleId, winner.name);
+    const winner = rulesById.get(shadowedByRuleId);
+    if (winner !== undefined) {
+      overriddenBy.set(ruleId, ruleLabel(winner));
     }
   }
 
@@ -143,7 +130,6 @@ export function computeReadout({
     ruleChange(profile, rule, {
       grants,
       paused,
-      multiProfile,
       overriddenBy: overriddenBy.get(rule.id),
     }),
   );
@@ -152,7 +138,10 @@ export function computeReadout({
   // Swap reads back as the value it just set; otherwise it is the rule itself.
   // Under pause nothing runs and an off token is not live, so neither is a hero.
   const heroable = (change: TabChange) =>
-    !paused && isAuthorizationToken(change) && change.status !== "off";
+    !paused &&
+    isAuthorizationToken(change) &&
+    change.status !== "off" &&
+    change.status !== "overridden";
   const overrideToken = overrideLines.find(heroable);
   const ruleTokenIndex = changes.findIndex(heroable);
   const token =
@@ -170,7 +159,9 @@ export function computeReadout({
     host,
     // "N changes on this tab" counts what is running or trying to; a turned-off
     // line still renders so it can be turned back on, but it is not a change.
-    total: changes.filter((change) => change.status !== "off").length,
+    total: changes.filter(
+      (change) => change.status !== "off" && change.status !== "overridden",
+    ).length,
     request: listed.filter((change) => change.direction === "request"),
     response: listed.filter((change) => change.direction === "response"),
     ...(token === undefined ? {} : { token }),
@@ -178,7 +169,6 @@ export function computeReadout({
     needsAccess: changes.filter((c) => c.status === "needs-access").length,
     refused: changes.filter((c) => c.status === "refused").length,
     overridden: changes.filter((c) => c.status === "overridden").length,
-    multiProfile,
   };
 }
 
@@ -197,7 +187,6 @@ function ruleChange(
   context: {
     grants: GrantSnapshot;
     paused: boolean;
-    multiProfile: boolean;
     overriddenBy: string | undefined;
   },
 ): TabChange {
@@ -233,15 +222,6 @@ function ruleChange(
       : { overriddenBy: context.overriddenBy }),
     ...(status === "needs-access" ? { missing } : {}),
     ...(status === "refused" && refused !== undefined ? { refused } : {}),
-    ...(context.multiProfile
-      ? {
-          provenance: {
-            name: profile.name,
-            badgeText: profile.badgeText,
-            color: profile.color,
-          },
-        }
-      : {}),
   };
 }
 
@@ -311,10 +291,10 @@ export interface SwitchPreview {
 /**
  * What switching profiles would change on this tab, computed before the commit:
  * the biggest silent surprise in any profile tool, turned into a legible local
- * diff. Exclusive by default, so the diff is against every profile now on.
+ * diff. The diff is against the one profile active now.
  */
 export function previewSwitch(
-  from: readonly Profile[],
+  from: Profile | undefined,
   to: Profile,
   host: string | undefined,
 ): SwitchPreview {
@@ -322,8 +302,8 @@ export function previewSwitch(
     return { drops: [], adds: [] };
   }
   const current = new Set<string>();
-  for (const profile of from) {
-    for (const rule of profile.rules) {
+  if (from !== undefined) {
+    for (const rule of from.rules) {
       if (rule.enabled && ruleAppliesToHost(rule, host)) {
         current.add(normalizeHeaderName(rule.header));
       }
@@ -347,8 +327,8 @@ export function previewSwitch(
     }
   }
   const drops: string[] = [];
-  for (const profile of from) {
-    for (const rule of profile.rules) {
+  if (from !== undefined) {
+    for (const rule of from.rules) {
       const key = normalizeHeaderName(rule.header);
       if (
         rule.enabled &&
@@ -361,6 +341,13 @@ export function previewSwitch(
     }
   }
   return { drops, adds };
+}
+
+function ruleLabel(rule: Rule): string {
+  const comment = rule.comment?.trim();
+  return comment === undefined || comment.length === 0
+    ? `${rule.header} rule`
+    : comment;
 }
 
 function ruleAppliesToHost(rule: Rule, host: string): boolean {

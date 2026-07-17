@@ -6,8 +6,8 @@ import {
 } from "../src/core/compile";
 import { docMissingGrants } from "../src/core/grants";
 import {
+  activateProfile,
   type StateDoc,
-  switchToNextProfile,
   type TabOverride,
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
@@ -141,7 +141,7 @@ export default defineBackground(() => {
   async function compilableDoc(doc: StateDoc): Promise<StateDoc> {
     const regexes = new Set<string>();
     for (const profile of doc.profiles) {
-      if (!profile.enabled) {
+      if (profile.id !== doc.activeProfileId) {
         continue;
       }
       for (const rule of profile.rules) {
@@ -278,7 +278,7 @@ export default defineBackground(() => {
       }));
     }
     if (command === "next-profile") {
-      return mutateState(switchToNextProfile);
+      return mutateState(activateNextProfile);
     }
     return undefined;
   }
@@ -292,6 +292,23 @@ export default defineBackground(() => {
     });
   }
 });
+
+function activateNextProfile(doc: StateDoc): StateDoc {
+  const activeIndex = doc.profiles.findIndex(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  for (let step = 1; step <= doc.profiles.length; step += 1) {
+    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
+    if (next === undefined) {
+      continue;
+    }
+    const activated = activateProfile(doc, next.id);
+    if (activated.activeProfileId === next.id) {
+      return activated;
+    }
+  }
+  return doc;
+}
 
 function noop(): void {}
 

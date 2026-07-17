@@ -79,14 +79,15 @@ test("a popup-created profile becomes active without reloading", async ({
   await expect
     .poll(async () => {
       const doc = await readState(serviceWorker);
-      return doc.profiles.find((profile) => profile.id === doc.focusedProfileId)
+      return doc.profiles.find((profile) => profile.id === doc.activeProfileId)
         ?.name;
     })
     .toBe("Staging");
   const doc = await readState(serviceWorker);
   expect(
-    doc.profiles.filter((profile) => profile.enabled).map((p) => p.name),
-  ).toEqual(["Staging"]);
+    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.name,
+  ).toBe("Staging");
+  expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 });
 
 test("the popup theme control updates the current page in place", async ({

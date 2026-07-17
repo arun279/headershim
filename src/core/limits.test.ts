@@ -46,13 +46,12 @@ function rules(
   );
 }
 
-function profile(id: string, profileRules: Rule[], enabled = true): Profile {
+function profile(id: string, profileRules: Rule[]): Profile {
   return {
     id,
     name: id,
     badgeText: id.slice(0, 2),
     color: "blue",
-    enabled,
     rules: profileRules,
   };
 }
@@ -61,18 +60,19 @@ function state(...profiles: Profile[]): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: 10_000,
     settings: { paused: false, theme: "system", badgeMode: "count" },
   };
 }
 
 function enabledRules(doc: StateDoc): Rule[] {
-  return doc.profiles.flatMap((candidateProfile) =>
-    candidateProfile.enabled
-      ? candidateProfile.rules.filter((candidateRule) => candidateRule.enabled)
-      : [],
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
   );
+  return active === undefined
+    ? []
+    : active.rules.filter((rule) => rule.enabled);
 }
 
 function expectBoundary(
@@ -180,14 +180,14 @@ describe("enabled rule limits", () => {
 
   it("checks all rules activated by enabling a profile", () => {
     const atEnabledLimit = state(
-      profile("active", rules(4_000)),
-      profile("activated", rules(500, { start: 4_001 }), false),
+      profile("active", rules(1)),
+      profile("activated", rules(4_500)),
     );
     const activated = atEnabledLimit.profiles[1];
     if (activated === undefined) {
       throw new Error("fixture must contain the profile being enabled");
     }
-    activated.enabled = true;
+    atEnabledLimit.activeProfileId = activated.id;
     expect(checkEnabledRuleLimits(enabledRules(atEnabledLimit)).ok).toBe(true);
     activated.rules.push(storedRule(4_501));
     expect(checkEnabledRuleLimits(enabledRules(atEnabledLimit))).toMatchObject({
@@ -196,18 +196,14 @@ describe("enabled rule limits", () => {
     });
 
     const atRegexLimit = state(
-      profile("active-regex", rules(500, { regexCount: 500 })),
-      profile(
-        "activated-regex",
-        rules(500, { start: 501, regexCount: 500 }),
-        false,
-      ),
+      profile("active-regex", rules(1)),
+      profile("activated-regex", rules(1_000, { regexCount: 1_000 })),
     );
     const activatedRegex = atRegexLimit.profiles[1];
     if (activatedRegex === undefined) {
       throw new Error("fixture must contain the regex profile being enabled");
     }
-    activatedRegex.enabled = true;
+    atRegexLimit.activeProfileId = activatedRegex.id;
     expect(checkEnabledRuleLimits(enabledRules(atRegexLimit)).ok).toBe(true);
     activatedRegex.rules.push(storedRule(1_001, true));
     expect(checkEnabledRuleLimits(enabledRules(atRegexLimit))).toMatchObject({
@@ -217,15 +213,13 @@ describe("enabled rule limits", () => {
   });
 
   it("checks imported profiles when they are enabled", () => {
-    const importedEnabled = state(profile("existing", rules(4_000)));
-    importedEnabled.profiles.push(
-      profile("imported", rules(500, { start: 4_001 }), false),
-    );
+    const importedEnabled = state(profile("existing", rules(1)));
+    importedEnabled.profiles.push(profile("imported", rules(4_500)));
     const importedProfile = importedEnabled.profiles[1];
     if (importedProfile === undefined) {
       throw new Error("fixture must contain the imported profile");
     }
-    importedProfile.enabled = true;
+    importedEnabled.activeProfileId = importedProfile.id;
     expect(checkEnabledRuleLimits(enabledRules(importedEnabled)).ok).toBe(true);
     importedProfile.rules.push(storedRule(4_501));
     expect(checkEnabledRuleLimits(enabledRules(importedEnabled))).toMatchObject(
@@ -235,21 +229,15 @@ describe("enabled rule limits", () => {
       },
     );
 
-    const importedRegex = state(
-      profile("existing-regex", rules(600, { regexCount: 600 })),
-    );
+    const importedRegex = state(profile("existing-regex", rules(1)));
     importedRegex.profiles.push(
-      profile(
-        "imported-regex",
-        rules(400, { start: 601, regexCount: 400 }),
-        false,
-      ),
+      profile("imported-regex", rules(1_000, { regexCount: 1_000 })),
     );
     const importedRegexProfile = importedRegex.profiles[1];
     if (importedRegexProfile === undefined) {
       throw new Error("fixture must contain the imported regex profile");
     }
-    importedRegexProfile.enabled = true;
+    importedRegex.activeProfileId = importedRegexProfile.id;
     expect(checkEnabledRuleLimits(enabledRules(importedRegex)).ok).toBe(true);
     importedRegexProfile.rules.push(storedRule(1_001, true));
     expect(checkEnabledRuleLimits(enabledRules(importedRegex))).toMatchObject({

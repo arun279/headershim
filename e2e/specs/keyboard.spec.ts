@@ -39,7 +39,6 @@ function baseDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
       name: "Default",
       badgeText: "DE",
       color: "indigo",
-      enabled: true,
     }),
     rules: [a, b],
   };
@@ -48,14 +47,13 @@ function baseDoc(over: Partial<StateDoc["settings"]> = {}): StateDoc {
       name: "Local",
       badgeText: "LO",
       color: "teal",
-      enabled: false,
     }),
     rules: [],
   };
   return {
     ...doc,
     profiles: [primary, local],
-    focusedProfileId: primary.id,
+    activeProfileId: primary.id,
     settings: { ...doc.settings, ...over },
   };
 }

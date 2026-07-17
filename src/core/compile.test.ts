@@ -37,22 +37,25 @@ function storedRule(num: number, changes: RuleChanges = {}): Rule {
   };
 }
 
-function profile(id: string, rules: Rule[], enabled = true): Profile {
+function profile(id: string, rules: Rule[]): Profile {
   return {
     id,
     name: id,
     badgeText: id.slice(0, 2),
     color: "blue",
-    enabled,
     rules,
   };
 }
 
-function state(profiles: Profile[], paused = false): StateDoc {
+function state(
+  profiles: Profile[],
+  paused = false,
+  activeProfileId = profiles[0]?.id,
+): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId,
     nextRuleNum: 20_000,
     settings: { paused, theme: "system", badgeMode: "count" },
   };
@@ -162,13 +165,14 @@ describe("dynamic rule compilation", () => {
     ];
 
     for (const arrangement of arrangements) {
-      const expectedIds = arrangement.profiles.flatMap((candidateProfile) =>
-        candidateProfile.enabled
-          ? candidateProfile.rules
-              .filter((rule) => rule.enabled)
-              .map((rule) => rule.num)
-          : [],
-      );
+      const expectedIds =
+        arrangement.profiles
+          .find(
+            (candidateProfile) =>
+              candidateProfile.id === arrangement.activeProfileId,
+          )
+          ?.rules.filter((rule) => rule.enabled)
+          .map((rule) => rule.num) ?? [];
       const compiled = compileDynamic(arrangement);
 
       expect(compiled.map((rule) => rule.id)).toEqual(expectedIds);
@@ -311,7 +315,9 @@ describe("dynamic rule compilation", () => {
       compileDynamic(state([profile("paused", [storedRule(1)])], true)),
     ).toEqual([]);
     expect(
-      compileDynamic(state([profile("profile-off", [storedRule(2)], false)])),
+      compileDynamic(
+        state([profile("profile-off", [storedRule(2)])], false, "missing"),
+      ),
     ).toEqual([]);
     expect(
       compileDynamic(
@@ -386,7 +392,7 @@ describe("dropping uncompilable rules", () => {
     const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
     const doc = state([
       profile("on", [storedRule(1), bad]),
-      profile("off", [storedRule(3, { header: ":authority" })], false),
+      profile("off", [storedRule(3, { header: ":authority" })]),
     ]);
 
     const dropped = dropUncompilable(doc, supportAll);

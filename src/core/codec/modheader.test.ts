@@ -77,8 +77,8 @@ describe("ModHeader import", () => {
       name: "Development",
       badgeText: "DE",
       color: "blue",
-      enabled: false,
     });
+    expect(profile).not.toHaveProperty("enabled");
     expect(nearestBadgeColor("#b03a78")).toBe("magenta");
     expect(nearestBadgeColor("#fff")).toBe("plum");
     expect(nearestBadgeColor(undefined)).toBe("indigo");
@@ -406,13 +406,14 @@ describe("ModHeader import", () => {
       name: "development",
       badgeText: "DE",
       color: "blue",
-      enabled: true,
       rules: [],
     };
 
-    expect(
-      onlyProfile(await importFixture(PROFILE_URL, acceptRegex, [existing])),
-    ).toMatchObject({ name: "Development 2", enabled: false });
+    const imported = onlyProfile(
+      await importFixture(PROFILE_URL, acceptRegex, [existing]),
+    );
+    expect(imported.name).toBe("Development 2");
+    expect(imported).not.toHaveProperty("enabled");
   });
 
   it("detects the format and returns typed errors without partial plans", async () => {

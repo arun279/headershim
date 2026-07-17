@@ -12,14 +12,14 @@ export interface VerifyReadout {
 }
 
 export interface VerifyInput {
-  /** The enabled profiles whose rules Verify reports on. */
+  /** The active profile whose rules Verify reports on. */
   readonly profiles: readonly Profile[];
   /** Decoded matches for the tab; stable-id attribution from `decodeMatches`. */
   readonly matches: readonly DecodedMatch[];
 }
 
 /**
- * Turns decoded matches into the enabled-profile rules that fired and their
+ * Turns decoded matches into the active-profile rules that fired and their
  * tallies. Tallies come from `decodeMatches`, so a deleted rule's retained
  * matches are already dropped and session matches never leak into the
  * profile-rule count.

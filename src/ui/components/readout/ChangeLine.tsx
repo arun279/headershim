@@ -3,7 +3,6 @@ import { copy } from "../../copy";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
 import { OpGlyph } from "./glyphs";
-import { ProfileBadge } from "./ProfileBadge";
 
 interface ChangeLineProps {
   change: TabChange;
@@ -52,13 +51,6 @@ export function ChangeLine({
           />
         ) : (
           <p class="say">
-            {change.provenance !== undefined && (
-              <ProfileBadge
-                text={change.provenance.badgeText}
-                color={change.provenance.color}
-                size={15}
-              />
-            )}
             <span class="verb">{copy.readout.verb[change.operation]}</span>{" "}
             <span class="k">{change.header}</span>
             {change.display !== undefined && (
