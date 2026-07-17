@@ -153,14 +153,40 @@ export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   return { ...doc, activeProfileId: profileId };
 }
 
+export function activateNextProfile(doc: StateDoc): StateDoc {
+  const activeIndex = doc.profiles.findIndex(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  for (let step = 1; step <= doc.profiles.length; step += 1) {
+    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
+    if (next === undefined) {
+      continue;
+    }
+    const activated = activateProfile(doc, next.id);
+    if (activated.activeProfileId === next.id) {
+      return activated;
+    }
+  }
+  return doc;
+}
+
 export function isProfileNameAvailable(
   profiles: readonly Profile[],
   candidate: string,
   excludedProfileId?: string,
 ): boolean {
-  if (candidate.trim().length === 0 || candidate.length > 48) {
-    return false;
-  }
+  return (
+    candidate.length <= 48 &&
+    isStoredProfileNameValid(profiles, candidate, excludedProfileId)
+  );
+}
+
+export function isStoredProfileNameValid(
+  profiles: readonly Profile[],
+  candidate: string,
+  excludedProfileId?: string,
+): boolean {
+  if (candidate.trim().length === 0) return false;
 
   const normalized = candidate.toLowerCase();
   return !profiles.some(

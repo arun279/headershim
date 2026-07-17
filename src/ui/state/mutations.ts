@@ -378,7 +378,12 @@ export function createMutations({ validateRegex }: MutationDeps) {
                   color: "indigo",
                 }),
               ];
-        const next: StateDoc = { ...doc, profiles };
+        const next: StateDoc = {
+          ...doc,
+          profiles,
+          activeProfileId:
+            doc.activeProfileId === profileId ? undefined : doc.activeProfileId,
+        };
         return ok([next, { profile: removed, index }]);
       });
     },

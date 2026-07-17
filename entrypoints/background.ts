@@ -6,7 +6,7 @@ import {
 } from "../src/core/compile";
 import { docMissingGrants } from "../src/core/grants";
 import {
-  activateProfile,
+  activateNextProfile,
   type StateDoc,
   type TabOverride,
 } from "../src/core/model";
@@ -273,23 +273,6 @@ export default defineBackground(() => {
     });
   }
 });
-
-function activateNextProfile(doc: StateDoc): StateDoc {
-  const activeIndex = doc.profiles.findIndex(
-    (profile) => profile.id === doc.activeProfileId,
-  );
-  for (let step = 1; step <= doc.profiles.length; step += 1) {
-    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
-    if (next === undefined) {
-      continue;
-    }
-    const activated = activateProfile(doc, next.id);
-    if (activated.activeProfileId === next.id) {
-      return activated;
-    }
-  }
-  return doc;
-}
 
 function noop(): void {}
 

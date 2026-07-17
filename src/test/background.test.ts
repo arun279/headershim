@@ -427,6 +427,40 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual([]);
   });
 
+  it("preserves a stored document when a profile name exceeds the UI limit", async () => {
+    start();
+    const doc = withRule(createV1Seed(), "x-live");
+    const stored = {
+      ...doc,
+      profiles: doc.profiles.map((profile, index) =>
+        index === 0 ? { ...profile, name: "x".repeat(49) } : profile,
+      ),
+    };
+
+    await writeState(stored);
+    await settle();
+
+    expect(await storedValue("state")).toEqual(stored);
+    expect(await quarantinedValue()).toBeUndefined();
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(stored));
+  });
+
+  it("repairs a dangling active profile id without quarantining the document", async () => {
+    start();
+    const doc = withRule(createV1Seed(), "x-live");
+    const stored = { ...doc, activeProfileId: "missing" };
+
+    await writeState(stored);
+    await settle();
+
+    expect(await storedValue("state")).toEqual({
+      ...stored,
+      activeProfileId: undefined,
+    });
+    expect(await quarantinedValue()).toBeUndefined();
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+  });
+
   it("refuses to write when the store is newer than this build", async () => {
     start();
     const stray: DnrRule = {

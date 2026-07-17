@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activateNextProfile,
   activateProfile,
   allocateRuleNum,
   cloneRule,
@@ -31,6 +32,25 @@ function profile(id: string, name: string): Profile {
     color: "blue",
     rules: [],
   };
+}
+
+function docWith(profiles: Profile[], activeProfileId?: string): StateDoc {
+  return { ...emptyDoc(), profiles, activeProfileId };
+}
+
+function bulkProfile(id: string, name: string, count: number): Profile {
+  return { ...profile(id, name), rules: bulkRules(count) };
+}
+
+function bulkRegexRules(count: number): Rule[] {
+  return bulkRules(count).map((rule) => ({
+    ...rule,
+    scope: {
+      type: "regex",
+      regex: "^https://api\\.example\\.com/",
+      hosts: ["api.example.com"],
+    },
+  }));
 }
 
 const baseDraft: RuleDraft = {
@@ -138,10 +158,6 @@ describe("profile invariants", () => {
 });
 
 describe("activateProfile", () => {
-  function docWith(profiles: Profile[], activeProfileId?: string): StateDoc {
-    return { ...emptyDoc(), profiles, activeProfileId };
-  }
-
   it("represents activation with one foreign key and no per-profile bits", () => {
     const doc = docWith(
       [
@@ -174,10 +190,7 @@ describe("activateProfile", () => {
   });
 
   it("refuses a profile whose enabled rules exceed the live caps", () => {
-    const oversized: Profile = {
-      ...profile("two", "Bulk"),
-      rules: bulkRules(4_501),
-    };
+    const oversized = bulkProfile("two", "Bulk", 4_501);
     const doc = docWith(
       [profile("one", "Default"), oversized, profile("three", "QA")],
       "one",
@@ -190,20 +203,36 @@ describe("activateProfile", () => {
   });
 
   it("refuses a profile whose enabled regex rules exceed the live cap", () => {
-    const regexRules = bulkRules(1_001).map((rule) => ({
-      ...rule,
-      scope: {
-        type: "regex" as const,
-        regex: "^https://api\\.example\\.com/",
-        hosts: ["api.example.com"],
-      },
-    }));
     const doc = docWith(
-      [{ ...profile("one", "Default"), rules: regexRules }],
+      [{ ...profile("one", "Default"), rules: bulkRegexRules(1_001) }],
       "one",
     );
 
     expect(activateProfile(doc, "one")).toBe(doc);
+  });
+});
+
+describe("activateNextProfile", () => {
+  it("skips a profile whose enabled rules exceed the live caps", () => {
+    const oversized = bulkProfile("two", "Bulk", 4_501);
+    const doc = docWith(
+      [profile("one", "Default"), oversized, profile("three", "QA")],
+      "one",
+    );
+
+    const next = activateNextProfile(doc);
+
+    expect(next.activeProfileId).toBe("three");
+    expect(next.profiles).toBe(doc.profiles);
+  });
+
+  it("returns the document unchanged when every candidate exceeds the caps", () => {
+    const doc = docWith(
+      [{ ...profile("one", "Default"), rules: bulkRegexRules(1_001) }],
+      "one",
+    );
+
+    expect(activateNextProfile(doc)).toBe(doc);
   });
 });
 

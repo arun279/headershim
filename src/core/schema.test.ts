@@ -158,13 +158,33 @@ describe("migrate", () => {
     expect(migrate(dark).ok).toBe(true);
   });
 
-  it("accepts no active profile and a dangling active profile id", () => {
+  it("accepts no active profile", () => {
     expect(migrate({ ...validDoc(), activeProfileId: undefined }).ok).toBe(
       true,
     );
-    expect(migrate({ ...validDoc(), activeProfileId: "missing" }).ok).toBe(
-      true,
-    );
+  });
+
+  it("repairs a dangling active profile id to no active profile", () => {
+    const doc = { ...validDoc(), activeProfileId: "missing" };
+    const result = migrate(doc);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { ...doc, activeProfileId: undefined },
+    });
+    if (result.ok) {
+      expect(result.value).not.toBe(doc);
+    }
+  });
+
+  it("preserves a document whose profile name exceeds the write-time limit", () => {
+    const doc = withProfile({ name: "x".repeat(49) });
+    const result = migrate(doc);
+
+    expect(result).toEqual({ ok: true, value: doc });
+    if (result.ok) {
+      expect(result.value).toBe(doc);
+    }
   });
 
   it("returns a corrupt error for unknown and malformed documents", () => {
@@ -194,7 +214,6 @@ describe("migrate", () => {
       withProfile({ id: "" }),
       withProfile({ name: null }),
       withProfile({ name: " " }),
-      withProfile({ name: "x".repeat(49) }),
       withProfile({ badgeText: null }),
       withProfile({ badgeText: "ABC" }),
       withProfile({ color: "amber" }),

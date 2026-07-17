@@ -507,14 +507,30 @@ describe("profile operations", () => {
     ).toBe(true);
   });
 
-  it("deleting the active profile leaves a fail-closed dangling id", async () => {
+  it("clears activation when deleting the active profile", async () => {
     await seed([profile("p1"), profile("p2"), profile("p3")], {
       activeProfileId: "p1",
     });
 
     const deleted = await mutations.deleteProfile("p1");
     expect(deleted.ok && deleted.value.index).toBe(0);
-    expect((await read()).activeProfileId).toBe("p1");
+    expect((await read()).activeProfileId).toBeUndefined();
+  });
+
+  it("keeps activation cleared when restoring the deleted active profile", async () => {
+    await seed([profile("p1"), profile("p2")], {
+      activeProfileId: "p1",
+    });
+
+    const deleted = await mutations.deleteProfile("p1");
+    if (!deleted.ok) {
+      throw new Error("fixture profile must be deletable");
+    }
+    await mutations.restoreProfile(deleted.value.profile, deleted.value.index);
+
+    const stored = await read();
+    expect(stored.profiles.map((candidate) => candidate.id)).toContain("p1");
+    expect(stored.activeProfileId).toBeUndefined();
   });
 
   it("recreates an inactive Default when the last profile is deleted", async () => {
@@ -528,7 +544,7 @@ describe("profile operations", () => {
       badgeText: "DE",
       rules: [],
     });
-    expect(stored.activeProfileId).toBe("p1");
+    expect(stored.activeProfileId).toBeUndefined();
     expect(stored.profiles[0]).not.toHaveProperty("enabled");
   });
 

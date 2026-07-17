@@ -318,6 +318,15 @@ describe("findOverriddenRules", () => {
     ).toEqual([]);
   });
 
+  it("filters disabled rules before they can shadow a later enabled rule", () => {
+    expect(
+      findOverriddenRules([
+        rule("rule-1", { type: "all" }, { enabled: false }),
+        rule("rule-2", { type: "all" }),
+      ]),
+    ).toEqual([]);
+  });
+
   it("reports the earliest qualifying rule above each overridden rule", () => {
     expect(
       findOverriddenRules([

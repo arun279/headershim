@@ -1,6 +1,6 @@
 import {
   createProfile,
-  isProfileNameAvailable,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type Rule,
@@ -68,7 +68,18 @@ export function migrate(doc: unknown): Result<StateDoc, MigrationError> {
   }
   /* v8 ignore stop */
 
-  return isStateDoc(migrated) ? ok(migrated) : err({ kind: "corrupt" });
+  if (!isStateDoc(migrated)) {
+    return err({ kind: "corrupt" });
+  }
+
+  const { activeProfileId } = migrated;
+  if (
+    activeProfileId !== undefined &&
+    !migrated.profiles.some((profile) => profile.id === activeProfileId)
+  ) {
+    return ok({ ...migrated, activeProfileId: undefined });
+  }
+  return ok(migrated);
 }
 
 export function createV1Seed(): StateDoc {
@@ -135,7 +146,7 @@ function isStateDoc(value: unknown): value is StateDoc {
   return (
     hasUniqueValues(profileIds) &&
     profiles.every((profile) =>
-      isProfileNameAvailable(profiles, profile.name, profile.id),
+      isStoredProfileNameValid(profiles, profile.name, profile.id),
     ) &&
     hasUniqueValues(ruleIds) &&
     hasUniqueValues(ruleNums) &&
@@ -153,7 +164,7 @@ function isProfile(value: unknown): value is Profile {
     typeof id === "string" &&
     id.length > 0 &&
     typeof name === "string" &&
-    isProfileNameAvailable([], name) &&
+    isStoredProfileNameValid([], name) &&
     typeof badgeText === "string" &&
     normalizeBadgeText(badgeText) === badgeText &&
     isOneOf(color, BADGE_COLORS) &&
