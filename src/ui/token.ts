@@ -6,7 +6,7 @@
  * an opaque token reports only that it has no expiry to read.
  */
 
-const SCHEME = /^(basic|bearer|digest|negotiate)\s+/i;
+export const SCHEME = /^(basic|bearer|digest|negotiate)\s+/i;
 
 export interface MaskedToken {
   /** The auth scheme word shown in muted ink, when the value carries one. */

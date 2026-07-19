@@ -57,7 +57,7 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/glyphs-*.js",
+      "path": ".output/chrome-mv3/chunks/readout-*.js",
       "limit": "15 kB"
     },
     {
@@ -71,10 +71,10 @@
         ".output/chrome-mv3/options.html",
         ".output/chrome-mv3/theme-bootstrap.js",
         ".output/chrome-mv3/chunks/options-*.js",
-        ".output/chrome-mv3/chunks/glyphs-*.js",
+        ".output/chrome-mv3/chunks/readout-*.js",
         ".output/chrome-mv3/chunks/commit-copy-*.js",
         ".output/chrome-mv3/chunks/headers-*.js",
-        ".output/chrome-mv3/assets/glyphs-*.css",
+        ".output/chrome-mv3/assets/readout-*.css",
         ".output/chrome-mv3/assets/commit-copy-*.css",
         ".output/chrome-mv3/assets/options-*.css"
       ],

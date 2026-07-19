@@ -14,7 +14,10 @@ import {
 } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
-import { CheckGlyph, TriangleGlyph } from "../../../src/ui/components/glyphs";
+import {
+  CheckGlyph,
+  TriangleGlyph,
+} from "../../../src/ui/components/readout/glyphs";
 import { Truncate } from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
 import "./SiteAccess.css";

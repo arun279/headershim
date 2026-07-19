@@ -52,6 +52,16 @@ function openCard(root: HTMLElement, index: number): void {
   );
 }
 
+async function openBadgeText(badgeText: string): Promise<{
+  root: HTMLElement;
+  input: HTMLInputElement;
+}> {
+  await seed([profile("p1", { name: "Default", badgeText })]);
+  const root = await mount();
+  openCard(root, 0);
+  return { root, input: within(root, ".badge-text-input") as HTMLInputElement };
+}
+
 function within(root: HTMLElement, selector: string): HTMLElement {
   const el = root.querySelector<HTMLElement>(selector);
   if (el === null) {
@@ -388,15 +398,22 @@ describe("badge editor", () => {
   });
 
   it("commits badge text on Enter", async () => {
-    await seed([profile("p1", { name: "Default", badgeText: "DE" })]);
-    const root = await mount();
-    openCard(root, 0);
-
-    const input = within(root, ".badge-text-input") as HTMLInputElement;
+    const { input } = await openBadgeText("DE");
     typeInto(input, "QA");
     press(input, "Enter");
     await settle();
 
     expect((await read()).profiles[0]?.badgeText).toBe("QA");
+  });
+
+  it("clamps badge text to two grapheme clusters while typing", async () => {
+    const { root, input } = await openBadgeText("DE");
+    typeInto(input, "🇺🇸USA");
+
+    expect(input.value).toBe("🇺🇸U");
+    expect(within(root, ".badge-preview").textContent).toBe("🇺🇸U");
+    press(input, "Enter");
+    await settle();
+    expect((await read()).profiles[0]?.badgeText).toBe("🇺🇸U");
   });
 });

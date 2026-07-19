@@ -2,7 +2,10 @@ import type { GrantSnapshot } from "../../../src/core/grants";
 import type { StateDoc } from "../../../src/core/model";
 import type { SystemStatus } from "../../../src/core/status";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
-import { OpGlyph } from "../../../src/ui/components/readout/glyphs";
+import {
+  OpGlyph,
+  StatusGlyph,
+} from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
 import {
   TRUNCATION_LIMITS,
@@ -116,46 +119,4 @@ function statusLabel(row: TapeRow): string {
     case "paused":
       return text.status.paused;
   }
-}
-
-function StatusGlyph({ status }: { status: TapeRow["status"] }) {
-  if (status === "refused" || status === "out-of-sync") {
-    return (
-      <svg
-        viewBox="0 0 12 12"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        aria-hidden="true"
-      >
-        <path d="M3 3l6 6m0-6l-6 6" />
-      </svg>
-    );
-  }
-  if (status === "paused") {
-    return (
-      <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-        <rect x="3" y="2.5" width="2" height="7" rx="0.6" />
-        <rect x="7" y="2.5" width="2" height="7" rx="0.6" />
-      </svg>
-    );
-  }
-  if (status === "needs-access" || status === "managed") {
-    return (
-      <svg
-        viewBox="0 0 12 12"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        aria-hidden="true"
-      >
-        <circle cx="6" cy="6" r="4" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-      <circle cx="6" cy="6" r="4" />
-    </svg>
-  );
 }

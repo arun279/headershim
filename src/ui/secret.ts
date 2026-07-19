@@ -9,6 +9,7 @@
 import { isSecretHeader } from "../core/headers";
 import type { Rule } from "../core/model";
 import { copy } from "./copy";
+import { SCHEME } from "./token";
 
 export { isSecretHeader };
 
@@ -21,7 +22,7 @@ export function headerValueSummary(
   if (value === undefined || value === "" || !isSecretHeader(header)) {
     return value;
   }
-  const scheme = /^(basic|bearer|digest|negotiate)\s+/i.exec(value)?.[1];
+  const scheme = SCHEME.exec(value)?.[1];
   return scheme === undefined
     ? copy.rules.redacted
     : `${scheme} ${copy.rules.redacted}`;

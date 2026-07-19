@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { BADGE_PALETTE } from "../core/badge";
+import { BADGE_COLORS } from "../core/model";
 
 // The readout's whole claim to WCAG AA rides on these token values: text pairs
 // must clear 4.5:1 and graphical/UI pairs 3:1, in both themes. axe checks
@@ -138,6 +140,16 @@ describe("the accent, doubled and reserved", () => {
     );
     expect(toggleCss).toMatch(
       /\.sw\.sw-paused\[aria-checked="true"\]::before\s*\{[^}]*background:\s*var\(--amber\)/s,
+    );
+  });
+});
+
+describe("profile badge palette", () => {
+  it.each(
+    BADGE_COLORS,
+  )("keeps --badge-%s aligned with the core palette", (color) => {
+    expect(resolve(ROOT, `badge-${color}`).toLowerCase()).toBe(
+      BADGE_PALETTE[color].toLowerCase(),
     );
   });
 });
