@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/popup/App";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
+import { setReconcileError } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import { fire, press, render, settle, typeInto } from "../ui/test/render";
@@ -134,6 +135,65 @@ describe("popup readout", () => {
     expect(line.querySelector('[aria-label="Turn off: x-env"]')).not.toBeNull();
     // A live line adds no reason.
     expect(line.querySelector(".why")).toBeNull();
+  });
+
+  it("shows a hollow doubt lamp when any counted line is unconfirmed", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule(),
+        rule({
+          id: "rule-2",
+          num: 2,
+          header: "x-debug",
+          scope: {
+            type: "pattern",
+            pattern: "||api.example.com^",
+            hosts: ["api.example.com"],
+          },
+        }),
+      ]),
+      true,
+    );
+    expect(root.querySelector(".change-line.unconfirmed")).not.toBeNull();
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "2 changes on this tab",
+    );
+    expect(root.querySelector(".lamp.doubt")).not.toBeNull();
+    expect(root.querySelector(".lamp.live")).toBeNull();
+  });
+
+  it("renders a network-managed line as managed, never live or counted", async () => {
+    const { root } = await mount(
+      seededDoc([rule({ header: "connection", value: "keep-alive" })]),
+      true,
+    );
+    const line = root.querySelector(".change-line") as HTMLElement;
+    expect(line.classList.contains("managed")).toBe(true);
+    expect(line.classList.contains("live")).toBe(false);
+    expect(line.querySelector(".why.amber")?.textContent).toContain(
+      copy.readout.managedReason,
+    );
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "0 changes on this tab",
+    );
+    expect(root.querySelector(".substatus .amber")?.textContent).toBe(
+      "1 managed by Chrome",
+    );
+    expect(root.querySelector(".lamp.warn")).not.toBeNull();
+    expect(line.querySelector('[role="switch"]')?.className).toBe(
+      "sw sw-inert",
+    );
+  });
+
+  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+    await setReconcileError(true);
+    const { root } = await mount(seededDoc([rule()]), true);
+    const toggle = root.querySelector(
+      '.change-line.out-of-sync [role="switch"]',
+    );
+    expect(toggle?.getAttribute("aria-checked")).toBe("true");
+    expect(toggle?.className).toBe("sw sw-inert");
+    expect(toggle?.className).not.toBe("sw");
   });
 
   it("renders generated metadata in place of an absent literal value", async () => {
@@ -321,6 +381,7 @@ describe("popup readout", () => {
       "1 needs access",
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
+    expect(status().textContent).toBe("0 changes on this tab");
     const grant = root.querySelector(
       ".change-line .grant",
     ) as HTMLButtonElement;
@@ -351,6 +412,9 @@ describe("popup readout", () => {
     );
     expect(root.querySelector(".substatus .stop")?.textContent).toBe(
       "1 refused by Chrome",
+    );
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "0 changes on this tab",
     );
   });
 

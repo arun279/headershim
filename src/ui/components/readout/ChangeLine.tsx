@@ -16,9 +16,9 @@ interface ChangeLineProps {
 
 /**
  * One change, in the one grammar: a severity spine (teal live, amber a grant
- * away or not applied yet, red refused, faint where only Chrome can settle the
- * match, grey-dashed at rest), the operation glyph, and the wire bytes. A live
- * line is silent; only an exception adds a reason, said once.
+ * away, managed, or not applied yet, red refused, faint where only Chrome can
+ * settle the match, grey-dashed at rest), the operation glyph, and the wire
+ * bytes. A live line is silent; only an exception adds a reason, said once.
  */
 export function ChangeLine({
   change,
@@ -89,6 +89,12 @@ export function ChangeLine({
           <p class="why stop">
             <span class="dot" aria-hidden="true" />
             {copy.readout.refusedReason[change.refused]}
+          </p>
+        )}
+        {change.status === "managed" && (
+          <p class="why amber">
+            <span class="dot" aria-hidden="true" />
+            {copy.readout.managedReason}
           </p>
         )}
         {change.status === "out-of-sync" && (

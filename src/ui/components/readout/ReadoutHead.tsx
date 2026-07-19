@@ -31,7 +31,11 @@ export function ReadoutHead({
   onNewProfile,
 }: ReadoutHeadProps) {
   const attention =
-    readout.needsAccess > 0 || readout.refused > 0 || readout.outOfSync > 0;
+    readout.needsAccess > 0 ||
+    readout.refused > 0 ||
+    readout.managed > 0 ||
+    readout.outOfSync > 0;
+  const doubt = readout.unconfirmed > 0;
   const showGlance = readout.host !== undefined && hasRows && !paused;
 
   return (
@@ -60,9 +64,9 @@ export function ReadoutHead({
       {showGlance && (
         <div class="glance-wrap">
           <div class="glance">
-            {readout.total > 0 && (
+            {(readout.total > 0 || attention || doubt) && (
               <span
-                class={`lamp ${attention ? "warn" : "live"}`}
+                class={`lamp ${attention ? "warn" : doubt ? "doubt" : "live"}`}
                 aria-hidden="true"
               />
             )}
@@ -70,6 +74,7 @@ export function ReadoutHead({
           </div>
           {(readout.needsAccess > 0 ||
             readout.refused > 0 ||
+            readout.managed > 0 ||
             readout.outOfSync > 0 ||
             readout.unconfirmed > 0 ||
             readout.overridden > 0) && (
@@ -87,6 +92,11 @@ export function ReadoutHead({
               {readout.refused > 0 && (
                 <span class="seg stop">
                   {copy.readout.refused(readout.refused)}
+                </span>
+              )}
+              {readout.managed > 0 && (
+                <span class="seg amber">
+                  {copy.readout.managed(readout.managed)}
                 </span>
               )}
               {readout.unconfirmed > 0 && (

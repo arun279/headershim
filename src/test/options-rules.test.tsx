@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import type { Profile } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
+import { setReconcileError } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
 import { copy } from "../ui/copy";
@@ -73,6 +74,10 @@ async function seedOneOfEachSeverity(): Promise<void> {
           header: "host",
           scope: { type: "domains", domains: ["api.example.com"] },
         }),
+        rule({
+          header: "connection",
+          scope: { type: "domains", domains: ["api.example.com"] },
+        }),
       ],
     }),
   ]);
@@ -92,10 +97,13 @@ describe("all rules", () => {
     expect(hosts).toContain("api.example.com");
     expect(hosts).toContain("other.example.com");
 
-    // A granted rule is live; the Host rule is refused; the ungranted rule needs
-    // access and offers a Grant.
+    // A granted rule is live; the Host rule is refused; the managed rule is
+    // inert; the ungranted rule needs access and offers a Grant.
     expect(root.querySelector(".fleet-row.live")).not.toBeNull();
     expect(root.querySelector(".fleet-row.refused")).not.toBeNull();
+    expect(
+      root.querySelector(".fleet-row.managed .why")?.textContent,
+    ).toContain(copy.readout.managedReason);
     const blocked = within(root, ".fleet-row.needs-access");
     expect(blocked.querySelector(".grant")?.textContent).toBe(
       copy.readout.grant,
@@ -110,13 +118,27 @@ describe("all rules", () => {
     // rule wearing the live hue contradicts the reason printed beside it.
     const live = within(root, '.fleet-row.live [role="switch"]');
     const refused = within(root, '.fleet-row.refused [role="switch"]');
+    const managed = within(root, '.fleet-row.managed [role="switch"]');
     const needsAccess = within(root, '.fleet-row.needs-access [role="switch"]');
     expect(live.getAttribute("aria-checked")).toBe("true");
     expect(refused.getAttribute("aria-checked")).toBe("true");
+    expect(managed.getAttribute("aria-checked")).toBe("true");
     expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
+    expect(managed.className).toBe("sw sw-inert");
     expect(needsAccess.className).toBe("sw sw-inert");
+  });
+
+  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+    await seed(oneRule());
+    await setReconcileError(true);
+    const root = await mount();
+
+    const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.className).toBe("sw sw-inert");
+    expect(toggle.className).not.toBe("sw");
   });
 
   it("keeps the running tone off a configured-on rule in an off profile", async () => {
@@ -361,6 +383,7 @@ describe("configured changes", () => {
             header: "host",
             scope: { type: "domains", domains: ["api.example.com"] },
           }),
+          rule({ header: "connection", scope: { type: "all" } }),
           rule({ header: "x-off", enabled: false }),
         ],
       }),
@@ -371,9 +394,13 @@ describe("configured changes", () => {
       copy.options.traffic.title,
     );
     const rows = [...root.querySelectorAll(".tape-row")];
-    expect(rows.length).toBe(2);
+    expect(rows.length).toBe(3);
     expect(root.querySelector(".tape-row.refused")).not.toBeNull();
+    expect(root.querySelector(".tape-row.managed")).not.toBeNull();
     expect(root.querySelector(".tape-row.live")).not.toBeNull();
+    expect(
+      root.querySelector(".tape-row.managed .tape-status")?.textContent,
+    ).toBe(copy.options.traffic.status.managed);
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
   });

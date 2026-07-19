@@ -103,6 +103,42 @@ describe("projectFleet status ladder", () => {
     expect(byKey(fleet, "p1:r").refused).toBe("host");
   });
 
+  it("marks a network-managed rule managed rather than live", () => {
+    const fleet = projectFleet({
+      profiles: [profile({ rules: [rule({ id: "r", header: "connection" })] })],
+      grants: ALL,
+      status: LIVE,
+    });
+    expect(byKey(fleet, "p1:r").status).toBe("managed");
+  });
+
+  it("lets compiler refusal outrank network-managed classification", () => {
+    const fleet = projectFleet({
+      profiles: [
+        profile({
+          rules: [
+            rule({
+              id: "r",
+              operation: "append",
+              header: "content-length",
+            }),
+          ],
+        }),
+      ],
+      grants: ALL,
+      status: LIVE,
+    });
+    const entry = byKey(fleet, "p1:r");
+    expect(entry.status).toBe("refused");
+    expect(entry.refused).toBe("append");
+    expect(fleet.filter((rule) => rule.status === "managed")).toHaveLength(0);
+    expect(
+      fleet.filter(
+        (rule) => rule.status === "live" || rule.status === "unconfirmed",
+      ),
+    ).toHaveLength(0);
+  });
+
   it("never reads live while Chrome has not taken the ruleset", () => {
     const fleet = projectFleet({
       profiles: [profile({ rules: [rule({ id: "r" })] })],
@@ -373,6 +409,7 @@ describe("tapeRows", () => {
             }),
             rule({ id: "off", enabled: false }),
             rule({ id: "host", header: "host" }),
+            rule({ id: "managed", header: "connection" }),
           ],
         }),
       ],
@@ -383,9 +420,10 @@ describe("tapeRows", () => {
     const statuses = rows.map((row) => row.status);
     expect(statuses).toContain("live");
     expect(statuses).toContain("refused");
+    expect(statuses).toContain("managed");
     expect(rows.some((row) => row.header === "host")).toBe(true);
     // The off rule is not traffic and never reaches the tape.
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     // Refused sorts ahead of live.
     expect(rows[0]?.status).toBe("refused");
   });

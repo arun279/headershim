@@ -501,6 +501,14 @@ function FleetWhy({
       </span>
     );
   }
+  if (rule.status === "managed") {
+    return (
+      <span class="why amber">
+        <span class="dot" aria-hidden="true" />
+        {copy.readout.managedReason}
+      </span>
+    );
+  }
   if (rule.status === "out-of-sync") {
     return (
       <span class="why amber">

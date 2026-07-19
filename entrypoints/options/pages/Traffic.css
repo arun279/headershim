@@ -43,6 +43,9 @@
 .tape-row.needs-access .tape-mark {
   color: var(--amber);
 }
+.tape-row.managed .tape-mark {
+  color: var(--amber);
+}
 .tape-row.refused .tape-mark {
   color: var(--stop);
 }
@@ -96,6 +99,9 @@
   color: var(--live-ink);
 }
 .tape-row.needs-access .tape-status {
+  color: var(--amber);
+}
+.tape-row.managed .tape-status {
   color: var(--amber);
 }
 .tape-row.refused .tape-status {

@@ -3,11 +3,11 @@
  * the same severity ladder the popup readout uses, then grouped two ways. "By
  * site" answers "what does HeaderShim do to this domain"; "by header" answers
  * "where does this one header reach" and is the home for cross-site rules. The
- * traffic receipt is the same projection flattened to the stamps actually live,
+ * traffic receipt is the same projection flattened to the stamps live, managed,
  * skipped, or refused right now. Nothing here recomputes match behavior: the
  * severity ladder, the refused classifier and the per-request test are the same
- * ones the popup readout reads, so a rule cannot carry one state here and
- * another there.
+ * ones the popup readout reads, so a rule cannot carry one state here and another
+ * there.
  */
 
 import { dropUncompilable, settlesPerRequest } from "../../core/compile";
@@ -25,6 +25,7 @@ import type {
 import type { SystemStatus } from "../../core/status";
 import { isSecretHeader, ruleValueSummary } from "../secret";
 import {
+  isNetworkManagedHeader,
   type LineStatus,
   lineStatus,
   type RefusedReason,
@@ -151,6 +152,7 @@ function fleetRule(
     outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
+    managed: isNetworkManagedHeader(rule.header),
     needsAccess: missing.length > 0,
     perRequest: settlesPerRequest(rule),
   });
@@ -309,25 +311,26 @@ export interface TapeRow {
   readonly header: string;
   readonly secret: boolean;
   readonly provenance: FleetProvenance;
-  /** Only the states that describe live traffic reach the tape. */
+  /** Only enabled active-profile states reach the tape. */
   readonly status: Exclude<LineStatus, "off" | "overridden">;
   readonly refused?: RefusedReason;
 }
 
 const TAPE_ORDER: Record<TapeRow["status"], number> = {
   refused: 0,
-  "out-of-sync": 1,
-  "needs-access": 2,
-  unconfirmed: 3,
-  live: 4,
-  paused: 5,
+  managed: 1,
+  "out-of-sync": 2,
+  "needs-access": 3,
+  unconfirmed: 4,
+  live: 5,
+  paused: 6,
 };
 
 /**
  * The receipt: every stamp HeaderShim is set to apply right now, grouped by the
- * site it lands on, plus the ones it is skipping (ungranted) or Chrome refuses.
- * Off rules are not traffic and never appear; values are never carried, so a
- * secret is categorically absent from the record.
+ * site it lands on, plus the ones it is skipping, Chrome manages, or Chrome
+ * refuses. Off rules are not traffic and never appear; values are never carried,
+ * so a secret is categorically absent from the record.
  */
 export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
   const rows: TapeRow[] = [];

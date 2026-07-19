@@ -145,6 +145,51 @@ describe("computeReadout", () => {
     expect(readout.request[0]?.status).toBe("needs-access");
     expect(readout.request[0]?.missing).toEqual(["*://*.api.example.com/*"]);
     expect(readout.needsAccess).toBe(1);
+    expect(readout.total).toBe(0);
+  });
+
+  it.each([
+    ["request", "connection"],
+    ["response", "content-length"],
+  ] as const)("marks a %s network-managed header managed and uncounted", (direction, header) => {
+    const readout = computeReadout({
+      ...base,
+      activeProfile: profile({ rules: [rule({ direction, header })] }),
+    });
+    const line = [...readout.request, ...readout.response][0];
+    expect(line?.status).toBe("managed");
+    expect(readout.managed).toBe(1);
+    expect(readout.total).toBe(0);
+  });
+
+  it("lets compiler refusal outrank network-managed classification", () => {
+    const readout = computeReadout({
+      ...base,
+      activeProfile: profile({
+        rules: [
+          rule({
+            operation: "append",
+            header: "content-length",
+          }),
+        ],
+      }),
+    });
+    expect(readout.request[0]?.status).toBe("refused");
+    expect(readout.request[0]?.refused).toBe("append");
+    expect(readout.refused).toBe(1);
+    expect(readout.managed).toBe(0);
+    expect(readout.total).toBe(0);
+  });
+
+  it("marks a network-managed this-tab override managed and uncounted", () => {
+    const readout = computeReadout({
+      ...base,
+      activeProfile: undefined,
+      overrides: [override({ header: "connection" })],
+    });
+    expect(readout.overrides[0]?.status).toBe("managed");
+    expect(readout.managed).toBe(1);
+    expect(readout.total).toBe(0);
   });
 
   it("marks a Host rule refused, honestly and enabled", () => {
@@ -157,6 +202,7 @@ describe("computeReadout", () => {
     expect(readout.request[0]?.status).toBe("refused");
     expect(readout.request[0]?.refused).toBe("host");
     expect(readout.refused).toBe(1);
+    expect(readout.total).toBe(0);
   });
 
   it("marks a same-profile collision overridden using the shared primitive", () => {
@@ -254,6 +300,7 @@ describe("computeReadout", () => {
     });
     expect(readout.request[0]?.status).toBe("out-of-sync");
     expect(readout.outOfSync).toBe(1);
+    expect(readout.total).toBe(0);
     // The hero is the loudest live claim in the popup; it may not be made.
     expect(readout.token).toBeUndefined();
   });
@@ -277,6 +324,7 @@ describe("computeReadout", () => {
     // this projection cannot evaluate it.
     expect(readout.request[0]?.status).toBe("unconfirmed");
     expect(readout.unconfirmed).toBe(1);
+    expect(readout.total).toBe(1);
   });
 
   it("declines to claim a regex rule matches this tab, however broad its grant", () => {
@@ -342,6 +390,7 @@ describe("computeReadout", () => {
     expect(line?.status).toBe("refused");
     expect(line?.refused).toBe(reason);
     expect(readout.refused).toBe(1);
+    expect(readout.total).toBe(0);
   });
 
   it("lifts a this-tab authorization swap into the token, out of the strip", () => {
@@ -357,14 +406,14 @@ describe("computeReadout", () => {
     expect(readout.overrides.map((o) => o.overrideNum)).toEqual([8]);
   });
 
-  it("counts an override-only reconcile failure in the summary", () => {
+  it("excludes an override-only reconcile failure from the headline", () => {
     const readout = computeReadout({
       ...base,
       activeProfile: undefined,
       overrides: [override()],
       status: OUT_OF_SYNC,
     });
-    expect(readout.total).toBe(1);
+    expect(readout.total).toBe(0);
     expect(readout.outOfSync).toBe(1);
   });
 });

@@ -40,6 +40,7 @@ export type LineStatus =
   | "unconfirmed"
   | "needs-access"
   | "refused"
+  | "managed"
   | "overridden"
   | "out-of-sync"
   | "off"
@@ -90,6 +91,7 @@ export interface TabReadout {
   readonly overrides: readonly TabChange[];
   readonly needsAccess: number;
   readonly refused: number;
+  readonly managed: number;
   readonly overridden: number;
   /** Lines only Chrome can settle, counted so the head can own the doubt. */
   readonly unconfirmed: number;
@@ -209,6 +211,7 @@ type ReadoutSummary = Pick<
   | "total"
   | "needsAccess"
   | "refused"
+  | "managed"
   | "overridden"
   | "unconfirmed"
   | "outOfSync"
@@ -217,10 +220,11 @@ type ReadoutSummary = Pick<
 function summarize(changes: readonly TabChange[]): ReadoutSummary {
   return {
     total: changes.filter(
-      (change) => change.status !== "off" && change.status !== "overridden",
+      (change) => change.status === "live" || change.status === "unconfirmed",
     ).length,
     needsAccess: changes.filter((c) => c.status === "needs-access").length,
     refused: changes.filter((c) => c.status === "refused").length,
+    managed: changes.filter((c) => c.status === "managed").length,
     overridden: changes.filter((c) => c.status === "overridden").length,
     unconfirmed: changes.filter((c) => c.status === "unconfirmed").length,
     outOfSync: changes.filter((c) => c.status === "out-of-sync").length,
@@ -267,6 +271,7 @@ function ruleChange(
     outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
+    managed: isNetworkManagedHeader(rule.header),
     needsAccess: missing.length > 0,
     perRequest: context.reach === "unknown",
   });
@@ -308,6 +313,7 @@ function overrideChange(
     outOfSync,
     overridden: false,
     refused: false,
+    managed: isNetworkManagedHeader(override.header),
     needsAccess: false,
     perRequest: false,
   });
@@ -341,6 +347,7 @@ export function lineStatus(flags: {
   outOfSync: boolean;
   overridden: boolean;
   refused: boolean;
+  managed: boolean;
   needsAccess: boolean;
   perRequest: boolean;
 }): LineStatus {
@@ -353,14 +360,21 @@ export function lineStatus(flags: {
   if (flags.outOfSync) return "out-of-sync";
   if (flags.overridden) return "overridden";
   if (flags.refused) return "refused";
+  if (flags.managed) return "managed";
   if (flags.needsAccess) return "needs-access";
   if (flags.perRequest) return "unconfirmed";
   return "live";
 }
 
+export function isNetworkManagedHeader(header: string): boolean {
+  return classifyHeaderName(header).advisories.some(
+    (advisory) => advisory.kind === "network-managed",
+  );
+}
+
 /**
- * Why Chrome will not run this rule, or undefined when it will. The Host header
- * is the classifier's case: extensions cannot change the authority on the
+ * Why Chrome refuses this rule, or undefined when it accepts it. The Host
+ * header is the classifier's case: extensions cannot change the authority on the
  * HTTP/2 connections most sites use, so the rule is enabled yet refused. Every
  * other reason is the compiler's own, read from the gate that actually drops
  * the rule, so a line can never claim to run something Chrome never received.

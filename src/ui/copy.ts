@@ -29,6 +29,8 @@ const rules = (n: number) => (n === 1 ? "rule" : "rules");
 const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 const changes = (n: number) => (n === 1 ? "change" : "changes");
 const sites = (n: number) => (n === 1 ? "site" : "sites");
+const managedHeader =
+  "Chrome's network stack manages this header itself; a rule here usually has no effect.";
 
 /** "5h 18m" / "8m" / "3d 4h", the coarsest two units that stay honest. */
 function duration(ms: number): string {
@@ -60,6 +62,8 @@ export const copy = {
     needsAccess: (count: number) => `${count} needs access`,
     refused: (count: number) =>
       count === 1 ? "1 refused by Chrome" : `${count} refused by Chrome`,
+    managed: (count: number) =>
+      count === 1 ? "1 managed by Chrome" : `${count} managed by Chrome`,
     overridden: (count: number) =>
       count === 1
         ? "1 overridden by another rule"
@@ -80,6 +84,7 @@ export const copy = {
       regex: "Chrome won't accept this regular expression",
       domains: "Chrome won't accept this rule's sites",
     },
+    managedReason: managedHeader,
     // A rule whose match Chrome settles per request, against a URL this popup
     // never sees. Saying "live" here would draw a fact it cannot know.
     unconfirmedReason: "Only Chrome can tell whether this matches here",
@@ -241,6 +246,7 @@ export const copy = {
         unconfirmed: "only Chrome can say",
         needsAccess: "not granted",
         refused: "refused by Chrome",
+        managed: "managed by Chrome",
         outOfSync: "not applied yet",
         paused: "paused",
       },
@@ -668,8 +674,7 @@ export const copy = {
   },
 
   advisories: {
-    managedHeader:
-      "Chrome's network stack manages this header itself; a rule here usually has no effect.",
+    managedHeader,
     host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
     credential:
       "This header carries a credential. Everything this rule reaches will be sent it, so keep the scope as narrow as the job needs.",

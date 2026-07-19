@@ -83,6 +83,7 @@
   background: var(--live);
 }
 .fleet-row.needs-access .spine,
+.fleet-row.managed .spine,
 .fleet-row.out-of-sync .spine {
   background: var(--amber);
 }
@@ -111,6 +112,7 @@
   height: 16px;
 }
 .fleet-row.needs-access .op,
+.fleet-row.managed .op,
 .fleet-row.out-of-sync .op {
   color: var(--amber);
 }

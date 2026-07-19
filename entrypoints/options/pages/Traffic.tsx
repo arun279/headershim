@@ -21,10 +21,10 @@ const text = copy.options.traffic;
 
 /**
  * Every change the compiled ruleset carries and where each one stands: applying,
- * a grant away, or refused by Chrome. It reads that ruleset, never the wire, so
- * it states what HeaderShim is set to do and never that a request happened. A
- * rule that is off would do nothing, and nothing is what this page omits. Values
- * are never carried here, so a secret cannot reach it.
+ * managed by Chrome, a grant away, or refused. It reads that ruleset, never the
+ * wire, so it states what HeaderShim is set to do and never that a request
+ * happened. A rule that is off would do nothing, and nothing is what this page
+ * omits. Values are never carried here, so a secret cannot reach it.
  */
 export function TrafficPage({
   doc,
@@ -107,6 +107,8 @@ function statusLabel(row: TapeRow): string {
       return row.refused === undefined
         ? text.status.refused
         : copy.readout.refusedReason[row.refused];
+    case "managed":
+      return text.status.managed;
     case "out-of-sync":
       return text.status.outOfSync;
     case "unconfirmed":
@@ -138,7 +140,7 @@ function StatusGlyph({ status }: { status: TapeRow["status"] }) {
       </svg>
     );
   }
-  if (status === "needs-access") {
+  if (status === "needs-access" || status === "managed") {
     return (
       <svg
         viewBox="0 0 12 12"

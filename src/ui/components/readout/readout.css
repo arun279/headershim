@@ -1,8 +1,8 @@
 /*
  * The readout's one grammar. Color says how much a change needs you (teal live,
- * amber a grant away, red refused, grey-dashed at rest); shape says what it does
- * (the op glyph, always the spine's color). Sans narrates, mono is every wire
- * byte. Nothing here restates a fact another cue already carries.
+ * amber caution, red refused, grey-dashed at rest); shape says what it does (the
+ * op glyph, always the spine's color). Sans narrates, mono is every wire byte.
+ * Nothing here restates a fact another cue already carries.
  */
 
 /* ---------------- head ---------------- */
@@ -61,6 +61,10 @@
 .lamp.warn {
   background: transparent;
   border: 2px solid var(--amber);
+}
+.lamp.doubt {
+  background: transparent;
+  border: 2px solid var(--ink3);
 }
 .status {
   font-size: 16px;
@@ -263,6 +267,7 @@
   background: var(--live);
 }
 .change-line.needs-access .spine,
+.change-line.managed .spine,
 .change-line.out-of-sync .spine {
   background: var(--amber);
 }
@@ -294,6 +299,7 @@
   height: 16px;
 }
 .change-line.needs-access .op,
+.change-line.managed .op,
 .change-line.out-of-sync .op {
   color: var(--amber);
 }
