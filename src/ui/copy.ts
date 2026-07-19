@@ -122,7 +122,6 @@ export const copy = {
     switcher: {
       chipLabel: "Switch profile",
       title: "Switch profile",
-      select: (name: string) => `Switch to ${name}`,
       // Consequence first: the local diff a switch would apply to this tab.
       previewLead: (name: string) => `If you switch to ${name}, on this tab`,
       drops: (header: string, more: number): Sentence => [
@@ -619,6 +618,7 @@ export const copy = {
   },
 
   errors: {
+    saveFailed: "Couldn't save this change. Try again.",
     regexInvalid:
       "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses. RE2 has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
     regexOversize:

@@ -13,7 +13,8 @@ interface ReadoutHeadProps {
   activeProfile: Profile | undefined;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
-  onNewProfile: () => void;
+  onNewProfile: () => Promise<string | undefined>;
+  onRenameProfile: (profileId: string, name: string) => void;
 }
 
 /**
@@ -29,6 +30,7 @@ export function ReadoutHead({
   paused,
   onSwitchProfile,
   onNewProfile,
+  onRenameProfile,
 }: ReadoutHeadProps) {
   const attention =
     readout.needsAccess > 0 ||
@@ -58,6 +60,7 @@ export function ReadoutHead({
           host={readout.host}
           onSwitch={onSwitchProfile}
           onNewProfile={onNewProfile}
+          onRenameProfile={onRenameProfile}
         />
       </div>
 

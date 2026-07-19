@@ -174,33 +174,47 @@ function Ready({
     [doc, tabDomain, grants, overrides, isRegexSupported, status],
   );
 
-  const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
+  const run = <T,>(
+    mutation: Promise<Result<T, MutationError>>,
+    fallback?: string,
+  ) => {
     void mutation.then((outcome) => {
       if (!outcome.ok) {
-        const message = blockedCommitCopy(outcome.error);
-        if (message !== undefined) showToast(message);
+        reportBlockedCommit(outcome.error, fallback);
       }
     });
+  };
+
+  const reportBlockedCommit = (error: MutationError, fallback?: string) => {
+    const message = blockedCommitCopy(error) ?? fallback;
+    if (message !== undefined) showToast(message);
   };
 
   const switchProfile = (targetId: string) => {
     run(mutations.activateProfile(targetId));
   };
 
-  const newProfile = () => {
-    run(
-      mutations.createProfile({
-        name: availableProfileName(
-          copy.options.profiles.newName,
-          doc.profiles,
-          [],
-        ),
-        color:
-          BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
-          BADGE_COLORS[0],
-        enabled: true,
-      }),
-    );
+  const newProfile = async () => {
+    const outcome = await mutations.createProfile({
+      name: availableProfileName(
+        copy.options.profiles.newName,
+        doc.profiles,
+        [],
+      ),
+      color:
+        BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
+        BADGE_COLORS[0],
+      enabled: true,
+    });
+    if (!outcome.ok) {
+      reportBlockedCommit(outcome.error);
+      return undefined;
+    }
+    return outcome.value.id;
+  };
+
+  const renameProfile = (profileId: string, name: string) => {
+    run(mutations.renameProfile(profileId, name), copy.errors.saveFailed);
   };
 
   const toggleChange = (change: TabChange, next: boolean) => {
@@ -234,26 +248,39 @@ function Ready({
     value: string,
   ): Promise<boolean> => {
     if (change.source === "override") {
-      if (tabId === undefined || change.overrideNum === undefined) return false;
+      if (tabId === undefined || change.overrideNum === undefined) {
+        showToast(copy.errors.saveFailed);
+        return false;
+      }
       const outcome = await updateOverrideValue(
         tabId,
         change.overrideNum,
         value,
       );
-      return outcome.ok;
+      if (!outcome.ok) {
+        showToast(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
+        return false;
+      }
+      if (outcome.value === undefined) {
+        showToast(copy.errors.saveFailed);
+        return false;
+      }
+      return true;
     }
     const rule = docRef.current.profiles
       .find((profile) => profile.id === change.profileId)
       ?.rules.find((candidate) => candidate.id === change.ruleId);
-    if (rule === undefined || change.profileId === undefined) return false;
+    if (rule === undefined || change.profileId === undefined) {
+      showToast(copy.errors.saveFailed);
+      return false;
+    }
     const { id: _id, num: _num, generated: _generated, ...unchanged } = rule;
     const outcome = await mutations.saveRule(change.profileId, rule.id, {
       ...unchanged,
       value,
     });
     if (!outcome.ok) {
-      const message = blockedCommitCopy(outcome.error);
-      if (message !== undefined) showToast(message);
+      showToast(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
       return false;
     }
     return true;
@@ -405,6 +432,7 @@ function Ready({
         paused={paused}
         onSwitchProfile={switchProfile}
         onNewProfile={newProfile}
+        onRenameProfile={renameProfile}
       />
       {paused && (
         <div class="pausebar" role="status">

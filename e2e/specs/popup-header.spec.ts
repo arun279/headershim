@@ -57,9 +57,13 @@ test("a popup-created profile becomes active without reloading", async ({
       exact: true,
     })
     .click();
-  // The popup names the profile itself, so the picker reads back the new one as
-  // active with no naming step in between.
-  const created = copy.options.profiles.newName;
+  const created = "QA headers";
+  await page
+    .getByRole("textbox", { name: copy.options.profiles.nameLabel })
+    .fill(created);
+  await page
+    .getByRole("textbox", { name: copy.options.profiles.nameLabel })
+    .press("Enter");
   await expect(page.locator(".prof .lbl")).toHaveText(created);
   expect(page.url()).toBe(url);
   expect(

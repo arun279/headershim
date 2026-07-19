@@ -255,6 +255,13 @@ button {
   color: var(--ink);
 }
 
+.profile-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px var(--sp-3);
+  font-weight: 500;
+}
+
 /* Silkscreen micro-label: source copy stays sentence case, caps via CSS only. */
 .silk {
   font-size: 10px;

@@ -68,6 +68,17 @@ async function mountSwapped() {
   return root;
 }
 
+async function openNewProfileName(
+  root: HTMLElement,
+): Promise<HTMLInputElement> {
+  fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
+  await act(async () => {
+    (root.querySelector(".popt.new") as HTMLButtonElement).click();
+  });
+  await settle();
+  return root.querySelector(".profile-name-input") as HTMLInputElement;
+}
+
 /** Operate the Undo the toast is offering, and report what the rule holds. */
 async function undoThroughToast(root: Element) {
   const undo = root.querySelector(".toast-action") as HTMLButtonElement;
@@ -298,6 +309,31 @@ describe("popup readout", () => {
       m.read(),
     );
     expect(session.tabs[5]).toBeUndefined();
+  });
+
+  it("reports a token swap that cannot reach the current store", async () => {
+    const { root } = await mount(tokenDoc(), true);
+    fire(() =>
+      (root.querySelector(".token .swap") as HTMLButtonElement).click(),
+    );
+    const field = root.querySelector(".swapfield input") as HTMLInputElement;
+    typeInto(field, SWAP_TO);
+    const get = vi
+      .spyOn(fakeBrowser.storage.local, "get")
+      .mockResolvedValueOnce({ state: { v: 9 } });
+
+    try {
+      press(field, "Enter");
+      await settle();
+    } finally {
+      get.mockRestore();
+    }
+
+    expect(root.querySelector(".swapfield input")).not.toBeNull();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe(SWAP_FROM);
   });
 
   it("hands back the old token from the swap toast", async () => {
@@ -580,18 +616,50 @@ describe("popup profile switch", () => {
   // Opens the picker and returns the "Prod read-only" switch target.
   const openPickerTarget = (root: HTMLElement): HTMLButtonElement => {
     fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
-    return root.querySelector(
-      '[aria-label="Switch to Prod read-only"]',
-    ) as HTMLButtonElement;
+    const target = [
+      ...root.querySelectorAll<HTMLButtonElement>(".pop-list button"),
+    ].find(
+      (button) => button.querySelector(".nm")?.textContent === "Prod read-only",
+    );
+    if (target === undefined) throw new Error("missing profile switch target");
+    return target;
   };
 
-  it("switches profiles with one active id from the picker", async () => {
+  it("uses disclosure roles, visible names, and focuses the active profile", async () => {
+    const { root } = await mount(withSecond(), true);
+    const trigger = root.querySelector(".prof") as HTMLButtonElement;
+    const target = openPickerTarget(root);
+    const group = root.querySelector('[role="group"]') as HTMLElement;
+    const current = group.querySelector('[aria-current="true"]');
+    const options = [...group.querySelectorAll(".pop-list > .popt")];
+
+    expect(trigger.getAttribute("aria-haspopup")).toBeNull();
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(trigger.getAttribute("aria-controls")).toBe("profile-switch-pop");
+    expect(group.getAttribute("aria-labelledby")).toBe("profile-switch-pop-h");
+    expect(root.querySelector('[role="menu"]')).toBeNull();
+    expect(group.querySelector('[role="menuitemradio"]')).toBeNull();
+    expect(options).toHaveLength(2);
+    expect(options.every((option) => option instanceof HTMLButtonElement)).toBe(
+      true,
+    );
+    expect(
+      options.every((option) => !option.hasAttribute("aria-checked")),
+    ).toBe(true);
+    expect(current?.querySelector(".nm")?.textContent).toBe("Default");
+    expect(document.activeElement).toBe(current);
+    expect(target.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("switches profiles with one active id and restores trigger focus", async () => {
     const { root } = await mount(withSecond(), true);
     const target = openPickerTarget(root);
     await act(async () => target.click());
     await settle();
     const stored = await read();
     expect(stored.activeProfileId).toBe("p2");
+    expect(root.querySelector(".pop")).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector(".prof"));
     expect(
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);
@@ -614,19 +682,109 @@ describe("popup profile switch", () => {
     expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
   });
 
-  it("creates and activates a new profile from the picker", async () => {
+  it("creates, focuses, and names a new profile from the picker", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
-    fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
-    await act(async () => {
-      (root.querySelector(".popt.new") as HTMLButtonElement).click();
-    });
+    const input = await openNewProfileName(root);
+    expect(input.value).toBe(copy.options.profiles.newName);
+    expect(input.getAttribute("aria-label")).toBe(
+      copy.options.profiles.nameLabel,
+    );
+    expect(document.activeElement).toBe(input);
+
+    typeInto(input, "QA headers");
+    press(input, "Enter");
     await settle();
+
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
     expect(stored.activeProfileId).toBe(stored.profiles[1]?.id);
+    expect(stored.profiles[1]?.name).toBe("QA headers");
+    expect(root.querySelector(".pop")).not.toBeNull();
+    expect(document.activeElement).toBe(
+      root.querySelector('[aria-current="true"]'),
+    );
     expect(
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);
+  });
+
+  it("cancels a new profile rename before Escape dismisses the picker", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    typeInto(input, "Discarded name");
+
+    press(input, "Escape");
+    await settle();
+
+    expect(root.querySelector(".pop")).not.toBeNull();
+    expect(root.querySelector(".profile-name-input")).toBeNull();
+    expect(document.activeElement).toBe(
+      root.querySelector('[aria-current="true"]'),
+    );
+    expect((await read()).profiles[1]?.name).toBe(
+      copy.options.profiles.newName,
+    );
+    expect(close).not.toHaveBeenCalled();
+    close.mockRestore();
+  });
+
+  it("reports a profile rename whose target disappeared", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    const stored = await read();
+    const first = stored.profiles[0];
+    if (first === undefined) throw new Error("missing original profile");
+    const get = vi
+      .spyOn(fakeBrowser.storage.local, "get")
+      .mockResolvedValueOnce({
+        state: { ...stored, profiles: [first], activeProfileId: first.id },
+      });
+
+    try {
+      typeInto(input, "Vanished profile");
+      press(input, "Enter");
+      await settle();
+    } finally {
+      get.mockRestore();
+    }
+
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
+  });
+
+  it("does not reopen a delayed new profile in rename mode after dismissal", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const stored = await read();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const get = vi
+      .spyOn(fakeBrowser.storage.local, "get")
+      .mockImplementationOnce(async () => {
+        await promise;
+        return { state: stored };
+      });
+
+    fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
+    const create = root.querySelector(".popt.new") as HTMLButtonElement;
+    fire(() => create.click());
+    press(create, "Escape");
+    expect(root.querySelector(".pop")).toBeNull();
+
+    resolve();
+    await settle();
+    get.mockRestore();
+
+    fire(() => (root.querySelector(".prof") as HTMLButtonElement).click());
+    await settle();
+
+    const current = root.querySelector('[aria-current="true"]');
+    expect((await read()).profiles).toHaveLength(2);
+    expect(root.querySelector(".profile-name-input")).toBeNull();
+    expect(current?.querySelector(".nm")?.textContent).toBe(
+      copy.options.profiles.newName,
+    );
+    expect(document.activeElement).toBe(current);
   });
 
   it("uses Escape to close the picker without closing the popup", async () => {

@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Profile } from "../../../core/model";
 import { copy } from "../../copy";
 import { previewSwitch } from "../../state/readout";
@@ -12,7 +12,8 @@ interface ProfilePickerProps {
   activeProfile: Profile | undefined;
   host: string | undefined;
   onSwitch: (profileId: string) => void;
-  onNewProfile: () => void;
+  onNewProfile: () => Promise<string | undefined>;
+  onRenameProfile: (profileId: string, name: string) => void;
 }
 
 /**
@@ -26,16 +27,71 @@ export function ProfilePicker({
   host,
   onSwitch,
   onNewProfile,
+  onRenameProfile,
 }: ProfilePickerProps) {
   const [open, setOpen] = useState(false);
   const [previewId, setPreviewId] = useState<string | undefined>(undefined);
+  const [editingId, setEditingId] = useState<string | undefined>(undefined);
   const trigger = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
+  const openRef = useRef(false);
+  const profileButtons = useRef(new Map<string, HTMLButtonElement>());
+  const nameInput = useRef<HTMLInputElement>(null);
+
+  const setPickerOpen = (next: boolean) => {
+    openRef.current = next;
+    setOpen(next);
+    if (!next) {
+      setEditingId(undefined);
+      setPreviewId(undefined);
+    }
+  };
+
+  const focusCurrentProfile = () => {
+    const id = activeProfile?.id ?? profiles[0]?.id;
+    if (id !== undefined) profileButtons.current.get(id)?.focus();
+  };
+
+  const stopEditing = (restoreFocus: boolean) => {
+    setEditingId(undefined);
+    if (restoreFocus) {
+      queueMicrotask(focusCurrentProfile);
+    }
+  };
+
+  const commitName = (restoreFocus: boolean) => {
+    const id = editingId;
+    const value = nameInput.current?.value.trim() ?? "";
+    stopEditing(restoreFocus);
+    if (
+      id !== undefined &&
+      value.length > 0 &&
+      value !== profiles.find((profile) => profile.id === id)?.name
+    ) {
+      onRenameProfile(id, value);
+    }
+  };
+
   usePopoverDismiss(open, popover, trigger, (restoreFocus) => {
-    setOpen(false);
-    setPreviewId(undefined);
+    if (editingId !== undefined && restoreFocus) {
+      stopEditing(true);
+      return;
+    }
+    if (editingId !== undefined) commitName(false);
+    setPickerOpen(false);
     if (restoreFocus) trigger.current?.focus();
   });
+
+  useEffect(() => {
+    if (open) focusCurrentProfile();
+  }, [open]);
+
+  useEffect(() => {
+    if (open && editingId !== undefined) {
+      nameInput.current?.focus();
+      nameInput.current?.select();
+    }
+  }, [editingId, open, profiles]);
 
   const preview =
     previewId === undefined
@@ -48,10 +104,10 @@ export function ProfilePicker({
         type="button"
         ref={trigger}
         class="prof"
-        aria-haspopup="menu"
         aria-expanded={open}
+        aria-controls="profile-switch-pop"
         aria-label={copy.readout.switcher.chipLabel}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setPickerOpen(!openRef.current)}
       >
         {activeProfile !== undefined ? (
           <>
@@ -69,25 +125,78 @@ export function ProfilePicker({
       </button>
 
       {open && (
-        <div class="pop" ref={popover} role="menu">
-          <div class="pop-h silk">{copy.readout.switcher.title}</div>
+        // biome-ignore lint/a11y/useSemanticElements: this is a disclosure popover, not a form fieldset.
+        <div
+          id="profile-switch-pop"
+          class="pop"
+          ref={popover}
+          role="group"
+          aria-labelledby="profile-switch-pop-h"
+        >
+          <div id="profile-switch-pop-h" class="pop-h silk">
+            {copy.readout.switcher.title}
+          </div>
           <div class="pop-list">
             {profiles.map((profile) => {
               const on = profile.id === activeProfile?.id;
+              if (profile.id === editingId) {
+                return (
+                  <div
+                    key={profile.id}
+                    class={`popt${on ? " sel" : ""}`}
+                    aria-current={on ? "true" : undefined}
+                  >
+                    <ProfileBadge
+                      text={profile.badgeText}
+                      color={profile.color}
+                      size={19}
+                    />
+                    <input
+                      class="profile-name-input inset-field"
+                      type="text"
+                      maxLength={48}
+                      aria-label={copy.options.profiles.nameLabel}
+                      defaultValue={profile.name}
+                      ref={nameInput}
+                      onBlur={() => commitName(false)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitName(true);
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          stopEditing(true);
+                        }
+                      }}
+                    />
+                    {on && (
+                      <span class="chk" aria-hidden="true">
+                        <CheckGlyph />
+                      </span>
+                    )}
+                  </div>
+                );
+              }
               return (
                 <button
                   type="button"
                   key={profile.id}
-                  role="menuitemradio"
-                  aria-checked={on}
+                  ref={(node) => {
+                    if (node === null) {
+                      profileButtons.current.delete(profile.id);
+                    } else {
+                      profileButtons.current.set(profile.id, node);
+                    }
+                  }}
+                  aria-current={on ? "true" : undefined}
                   class={`popt${on ? " sel" : ""}`}
-                  aria-label={copy.readout.switcher.select(profile.name)}
                   onMouseEnter={() => setPreviewId(on ? undefined : profile.id)}
                   onFocus={() => setPreviewId(on ? undefined : profile.id)}
                   onClick={() => {
                     onSwitch(profile.id);
-                    setOpen(false);
-                    setPreviewId(undefined);
+                    setPickerOpen(false);
+                    trigger.current?.focus();
                   }}
                 >
                   <ProfileBadge
@@ -108,7 +217,14 @@ export function ProfilePicker({
           {preview !== undefined && (
             <SwitchPreviewPanel from={activeProfile} to={preview} host={host} />
           )}
-          <button type="button" class="popt new" onClick={onNewProfile}>
+          <button
+            type="button"
+            class="popt new"
+            onClick={async () => {
+              const id = await onNewProfile();
+              if (id !== undefined && openRef.current) setEditingId(id);
+            }}
+          >
             <PlusGlyph />
             {copy.readout.switcher.newProfile}
           </button>

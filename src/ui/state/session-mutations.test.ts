@@ -136,6 +136,13 @@ describe("session mutations", () => {
     expect((await readSession()).tabs[5]?.[0]?.value).toBe("rotated");
   });
 
+  it("returns an empty success when the row was removed before the update", async () => {
+    const outcome = await updateOverrideValue(5, 1, "rotated");
+
+    expect(outcome).toEqual({ ok: true, value: undefined });
+    expect((await readSession()).tabs).toEqual({});
+  });
+
   it("prunes rows whose origin no longer matches where the tab sits", async () => {
     await write({
       nextNum: 3,

@@ -40,8 +40,9 @@ export function blockedCommitCopy(error: MutationError): string | undefined {
       return copy.errors.scopeEmpty.all;
     case "profile-name-unavailable":
       return copy.options.profiles.nameTaken(error.name);
-    case "not-found":
     case "store-unavailable":
+      return copy.errors.saveFailed;
+    case "not-found":
       return undefined;
   }
 }

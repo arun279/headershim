@@ -11,7 +11,14 @@ import {
 } from "../platform/session-store";
 import { write } from "../platform/store";
 import { copy } from "../ui/copy";
-import { pasteInto, press, render, settle, typeInto } from "../ui/test/render";
+import {
+  fire,
+  pasteInto,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../ui/test/render";
 
 // The popup's tab is pinned so This-tab writes bind to a known origin.
 vi.mock("../platform/tabs", () => ({
@@ -165,6 +172,35 @@ describe("popup This-tab overrides", () => {
     await act(async () => remove.click());
     await settle();
     expect((await readSession()).tabs).toEqual({});
+  });
+
+  it("does not report a removed override token as saved", async () => {
+    const original = override({
+      header: "authorization",
+      value: "Bearer original-1234",
+    });
+    const root = await mount(createV1Seed(), {
+      nextNum: 2,
+      tabs: { 5: [original] },
+    });
+    fire(() =>
+      (root.querySelector(".token .swap") as HTMLButtonElement).click(),
+    );
+    const field = root.querySelector(".swapfield input") as HTMLInputElement;
+    typeInto(field, "Bearer replacement-5678");
+    const get = vi
+      .spyOn(fakeBrowser.storage.session, "get")
+      .mockResolvedValueOnce({ sessionState: { nextNum: 2, tabs: {} } });
+
+    press(field, "Enter");
+    await settle();
+    get.mockRestore();
+
+    expect(root.querySelector(".swapfield input")).not.toBeNull();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
+    expect((await readSession()).tabs[5]).toEqual([original]);
   });
 
   it("prunes a stale-origin override on popup open", async () => {
