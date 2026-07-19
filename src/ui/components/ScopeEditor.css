@@ -1,6 +1,6 @@
 .segments {
   display: inline-flex;
-  border: var(--hairline) solid var(--bezel-strong);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
   overflow: hidden;
 }
@@ -11,17 +11,17 @@
   min-height: 24px;
   padding: 3px 10px;
   font-size: 12px;
-  color: var(--ink-mute);
+  color: var(--ink2);
   cursor: pointer;
 }
 
 .segment + .segment {
-  border-left: var(--hairline) solid var(--bezel-strong);
+  border-left: var(--hairline) solid var(--line-strong);
 }
 
 .segment.checked {
-  background: var(--trace);
-  color: var(--trace-ink);
+  background: var(--live-fill);
+  color: var(--on-live);
 }
 
 /* The radio is visually hidden; its focus ring lands on the segment skin. The
@@ -31,12 +31,12 @@
   outline-offset: -2px;
 }
 
-/* On the selected segment the fill is --trace, so a --focus (== --trace) ring
-   would vanish. Switch to --trace-ink, the token proven >=3:1 against --trace in
+/* On the selected segment the fill is --live-fill, so a --focus ring would be
+   too subtle. Switch to --on-live, the token proven >=3:1 against --live-fill in
    both themes (it is the segment's own text color) so the ring stays visible
    while the radiogroup keeps focus on the checked segment (WCAG 2.4.7). */
 .segment.checked:has(:focus-visible) {
-  outline-color: var(--trace-ink);
+  outline-color: var(--on-live);
 }
 
 .disclosure {
@@ -53,7 +53,7 @@
 }
 
 .disclosure:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 .disclosure-chevron {
@@ -61,7 +61,7 @@
   font-family: var(--font-data);
   font-size: 16px;
   line-height: 1;
-  color: var(--ink-mute);
+  color: var(--ink2);
   transform: rotate(0deg);
   transition: transform var(--t-fast) var(--ease);
 }

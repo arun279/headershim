@@ -43,7 +43,7 @@
   line-height: 1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .editor-control {
@@ -58,8 +58,8 @@
   font: inherit;
   font-size: 12px;
   color: var(--ink);
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
 }
 
@@ -82,7 +82,7 @@
   margin-top: var(--sp-1);
   font-size: 11px;
   line-height: 1.4;
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .editor-error {
@@ -90,7 +90,7 @@
   font-size: 11px;
   line-height: 1.4;
   font-weight: 600;
-  color: var(--caution);
+  color: var(--amber);
 }
 
 .editor-error-global {
@@ -101,7 +101,7 @@
   min-height: 24px;
   padding: 0 var(--sp-1);
   font-size: 11px;
-  color: var(--trace);
+  color: var(--live-ink);
 }
 
 .editor-option {
@@ -133,11 +133,11 @@
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--radius-outer);
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .editor-cancel:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 /* Destructive, so it sits apart from the two actions that keep the rule. It
@@ -158,5 +158,5 @@
 .discard-title {
   margin-right: auto;
   font-size: 12px;
-  color: var(--caution);
+  color: var(--amber);
 }

@@ -4,7 +4,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--panel-0);
+  background: var(--paper);
 }
 
 .sheet-head {
@@ -12,8 +12,8 @@
   align-items: center;
   min-height: 44px;
   padding: var(--sp-3) var(--sp-4);
-  background: var(--panel-1);
-  border-bottom: var(--hairline) solid var(--bezel);
+  background: var(--panel);
+  border-bottom: var(--hairline) solid var(--line);
 }
 
 .sheet-region {
@@ -31,6 +31,6 @@
   position: sticky;
   bottom: 0;
   z-index: 1;
-  background: var(--panel-1);
-  border-top: var(--hairline) solid var(--bezel);
+  background: var(--panel);
+  border-top: var(--hairline) solid var(--line);
 }

@@ -147,8 +147,8 @@ test("an ungranted rule shows the calm needs-access state in the popup", async (
     };
     return {
       track: getComputedStyle(element, "::before").backgroundColor,
-      amber: resolveColor("--caution-lamp"),
-      green: resolveColor("--sw-on"),
+      amber: resolveColor("--amber"),
+      green: resolveColor("--live"),
     };
   });
   expect(toggleColors.track).toBe(toggleColors.amber);

@@ -10,21 +10,21 @@
 }
 
 .btn.primary {
-  background: var(--trace);
-  color: var(--trace-ink);
+  background: var(--live-fill);
+  color: var(--on-live);
 }
 
 .btn.quiet {
-  background: var(--panel-0);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--paper);
+  border: var(--hairline) solid var(--line-strong);
   color: var(--ink);
 }
 
 /* Caution-outline: only ever used inside caution surfaces. */
 .btn.caution {
   background: transparent;
-  border: var(--hairline) solid var(--caution);
-  color: var(--caution);
+  border: var(--hairline) solid var(--amber);
+  color: var(--amber);
 }
 
 .icon-btn {
@@ -33,11 +33,11 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-inner);
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .icon-btn:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 /* Shared popover surface for menus; each menu adds its own placement. */
@@ -47,10 +47,10 @@
   margin: 0;
   z-index: 2;
   padding: var(--sp-2);
-  background: var(--panel-1);
+  background: var(--panel);
   /* Explicit, so menu-item text never inherits the UA popover's CanvasText. */
   color: var(--ink);
-  border: var(--hairline) solid var(--bezel-strong);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-outer);
   box-shadow: var(--shadow-pop);
 }
@@ -71,11 +71,11 @@
 }
 
 .menu-item:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 .menu-item.destructive {
-  color: var(--caution);
+  color: var(--amber);
 }
 
 .btn:disabled,

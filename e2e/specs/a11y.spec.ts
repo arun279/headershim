@@ -120,17 +120,17 @@ test("design tokens load on every extension surface", async ({
 
     const panel0 = await page.evaluate(() =>
       getComputedStyle(document.documentElement)
-        .getPropertyValue("--panel-0")
+        .getPropertyValue("--paper")
         .trim(),
     );
-    expect(panel0, `${surface}: --panel-0 must resolve on :root`).not.toBe("");
+    expect(panel0, `${surface}: --paper must resolve on :root`).not.toBe("");
 
     // The token has to actually paint, not just be declared: an unstyled body
     // reads back the transparent default rather than the panel fill.
     const background = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
     );
-    expect(background, `${surface}: body must paint --panel-0`).not.toBe(
+    expect(background, `${surface}: body must paint --paper`).not.toBe(
       "rgba(0, 0, 0, 0)",
     );
 

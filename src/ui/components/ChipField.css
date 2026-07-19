@@ -15,8 +15,8 @@
 .domain-chips {
   margin-top: var(--sp-2);
   padding: var(--sp-1);
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
 }
 
@@ -24,21 +24,21 @@
   display: inline-flex;
   align-items: center;
   min-height: 24px;
-  background: var(--panel-1);
+  background: var(--panel);
   border-radius: var(--radius-inner);
   font-size: 12px;
 }
 
 .domain-chip {
   padding-left: var(--sp-3);
-  border: var(--hairline) solid var(--bezel);
+  border: var(--hairline) solid var(--line);
 }
 
 .grant-chip {
   gap: var(--sp-1);
   padding: 2px var(--sp-1) 2px var(--sp-2);
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--caution-edge);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
 }
 
 .chip-field-x {
@@ -47,7 +47,7 @@
   justify-content: center;
   min-width: 24px;
   min-height: 24px;
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .chip-field-input {
@@ -62,14 +62,14 @@
 }
 
 .chip-field-input::placeholder {
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .chip-field-hint {
   flex: none;
   padding-right: var(--sp-1);
   font-size: 10.5px;
-  color: var(--ink-mute);
+  color: var(--ink2);
 }
 
 .grant-field {
@@ -79,8 +79,8 @@
 .grant-chip-input {
   min-width: 96px;
   font-size: 11px;
-  background: var(--panel-2);
-  border: var(--hairline) solid var(--caution-edge);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
 }
 

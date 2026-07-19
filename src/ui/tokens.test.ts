@@ -18,6 +18,10 @@ const settingsCss = readFileSync(
   ),
   "utf8",
 );
+const toggleCss = readFileSync(
+  fileURLToPath(new URL("./components/Toggle.css", import.meta.url)),
+  "utf8",
+);
 
 function block(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -121,13 +125,18 @@ describe("the accent, doubled and reserved", () => {
     expect(value(block(":root"), "focus")).toBe("var(--live-ink)");
   });
 
-  it("keeps the running and paused toggle tracks on distinct semantic roles", () => {
+  it("keeps the toggle tracks on distinct semantic roles", () => {
     const source = block(":root");
-    expect(value(source, "sw-on")).toBe("var(--live)");
-    expect(value(source, "sw-paused")).toBe("var(--amber)");
+    expect(value(source, "sw-off")).toBe("#8b9096");
     expect(
       [...source.matchAll(/--sw-([a-z-]+):/g)].map((match) => match[1]).sort(),
-    ).toEqual(["off", "on", "paused"]);
+    ).toEqual(["off"]);
+    expect(toggleCss).toMatch(
+      /\.sw\[aria-checked="true"\]::before\s*\{[^}]*background:\s*var\(--live\)/s,
+    );
+    expect(toggleCss).toMatch(
+      /\.sw\.sw-paused\[aria-checked="true"\]::before\s*\{[^}]*background:\s*var\(--amber\)/s,
+    );
   });
 });
 

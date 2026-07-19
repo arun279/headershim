@@ -5,8 +5,8 @@
   gap: var(--sp-3);
   max-width: 376px;
   padding: var(--sp-2) var(--sp-4);
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
   border-radius: var(--radius-outer);
   box-shadow: var(--shadow-toast);
 }
@@ -20,7 +20,7 @@
   flex: none;
   min-height: 24px;
   padding: var(--sp-1) var(--sp-3);
-  border: var(--hairline) solid var(--bezel-strong);
+  border: var(--hairline) solid var(--line-strong);
   border-radius: var(--radius-inner);
   color: var(--ink);
   font-size: 12px;
