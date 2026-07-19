@@ -52,7 +52,7 @@ function projectFleet(
     profiles: [...input.profiles],
     activeProfileId,
     nextRuleNum: 100,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
   return projectFleetWithActive({
     doc,

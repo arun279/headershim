@@ -607,39 +607,6 @@ describe("background lifecycle", () => {
     expect(await browser.action.getBadgeText({})).toBe("");
   });
 
-  it("clears This-tab markers when a global state takes over and repaints them on exit", async () => {
-    start();
-    const { id: tabId } = await fakeBrowser.tabs.create({});
-    if (tabId === undefined) {
-      throw new Error("fake tab has no id");
-    }
-    const seed = createV1Seed();
-    const neutral: StateDoc = {
-      ...seed,
-      activeProfileId: undefined,
-      settings: { ...seed.settings, badgeMode: "initials" },
-    };
-
-    await writeState(neutral);
-    await writeSession({
-      nextNum: 2,
-      tabs: { [tabId]: [override(tabId, "app.example")] },
-    });
-    await settle();
-    expect(await browser.action.getBadgeText({ tabId })).toBe("T");
-
-    await writeState({
-      ...neutral,
-      settings: { ...neutral.settings, paused: true },
-    });
-    await settle();
-    expect(await browser.action.getBadgeText({ tabId })).toBe("");
-
-    await writeState(neutral);
-    await settle();
-    expect(await browser.action.getBadgeText({ tabId })).toBe("T");
-  });
-
   it("switches to the next profile with one active id on command", async () => {
     start();
     const seed = createV1Seed();

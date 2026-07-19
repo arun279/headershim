@@ -69,7 +69,6 @@
   --caution-bg: var(--amber-soft);
   --caution-edge: var(--line-strong);
   --caution-lamp: var(--amber);
-  --advisory: var(--live-ink);
   --sw-off: #8b9096; /* toggle off-track: 3.0:1 vs paper */
   --sw-on: var(--live);
   --sw-paused: var(--amber);

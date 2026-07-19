@@ -28,7 +28,7 @@ function doc(profiles: Profile[], paused = false): StateDoc {
     profiles,
     activeProfileId: profiles[0]?.id,
     nextRuleNum: 100,
-    settings: { paused, theme: "system", badgeMode: "count" },
+    settings: { paused, theme: "system" },
   };
 }
 

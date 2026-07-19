@@ -82,7 +82,7 @@ function validDoc(): StateDoc {
     profiles,
     activeProfileId: profiles[0]?.id,
     nextRuleNum: 5,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 
@@ -150,9 +150,9 @@ describe("migrate", () => {
 
   it("accepts all current settings variants", () => {
     const light = validDoc();
-    light.settings = { paused: true, theme: "light", badgeMode: "initials" };
+    light.settings = { paused: true, theme: "light" };
     const dark = validDoc();
-    dark.settings = { paused: false, theme: "dark", badgeMode: "count" };
+    dark.settings = { paused: false, theme: "dark" };
 
     expect(migrate(light).ok).toBe(true);
     expect(migrate(dark).ok).toBe(true);
@@ -209,7 +209,6 @@ describe("migrate", () => {
       { ...validDoc(), settings: null },
       withSettings({ paused: "false" }),
       withSettings({ theme: "contrast" }),
-      withSettings({ badgeMode: "profile" }),
       withProfile({ id: null }),
       withProfile({ id: "" }),
       withProfile({ name: null }),
@@ -313,7 +312,7 @@ describe("createV1Seed", () => {
     expect(seed).toMatchObject({
       v: 1,
       nextRuleNum: 1,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
       profiles: [
         {
           name: "Default",

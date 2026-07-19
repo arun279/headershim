@@ -97,7 +97,6 @@ export function createV1Seed(): StateDoc {
     settings: {
       paused: false,
       theme: "system",
-      badgeMode: "count",
     },
   };
 }
@@ -217,11 +216,10 @@ function isSettings(value: unknown): value is Settings {
     return false;
   }
 
-  const { paused, theme, badgeMode } = value;
+  const { paused, theme } = value;
   return (
     typeof paused === "boolean" &&
-    (theme === "system" || theme === "light" || theme === "dark") &&
-    (badgeMode === "count" || badgeMode === "initials")
+    (theme === "system" || theme === "light" || theme === "dark")
   );
 }
 

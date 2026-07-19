@@ -435,7 +435,6 @@ export const copy = {
     createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
     saveChanges: "Save changes",
     saveChangesAndAllow: (host: string) => `Save changes and allow ${host}`,
-    testOnThisTab: "Test on this tab",
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands; there is no

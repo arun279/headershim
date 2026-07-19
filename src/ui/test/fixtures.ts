@@ -54,7 +54,7 @@ export function stateDoc(
     profiles,
     activeProfileId: profiles[0]?.id,
     nextRuleNum: seq + 1,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
     ...overrides,
   };
 }

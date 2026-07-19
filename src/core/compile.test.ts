@@ -58,7 +58,7 @@ function state(
     profiles,
     activeProfileId,
     nextRuleNum: 20_000,
-    settings: { paused, theme: "system", badgeMode: "count" },
+    settings: { paused, theme: "system" },
   };
 }
 

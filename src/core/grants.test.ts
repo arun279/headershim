@@ -277,7 +277,7 @@ describe("docMissingGrants", () => {
       ],
       activeProfileId: "profile-on",
       nextRuleNum: 4,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
     };
 
     expect(docMissingGrants(doc, none)).toEqual([
@@ -300,7 +300,7 @@ describe("siteAccessView", () => {
       profiles,
       activeProfileId: profiles[0]?.id,
       nextRuleNum: 100,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
     };
   }
 

@@ -120,7 +120,7 @@ function profileSet(): StateDoc {
     profiles,
     activeProfileId: profiles[0]?.id,
     nextRuleNum: 5,
-    settings: { paused: true, theme: "dark", badgeMode: "initials" },
+    settings: { paused: true, theme: "dark" },
   };
 }
 
@@ -138,7 +138,7 @@ function targetDoc(): StateDoc {
     ],
     activeProfileId: "profile-existing",
     nextRuleNum: 50,
-    settings: { paused: false, theme: "light", badgeMode: "count" },
+    settings: { paused: false, theme: "light" },
   };
 }
 

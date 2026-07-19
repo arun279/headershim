@@ -183,21 +183,6 @@ test("every popup state passes axe in both themes", async ({
     await expect(editor.locator(".rule-editor")).toBeVisible();
     await analyze(editor, `popup rule editor (${theme})`, theme);
     await editor.close();
-
-    const thisTab = await open(ruleDoc(), theme);
-    await thisTab.locator(".profiles .chip").first().focus();
-    await thisTab.keyboard.press("t");
-    await expect(thisTab.locator(".this-tab")).toBeVisible();
-    await analyze(thisTab, `popup this-tab composer (${theme})`, theme);
-    await thisTab.close();
-
-    const verify = await open(ruleDoc(), theme);
-    await verify
-      .getByRole("button", { name: copy.actions.testOnThisTab })
-      .click();
-    await expect(verify.locator(".verify-inline-result")).toBeVisible();
-    await analyze(verify, `popup verify result (${theme})`, theme);
-    await verify.close();
   }
 });
 

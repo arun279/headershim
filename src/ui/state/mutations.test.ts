@@ -658,7 +658,6 @@ describe("settings and import", () => {
     expect((await read()).settings).toEqual({
       paused: true,
       theme: "dark",
-      badgeMode: "count",
     });
     await mutations.setPaused(false);
     expect((await read()).settings.paused).toBe(false);

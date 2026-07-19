@@ -20,7 +20,7 @@ function emptyDoc(nextRuleNum = 1): StateDoc {
     profiles: [],
     activeProfileId: undefined,
     nextRuleNum,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 

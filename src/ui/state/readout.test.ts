@@ -50,7 +50,7 @@ function state(activeProfile: Profile | undefined): StateDoc {
     profiles: activeProfile === undefined ? [] : [activeProfile],
     activeProfileId: activeProfile?.id,
     nextRuleNum: 100,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 

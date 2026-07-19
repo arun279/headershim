@@ -62,7 +62,6 @@ export interface Profile {
 export interface Settings {
   paused: boolean;
   theme: "system" | "light" | "dark";
-  badgeMode: "count" | "initials";
 }
 
 export interface StateDoc {

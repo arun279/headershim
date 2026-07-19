@@ -78,7 +78,7 @@ function doc(profileOverrides: Partial<Profile> = {}): StateDoc {
     ],
     activeProfileId: "p1",
     nextRuleNum: 10,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 

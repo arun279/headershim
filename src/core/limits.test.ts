@@ -62,7 +62,7 @@ function state(...profiles: Profile[]): StateDoc {
     profiles,
     activeProfileId: profiles[0]?.id,
     nextRuleNum: 10_000,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 

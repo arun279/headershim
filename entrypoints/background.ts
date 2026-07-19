@@ -28,7 +28,6 @@ import {
 import {
   getReconcileError,
   read as readSession,
-  type SessionState,
   setReconcileError,
   subscribe as subscribeSession,
   write as writeSession,
@@ -196,21 +195,19 @@ export default defineBackground(() => {
     if (!outcome.ok) {
       return;
     }
-    const [granted, session, reconcileError] = await Promise.all([
+    const [granted, reconcileError] = await Promise.all([
       grantSnapshot(),
-      readSession(),
       getReconcileError(),
     ]);
-    const { state, tabBadges, title } = planBadge({
+    const { state, title } = planBadge({
       doc: outcome.value,
       status: computeStatus({
         doc: outcome.value,
         grantGaps: docMissingGrants(outcome.value, granted),
         reconcileError,
       }),
-      overrideTabIds: overrideTabIds(session),
     });
-    await applyBadge(state, tabBadges, title);
+    await applyBadge(state, title);
   }
 
   async function endOverrides(
@@ -275,9 +272,3 @@ export default defineBackground(() => {
 });
 
 function noop(): void {}
-
-function overrideTabIds(session: SessionState): number[] {
-  return Object.entries(session.tabs)
-    .filter(([, rows]) => rows.some((row) => row.enabled))
-    .map(([tabId]) => Number(tabId));
-}
