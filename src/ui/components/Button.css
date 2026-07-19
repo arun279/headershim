@@ -48,6 +48,8 @@
   z-index: 2;
   padding: var(--sp-2);
   background: var(--panel-1);
+  /* Explicit, so menu-item text never inherits the UA popover's CanvasText. */
+  color: var(--ink);
   border: var(--hairline) solid var(--bezel-strong);
   border-radius: var(--radius-outer);
   box-shadow: var(--shadow-pop);

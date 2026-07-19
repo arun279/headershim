@@ -14,6 +14,12 @@
  */
 
 :root {
+  /* System colours (the Canvas/CanvasText behind a popover, form controls,
+     scrollbars) follow the resolved theme; without this they fall back to the
+     opposite scheme and a popover paints invisible text. System theme tracks the
+     OS, matching the dark-token media flip below. */
+  color-scheme: light dark;
+
   /* near-monochrome surfaces (light: warm paper) */
   --paper: #fcfcfb; /* window background */
   --panel: #ffffff; /* raised: head, footer, token, cards */
@@ -147,8 +153,14 @@
 /* Forced dark repeats the media-query palette verbatim: plain CSS cannot share a
    declaration block across a media boundary, so the values are intentionally
    duplicated rather than factored out. */
+/* A forced theme pins the scheme both ways so system colours cannot follow the
+   OS away from the tokens (forced light on a dark OS, or the reverse). */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
 /* jscpd:ignore-start */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --paper: #121317;
   --panel: #181a1f;
   --raise: #1f222a;

@@ -8,6 +8,8 @@
   overflow-y: auto;
   list-style: none;
   background: var(--panel-1);
+  /* Explicit, so option text never inherits the UA popover's CanvasText. */
+  color: var(--ink);
   border: var(--hairline) solid var(--bezel-strong);
   border-radius: var(--radius-inner);
   box-shadow: var(--shadow-pop);
