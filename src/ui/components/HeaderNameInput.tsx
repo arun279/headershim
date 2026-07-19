@@ -12,6 +12,7 @@ import { copy } from "../copy";
 import { closePopover, openPositionedPopover } from "./popover";
 import { sentence } from "./sentence";
 import "./HeaderNameInput.css";
+import "./MenuSurface.css";
 
 interface HeaderNameInputProps {
   /** Raw text as typed; the editor echoes it and the store lowercases it. */

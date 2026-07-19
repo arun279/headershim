@@ -6,7 +6,7 @@
   padding: var(--sp-4);
   background: var(--raise2);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
 }
 
 .import-counts {
@@ -30,7 +30,7 @@
   padding: var(--sp-3) var(--sp-4);
   background: var(--amber-soft);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
 }
 
 /* Caution lamp: a filled triangle, matching the annunciator's alert glyph. */

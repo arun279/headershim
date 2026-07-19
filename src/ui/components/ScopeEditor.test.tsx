@@ -32,7 +32,7 @@ function mount(props: Parameters<typeof Harness>[0] = {}) {
   return {
     root,
     radios: () =>
-      [...root.querySelectorAll(".segments input")] as HTMLInputElement[],
+      [...root.querySelectorAll(".segmented input")] as HTMLInputElement[],
     chipInput: () =>
       root.querySelector(".domain-chip-input") as HTMLInputElement,
     chips: () =>
@@ -52,7 +52,9 @@ function mount(props: Parameters<typeof Harness>[0] = {}) {
 describe("ScopeEditor match type", () => {
   it("renders four peer segments as a native radio group, Domains checked", () => {
     const ctx = mount();
-    expect(ctx.root.querySelector('[role="radiogroup"]')).not.toBeNull();
+    expect(ctx.root.querySelector('[role="radiogroup"]')?.className).toBe(
+      "segmented",
+    );
     expect(ctx.radios().map((radio) => radio.checked)).toEqual([
       true,
       false,

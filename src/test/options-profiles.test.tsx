@@ -165,7 +165,9 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    fire(() => findButton(root, copy.options.profiles.newProfile).click());
+    const create = findButton(root, copy.options.profiles.newProfile);
+    expect(create.className).toBe("btn primary");
+    fire(() => create.click());
     await settle();
 
     expect(cardNames(root)).toEqual(["Default", copy.options.profiles.newName]);

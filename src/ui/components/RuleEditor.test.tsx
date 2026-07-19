@@ -80,7 +80,7 @@ function mount(
       root.querySelector(".domain-chip-input") as HTMLInputElement,
     operationInput: (operation: string) =>
       root.querySelector(
-        `.editor-segments input[value="${operation}"]`,
+        `.segmented input[value="${operation}"]`,
       ) as HTMLInputElement,
     saveButton: () =>
       root.querySelector(".editor-actions .primary") as HTMLButtonElement,
@@ -546,7 +546,7 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       { error: { kind: "regex-invalid", regex: "(a|b", reason } },
     );
     const regexRadio = ctx.root.querySelector(
-      '.segments input[value="regex"]',
+      '.segmented input[value="regex"]',
     ) as HTMLInputElement;
     fire(() => regexRadio.click());
     const regexInput = ctx.root.querySelector(
@@ -804,7 +804,7 @@ describe("RuleEditor grant moment", () => {
   it("folds an ungranted all-sites scope into the primary action", async () => {
     const ctx = mount({ grants: NARROW });
     const allSites = ctx.root.querySelector(
-      '.segments input[value="all"]',
+      '.segmented input[value="all"]',
     ) as HTMLInputElement;
     fire(() => allSites.click());
 
@@ -828,7 +828,7 @@ describe("RuleEditor grant moment", () => {
   it("keeps all-sites saves plain when broad access is already granted", () => {
     const ctx = mount({ grants: GRANTED_ALL });
     const allSites = ctx.root.querySelector(
-      '.segments input[value="all"]',
+      '.segmented input[value="all"]',
     ) as HTMLInputElement;
     fire(() => allSites.click());
 

@@ -295,6 +295,9 @@ describe("popup readout", () => {
 
     const field = root.querySelector(".swapfield input") as HTMLInputElement;
     expect(field.type).toBe("password");
+    expect(
+      root.querySelector(".swapfield .btn.primary")?.textContent,
+    ).toContain(copy.token.replace);
     // The resting masked value yields to a bare "on <host>" while swapping.
     expect(root.querySelector(".tk-val")).toBeNull();
 

@@ -134,7 +134,7 @@
   display: block;
   text-align: left;
   padding: 2px 0;
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
 }
 .fleet-open .say {
   display: flex;

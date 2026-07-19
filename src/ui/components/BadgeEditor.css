@@ -36,7 +36,7 @@
   width: 24px;
   height: 24px;
   flex: none;
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   border: var(--hairline) solid rgba(0, 0, 0, 0.18);
   cursor: pointer;
 }

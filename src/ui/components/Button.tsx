@@ -1,5 +1,6 @@
 import type { ComponentChildren, JSX } from "preact";
 import "./Button.css";
+import "./MenuSurface.css";
 
 type Kind = "primary" | "quiet" | "caution" | "ghost" | "destructive";
 

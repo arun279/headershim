@@ -127,10 +127,10 @@ export function ProfilesPage({
             </p>
           )}
         </div>
-        <button type="button" class="wb-primary" onClick={create}>
+        <Button kind="primary" onClick={create}>
           <PlusGlyph />
           {copy.options.profiles.newProfile}
-        </button>
+        </Button>
       </div>
 
       <div class="profiles-card">

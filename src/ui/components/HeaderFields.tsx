@@ -1,5 +1,6 @@
 import type { Direction, HeaderOp } from "../../core/model";
 import { copy } from "../copy";
+import { Segmented } from "./Segmented";
 
 interface HeaderDraft {
   direction: Direction;
@@ -24,7 +25,7 @@ export function HeaderFields<D extends HeaderDraft>({
 }) {
   return (
     <div class="editor-primary-grid">
-      <Segments
+      <SegmentedField
         name={`${idBase}-dir`}
         label={copy.editor.labels.direction}
         options={["request", "response"]}
@@ -33,7 +34,7 @@ export function HeaderFields<D extends HeaderDraft>({
         onPick={(direction) => update((current) => ({ ...current, direction }))}
       />
 
-      <Segments
+      <SegmentedField
         name={`${idBase}-op`}
         label={copy.editor.labels.operation}
         options={["set", "append", "remove"]}
@@ -46,7 +47,7 @@ export function HeaderFields<D extends HeaderDraft>({
   );
 }
 
-function Segments<V extends string>({
+function SegmentedField<V extends string>({
   name,
   label,
   options,
@@ -68,28 +69,17 @@ function Segments<V extends string>({
       <legend class="editor-label" id={name}>
         {label}
       </legend>
-      <div
-        class="segments editor-segments"
-        role="radiogroup"
-        aria-labelledby={name}
-      >
-        {options.map((value) => (
-          <label
-            class={selected === value ? "segment checked" : "segment"}
-            key={value}
-          >
-            <input
-              class="sr-only"
-              type="radio"
-              name={name}
-              value={value}
-              checked={selected === value}
-              onChange={() => onPick(value)}
-            />
-            {optionLabel(value)}
-          </label>
-        ))}
-      </div>
+      <Segmented
+        semantics="radio"
+        name={name}
+        labelledBy={name}
+        value={selected}
+        options={options.map((value) => ({
+          value,
+          label: optionLabel(value),
+        }))}
+        onChange={onPick}
+      />
       {error !== undefined && (
         <p class="editor-error" role="alert">
           {error}

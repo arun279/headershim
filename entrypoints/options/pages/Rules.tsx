@@ -7,9 +7,11 @@ import type { StateDoc } from "../../../src/core/model";
 import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
+import { Button } from "../../../src/ui/components/Button";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
 import { OpGlyph, PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
+import { Segmented } from "../../../src/ui/components/Segmented";
 import { sentence } from "../../../src/ui/components/sentence";
 import { Toast } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
@@ -254,27 +256,20 @@ export function RulesPage({
             state carries the one action, so the head carries neither. */}
         {!empty && (
           <div class="rules-controls">
-            <fieldset class="seg">
-              <legend class="sr-only">{text.lensLabel}</legend>
-              <button
-                type="button"
-                aria-pressed={lens === "site"}
-                onClick={() => setLens("site")}
-              >
-                {text.bySite}
-              </button>
-              <button
-                type="button"
-                aria-pressed={lens === "header"}
-                onClick={() => setLens("header")}
-              >
-                {text.byHeader}
-              </button>
-            </fieldset>
-            <button type="button" class="wb-primary" onClick={newRule}>
+            <Segmented
+              semantics="pressed"
+              label={text.lensLabel}
+              value={lens}
+              options={[
+                { value: "site", label: text.bySite },
+                { value: "header", label: text.byHeader },
+              ]}
+              onChange={setLens}
+            />
+            <Button kind="primary" onClick={newRule}>
               <PlusGlyph />
               {text.newRule}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -285,10 +280,10 @@ export function RulesPage({
             message={noProfilesOn ? text.emptyProfileOff : text.empty}
             actions={
               noProfilesOn ? undefined : (
-                <button type="button" class="wb-primary" onClick={newRule}>
+                <Button kind="primary" onClick={newRule}>
                   <PlusGlyph />
                   {text.newRule}
-                </button>
+                </Button>
               )
             }
           />

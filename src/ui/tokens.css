@@ -80,8 +80,6 @@
   --sp-4: 12px;
   --sp-5: 16px;
   --sp-6: 24px;
-  --radius-outer: 6px; /* legacy: options buttons/wells */
-  --radius-inner: 4px; /* legacy: badges, fields, focus rounding */
   --r-card: 13px; /* token hero, this-tab strip */
   --r-ctl: 9px; /* buttons */
   --r-chip: 8px; /* segmented / chips */
@@ -206,7 +204,7 @@ button {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
 }
 
 .mono {
@@ -224,7 +222,7 @@ button {
   display: grid;
   place-items: center;
   overflow: hidden;
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   font-family: var(--font-data);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -235,7 +233,7 @@ button {
 .inset-field {
   background: var(--raise2);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
   color: var(--ink);
 }
 
@@ -262,7 +260,7 @@ button {
   padding: 10px var(--sp-4) var(--sp-4);
   background: var(--panel);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-outer);
+  border-radius: var(--r-ctl);
   animation: editor-in var(--t-med) var(--ease);
 }
 

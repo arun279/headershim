@@ -31,38 +31,6 @@
   flex-wrap: wrap;
 }
 
-/* The theme picker is the shared segmented control (App.css .seg), inline. */
-.settings-segments {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--raise2);
-  border-radius: var(--r-chip);
-}
-.settings-segment {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  color: var(--ink2);
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
-}
-.settings-segment:hover {
-  color: var(--ink);
-}
-.settings-segment.checked {
-  color: var(--ink);
-  background: var(--panel);
-  box-shadow: 0 1px 2px rgba(18, 22, 33, 0.08);
-}
-.settings-segment:has(:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .settings-link {
   color: var(--live-ink);
   font-weight: 600;

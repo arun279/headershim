@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import type { StateDoc } from "../../../src/core/model";
+import { Segmented } from "../../../src/ui/components/Segmented";
 import { copy } from "../../../src/ui/copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
 import { applyTheme, type Theme } from "../../../src/ui/theme";
@@ -29,37 +30,19 @@ export function SettingsPage({
       <div class="settings-card">
         <fieldset class="settings-row settings-radios">
           <legend>{text.theme.label}</legend>
-          <div
-            class="settings-segments"
-            role="radiogroup"
-            aria-label={text.theme.label}
-          >
-            {(Object.entries(text.theme.options) as [Theme, string][]).map(
-              ([value, label]) => (
-                <label
-                  key={value}
-                  class={
-                    doc.settings.theme === value
-                      ? "settings-segment checked"
-                      : "settings-segment"
-                  }
-                >
-                  <input
-                    class="sr-only"
-                    type="radio"
-                    name="theme"
-                    value={value}
-                    checked={doc.settings.theme === value}
-                    onChange={() => {
-                      applyTheme(value);
-                      void mutations.setTheme(value);
-                    }}
-                  />
-                  {label}
-                </label>
-              ),
-            )}
-          </div>
+          <Segmented
+            semantics="radio"
+            name="theme"
+            label={text.theme.label}
+            value={doc.settings.theme}
+            options={(
+              Object.entries(text.theme.options) as [Theme, string][]
+            ).map(([value, label]) => ({ value, label }))}
+            onChange={(value) => {
+              applyTheme(value);
+              void mutations.setTheme(value);
+            }}
+          />
         </fieldset>
 
         <div class="settings-row settings-shortcuts">

@@ -12,10 +12,12 @@ const css = readFileSync(
   fileURLToPath(new URL("./tokens.css", import.meta.url)),
   "utf8",
 );
-const settingsCss = readFileSync(
-  fileURLToPath(
-    new URL("../../entrypoints/options/pages/Settings.css", import.meta.url),
-  ),
+const buttonCss = readFileSync(
+  fileURLToPath(new URL("./components/Button.css", import.meta.url)),
+  "utf8",
+);
+const segmentedCss = readFileSync(
+  fileURLToPath(new URL("./components/Segmented.css", import.meta.url)),
   "utf8",
 );
 const toggleCss = readFileSync(
@@ -140,14 +142,32 @@ describe("the accent, doubled and reserved", () => {
   });
 });
 
-describe("options settings surface inherits the palette", () => {
-  it("draws the segmented theme control on audited surfaces", () => {
-    expect(settingsCss).toMatch(
-      /\.settings-segments\s*\{[^}]*background:\s*var\(--raise2\)/s,
+describe("shared control skins inherit the palette", () => {
+  it("draws the only primary button with the live fill and control radius", () => {
+    expect(buttonCss).toMatch(
+      /\.btn\s*\{[^}]*border-radius:\s*var\(--r-ctl\)/s,
     );
-    expect(settingsCss).toMatch(
-      /\.settings-segment\.checked\s*\{[^}]*background:\s*var\(--panel\)/s,
+    expect(buttonCss).toMatch(
+      /\.btn\.primary\s*\{[^}]*background:\s*var\(--live-fill\)/s,
     );
+  });
+
+  it("draws radio and pressed segments on the one inset track", () => {
+    expect(segmentedCss).toMatch(
+      /\.segmented\s*\{[^}]*border-radius:\s*var\(--r-chip\)[^}]*background:\s*var\(--raise2\)/s,
+    );
+    expect(segmentedCss).toMatch(
+      /\.segmented button\[aria-pressed="true"\],[^{]*\.segmented-option:has\(input:checked\)\s*\{[^}]*background:\s*var\(--panel\)/s,
+    );
+  });
+
+  it("defines only the new radius scale", () => {
+    expect(
+      [...ROOT.matchAll(/--(r-(?:card|ctl|chip)):/g)].map((match) => match[1]),
+    ).toEqual(["r-card", "r-ctl", "r-chip"]);
+    expect(
+      ["r-card", "r-ctl", "r-chip"].map((token) => value(ROOT, token)),
+    ).toEqual(["13px", "9px", "8px"]);
   });
 
   it.each(THEMES)("$name: the checked segment text clears 4.5:1", ({

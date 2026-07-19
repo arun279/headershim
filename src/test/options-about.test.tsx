@@ -53,7 +53,9 @@ describe("options settings", () => {
   it("persists the theme choice and stamps data-theme on the root", async () => {
     const root = await mount("#settings");
     expect(root.querySelectorAll(".settings-row")).toHaveLength(2);
-    expect(root.querySelector(".settings-segments")).not.toBeNull();
+    expect(root.querySelector('[role="radiogroup"]')?.className).toBe(
+      "segmented",
+    );
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
     expect(radio(root, "theme", "system").checked).toBe(true);
     expect(

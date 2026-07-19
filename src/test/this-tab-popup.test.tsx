@@ -64,7 +64,11 @@ async function composeChange(): Promise<HTMLElement> {
   typeInto(root.querySelector(".cin.name") as HTMLInputElement, "x-a");
   typeInto(root.querySelector(".cin.val") as HTMLInputElement, "42");
   await act(async () => {
-    (root.querySelector(".compose .commit") as HTMLButtonElement).click();
+    const submit = root.querySelector(
+      ".compose .btn.primary",
+    ) as HTMLButtonElement;
+    expect(submit.textContent).toContain(copy.readout.addThisTab);
+    submit.click();
   });
   await settle();
   return root;
@@ -103,6 +107,46 @@ describe("popup This-tab overrides", () => {
     );
   });
 
+  it("keeps both composer choices as labelled pressed-button groups", async () => {
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+
+    const groups = [
+      ...root.querySelectorAll<HTMLElement>(".compose fieldset.segmented"),
+    ];
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
+      copy.editor.labels.direction,
+      copy.editor.labels.operation,
+    ]);
+    expect(
+      groups.map((group) =>
+        [...group.querySelectorAll("button")].map((button) => [
+          button.textContent,
+          button.getAttribute("aria-pressed"),
+        ]),
+      ),
+    ).toEqual([
+      [
+        [copy.readout.direction.request, "true"],
+        [copy.readout.direction.response, "false"],
+      ],
+      [
+        [copy.editor.operation.set, "true"],
+        [copy.editor.operation.append, "false"],
+        [copy.editor.operation.remove, "false"],
+      ],
+    ]);
+
+    fire(() => groups[1]?.querySelectorAll("button")[2]?.click());
+    expect(
+      [...(groups[1]?.querySelectorAll("button") ?? [])].map((button) =>
+        button.getAttribute("aria-pressed"),
+      ),
+    ).toEqual(["false", "false", "true"]);
+    expect(root.querySelector(".cin.val")).toBeNull();
+  });
+
   it("writes nothing when the host grant is declined", async () => {
     vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValue(false);
     const root = await composeChange();
@@ -123,7 +167,9 @@ describe("popup This-tab overrides", () => {
     typeInto(root.querySelector(".cin.name") as HTMLInputElement, ":method");
     typeInto(root.querySelector(".cin.val") as HTMLInputElement, "x");
     await act(async () => {
-      (root.querySelector(".compose .commit") as HTMLButtonElement).click();
+      (
+        root.querySelector(".compose .btn.primary") as HTMLButtonElement
+      ).click();
     });
     await settle();
     expect(root.querySelector(".compose")).not.toBeNull();

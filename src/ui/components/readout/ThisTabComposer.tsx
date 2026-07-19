@@ -12,7 +12,9 @@ import type {
   OverrideDraft,
   SessionMutationError,
 } from "../../state/session-mutations";
+import { Button } from "../Button";
 import { parseHeaderLine } from "../headerLine";
+import { Segmented } from "../Segmented";
 import { useEscapeDismiss } from "../usePopoverDismiss";
 import { OpGlyph, TabGlyph } from "./glyphs";
 
@@ -95,34 +97,32 @@ export function ThisTabComposer({
         <TabGlyph />
         {copy.readout.thisTabTag}
       </div>
-      <div class="cseg-row">
-        <div class="cseg">
-          {DIRECTIONS.map((option) => (
-            <button
-              type="button"
-              key={option}
-              class={option === direction ? "on" : ""}
-              aria-pressed={option === direction}
-              onClick={() => setDirection(option)}
-            >
-              {copy.readout.direction[option]}
-            </button>
-          ))}
-        </div>
-        <div class="cseg">
-          {OPERATIONS.map((option) => (
-            <button
-              type="button"
-              key={option}
-              class={option === operation ? "on" : ""}
-              aria-pressed={option === operation}
-              onClick={() => setOperation(option)}
-            >
-              <OpGlyph operation={option} />
-              {copy.editor.operation[option]}
-            </button>
-          ))}
-        </div>
+      <div class="compose-segments">
+        <Segmented
+          semantics="pressed"
+          label={copy.editor.labels.direction}
+          value={direction}
+          options={DIRECTIONS.map((option) => ({
+            value: option,
+            label: copy.readout.direction[option],
+          }))}
+          onChange={setDirection}
+        />
+        <Segmented
+          semantics="pressed"
+          label={copy.editor.labels.operation}
+          value={operation}
+          options={OPERATIONS.map((option) => ({
+            value: option,
+            label: (
+              <>
+                <OpGlyph operation={option} />
+                {copy.editor.operation[option]}
+              </>
+            ),
+          }))}
+          onChange={setOperation}
+        />
       </div>
       <div class="cfields">
         <input
@@ -181,9 +181,9 @@ export function ThisTabComposer({
         <button type="button" class="btng" onClick={onClose}>
           {copy.actions.cancel}
         </button>
-        <button type="button" class="commit" onClick={commit}>
+        <Button kind="primary" onClick={commit}>
           {copy.readout.addThisTab} <span class="kbd mono">↵</span>
-        </button>
+        </Button>
       </div>
     </section>
   );

@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { copy } from "../../copy";
 import type { TabChange } from "../../state/readout";
 import { maskToken, tokenFreshness } from "../../token";
+import { Button } from "../Button";
 import { sentence } from "../sentence";
 import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
 import { ClockGlyph, KeyGlyph } from "./glyphs";
@@ -165,9 +166,9 @@ function SwapField({
         }}
       />
       <div class="actions">
-        <button type="button" class="btnp" onClick={() => onReplace(value)}>
+        <Button kind="primary" onClick={() => onReplace(value)}>
           {copy.token.replace} <span class="kbd mono">↵</span>
-        </button>
+        </Button>
         <button type="button" class="btng" onClick={onCancel}>
           {copy.token.cancel}
         </button>

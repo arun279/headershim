@@ -60,18 +60,11 @@
   color: var(--ink);
   background: var(--raise2);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
 }
 
 .field.mono {
   font-family: var(--font-data);
-}
-
-.editor-segments .segment {
-  min-width: 58px;
-  justify-content: center;
-  padding: 4px 10px;
-  font-size: 12.5px;
 }
 
 .editor-profile-select {
@@ -132,7 +125,7 @@
 .editor-cancel {
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--radius-outer);
+  border-radius: var(--r-ctl);
   color: var(--ink2);
 }
 
@@ -146,7 +139,7 @@
   margin-right: auto;
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--radius-outer);
+  border-radius: var(--r-ctl);
   color: var(--stop);
   font-weight: 600;
 }

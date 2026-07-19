@@ -212,6 +212,9 @@ describe("all rules", () => {
 
     const heads = () =>
       [...root.querySelectorAll(".fleet-host")].map((head) => head.textContent);
+    expect(
+      root.querySelector("fieldset.segmented")?.getAttribute("aria-label"),
+    ).toBe(text.lensLabel);
     // Both rules collapse under one header group.
     expect(heads()).toEqual(["x-env"]);
     expect(findButton(root, text.byHeader).getAttribute("aria-pressed")).toBe(
@@ -220,6 +223,7 @@ describe("all rules", () => {
     expect(findButton(root, text.bySite).getAttribute("aria-pressed")).toBe(
       "false",
     );
+    expect(findButton(root, text.newRule).className).toBe("btn primary");
 
     fire(() => findButton(root, text.bySite).click());
     await settle();
@@ -338,7 +342,7 @@ describe("all rules", () => {
       ),
     ).toHaveLength(1);
     expect(within(root, ".empty-state").textContent).toContain(text.empty);
-    expect(root.querySelector(".seg")).toBeNull();
+    expect(root.querySelector(".segmented")).toBeNull();
   });
 });
 

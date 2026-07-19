@@ -4,14 +4,20 @@
   gap: var(--sp-2);
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--radius-outer);
+  border-radius: var(--r-ctl);
   font-size: 12.5px;
   font-weight: 600;
 }
 
 .btn.primary {
+  flex: none;
   background: var(--live-fill);
   color: var(--on-live);
+  white-space: nowrap;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.04);
 }
 
 .btn.quiet {
@@ -32,7 +38,7 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   color: var(--ink2);
 }
 
@@ -47,12 +53,6 @@
   margin: 0;
   z-index: 2;
   padding: var(--sp-2);
-  background: var(--panel);
-  /* Explicit, so menu-item text never inherits the UA popover's CanvasText. */
-  color: var(--ink);
-  border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-outer);
-  box-shadow: var(--shadow-pop);
 }
 
 .menu-pop[data-popover-open] {
@@ -65,7 +65,7 @@
   width: 100%;
   min-height: 28px;
   padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   font-size: 12.5px;
   text-align: left;
 }

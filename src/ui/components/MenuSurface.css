@@ -1,0 +1,9 @@
+.menu-pop,
+.combo-list {
+  background: var(--panel);
+  /* Explicit, so popover text never inherits the UA's CanvasText. */
+  color: var(--ink);
+  border: var(--hairline) solid var(--line-strong);
+  border-radius: var(--r-chip);
+  box-shadow: var(--shadow-pop);
+}

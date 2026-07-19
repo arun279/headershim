@@ -2,6 +2,7 @@ import { useId, useState } from "preact/hooks";
 import type { ResourceGroup, Scope } from "../../core/model";
 import { copy } from "../copy";
 import { ChipField } from "./ChipField";
+import { Segmented } from "./Segmented";
 import { sentence } from "./sentence";
 import "./ScopeEditor.css";
 
@@ -151,26 +152,20 @@ function SegmentedType({
   // Native radios carry the whole radio-group contract — arrows move and
   // select, one tab stop — so the segment paint is just a label skin.
   return (
-    <div class="segments" role="radiogroup" aria-labelledby={labelId}>
-      {SEGMENTS.map((segment) => (
-        <label
-          key={segment}
-          class={type === segment ? "segment checked" : "segment"}
-        >
-          <input
-            class="sr-only"
-            type="radio"
-            name={`${id}-scope-type`}
-            value={segment}
-            checked={type === segment}
-            onChange={() => onType(segment)}
-          />
-          {segment === "all"
+    <Segmented
+      semantics="radio"
+      name={`${id}-scope-type`}
+      labelledBy={labelId}
+      value={type}
+      options={SEGMENTS.map((segment) => ({
+        value: segment,
+        label:
+          segment === "all"
             ? copy.editor.allSites
-            : copy.editor.scopeType[segment]}
-        </label>
-      ))}
-    </div>
+            : copy.editor.scopeType[segment],
+      }))}
+      onChange={onType}
+    />
   );
 }
 

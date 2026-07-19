@@ -7,12 +7,6 @@
   max-height: 168px;
   overflow-y: auto;
   list-style: none;
-  background: var(--panel);
-  /* Explicit, so option text never inherits the UA popover's CanvasText. */
-  color: var(--ink);
-  border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
-  box-shadow: var(--shadow-pop);
 }
 
 .combo-option {

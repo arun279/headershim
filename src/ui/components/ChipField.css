@@ -17,7 +17,7 @@
   padding: var(--sp-1);
   background: var(--raise2);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
 }
 
 .chip-field-chip {
@@ -25,7 +25,7 @@
   align-items: center;
   min-height: 24px;
   background: var(--panel);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   font-size: 12px;
 }
 
@@ -81,7 +81,7 @@
   font-size: 11px;
   background: var(--raise2);
   border: var(--hairline) solid var(--line-strong);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-ctl);
 }
 
 .grant-chip .mono {
