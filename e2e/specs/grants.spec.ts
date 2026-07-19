@@ -93,70 +93,32 @@ test("response-header rules apply to HTTP-cached responses", {
   expect(cached.responseHeaders[header]).toBe("cached-rule");
 });
 
-// An ungranted rule must surface the calm needs-access state in the popup, not
-// fail silently. For one visible blocked row, the strip summarizes and the row
-// owns the sole recovery action.
-test("an ungranted rule shows the calm needs-access state in the popup", async ({
-  context,
-  extensionId,
-  serviceWorker,
-}) => {
-  await seedState(
-    serviceWorker,
-    stateWithRules([
-      {
-        direction: "request",
-        operation: "set",
-        header: "x-headershim-calm",
-        value: "1",
-        scope: { type: "domains", domains: ["needs.example.test"] },
-        resourceTypes: ["xhr"],
-        initiators: [],
-        enabled: true,
-      },
-    ]),
-  );
-
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  const annunciator = popup.locator(".annunciator");
-  await expect(annunciator).toHaveAttribute("data-state", "needs-access");
-  await expect(
-    annunciator.getByRole("button", { name: copy.actions.grantAccess }),
-  ).toHaveCount(0);
-
-  // The row tells the actionable truth. The switch preserves the user's
-  // requested on-state, while amber held styling, status words, and Grant make
-  // clear that the rule cannot run yet.
-  const row = popup.locator(".rule-row").first();
-  await expect(row).toHaveClass(/\bblocked\b/);
-  await expect(row).not.toHaveClass(/\brunning\b/);
-  await expect(row.locator(".rule-status")).toContainText("Needs access");
-  await expect(row.locator(".rule-status")).toContainText("needs.example.test");
-  const toggle = row.getByRole("switch");
-  await expect(toggle).toHaveAttribute("aria-checked", "true");
-  await expect(toggle).toHaveClass(/\bsw-blocked\b/);
-  const toggleColors = await toggle.evaluate((element) => {
-    const resolveColor = (token: string) => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(${token})`;
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    };
-    return {
-      track: getComputedStyle(element, "::before").backgroundColor,
-      amber: resolveColor("--amber"),
-      green: resolveColor("--live"),
-    };
-  });
-  expect(toggleColors.track).toBe(toggleColors.amber);
-  expect(toggleColors.track).not.toBe(toggleColors.green);
-  await expect(
-    row.getByRole("button", { name: copy.actions.grant, exact: true }),
-  ).toBeVisible();
-});
+// The popup's calm needs-access state — an ungranted rule rendered amber in the
+// head (`.lamp.warn` + `.substatus .amber`) with its row owning the sole Grant
+// action (`.change-line.needs-access .grant`) — is not reproducible end to end.
+// The redesigned popup is tab-scoped: it renders a rule only for the host the
+// active tab reports, and it can enter needs-access only when that host is
+// readable AND ungranted. No e2e build supplies both. The shipped build has no
+// host_permissions, so Chromium redacts tabs.query().url (a probe reads null
+// even with the site frontmost) and the popup shows its no-host state with no
+// rows. The host-access build exposes the tab URL but grants *://*/* — a
+// required, non-revocable permission — so every rule reads live, never
+// needs-access. That combination is only reachable in production, where
+// clicking the action grants activeTab on an ungranted site.
+//
+// The state itself is real, works, and is asserted against the exact redesigned
+// DOM by unit and integration tests: src/test/popup.test.tsx ("shows an
+// ungranted rule amber with a Grant that clears every surface") asserts
+// .change-line.needs-access, .substatus .amber, .lamp.warn, and the presence of
+// the row's Grant button; src/ui/state/readout.test.ts covers the needs-access
+// projection and its missing origins; src/test/grant-flow.integration.test.tsx
+// drives the grant/decline/revoke transitions and asserts the surfaces relight
+// (through permissions.request/remove, since jsdom cannot answer Chrome's native
+// prompt). The system-level needs-access signal is covered end to end by
+// badge.spec.ts ("paints the needs-access Chrome badge amber").
+// So the e2e case is removed rather than reconciled: pointing it at a build
+// where the rule is always granted would make the needs-access assertion
+// impossible, and no build lets the popup read an ungranted host.
 
 // Site-access UI half: the Site access page is a projection of the
 // browser's live permissions plus the rules' required origins. The shipped
@@ -196,9 +158,12 @@ test("the site-access page mirrors the browser's granted and needed origins", as
 
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html#site-access`);
-  await expect(page.locator(".page-title")).toBeVisible();
 
   const text = copy.options.siteAccess;
+  await expect(
+    page.getByRole("heading", { name: text.title, level: 1 }),
+  ).toBeVisible();
+
   const needed = page.getByRole("list", { name: text.neededHeading });
   await expect(needed.locator(".sa-domain")).toHaveText([
     "api.example.com",

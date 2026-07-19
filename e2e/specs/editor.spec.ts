@@ -1,8 +1,18 @@
-import type { Worker } from "@playwright/test";
+import type { Page, Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
 import { expect, seedState, test } from "../fixtures";
+
+// The Ready view attaches the popup's document-level keydown listener only once
+// it mounts, and init awaits async storage; pressing a shortcut before then
+// drops the key. The profile-switcher chip is the head control that view always
+// draws, so its visibility is the stable signal the keypress will be heard.
+async function waitForReady(page: Page): Promise<void> {
+  await expect(
+    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
+  ).toBeVisible();
+}
 
 async function readState(worker: Worker): Promise<StateDoc> {
   return worker.evaluate(async () => {
@@ -27,22 +37,31 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await waitForReady(page);
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
   await expect(editor).toBeVisible();
-  await expect(page.locator(".popup-head")).toHaveCount(0);
-  await expect(page.locator(".first-run")).toHaveCount(0);
+  // The editor owns the whole surface: the popup's own readout is unmounted,
+  // head and footer alike, so no readout control can be reached behind it —
+  // proven by the absence of the readout's own head and foot regions, not just
+  // the Options button.
+  await expect(page.locator(".head")).toHaveCount(0);
+  await expect(page.locator(".foot")).toHaveCount(0);
 
   const name = editor.getByRole("combobox", {
     name: copy.editor.labels.headerName,
   });
   await name.fill("x-explicit-only");
 
+  // The radio inputs are .sr-only; a pointer click has to land on the visible
+  // enclosing label, while the checked state is still read back by role.
   await editor
-    .getByRole("radio", { name: copy.editor.direction.response })
+    .locator("label.segmented-option", {
+      hasText: copy.editor.direction.response,
+    })
     .click();
   await expect(
     editor.getByRole("radio", { name: copy.editor.direction.response }),
@@ -54,7 +73,9 @@ test("editor controls never save or leave the sheet by themselves", async ({
     name: copy.editor.operation.remove,
   });
   await editor
-    .locator("label.segment", { hasText: copy.editor.operation.remove })
+    .locator("label.segmented-option", {
+      hasText: copy.editor.operation.remove,
+    })
     .click();
   await expect(operation).toBeChecked();
   await expect(
@@ -64,7 +85,9 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
-    .locator("label.segment", { hasText: copy.editor.scopeType.pattern })
+    .locator("label.segmented-option", {
+      hasText: copy.editor.scopeType.pattern,
+    })
     .click();
   await expect(
     editor.getByRole("radio", { name: copy.editor.scopeType.pattern }),
@@ -73,7 +96,9 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
-    .locator("label.segment", { hasText: copy.editor.scopeType.regex })
+    .locator("label.segmented-option", {
+      hasText: copy.editor.scopeType.regex,
+    })
     .click();
   await expect(
     editor.getByRole("radio", { name: copy.editor.scopeType.regex }),
@@ -85,7 +110,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
     name: copy.editor.allSites,
   });
   await editor
-    .locator("label.segment", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: copy.editor.allSites })
     .click();
   await expect(allSites).toBeChecked();
   await expect(editor).toBeVisible();
@@ -102,9 +127,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
   const pages = editor.getByRole("checkbox", {
     name: copy.resourceTypes.groups.pages,
   });
-  await editor
-    .locator("label.rt-item", { hasText: copy.resourceTypes.groups.pages })
-    .click();
+  await pages.click();
   await expect(pages).not.toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
@@ -122,7 +145,10 @@ test("editor controls never save or leave the sheet by themselves", async ({
     })
     .click();
   await expect(editor).toBeHidden();
-  await expect(page.locator(".first-run")).toBeVisible();
+  // Discarding drops back to the popup's own surface, chrome and all.
+  await expect(
+    page.getByRole("button", { name: copy.actions.options }),
+  ).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 });
 
@@ -137,6 +163,7 @@ test("Create rule is the only pointer action that saves a draft", {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await waitForReady(page);
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
@@ -152,7 +179,7 @@ test("Create rule is the only pointer action that saves a draft", {
   await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("created");
   await editor
-    .locator("label.segment", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: copy.editor.allSites })
     .click();
   await expect(
     editor.getByRole("radio", { name: copy.editor.allSites }),
@@ -164,7 +191,9 @@ test("Create rule is the only pointer action that saves a draft", {
   await editor.getByRole("radio", { name: copy.editor.operation.set }).focus();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
-  await editor.locator(".editor-title").click();
+  await editor
+    .getByRole("heading", { name: copy.editor.heading("new", "Default") })
+    .click();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
@@ -172,7 +201,12 @@ test("Create rule is the only pointer action that saves a draft", {
     .getByRole("button", { name: copy.actions.createRule, exact: true })
     .click();
   await expect(editor).toBeHidden();
-  await expect(page.locator(".rule-row")).toHaveCount(1);
+  // The commit is announced, so a save that silently gives no feedback fails
+  // here rather than passing on the store count alone. Scoped to the toast: the
+  // same words also render in the aria-live region, so an unscoped match is two.
+  await expect(
+    page.locator(".toast", { hasText: copy.toast.ruleCreated }),
+  ).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(1);
 
   const doc = await readState(serviceWorker);
@@ -191,6 +225,7 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
   await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await waitForReady(page);
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
@@ -206,7 +241,7 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
   await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("chord");
   await editor
-    .locator("label.segment", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: copy.editor.allSites })
     .click();
   await expect(
     editor.getByRole("radio", { name: copy.editor.allSites }),
@@ -220,6 +255,8 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
 
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(editor).toBeHidden();
-  await expect(page.locator(".rule-row")).toHaveCount(1);
+  await expect(
+    page.locator(".toast", { hasText: copy.toast.ruleCreated }),
+  ).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(1);
 });

@@ -179,9 +179,10 @@ test("an export round-trips through the options UI to an equivalent state, off",
   }
 });
 
-// The thirteen ModHeader warning kinds the fixture is built to produce; four of
-// them (tab/tab-group/window/time) deliberately share one copy string, so rows
-// are matched on their distinct name plus detail, not the detail alone.
+// Every warning class the two import codecs can raise — the fixture is built to
+// exercise all of them. Four of the dropped-filter kinds (tab/tab-group/window/
+// time) deliberately share one copy string, so rows are matched on their
+// distinct name plus detail, not the detail alone.
 const WARNING_KINDS: readonly ImportPlanWarning["kind"][] = [
   "credential",
   "security-response",
@@ -224,8 +225,12 @@ test("a ModHeader import surfaces every warning class on the summary", async ({
     throw new Error(`fixture failed to decode: ${decoded.error.kind}`);
   }
   const { warnings: decodedWarnings } = decoded.value;
-  expect(decodedWarnings.map((warning) => warning.kind).sort()).toEqual(
-    [...WARNING_KINDS].sort(),
+  // Class coverage, not an ordered count: the fixture emits more warnings than
+  // there are classes because `credential` fires once per credential-bearing
+  // header (authorization, cookie, set-cookie). A set equality pins that every
+  // class appears and no unknown class leaks, without freezing the multiplicity.
+  expect(new Set(decodedWarnings.map((warning) => warning.kind))).toEqual(
+    new Set(WARNING_KINDS),
   );
 
   const page = await context.newPage();
