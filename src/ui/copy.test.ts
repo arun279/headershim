@@ -8,6 +8,9 @@ describe("copy", () => {
     expect(copy.readout.needsAccess(2)).toBe("2 needs access");
     expect(copy.readout.overridden(1)).toBe("1 overridden by another rule");
     expect(copy.readout.refused(3)).toBe("3 refused by Chrome");
+    // The one state only Chrome can settle names Chrome at the count, not a
+    // bare "unconfirmed".
+    expect(copy.readout.unconfirmed(2)).toBe("2 confirmable only by Chrome");
     expect(copy.readout.overriddenBy("Staging auth")).toBe(
       "overridden by Staging auth",
     );
@@ -87,6 +90,19 @@ describe("copy", () => {
     );
     expect(copy.options.profiles.nameTaken("Staging")).toBe(
       "'Staging' is taken. Use a different name.",
+    );
+    // One canonical label per state across the popup and the options
+    // Configured-changes surface: no per-surface drift.
+    expect(copy.options.traffic.status.unconfirmed).toBe(
+      "confirmable only by Chrome",
+    );
+    expect(copy.options.traffic.status.needsAccess).toBe("needs access");
+    expect(copy.readout.unconfirmed(3)).toContain(
+      copy.options.traffic.status.unconfirmed,
+    );
+    // The per-line reason stays the honest sentence that never presumes a match.
+    expect(copy.readout.unconfirmedReason).toBe(
+      "Only Chrome can tell whether this matches here",
     );
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",

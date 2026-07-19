@@ -91,7 +91,7 @@ export const copy = {
     // The ruleset Chrome is running is not the one on screen, so no line can
     // claim to be live until the two agree again.
     outOfSyncReason: "Chrome hasn't taken this rule yet",
-    unconfirmed: (count: number) => `${count} unconfirmed`,
+    unconfirmed: (count: number) => `${count} confirmable only by Chrome`,
     outOfSync: (count: number) => `${count} not applied yet`,
     details: "Details",
     grant: "Grant",
@@ -242,8 +242,8 @@ export const copy = {
       title: "Configured changes",
       status: {
         live: "live",
-        unconfirmed: "only Chrome can say",
-        needsAccess: "not granted",
+        unconfirmed: "confirmable only by Chrome",
+        needsAccess: "needs access",
         refused: "refused by Chrome",
         managed: "managed by Chrome",
         outOfSync: "not applied yet",
