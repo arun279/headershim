@@ -244,13 +244,16 @@ button {
   font-weight: 500;
 }
 
-/* Silkscreen micro-label: source copy stays sentence case, caps via CSS only. */
+/* Silkscreen micro-label: source copy stays sentence case, caps via CSS only.
+   ink2, not ink3: at 10px this reads on raised wells too. --ink3 dips to 4.27:1
+   on the --raise2 well the import summary tints (light), just under the 4.5:1
+   text floor; --ink2 clears it on every surface (>=6:1, both themes). */
 .silk {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink3);
+  color: var(--ink2);
 }
 
 /* The bordered inset card the rule editor and composer expand into. */
