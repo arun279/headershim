@@ -95,6 +95,7 @@
       "spawn-sync"
     ],
     "overrides": {
+      "adm-zip": ">=0.6.0",
       "esbuild": ">=0.28.1",
       "shell-quote": ">=1.8.4",
       "tmp": ">=0.2.6",
