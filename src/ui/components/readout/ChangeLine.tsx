@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { copy } from "../../copy";
+import { grantLabel } from "../../grantLabel";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
 import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
@@ -113,7 +114,7 @@ export function ChangeLine({
       <div class="line-control">
         {change.status === "needs-access" ? (
           <button type="button" class="grant" onClick={onGrant}>
-            {copy.readout.grant}
+            {grantLabel(change.missing)}
           </button>
         ) : (
           <>

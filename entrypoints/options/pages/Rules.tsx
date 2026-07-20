@@ -21,6 +21,7 @@ import {
 } from "../../../src/ui/components/Truncate";
 import { toneForStatus } from "../../../src/ui/components/toggleTone";
 import { copy } from "../../../src/ui/copy";
+import { grantLabel } from "../../../src/ui/grantLabel";
 import {
   type FleetRule,
   groupByHeader,
@@ -457,7 +458,7 @@ function FleetRow({
       <div class="line-control">
         {rule.status === "needs-access" && (
           <button type="button" class="grant" onClick={() => onGrant(rule)}>
-            {copy.readout.grant}
+            {grantLabel(rule.missing)}
           </button>
         )}
         <Toggle

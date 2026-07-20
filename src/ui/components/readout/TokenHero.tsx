@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { copy } from "../../copy";
+import { grantLabel } from "../../grantLabel";
 import type { TabChange } from "../../state/readout";
 import { maskToken, tokenFreshness } from "../../token";
 import { Button } from "../Button";
@@ -71,7 +72,7 @@ export function TokenHero({
         {!swapping &&
           (needsAccess ? (
             <button type="button" class="grant tk-action" onClick={onGrant}>
-              {copy.readout.grant}
+              {grantLabel(change.missing)}
             </button>
           ) : (
             <button

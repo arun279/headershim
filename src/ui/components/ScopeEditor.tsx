@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
 import type { ResourceGroup, Scope } from "../../core/model";
 import { copy } from "../copy";
@@ -12,6 +13,8 @@ export interface ScopeDraft {
   domains: string[];
   pattern: string;
   regex: string;
+  /** Hosts a pattern/regex rule is granted on; empty means all sites. */
+  hosts: string[];
 }
 
 interface ScopeEditorProps {
@@ -86,37 +89,28 @@ export function ScopeEditor(props: ScopeEditorProps) {
             </>
           )}
           {scope.type === "pattern" && (
-            <>
-              <input
-                class="field mono"
-                type="text"
-                aria-label={copy.editor.scopeType.pattern}
-                aria-invalid={props.error !== undefined ? true : undefined}
-                value={scope.pattern}
-                onInput={(event) =>
-                  props.onScope({
-                    ...scope,
-                    pattern: event.currentTarget.value,
-                  })
-                }
-              />
-              <p class="editor-micro">{sentence(copy.editor.patternHint)}</p>
-            </>
+            <UrlScopeField
+              id={id}
+              label={copy.editor.scopeType.pattern}
+              hint={sentence(copy.editor.patternHint)}
+              invalid={props.error !== undefined}
+              value={scope.pattern}
+              hosts={scope.hosts}
+              onValue={(pattern) => props.onScope({ ...scope, pattern })}
+              onHosts={(hosts) => props.onScope({ ...scope, hosts })}
+            />
           )}
           {scope.type === "regex" && (
-            <>
-              <input
-                class="field mono"
-                type="text"
-                aria-label={copy.editor.scopeType.regex}
-                aria-invalid={props.error !== undefined ? true : undefined}
-                value={scope.regex}
-                onInput={(event) =>
-                  props.onScope({ ...scope, regex: event.currentTarget.value })
-                }
-              />
-              <p class="editor-micro">{copy.editor.regexHint}</p>
-            </>
+            <UrlScopeField
+              id={id}
+              label={copy.editor.scopeType.regex}
+              hint={copy.editor.regexHint}
+              invalid={props.error !== undefined}
+              value={scope.regex}
+              hosts={scope.hosts}
+              onValue={(regex) => props.onScope({ ...scope, regex })}
+              onHosts={(hosts) => props.onScope({ ...scope, hosts })}
+            />
           )}
           {scope.type === "all" && (
             <p class="editor-micro">{copy.editor.allSitesHelper}</p>
@@ -134,6 +128,81 @@ export function ScopeEditor(props: ScopeEditorProps) {
         defaultOpen={props.defaultResourceTypesOpen === true}
         onResourceTypes={props.onResourceTypes}
       />
+    </>
+  );
+}
+
+/**
+ * The pattern and regex scopes share one shape: a mono URL-matching field, its
+ * syntax hint, and the grant-hosts escape hatch beneath. Only the label, hint,
+ * and which field they write differ.
+ */
+function UrlScopeField({
+  id,
+  label,
+  hint,
+  invalid,
+  value,
+  hosts,
+  onValue,
+  onHosts,
+}: {
+  id: string;
+  label: string;
+  hint: ComponentChildren;
+  invalid: boolean;
+  value: string;
+  hosts: string[];
+  onValue: (value: string) => void;
+  onHosts: (hosts: string[]) => void;
+}) {
+  return (
+    <>
+      <input
+        class="field mono"
+        type="text"
+        aria-label={label}
+        aria-invalid={invalid ? true : undefined}
+        value={value}
+        onInput={(event) => onValue(event.currentTarget.value)}
+      />
+      <p class="editor-micro">{hint}</p>
+      <GrantHosts id={`${id}-hosts`} hosts={hosts} onChange={onHosts} />
+    </>
+  );
+}
+
+/**
+ * The per-site escape hatch for a pattern/regex rule. A regex names no host
+ * Chrome can scope a permission to, so leaving this empty is an honest all-sites
+ * request; adding a host bounds the grant to it and keeps the rule per-site.
+ */
+function GrantHosts({
+  id,
+  hosts,
+  onChange,
+}: {
+  id: string;
+  hosts: string[];
+  onChange: (hosts: string[]) => void;
+}) {
+  return (
+    <>
+      <ChipField
+        id={id}
+        label={copy.editor.grantHostsLabel}
+        inputLabel={copy.editor.grantHostInputLabel}
+        placeholder={copy.editor.addDomain}
+        values={hosts}
+        variant="grant"
+        removeLabel={copy.editor.removeDomain}
+        onChange={onChange}
+      />
+      <p class="editor-micro">
+        {hosts.length === 0
+          ? copy.editor.grantHostsAllSites
+          : copy.editor.grantHostsBounded}
+      </p>
     </>
   );
 }

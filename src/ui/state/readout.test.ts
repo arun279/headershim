@@ -327,16 +327,29 @@ describe("computeReadout", () => {
     expect(readout.total).toBe(1);
   });
 
+  const hostlessRegexProfile = () =>
+    profile({
+      rules: [
+        rule({ scope: { type: "regex", regex: "^https://x/", hosts: [] } }),
+      ],
+    });
+
   it("declines to claim a regex rule matches this tab, however broad its grant", () => {
     const readout = computeReadout({
       ...base,
-      activeProfile: profile({
-        rules: [
-          rule({ scope: { type: "regex", regex: "^https://x/", hosts: [] } }),
-        ],
-      }),
+      activeProfile: hostlessRegexProfile(),
     });
     expect(readout.request[0]?.status).toBe("unconfirmed");
+  });
+
+  it("asks for broad access when a hostless regex rule needs a grant", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: NONE,
+      activeProfile: hostlessRegexProfile(),
+    });
+    expect(readout.request[0]?.status).toBe("needs-access");
+    expect(readout.request[0]?.missing).toEqual(["*://*/*"]);
   });
 
   it("refuses a regex the browser reports unsupported", () => {

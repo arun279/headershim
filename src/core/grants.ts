@@ -12,7 +12,9 @@ export interface GrantSnapshot {
   readonly allSites: boolean;
 }
 
-export function requiredOrigins(rule: Rule): string[] {
+export function requiredOrigins(
+  rule: Pick<Rule, "scope" | "resourceTypes" | "initiators">,
+): string[] {
   // A pattern/regex rule names no host to grant. Without one Chrome applies
   // nothing unless all-sites is granted, so the honest requirement is broad
   // access — not the empty set, which would read as already-live (initiators
@@ -176,7 +178,7 @@ function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
  * require the initiating page granted too, so only then can an unnamed
  * initiator be a silent gap worth a standing note.
  */
-function coversSubresourceTypes(rule: Rule): boolean {
+function coversSubresourceTypes(rule: Pick<Rule, "resourceTypes">): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",

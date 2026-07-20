@@ -8,7 +8,9 @@ import {
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
+  isAllSitesOrigin,
   originGranted,
+  requiredOrigins,
 } from "../../core/grants";
 import type {
   Direction,
@@ -568,6 +570,7 @@ function initialDraft(
         domains: prefillDomain === undefined ? [] : [prefillDomain],
         pattern: "",
         regex: "",
+        hosts: [],
       },
       resourceTypes: "all",
       comment: "",
@@ -585,6 +588,10 @@ function initialDraft(
       domains: source.scope.type === "domains" ? [...source.scope.domains] : [],
       pattern: source.scope.type === "pattern" ? source.scope.pattern : "",
       regex: source.scope.type === "regex" ? source.scope.regex : "",
+      hosts:
+        source.scope.type === "pattern" || source.scope.type === "regex"
+          ? [...source.scope.hosts]
+          : [],
     },
     resourceTypes:
       source.resourceTypes === "all" ? "all" : [...source.resourceTypes],
@@ -660,7 +667,7 @@ function toRuleDraft(draft: Draft, rule: Rule | undefined): RuleDraft {
     operation: draft.operation,
     header: draft.header,
     ...(draft.operation === "remove" ? {} : { value: draft.value }),
-    scope: toScope(draft.scope, rule),
+    scope: toScope(draft.scope),
     resourceTypes: draft.resourceTypes,
     initiators: rule === undefined ? [] : [...rule.initiators],
     enabled: rule?.enabled ?? true,
@@ -671,7 +678,7 @@ function toRuleDraft(draft: Draft, rule: Rule | undefined): RuleDraft {
   };
 }
 
-function toScope(scope: ScopeDraft, rule: Rule | undefined): Scope {
+function toScope(scope: ScopeDraft): Scope {
   switch (scope.type) {
     case "domains":
       return { type: "domains", domains: [...scope.domains] };
@@ -679,27 +686,13 @@ function toScope(scope: ScopeDraft, rule: Rule | undefined): Scope {
       return {
         type: "pattern",
         pattern: scope.pattern,
-        hosts: keptHosts(rule, "pattern"),
+        hosts: [...scope.hosts],
       };
     case "regex":
-      return {
-        type: "regex",
-        regex: scope.regex,
-        hosts: keptHosts(rule, "regex"),
-      };
+      return { type: "regex", regex: scope.regex, hosts: [...scope.hosts] };
     case "all":
       return { type: "all" };
   }
-}
-
-/** Grant hosts collected for a pattern/regex scope survive edits of the same type. */
-function keptHosts(
-  rule: Rule | undefined,
-  type: "pattern" | "regex",
-): string[] {
-  return rule !== undefined && rule.scope.type === type
-    ? [...rule.scope.hosts]
-    : [];
 }
 
 /** Builds the permission request and the rule metadata committed with it. */
@@ -711,7 +704,13 @@ function planCommitGrant(
   if (grants.allSites) {
     return undefined;
   }
-  if (draft.scope.type === "all") {
+  // One honest signal for the whole editor: the all-sites scope and a
+  // pattern/regex left with no grant host both surface here, so the button
+  // discloses broad access before Chrome's own dialog rather than committing a
+  // rule that later needs all sites in silence. An empty grant-host field is an
+  // explicit all-sites request, so the rule is committed exactly as authored —
+  // no host is inferred from the expression behind the user's back.
+  if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
       draft,
       host: copy.scopeSummary.allSites,
@@ -719,8 +718,7 @@ function planCommitGrant(
       sites: [copy.scopeSummary.allSites],
     };
   }
-  const scope = withInferredGrantHost(draft.scope);
-  const targets = targetHosts(scope);
+  const targets = targetHosts(draft.scope);
   if (targets.length === 0) {
     return undefined;
   }
@@ -749,29 +747,11 @@ function planCommitGrant(
   }
   const firstTarget = targets.find((target) => missing.includes(target));
   return {
-    draft: { ...draft, scope, initiators },
+    draft: { ...draft, initiators },
     host: firstTarget ?? (missing[0] as string),
     origins: missing.map(originPatternForDomain),
     sites: missing,
   };
-}
-
-function withInferredGrantHost(scope: Scope): Scope {
-  switch (scope.type) {
-    case "domains":
-    case "all":
-      return scope;
-    case "pattern": {
-      if (scope.hosts.length > 0) return scope;
-      const host = patternHost(scope.pattern);
-      return host === undefined ? scope : { ...scope, hosts: [host] };
-    }
-    case "regex": {
-      if (scope.hosts.length > 0) return scope;
-      const host = regexHost(scope.regex);
-      return host === undefined ? scope : { ...scope, hosts: [host] };
-    }
-  }
 }
 
 function targetHosts(scope: Scope): string[] {
@@ -784,29 +764,6 @@ function targetHosts(scope: Scope): string[] {
     case "all":
       return [];
   }
-}
-
-function patternHost(pattern: string): string | undefined {
-  const match =
-    /^\|\|([a-z0-9.-]+)/i.exec(pattern.trim()) ??
-    /^\|?https?:\/\/([a-z0-9.-]+)/i.exec(pattern.trim());
-  return normalizedHost(match?.[1]);
-}
-
-function regexHost(regex: string): string | undefined {
-  const withoutAnchor = regex.trim().replace(/^\^/, "");
-  const match = /^(?:https\?|https|http):\/\/([a-z0-9\\.-]+)/i.exec(
-    withoutAnchor,
-  );
-  return normalizedHost(match?.[1]?.replaceAll("\\.", "."));
-}
-
-function normalizedHost(host: string | undefined): string | undefined {
-  const normalized = host?.toLowerCase().replace(/^\*\./, "");
-  return normalized !== undefined &&
-    /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized)
-    ? normalized
-    : undefined;
 }
 
 function unique(values: readonly string[]): string[] {

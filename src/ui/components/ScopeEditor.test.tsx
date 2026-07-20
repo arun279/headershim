@@ -13,6 +13,7 @@ function Harness({
     domains: ["api.example.com"],
     pattern: "",
     regex: "",
+    hosts: [],
   } as ScopeDraft,
 }) {
   const [scope, setScope] = useState(initialScope);
@@ -65,18 +66,24 @@ describe("ScopeEditor match type", () => {
     expect(new Set(ctx.radios().map((radio) => radio.name)).size).toBe(1);
   });
 
-  it("switches to URL pattern with one syntax helper", () => {
+  it("switches to URL pattern with its syntax helper and the grant-hosts disclosure", () => {
     const ctx = mount();
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
-    expect(ctx.micros()).toEqual([sentenceText(copy.editor.patternHint)]);
+    expect(ctx.micros()).toEqual([
+      sentenceText(copy.editor.patternHint),
+      copy.editor.grantHostsAllSites,
+    ]);
   });
 
-  it("shows the RE2 helper on regex without a standing grant warning", () => {
+  it("shows the RE2 helper on regex and discloses the empty-hosts all-sites grant", () => {
     const ctx = mount();
     fire(() => ctx.radios()[2]?.click());
     expect(ctx.root.querySelector('[aria-label="Regex"]')).not.toBeNull();
-    expect(ctx.micros()).toContain(copy.editor.regexHint);
+    expect(ctx.micros()).toEqual([
+      copy.editor.regexHint,
+      copy.editor.grantHostsAllSites,
+    ]);
   });
 
   it("selects All sites as the fourth scope segment", () => {
@@ -160,6 +167,7 @@ describe("ScopeEditor domain chips", () => {
         domains: ["a.example.com", "b.example.com", "c.example.com"],
         pattern: "",
         regex: "",
+        hosts: [],
       },
     });
     const xs = [
@@ -172,6 +180,32 @@ describe("ScopeEditor domain chips", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
       copy.editor.removeDomain("c.example.com"),
     );
+  });
+});
+
+describe("ScopeEditor grant hosts", () => {
+  const grantInput = (root: HTMLElement) =>
+    root.querySelector(".grant-chip-input") as HTMLInputElement;
+
+  it("offers no grant-hosts field for a domains scope", () => {
+    const ctx = mount();
+    expect(ctx.root.querySelector(".grant-chip-input")).toBeNull();
+  });
+
+  it("bounds a regex to a typed host and flips the disclosure to per-site", () => {
+    const ctx = mount();
+    fire(() => ctx.radios()[2]?.click());
+    expect(ctx.micros()).toContain(copy.editor.grantHostsAllSites);
+
+    typeInto(grantInput(ctx.root), "Google.com");
+    press(grantInput(ctx.root), "Enter");
+    expect(
+      [...ctx.root.querySelectorAll(".grant-chip .mono")].map(
+        (chip) => chip.textContent,
+      ),
+    ).toEqual(["google.com"]);
+    expect(ctx.micros()).toContain(copy.editor.grantHostsBounded);
+    expect(ctx.micros()).not.toContain(copy.editor.grantHostsAllSites);
   });
 });
 

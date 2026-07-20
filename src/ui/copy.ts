@@ -95,6 +95,9 @@ export const copy = {
     outOfSync: (count: number) => `${count} not applied yet`,
     details: "Details",
     grant: "Grant",
+    // A rule Chrome can only run with broad access says so on the button, so the
+    // click is honest before Chrome's own all-sites dialog appears.
+    grantAllSites: "Grant all sites",
     ruleToggle: (header: string, on: boolean) =>
       `${on ? "Turn off" : "Turn on"}: ${header}`,
     editValue: (header: string) => `Edit ${header} value`,
@@ -574,6 +577,14 @@ export const copy = {
     addChipHint: "Press Enter to add",
     domainInputLabel: "Add domain",
     removeDomain: (domain: string) => `Remove ${domain}`,
+    // The escape hatch for a pattern/regex rule: bound the grant to named hosts
+    // instead of all sites. A regex names no host Chrome can scope a permission
+    // to, so an empty list is an honest all-sites request, said here before the
+    // save button repeats it.
+    grantHostsLabel: "Grant on hosts",
+    grantHostInputLabel: "Add host",
+    grantHostsAllSites: "Leave empty and this rule needs access to all sites.",
+    grantHostsBounded: "This rule is granted only on the hosts listed here.",
     patternHint: [
       data("||example.com/"),
       " matches the site, subdomains, and every path · ",

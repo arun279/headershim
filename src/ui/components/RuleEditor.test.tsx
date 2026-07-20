@@ -147,6 +147,14 @@ async function saveDraft(ctx: ReturnType<typeof mount>) {
   await settle();
 }
 
+function expectAllSitesGranted(ctx: ReturnType<typeof mount>) {
+  expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
+  expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
+    copy.scopeSummary.allSites,
+  ]);
+  expect(ctx.onClose).toHaveBeenCalledOnce();
+}
+
 function deleteButton(
   ctx: ReturnType<typeof mount>,
 ): HTMLButtonElement | undefined {
@@ -818,11 +826,7 @@ describe("RuleEditor grant moment", () => {
       expect.objectContaining({ scope: { type: "all" } }),
       undefined,
     );
-    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
-      copy.scopeSummary.allSites,
-    ]);
-    expect(ctx.onClose).toHaveBeenCalledOnce();
+    expectAllSitesGranted(ctx);
   });
 
   it("keeps all-sites saves plain when broad access is already granted", () => {
@@ -870,79 +874,117 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
-  it("infers and persists an anchored pattern host before requesting it", async () => {
-    const ctx = mountPageRule({
-      type: "pattern",
-      pattern: "||api.acme.dev^",
-      hosts: [],
-    });
+  // An empty grant-host field is an explicit all-sites request. The editor must
+  // not infer a host from the expression — anchored, literal, or otherwise — and
+  // quietly narrow a rule the user left open, so every empty-host pattern/regex
+  // discloses all sites and is saved exactly as authored.
+  it.each([
+    {
+      label: "an anchored pattern",
+      scope: {
+        type: "pattern" as const,
+        pattern: "||api.acme.dev^",
+        hosts: [],
+      },
+    },
+    {
+      label: "a literal-host regex",
+      scope: {
+        type: "regex" as const,
+        regex: "^https://api\\.acme\\.dev/",
+        hosts: [],
+      },
+    },
+    {
+      label: "a hostless pattern",
+      scope: { type: "pattern" as const, pattern: "/api/", hosts: [] },
+    },
+    {
+      label: "a hostless regex",
+      scope: { type: "regex" as const, regex: "/v[0-9]+/", hosts: [] },
+    },
+  ])("discloses all sites for $label with no grant host", async ({ scope }) => {
+    const ctx = mountPageRule(scope);
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.saveChangesAndAllow(copy.scopeSummary.allSites),
+    );
     await commitEditedValue(ctx);
 
-    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
-      "*://*.api.acme.dev/*",
-    ]);
     expect(ctx.onSave).toHaveBeenCalledWith(
       "r1",
       expect.objectContaining({
+        scope: expect.objectContaining({ hosts: [] }),
+      }),
+      undefined,
+    );
+    expectAllSitesGranted(ctx);
+  });
+
+  it("bounds a hostless regex to a typed host instead of all sites", async () => {
+    const ctx = mount({ grants: NARROW });
+    const regexRadio = ctx.root.querySelector(
+      '.segmented input[value="regex"]',
+    ) as HTMLInputElement;
+    fire(() => regexRadio.click());
+    const regexInput = ctx.root.querySelector(
+      '[aria-label="Regex"]',
+    ) as HTMLInputElement;
+    typeInto(regexInput, ".*google.*");
+
+    // With no host to grant, the honest request is all-sites and the button says so.
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
+    );
+
+    const hostInput = ctx.root.querySelector(
+      ".grant-chip-input",
+    ) as HTMLInputElement;
+    typeInto(hostInput, "google.com");
+    press(hostInput, "Enter");
+    await settle();
+
+    // A named host bounds the grant back to per-site.
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("google.com"),
+    );
+
+    typeInto(ctx.nameInput(), "authorization");
+    typeInto(ctx.valueInput(), "Bearer one");
+    fire(() => ctx.saveButton().click());
+    await settle();
+
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.google.com/*",
+    ]);
+    expect(ctx.onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        scope: { type: "regex", regex: ".*google.*", hosts: ["google.com"] },
+      }),
+      undefined,
+    );
+    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["google.com"]);
+  });
+
+  it("carries the grant hosts of an existing pattern rule into an editable field", () => {
+    const ctx = mount({
+      grants: NARROW,
+      rule: rule({
         scope: {
           type: "pattern",
           pattern: "||api.acme.dev^",
           hosts: ["api.acme.dev"],
         },
       }),
-      undefined,
-    );
-    expect(ctx.onGranted).toHaveBeenCalledOnce();
-  });
-
-  it("infers a literal host from a common anchored regex", async () => {
-    const ctx = mountPageRule({
-      type: "regex",
-      regex: "^https://api\\.acme\\.dev/",
-      hosts: [],
     });
-    await commitEditedValue(ctx);
-
-    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
-      "*://*.api.acme.dev/*",
-    ]);
-    expect(ctx.onSave).toHaveBeenCalledWith(
-      "r1",
-      expect.objectContaining({
-        scope: expect.objectContaining({ hosts: ["api.acme.dev"] }),
-      }),
-      undefined,
+    const chip = [...ctx.root.querySelectorAll(".grant-chip")].map(
+      (node) => node.textContent,
     );
-  });
-
-  it.each([
-    {
-      type: "pattern" as const,
-      scope: {
-        type: "pattern" as const,
-        pattern: "/api/",
-        hosts: [],
-      },
-    },
-    {
-      type: "regex" as const,
-      scope: {
-        type: "regex" as const,
-        regex: "/v[0-9]+/",
-        hosts: [],
-      },
-    },
-  ])("saves a non-inferable $type scope without claiming a grant", async ({
-    scope,
-  }) => {
-    const ctx = mountPageRule(scope);
-
-    expect(ctx.saveButton().textContent).toBe(copy.actions.saveChanges);
-    await commitEditedValue(ctx);
-
-    expect(ctx.onSave).toHaveBeenCalledOnce();
-    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
-    expect(ctx.onClose).toHaveBeenCalledOnce();
+    expect(chip.some((text) => text?.includes("api.acme.dev"))).toBe(true);
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.saveChangesAndAllow("api.acme.dev"),
+    );
   });
 
   it("stays out of the way when the site is already granted", async () => {

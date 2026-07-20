@@ -439,6 +439,22 @@ describe("popup readout", () => {
     expect(root.querySelector(".substatus")).toBeNull();
   });
 
+  it("labels the Grant all sites when a hostless pattern rule needs broad access", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule({
+          scope: { type: "pattern", pattern: "||example.com^", hosts: [] },
+        }),
+      ]),
+    );
+    const line = root.querySelector(".change-line") as HTMLElement;
+    expect(line.classList.contains("needs-access")).toBe(true);
+    const grant = root.querySelector(
+      ".change-line .grant",
+    ) as HTMLButtonElement;
+    expect(grant.textContent).toBe(copy.readout.grantAllSites);
+  });
+
   it("states the honest refused reason for a Host rule and stays enabled", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "host", value: "internal.example.com" })]),
