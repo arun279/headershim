@@ -1,0 +1,14 @@
+.profiles-card {
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* Passive rule counter under the title, past 4,000 of the 4,500 enabled cap. */
+.rule-counter {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}

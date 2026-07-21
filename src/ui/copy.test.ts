@@ -2,38 +2,27 @@ import { describe, expect, it } from "vitest";
 import { copy, sentenceText } from "./copy";
 
 describe("copy", () => {
-  it("names the enabled/configured split and appends this-tab temporaries", () => {
-    expect(sentenceText(copy.annunciator.live(1, 1, 0))).toBe(
-      "Live — 1 of 1 rule enabled.",
-    );
-    expect(sentenceText(copy.annunciator.live(2, 3, 0))).toBe(
-      "Live — 2 of 3 rules enabled.",
-    );
-    expect(sentenceText(copy.annunciator.live(2, 3, 1))).toBe(
-      "Live — 2 of 3 rules enabled. · 1 temporary on this tab",
-    );
-  });
-
-  it("names one site inline and counts the rest for needs-access", () => {
-    expect(
-      sentenceText(copy.annunciator.needsAccess(1, "app.acme.dev", 0)),
-    ).toBe(
-      "1 rule can't run — HeaderShim doesn't have access to app.acme.dev.",
-    );
-    expect(
-      sentenceText(copy.annunciator.needsAccess(2, "api.example.com", 2)),
-    ).toBe(
-      "2 rules can't run — HeaderShim doesn't have access to api.example.com and 2 more sites.",
+  it("answers the tab-scoped question and counts only exceptions", () => {
+    expect(sentenceText(copy.readout.status(1))).toBe("1 change on this tab");
+    expect(sentenceText(copy.readout.status(4))).toBe("4 changes on this tab");
+    expect(copy.readout.needsAccess(2)).toBe("2 needs access");
+    expect(copy.readout.overridden(1)).toBe("1 overridden by another rule");
+    expect(copy.readout.refused(3)).toBe("3 refused by Chrome");
+    // The one state only Chrome can settle names Chrome at the count, not a
+    // bare "unconfirmed".
+    expect(copy.readout.unconfirmed(2)).toBe("2 confirmable only by Chrome");
+    expect(copy.readout.overriddenBy("Staging auth")).toBe(
+      "overridden by Staging auth",
     );
   });
 
-  it("marks hostnames and counts as data segments for the mono face", () => {
-    const parts = copy.annunciator.needsAccess(2, "api.example.com", 2);
-    expect(parts.filter((part) => typeof part !== "string")).toEqual([
-      { data: "2" },
-      { data: "api.example.com" },
-      { data: "2" },
-    ]);
+  it("keeps the token honest: a countdown only when it can read one", () => {
+    expect(copy.token.expiresIn(0)).toBe("expired");
+    expect(copy.token.expiresIn(5 * 3_600_000 + 18 * 60_000)).toBe(
+      "expires in 5h 18m",
+    );
+    expect(copy.token.expiresIn(8 * 60_000)).toBe("expires in 8m");
+    expect(copy.token.opaque).toBe("opaque token · no expiry to read");
   });
 
   it("builds host-bound toasts, grants, and errors", () => {
@@ -43,17 +32,20 @@ describe("copy", () => {
     expect(copy.toast.profileDeleted("QA roles")).toBe(
       "Profile 'QA roles' deleted",
     );
-    expect(copy.actions.allowOn("3 sites")).toBe("Allow on 3 sites");
-    expect(copy.emptyState.profile("Staging")).toBe("No rules in Staging yet.");
-    expect(copy.grantPanel.single("api.example.com")).toContain(
-      "To change headers on api.example.com",
+    expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
+      "Create rule and allow api.example.com",
     );
-    expect(copy.grantPanel.multiple(3)).toContain("on 3 sites");
-    expect(
-      copy.grantPanel.initiator("app.example.com", "api.example.com"),
-    ).toContain("the site you're on");
+    expect(copy.actions.saveChangesAndAllow("api.example.com")).toBe(
+      "Save changes and allow api.example.com",
+    );
+    expect(copy.emptyState.profile("Staging")).toBe(
+      "Staging has no rules yet.",
+    );
     expect(copy.errors.grantDeclined("api.example.com")).toContain(
       "You declined access to api.example.com",
+    );
+    expect(copy.errors.grantDeclined("api.example.com")).not.toContain(
+      "starts working immediately",
     );
     expect(copy.errors.appendDisallowed("x-custom-token")).toContain(
       "x-custom-token isn't one of them",
@@ -63,9 +55,9 @@ describe("copy", () => {
       "format 2; this version reads up to 1",
     );
     // The Regenerate action renders as a button after the note, so the visible
-    // reading stays "Frozen at save · … · Regenerate".
+    // reading stays "Frozen at save: … · Regenerate".
     expect(copy.generatedValue.frozen("2026-07-12 14:03 UTC")).toBe(
-      "Frozen at save · 2026-07-12 14:03 UTC",
+      "Frozen at save: 2026-07-12 14:03 UTC",
     );
     expect(copy.editor.suggestions(1)).toBe("1 suggestion");
     expect(copy.editor.suggestions(6)).toBe("6 suggestions");
@@ -73,33 +65,21 @@ describe("copy", () => {
       "saved as x-feature-override",
     );
     expect(sentenceText(copy.editor.patternHint)).toBe(
-      "||example.com^ matches the site and subdomains · *://*/api/* matches paths",
-    );
-    expect(sentenceText(copy.verify.matchedHeadline(2))).toBe(
-      "Last request: 2 matched",
-    );
-    expect(
-      sentenceText(copy.verify.blockedHeadline(1, "api.example.com", 0)),
-    ).toBe("1 rule can't run — needs access to api.example.com.");
-    expect(
-      sentenceText(copy.verify.blockedHeadline(2, "api.example.com", 2)),
-    ).toBe(
-      "2 rules can't run — needs access to api.example.com and 2 more sites.",
+      "||example.com/ matches the site, subdomains, and every path · ||example.com/api/ narrows it to /api/ paths",
     );
   });
 
   it("keeps the static canonical strings verbatim", () => {
-    expect(sentenceText(copy.annunciator.paused)).toBe(
-      "Paused — no headers are being modified.",
+    expect(copy.readout.refusedReason.host).toBe(
+      "Chrome won't let extensions change the Host header",
     );
-    expect(sentenceText(copy.annunciator.off)).toBe(
-      "Off — no profiles are on.",
-    );
-    expect(sentenceText(copy.annunciator.outOfSync)).toBe(
-      "Out of sync — Chrome rejected HeaderShim's last rule update, so the rules shown here may not all be applied. Any edit retries it.",
+    // Names the control the footer actually has, not a "Resume" that never
+    // appears on any surface.
+    expect(copy.readout.pausedBanner).toBe(
+      "Everything paused. Switching back on restores this exact state.",
     );
     expect(copy.app.tagline).toBe(
-      "Change HTTP headers on sites you choose. No account. Nothing ever leaves your device.",
+      "Add, change, and remove HTTP headers on the sites you choose.",
     );
     expect(copy.errors.headerNotModifiable).toMatch(
       /^Header names starting with ':'/,
@@ -108,32 +88,46 @@ describe("copy", () => {
     expect(copy.errors.regexRuleCap).toContain(
       "caps regex-scoped rules at 1,000",
     );
+    expect(copy.options.profiles.nameTaken("Staging")).toBe(
+      "'Staging' is taken. Use a different name.",
+    );
+    // One canonical label per state across the popup and the options
+    // Configured-changes surface: no per-surface drift.
+    expect(copy.options.traffic.status.unconfirmed).toBe(
+      "confirmable only by Chrome",
+    );
+    expect(copy.options.traffic.status.needsAccess).toBe("needs access");
+    expect(copy.readout.unconfirmed(3)).toContain(
+      copy.options.traffic.status.unconfirmed,
+    );
+    // The per-line reason stays the honest sentence that never presumes a match.
+    expect(copy.readout.unconfirmedReason).toBe(
+      "Only Chrome can tell whether this matches here",
+    );
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );
-    expect(copy.verify.limits).toContain('check "Disable cache"');
   });
 
-  it("keeps the trust-page claims inside their honest wording bounds", () => {
-    // The all-sites card quotes Chrome's real warning string and keeps the
-    // revocation promise.
-    expect(copy.options.siteAccess.allSites.body).toContain(
+  it("keeps About factual and site-access wording precise", () => {
+    expect(copy.options.siteAccess.allSites.warning).toContain(
       '"Read and change all your data on all websites"',
     );
-    expect(copy.options.siteAccess.allSites.body).toContain(
-      "You can revoke it here at any time.",
+    expect(copy.options.siteAccess.allSites.warning).toContain(
+      "you can revoke this access here at any time.",
     );
-    // The install claim is always "no install-time warning" — never a broader
-    // "no permission text anywhere" — and the build claim never says the store
-    // build itself is verifiable.
-    expect(copy.options.about.permissions.intro).toContain(
-      "no install-time warning",
+    expect(copy.options.about).not.toHaveProperty("theme");
+    expect(sentenceText(copy.options.about.build("1.2.0", "a1b2c3d"))).toBe(
+      "HeaderShim v1.2.0 · commit a1b2c3d",
     );
-    expect(copy.options.about.verifyBuild.caveat).toContain(
-      "re-packages and signs",
+    expect(copy.options.about.description).not.toContain("ModHeader");
+    expect(copy.options.importExport.instruction).toContain("ModHeader export");
+    expect(copy.options.about.license).toBe(
+      "Open source under the MIT license. Provided as is, without warranty.",
     );
-    expect(JSON.stringify(copy.options.about)).not.toMatch(
-      /verify the store build/i,
+    expect(copy.options.settings.theme.label).toBe("Theme");
+    expect(Object.keys(copy.options.about).sort()).toEqual(
+      ["build", "description", "license", "links", "title"].sort(),
     );
     expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
     expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");
@@ -144,7 +138,7 @@ describe("copy", () => {
     // access ended.
     expect(
       copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
-    ).toBe("api.example.com grant removed — all-sites access still covers it");
+    ).toBe("api.example.com grant removed. All-sites access still covers it.");
   });
 
   // A global guard on the copy voice rules and the naming denylist below, so
@@ -214,6 +208,8 @@ describe("copy", () => {
     expect(strings.length).toBeGreaterThan(100);
     for (const text of strings) {
       const lower = text.toLowerCase();
+      expect(text, `em-dash in: ${text}`).not.toMatch(/[–—]/);
+      expect(text, `spaced-hyphen separator in: ${text}`).not.toContain(" - ");
       expect(text, `exclamation mark in: ${text}`).not.toContain("!");
       expect(text, `emoji in: ${text}`).not.toMatch(
         /\p{Extended_Pictographic}/u,

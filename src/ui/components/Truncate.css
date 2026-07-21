@@ -5,6 +5,8 @@
  * regardless of value length.
  */
 .truncate {
+  display: inline-block;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;

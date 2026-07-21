@@ -35,8 +35,7 @@ jobs:
 
   # Runs osv-scanner directly instead of the reusable workflow so it does not
   # upload SARIF to code scanning (which needs GHAS). The job fails on any
-  # dependency vulnerability except the dev-only findings documented in
-  # osv-scanner.toml, and keeps working on private repositories.
+  # dependency vulnerability, and keeps working on private repositories.
   osv-scanner:
     runs-on: ubuntu-latest
     permissions:

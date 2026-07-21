@@ -31,7 +31,6 @@ function validDoc(): StateDoc {
       name: "Default",
       badgeText: "DE",
       color: "indigo",
-      enabled: true,
       rules: [
         storedRule(1, { type: "domains", domains: ["example.com"] }),
         storedRule(
@@ -74,7 +73,6 @@ function validDoc(): StateDoc {
       name: "Staging",
       badgeText: "S",
       color: "slate",
-      enabled: false,
       rules: [],
     },
   ];
@@ -82,9 +80,9 @@ function validDoc(): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: 5,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 
@@ -152,17 +150,46 @@ describe("migrate", () => {
 
   it("accepts all current settings variants", () => {
     const light = validDoc();
-    light.settings = { paused: true, theme: "light", badgeMode: "initials" };
+    light.settings = { paused: true, theme: "light" };
     const dark = validDoc();
-    dark.settings = { paused: false, theme: "dark", badgeMode: "count" };
+    dark.settings = { paused: false, theme: "dark" };
 
     expect(migrate(light).ok).toBe(true);
     expect(migrate(dark).ok).toBe(true);
   });
 
+  it("accepts no active profile", () => {
+    expect(migrate({ ...validDoc(), activeProfileId: undefined }).ok).toBe(
+      true,
+    );
+  });
+
+  it("repairs a dangling active profile id to no active profile", () => {
+    const doc = { ...validDoc(), activeProfileId: "missing" };
+    const result = migrate(doc);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { ...doc, activeProfileId: undefined },
+    });
+    if (result.ok) {
+      expect(result.value).not.toBe(doc);
+    }
+  });
+
+  it("preserves a document whose profile name exceeds the write-time limit", () => {
+    const doc = withProfile({ name: "x".repeat(49) });
+    const result = migrate(doc);
+
+    expect(result).toEqual({ ok: true, value: doc });
+    if (result.ok) {
+      expect(result.value).toBe(doc);
+    }
+  });
+
   it("returns a corrupt error for unknown and malformed documents", () => {
     const duplicateProfile = firstProfile();
-    const duplicateRule = firstRule();
+    const repeatedRule = firstRule();
     const malformed: readonly unknown[] = [
       undefined,
       null,
@@ -175,24 +202,20 @@ describe("migrate", () => {
       { ...validDoc(), profiles: [] },
       { ...validDoc(), profiles: "Default" },
       { ...validDoc(), profiles: [null] },
-      { ...validDoc(), focusedProfileId: undefined },
-      { ...validDoc(), focusedProfileId: "missing" },
+      { ...validDoc(), activeProfileId: 1 },
       { ...validDoc(), nextRuleNum: "5" },
       { ...validDoc(), nextRuleNum: 0 },
       { ...validDoc(), nextRuleNum: 1.5 },
       { ...validDoc(), settings: null },
       withSettings({ paused: "false" }),
       withSettings({ theme: "contrast" }),
-      withSettings({ badgeMode: "profile" }),
       withProfile({ id: null }),
       withProfile({ id: "" }),
       withProfile({ name: null }),
       withProfile({ name: " " }),
-      withProfile({ name: "x".repeat(49) }),
       withProfile({ badgeText: null }),
       withProfile({ badgeText: "ABC" }),
       withProfile({ color: "amber" }),
-      withProfile({ enabled: "true" }),
       withProfile({ rules: null }),
       withProfile({ rules: [null] }),
       {
@@ -249,7 +272,7 @@ describe("migrate", () => {
         profiles: [
           {
             ...firstProfile(),
-            rules: [duplicateRule, { ...duplicateRule, num: 2 }],
+            rules: [repeatedRule, { ...repeatedRule, num: 2 }],
           },
         ],
       },
@@ -258,7 +281,7 @@ describe("migrate", () => {
         profiles: [
           {
             ...firstProfile(),
-            rules: [duplicateRule, { ...duplicateRule, id: "another-rule" }],
+            rules: [repeatedRule, { ...repeatedRule, id: "another-rule" }],
           },
         ],
       },
@@ -283,24 +306,24 @@ describe("migrate", () => {
 });
 
 describe("createV1Seed", () => {
-  it("creates one enabled and focused empty Default profile", () => {
+  it("creates one active empty Default profile with no profile-local bit", () => {
     const seed = createV1Seed();
 
     expect(seed).toMatchObject({
       v: 1,
       nextRuleNum: 1,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
       profiles: [
         {
           name: "Default",
           badgeText: "DE",
           color: "indigo",
-          enabled: true,
           rules: [],
         },
       ],
     });
-    expect(seed.focusedProfileId).toBe(seed.profiles[0]?.id);
+    expect(seed.activeProfileId).toBe(seed.profiles[0]?.id);
+    expect(seed.profiles[0]).not.toHaveProperty("enabled");
     expect(migrate(seed)).toEqual({ ok: true, value: seed });
     expect(createV1Seed()).not.toBe(seed);
   });

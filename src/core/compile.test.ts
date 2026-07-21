@@ -6,6 +6,7 @@ import {
   DYNAMIC_PRIORITY_TOP,
   dropUncompilable,
   SESSION_PRIORITY_TOP,
+  uncompilableReason,
 } from "./compile";
 import {
   MAX_ENABLED_RULES,
@@ -37,24 +38,27 @@ function storedRule(num: number, changes: RuleChanges = {}): Rule {
   };
 }
 
-function profile(id: string, rules: Rule[], enabled = true): Profile {
+function profile(id: string, rules: Rule[]): Profile {
   return {
     id,
     name: id,
     badgeText: id.slice(0, 2),
     color: "blue",
-    enabled,
     rules,
   };
 }
 
-function state(profiles: Profile[], paused = false): StateDoc {
+function state(
+  profiles: Profile[],
+  paused = false,
+  activeProfileId = profiles[0]?.id,
+): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId,
     nextRuleNum: 20_000,
-    settings: { paused, theme: "system", badgeMode: "count" },
+    settings: { paused, theme: "system" },
   };
 }
 
@@ -67,6 +71,7 @@ function sessionOverride(num: number): TabOverride {
     operation: "set",
     header: "x-session",
     value: `${num}`,
+    enabled: true,
   };
 }
 
@@ -161,13 +166,14 @@ describe("dynamic rule compilation", () => {
     ];
 
     for (const arrangement of arrangements) {
-      const expectedIds = arrangement.profiles.flatMap((candidateProfile) =>
-        candidateProfile.enabled
-          ? candidateProfile.rules
-              .filter((rule) => rule.enabled)
-              .map((rule) => rule.num)
-          : [],
-      );
+      const expectedIds =
+        arrangement.profiles
+          .find(
+            (candidateProfile) =>
+              candidateProfile.id === arrangement.activeProfileId,
+          )
+          ?.rules.filter((rule) => rule.enabled)
+          .map((rule) => rule.num) ?? [];
       const compiled = compileDynamic(arrangement);
 
       expect(compiled.map((rule) => rule.id)).toEqual(expectedIds);
@@ -310,7 +316,9 @@ describe("dynamic rule compilation", () => {
       compileDynamic(state([profile("paused", [storedRule(1)])], true)),
     ).toEqual([]);
     expect(
-      compileDynamic(state([profile("profile-off", [storedRule(2)], false)])),
+      compileDynamic(
+        state([profile("profile-off", [storedRule(2)])], false, "missing"),
+      ),
     ).toEqual([]);
     expect(
       compileDynamic(
@@ -381,11 +389,47 @@ describe("dropping uncompilable rules", () => {
     expect(compiledIds(doc, supported)).toEqual([1, 6]);
   });
 
+  it("strips a rule whose domains Chrome would refuse", () => {
+    const doc = state([
+      profile("domains", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com", "a.example.com"] },
+        }),
+        // Chrome takes an entry like this verbatim, so dropping the rule would
+        // break one that works today.
+        storedRule(2, {
+          scope: { type: "domains", domains: ["EXAMPLE.com:8080"] },
+        }),
+        storedRule(3, {
+          scope: { type: "domains", domains: ["example.com", "exämple.com"] },
+        }),
+        // Chrome refuses an empty requestDomains list outright.
+        storedRule(4, { scope: { type: "domains", domains: [] } }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll)).toEqual([1, 2]);
+  });
+
+  it("distinguishes and drops a disallowed request append", () => {
+    const append = storedRule(2, {
+      operation: "append",
+      header: "content-type",
+    });
+    const doc = state([profile("append", [storedRule(1), append])]);
+
+    expect(uncompilableReason(append, supportAll)).toBe("append");
+    expect(
+      uncompilableReason(storedRule(3, { header: ":authority" }), supportAll),
+    ).toBe("header");
+    expect(compiledIds(doc, supportAll)).toEqual([1]);
+  });
+
   it("never removes disabled rules or touches disabled profiles", () => {
     const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
     const doc = state([
       profile("on", [storedRule(1), bad]),
-      profile("off", [storedRule(3, { header: ":authority" })], false),
+      profile("off", [storedRule(3, { header: ":authority" })]),
     ]);
 
     const dropped = dropUncompilable(doc, supportAll);

@@ -1,4 +1,10 @@
 import type { Profile, Rule, StateDoc } from "../../core/model";
+import type { SystemStatus } from "../../core/status";
+
+/** The system states the popup and Workbench projections branch on. */
+export const LIVE: SystemStatus = { kind: "live" };
+export const PAUSED: SystemStatus = { kind: "paused" };
+export const OUT_OF_SYNC: SystemStatus = { kind: "out-of-sync" };
 
 let seq = 0;
 
@@ -34,7 +40,6 @@ export function profile(id: string, overrides: Partial<Profile> = {}): Profile {
     name: id,
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
     rules: [],
     ...overrides,
   };
@@ -47,9 +52,9 @@ export function stateDoc(
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: seq + 1,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
     ...overrides,
   };
 }

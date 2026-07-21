@@ -1,13 +1,2 @@
-# osv-scanner accepted findings.
-# Every other advisory still fails the Security workflow's osv-scanner job.
-# Both entries below are transitive dev-only dependencies that never ship in the
-# extension bundle, mirror the risk already accepted by `pnpm audit --audit-level=high`
-# in ci.yml, and have no non-breaking upstream fix.
-
-[[IgnoredVulns]]
-id = "GHSA-w5hq-g745-h8pq"
-reason = "uuid <11.1.1 buffer-bounds check reaches us only via node-notifier -> web-ext-run -> wxt (the dev runner). node-notifier does not call the vulnerable v3/v5/v6 buffer path, and uuid 11 is an ESM major bump node-notifier@10 cannot take."
-
-[[IgnoredVulns]]
-id = "GHSA-g7r4-m6w7-qqqr"
-reason = "esbuild dev-server arbitrary file read affects only `vite dev` on Windows, pulled transitively through the vitest/vite toolchain. It is dev-only and never bundled into the extension."
+# No accepted findings.
+# Every advisory fails the Security workflow's osv-scanner job.

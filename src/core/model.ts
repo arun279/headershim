@@ -56,20 +56,18 @@ export interface Profile {
   name: string;
   badgeText: string;
   color: BadgeColor;
-  enabled: boolean;
   rules: Rule[];
 }
 
 export interface Settings {
   paused: boolean;
   theme: "system" | "light" | "dark";
-  badgeMode: "count" | "initials";
 }
 
 export interface StateDoc {
   v: 1;
   profiles: Profile[];
-  focusedProfileId: string;
+  activeProfileId: string | undefined;
   nextRuleNum: number;
   settings: Settings;
 }
@@ -82,6 +80,7 @@ export interface TabOverride {
   operation: HeaderOp;
   header: string;
   value?: string;
+  enabled: boolean;
 }
 
 export type RuleDraft = Omit<Rule, "id" | "num">;
@@ -90,7 +89,6 @@ export interface ProfileDraft {
   name: string;
   badgeText: string;
   color: BadgeColor;
-  enabled: boolean;
 }
 
 export function allocateRuleNum(doc: StateDoc): [number, StateDoc] {
@@ -139,35 +137,34 @@ export function createProfile(draft: ProfileDraft): Profile {
     name: draft.name,
     badgeText: normalizeBadgeText(draft.badgeText),
     color: draft.color,
-    enabled: draft.enabled,
     rules: [],
   };
 }
 
-export function switchToNextProfile(doc: StateDoc): StateDoc {
-  const { profiles } = doc;
-  const focusedIndex = profiles.findIndex(
-    (profile) => profile.id === doc.focusedProfileId,
+export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
+  const profile = doc.profiles.find((candidate) => candidate.id === profileId);
+  if (
+    profile === undefined ||
+    !checkEnabledRuleLimits(profile.rules.filter((rule) => rule.enabled)).ok
+  ) {
+    return doc;
+  }
+  return { ...doc, activeProfileId: profileId };
+}
+
+export function activateNextProfile(doc: StateDoc): StateDoc {
+  const activeIndex = doc.profiles.findIndex(
+    (profile) => profile.id === doc.activeProfileId,
   );
-  // A stored profile can hold more enabled rules than the live caps permit;
-  // exclusively enabling one would make the document uncompilable, so the
-  // cycle passes over it.
-  for (let step = 1; step <= profiles.length; step += 1) {
-    const next = profiles[(focusedIndex + step) % profiles.length];
-    if (
-      next === undefined ||
-      !checkEnabledRuleLimits(next.rules.filter((rule) => rule.enabled)).ok
-    ) {
+  for (let step = 1; step <= doc.profiles.length; step += 1) {
+    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
+    if (next === undefined) {
       continue;
     }
-    return {
-      ...doc,
-      focusedProfileId: next.id,
-      profiles: profiles.map((profile) => ({
-        ...profile,
-        enabled: profile.id === next.id,
-      })),
-    };
+    const activated = activateProfile(doc, next.id);
+    if (activated.activeProfileId === next.id) {
+      return activated;
+    }
   }
   return doc;
 }
@@ -177,9 +174,18 @@ export function isProfileNameAvailable(
   candidate: string,
   excludedProfileId?: string,
 ): boolean {
-  if (candidate.trim().length === 0 || candidate.length > 48) {
-    return false;
-  }
+  return (
+    candidate.length <= 48 &&
+    isStoredProfileNameValid(profiles, candidate, excludedProfileId)
+  );
+}
+
+export function isStoredProfileNameValid(
+  profiles: readonly Profile[],
+  candidate: string,
+  excludedProfileId?: string,
+): boolean {
+  if (candidate.trim().length === 0) return false;
 
   const normalized = candidate.toLowerCase();
   return !profiles.some(

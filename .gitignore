@@ -1,6 +1,8 @@
 node_modules/
 .wxt/
 .output/
+.baseline-build-*/
+.current-build-*/
 coverage/
 dist/
 test-results/
@@ -9,3 +11,4 @@ e2e/packed/.artifacts/
 *.log
 .DS_Store
 *.tsbuildinfo
+.claude/

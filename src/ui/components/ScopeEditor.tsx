@@ -1,7 +1,9 @@
+import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
 import type { ResourceGroup, Scope } from "../../core/model";
-import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
+import { ChipField } from "./ChipField";
+import { Segmented } from "./Segmented";
 import { sentence } from "./sentence";
 import "./ScopeEditor.css";
 
@@ -11,6 +13,8 @@ export interface ScopeDraft {
   domains: string[];
   pattern: string;
   regex: string;
+  /** Hosts a pattern/regex rule is granted on; empty means all sites. */
+  hosts: string[];
 }
 
 interface ScopeEditorProps {
@@ -19,11 +23,12 @@ interface ScopeEditorProps {
   /** Blocking commit error for the active scope field (e.g. empty scope). */
   error?: string | undefined;
   typesError?: string | undefined;
+  defaultResourceTypesOpen?: boolean | undefined;
   onScope: (scope: ScopeDraft) => void;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }
 
-const SEGMENTS = ["domains", "pattern", "regex"] as const;
+const SEGMENTS = ["domains", "pattern", "regex", "all"] as const;
 
 const GROUPS: readonly ResourceGroup[] = [
   "pages",
@@ -40,13 +45,17 @@ const GROUPS: readonly ResourceGroup[] = [
 
 /**
  * Scope = match type + resource types. The segmented control carries radio
- * semantics (arrows move and select); "All sites" is deliberately subordinate —
- * a text link, not a fourth segment. The resource-type disclosure names the
+ * semantics (arrows move and select); All sites is the fourth peer scope. The
+ * resource-type disclosure names the
  * anti-footgun default out loud: top-level pages are included until unchecked.
  */
 export function ScopeEditor(props: ScopeEditorProps) {
   const id = useId();
   const { scope } = props;
+  const crossPageSubresources =
+    props.resourceTypes !== "all" &&
+    !props.resourceTypes.includes("pages") &&
+    props.resourceTypes.some((group) => group !== "subframes");
 
   return (
     <>
@@ -60,39 +69,51 @@ export function ScopeEditor(props: ScopeEditorProps) {
             type={scope.type}
             onType={(type) => props.onScope({ ...scope, type })}
           />
-          {scope.type === "domains" && <DomainChips {...props} />}
-          {scope.type === "pattern" && (
+          {scope.type === "domains" && (
             <>
-              <input
-                class="field mono"
-                type="text"
-                aria-label={copy.editor.scopeType.pattern}
-                aria-invalid={props.error !== undefined ? true : undefined}
-                value={scope.pattern}
-                onInput={(event) =>
-                  props.onScope({
-                    ...scope,
-                    pattern: event.currentTarget.value,
-                  })
-                }
+              <ChipField
+                id={`${id}-domains`}
+                inputLabel={copy.editor.domainInputLabel}
+                placeholder={copy.editor.addDomain}
+                values={scope.domains}
+                variant="domain"
+                invalid={props.error !== undefined}
+                removeLabel={copy.editor.removeDomain}
+                onChange={(domains) => props.onScope({ ...scope, domains })}
               />
-              <p class="editor-micro">{sentence(copy.editor.patternHint)}</p>
+              <p class="editor-micro">
+                {crossPageSubresources
+                  ? copy.editor.requestTarget
+                  : copy.editor.domainsHelper}
+              </p>
             </>
           )}
-          {scope.type === "regex" && (
-            <input
-              class="field mono"
-              type="text"
-              aria-label={copy.editor.scopeType.regex}
-              aria-invalid={props.error !== undefined ? true : undefined}
-              value={scope.regex}
-              onInput={(event) =>
-                props.onScope({ ...scope, regex: event.currentTarget.value })
-              }
+          {scope.type === "pattern" && (
+            <UrlScopeField
+              id={id}
+              label={copy.editor.scopeType.pattern}
+              hint={sentence(copy.editor.patternHint)}
+              invalid={props.error !== undefined}
+              value={scope.pattern}
+              hosts={scope.hosts}
+              onValue={(pattern) => props.onScope({ ...scope, pattern })}
+              onHosts={(hosts) => props.onScope({ ...scope, hosts })}
             />
           )}
-          {(scope.type === "pattern" || scope.type === "regex") && (
-            <p class="editor-micro">{copy.editor.grantNote}</p>
+          {scope.type === "regex" && (
+            <UrlScopeField
+              id={id}
+              label={copy.editor.scopeType.regex}
+              hint={copy.editor.regexHint}
+              invalid={props.error !== undefined}
+              value={scope.regex}
+              hosts={scope.hosts}
+              onValue={(regex) => props.onScope({ ...scope, regex })}
+              onHosts={(hosts) => props.onScope({ ...scope, hosts })}
+            />
+          )}
+          {scope.type === "all" && (
+            <p class="editor-micro">{copy.editor.allSitesHelper}</p>
           )}
           {props.error !== undefined && (
             <p class="editor-error" role="alert">
@@ -104,8 +125,84 @@ export function ScopeEditor(props: ScopeEditorProps) {
       <ResourceTypes
         resourceTypes={props.resourceTypes}
         error={props.typesError}
+        defaultOpen={props.defaultResourceTypesOpen === true}
         onResourceTypes={props.onResourceTypes}
       />
+    </>
+  );
+}
+
+/**
+ * The pattern and regex scopes share one shape: a mono URL-matching field, its
+ * syntax hint, and the grant-hosts escape hatch beneath. Only the label, hint,
+ * and which field they write differ.
+ */
+function UrlScopeField({
+  id,
+  label,
+  hint,
+  invalid,
+  value,
+  hosts,
+  onValue,
+  onHosts,
+}: {
+  id: string;
+  label: string;
+  hint: ComponentChildren;
+  invalid: boolean;
+  value: string;
+  hosts: string[];
+  onValue: (value: string) => void;
+  onHosts: (hosts: string[]) => void;
+}) {
+  return (
+    <>
+      <input
+        class="field mono"
+        type="text"
+        aria-label={label}
+        aria-invalid={invalid ? true : undefined}
+        value={value}
+        onInput={(event) => onValue(event.currentTarget.value)}
+      />
+      <p class="editor-micro">{hint}</p>
+      <GrantHosts id={`${id}-hosts`} hosts={hosts} onChange={onHosts} />
+    </>
+  );
+}
+
+/**
+ * The per-site escape hatch for a pattern/regex rule. A regex names no host
+ * Chrome can scope a permission to, so leaving this empty is an honest all-sites
+ * request; adding a host bounds the grant to it and keeps the rule per-site.
+ */
+function GrantHosts({
+  id,
+  hosts,
+  onChange,
+}: {
+  id: string;
+  hosts: string[];
+  onChange: (hosts: string[]) => void;
+}) {
+  return (
+    <>
+      <ChipField
+        id={id}
+        label={copy.editor.grantHostsLabel}
+        inputLabel={copy.editor.grantHostInputLabel}
+        placeholder={copy.editor.addDomain}
+        values={hosts}
+        variant="grant"
+        removeLabel={copy.editor.removeDomain}
+        onChange={onChange}
+      />
+      <p class="editor-micro">
+        {hosts.length === 0
+          ? copy.editor.grantHostsAllSites
+          : copy.editor.grantHostsBounded}
+      </p>
     </>
   );
 }
@@ -124,121 +221,36 @@ function SegmentedType({
   // Native radios carry the whole radio-group contract — arrows move and
   // select, one tab stop — so the segment paint is just a label skin.
   return (
-    <>
-      <div class="segments" role="radiogroup" aria-labelledby={labelId}>
-        {SEGMENTS.map((segment) => (
-          <label
-            key={segment}
-            class={type === segment ? "segment checked" : "segment"}
-          >
-            <input
-              class="sr-only"
-              type="radio"
-              name={`${id}-scope-type`}
-              checked={type === segment}
-              onChange={() => onType(segment)}
-            />
-            {copy.editor.scopeType[segment]}
-          </label>
-        ))}
-      </div>
-      <button
-        type="button"
-        class="link-btn all-sites"
-        aria-pressed={type === "all"}
-        onClick={() => onType("all")}
-      >
-        {copy.editor.allSites}
-      </button>
-    </>
-  );
-}
-
-function DomainChips(props: ScopeEditorProps) {
-  const [pending, setPending] = useState("");
-  const { scope } = props;
-
-  const commitPending = (raw: string) => {
-    const domain = raw.trim().toLowerCase();
-    setPending("");
-    if (domain !== "" && !scope.domains.includes(domain)) {
-      props.onScope({ ...scope, domains: [...scope.domains, domain] });
-    }
-  };
-
-  const removeChip = (domain: string) => {
-    props.onScope({
-      ...scope,
-      domains: scope.domains.filter((candidate) => candidate !== domain),
-    });
-  };
-
-  return (
-    <>
-      <div class="domain-chips">
-        {scope.domains.map((domain) => (
-          <span class="domain-chip" key={domain}>
-            <span class="mono">{domain}</span>
-            <button
-              type="button"
-              class="domain-chip-x"
-              aria-label={copy.editor.removeDomain(domain)}
-              onClick={(event) => {
-                focusOnRemoval(event.currentTarget);
-                removeChip(domain);
-              }}
-            >
-              ✕
-            </button>
-          </span>
-        ))}
-        <input
-          class="domain-chip-input mono"
-          type="text"
-          aria-label={copy.editor.domainInputLabel}
-          aria-invalid={props.error !== undefined ? true : undefined}
-          placeholder={copy.editor.addDomain}
-          value={pending}
-          onInput={(event) => setPending(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === ",") {
-              if (pending.trim() !== "") {
-                commitPending(pending);
-                // Ctrl/Cmd+Enter also commits the rule: the fresh chip is
-                // already in the draft, so the event may keep bubbling.
-                if (!(event.ctrlKey || event.metaKey)) {
-                  event.preventDefault();
-                }
-              } else if (event.key === ",") {
-                event.preventDefault();
-              }
-            } else if (
-              event.key === "Backspace" &&
-              pending === "" &&
-              scope.domains.length > 0
-            ) {
-              removeChip(scope.domains[scope.domains.length - 1] as string);
-            }
-          }}
-          onBlur={() => commitPending(pending)}
-        />
-      </div>
-      <p class="editor-micro">{copy.editor.domainsHelper}</p>
-    </>
+    <Segmented
+      semantics="radio"
+      name={`${id}-scope-type`}
+      labelledBy={labelId}
+      value={type}
+      options={SEGMENTS.map((segment) => ({
+        value: segment,
+        label:
+          segment === "all"
+            ? copy.editor.allSites
+            : copy.editor.scopeType[segment],
+      }))}
+      onChange={onType}
+    />
   );
 }
 
 function ResourceTypes({
   resourceTypes,
   error,
+  defaultOpen,
   onResourceTypes,
 }: {
   resourceTypes: ResourceGroup[] | "all";
   error?: string | undefined;
+  defaultOpen: boolean;
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }) {
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const selected = resourceTypes === "all" ? GROUPS : resourceTypes;
 
   const toggle = (group: ResourceGroup) => {
@@ -256,10 +268,7 @@ function ResourceTypes({
   };
 
   return (
-    <div class="editor-field">
-      <span class="editor-label" id={`${id}-label`}>
-        {copy.editor.labels.resourceTypes}
-      </span>
+    <div class="editor-option">
       <div class="editor-control">
         <button
           type="button"
@@ -268,16 +277,19 @@ function ResourceTypes({
           aria-controls={open ? `${id}-panel` : undefined}
           onClick={() => setOpen((current) => !current)}
         >
-          {typesSummary(resourceTypes)} <span aria-hidden="true">▾</span>
+          {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}
+          <span
+            class={open ? "disclosure-chevron open" : "disclosure-chevron"}
+            aria-hidden="true"
+          >
+            ›
+          </span>
         </button>
-        {selected.includes("pages") && (
-          <p class="editor-micro">{copy.editor.includesPages}</p>
-        )}
         {open && (
           <fieldset
             class="rt-grid"
             id={`${id}-panel`}
-            aria-labelledby={`${id}-label`}
+            aria-label={copy.editor.labels.resourceTypes}
           >
             {GROUPS.map((group) => (
               <label class="rt-item" key={group}>

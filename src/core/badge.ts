@@ -1,11 +1,6 @@
 import type { BadgeColor, StateDoc } from "./model";
 import type { SystemStatus } from "./status";
 
-export interface TabBadgeText {
-  readonly tabId: number;
-  readonly text: string;
-}
-
 interface BadgeColors {
   readonly backgroundColor: string;
   readonly textColor: string;
@@ -17,7 +12,6 @@ export type BadgeState =
 
 export interface BadgePlan {
   readonly state: BadgeState;
-  readonly tabBadges: readonly TabBadgeText[];
   // The toolbar button's tooltip. Only the paused state names itself;
   // every other state clears back to the manifest default_title. Lives
   // here beside the badge glyphs, not in copy.ts, so the service worker never
@@ -28,7 +22,6 @@ export interface BadgePlan {
 export interface BadgeInput {
   readonly doc: StateDoc;
   readonly status: SystemStatus;
-  readonly overrideTabIds: readonly number[];
 }
 
 export const BADGE_PALETTE = {
@@ -47,7 +40,7 @@ const PAUSED_FILL = "#6E7B88";
 const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
 // The paused-state toolbar tooltip; the only state that names itself.
-const PAUSED_TITLE = "HeaderShim — paused";
+const PAUSED_TITLE = "HeaderShim: paused";
 
 export function planBadge(input: BadgeInput): BadgePlan {
   return {
@@ -56,60 +49,33 @@ export function planBadge(input: BadgeInput): BadgePlan {
   };
 }
 
-function planFace({
-  doc,
-  status,
-  overrideTabIds,
-}: BadgeInput): Omit<BadgePlan, "title"> {
+function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
   if (status.kind === "paused") {
     return globalBadge(PAUSED_FILL);
   }
   // A missing grant and a failed reconcile are both can't-run states: rules the
-  // user believes are live are not. The amber badge outranks either content
-  // mode so no count or initials bleeds through. The annunciator reads the
-  // same status selector, so the surfaces cannot disagree.
+  // user believes are live are not. The amber badge outranks count rendering,
+  // so no count bleeds through. The annunciator reads the same status selector,
+  // so the surfaces cannot disagree.
   if (status.kind === "out-of-sync" || status.kind === "needs-access") {
     return globalBadge(CANT_RUN_FILL);
   }
 
-  const focused = doc.profiles.some((profile) => profile.enabled)
-    ? doc.profiles.find((profile) => profile.id === doc.focusedProfileId)
-    : undefined;
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
   const backgroundColor =
-    focused === undefined ? NEUTRAL_FILL : BADGE_PALETTE[focused.color];
+    active === undefined ? NEUTRAL_FILL : BADGE_PALETTE[active.color];
 
-  if (doc.settings.badgeMode === "count") {
-    // Count is Chrome-managed per tab: an enabled profile paints its matches
-    // everywhere, and with none enabled only This-tab overrides increment it.
-    return {
-      state: { kind: "count", backgroundColor, textColor: WHITE },
-      tabBadges: [],
-    };
-  }
-
-  if (focused === undefined) {
-    // No enabled profile: the badge is empty and neutral, except tabs holding a
-    // This-tab override carry a temporary "T" so modified traffic is never
-    // invisible.
-    return {
-      state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
-      tabBadges: overrideTabIds.map((tabId) => ({ tabId, text: "T" })),
-    };
-  }
+  // Count is Chrome-managed per tab: the active profile paints its matches
+  // everywhere, and with none active only This-tab overrides increment it.
   return {
-    state: {
-      kind: "manual",
-      text: focused.badgeText,
-      backgroundColor,
-      textColor: WHITE,
-    },
-    tabBadges: [],
+    state: { kind: "count", backgroundColor, textColor: WHITE },
   };
 }
 
 function globalBadge(backgroundColor: string): Omit<BadgePlan, "title"> {
   return {
     state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
-    tabBadges: [],
   };
 }

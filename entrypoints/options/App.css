@@ -1,133 +1,180 @@
-.options {
-  min-height: 100vh;
-  background: var(--panel-0);
-}
+/*
+ * The Workbench frame: a left rail that owns the brand and navigation, and a
+ * content column that fills the window at a readable measure. Nothing floats in
+ * a gray void; the rail and the content each paint edge to edge.
+ */
 
-.options-header {
+.wb {
   display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  padding: var(--sp-4) var(--sp-6);
-  border-bottom: var(--hairline) solid var(--bezel);
+  align-items: flex-start;
+  min-height: 100vh;
+  background: var(--paper);
 }
 
-.wordmark {
-  font-family: var(--font-data);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.version {
-  font-size: 11px;
-  color: var(--ink-mute);
-}
-
-.options-body {
-  display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: var(--sp-6);
-  align-items: start;
-  padding: var(--sp-6);
-}
-
-.options-nav {
+/* ---------------- rail ---------------- */
+.wb-nav {
+  position: sticky;
+  top: 0;
+  flex: none;
+  align-self: stretch;
+  width: 248px;
+  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-1);
-  position: sticky;
-  top: var(--sp-6);
+  gap: var(--sp-5);
+  padding: 20px 14px;
+  background: var(--panel);
+  border-right: var(--hairline) solid var(--hair);
 }
 
-.options-nav-link {
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--radius-inner);
-  color: var(--ink-mute);
-  text-decoration: none;
-  font-weight: 500;
+.wb-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px 0;
 }
-
-.options-nav-link:hover {
-  background: var(--panel-2);
-  color: var(--ink);
-}
-
-.options-nav-link[aria-current="page"] {
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
-  color: var(--ink);
-}
-
-.options-content {
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  max-width: 720px;
+}
+.wordmark-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 7px;
+  background: var(--live-soft);
+  color: var(--live);
+}
+.wordmark-mark svg {
+  width: 15px;
+  height: 15px;
+}
+.wordmark-name {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.wb-version {
+  font-size: 10.5px;
+  color: var(--ink3);
 }
 
-.page {
+.wb-nav-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.wb-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.wb-nav-grouplabel {
+  padding: 0 10px 6px;
+}
+.wb-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-chip);
+  border-left: 3px solid transparent;
+  color: var(--ink2);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 550;
+}
+.wb-nav-link:hover {
+  background: var(--raise);
+  color: var(--ink);
+}
+/* Active: bold + filled well + accent bar, so the marker never rests on color
+   alone and survives the grayscale test in both themes. */
+.wb-nav-link[aria-current="page"] {
+  background: var(--raise);
+  border-left-color: var(--live);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---------------- content ---------------- */
+.wb-main {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+}
+.wb-page {
+  width: 100%;
+  max-width: 940px;
+  padding: 28px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
 }
 
-.page-head {
+.wb-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
 }
-
-.page-title {
-  font-size: 16px;
-  font-weight: 600;
+.wb-title {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
 }
-
-/* Passive rule counter under the page title, past 4,000 of the 4,500 cap. */
-.rule-counter {
-  margin-top: var(--sp-1);
-  font-size: 12px;
-  color: var(--ink-mute);
-  font-variant-numeric: tabular-nums;
-}
-
-/* Sections are panel-1 cards (hairline, 6px radius). The profile
-   list keeps its rows edge-to-edge for hairline separators; the rules panel
-   takes the standard 16px padding. */
-.page > .profile-list {
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
-  border-radius: var(--radius-outer);
-  overflow: hidden;
-}
-
-.rules-panel,
-.ie-block,
+/* The shared page card: Site access, Import & export, and About all sit on it. */
 .sa-card,
-.about-card {
-  padding: var(--sp-5);
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel);
-  border-radius: var(--radius-outer);
-}
-
 .ie-block,
-.sa-card,
 .about-card {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  padding: 18px 20px;
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
 }
 
-.options .modal-card {
-  max-width: 480px;
+/* Modal card + confirm actions the pages reuse. */
+.wb .modal-card {
+  max-width: 460px;
 }
-
 .modal-text {
   color: var(--ink);
 }
-
 .modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--sp-3);
   margin-top: var(--sp-5);
+}
+
+@media (max-width: 720px) {
+  .wb {
+    flex-direction: column;
+  }
+  .wb-nav {
+    position: static;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    border-right: none;
+    border-bottom: var(--hairline) solid var(--hair);
+  }
+  .wb-nav-groups {
+    flex-flow: row wrap;
+    gap: 10px 20px;
+  }
+  .wb-page {
+    padding: 20px 18px 48px;
+  }
 }

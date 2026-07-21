@@ -35,6 +35,7 @@ describe("platform storage", () => {
             operation: "set",
             header: "x-debug",
             value: "enabled",
+            enabled: true,
           },
         ],
       },

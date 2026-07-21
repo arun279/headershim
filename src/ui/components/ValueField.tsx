@@ -1,6 +1,11 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Rule } from "../../core/model";
 import { copy } from "../copy";
+import {
+  closePopover,
+  openPositionedPopover,
+  trapPopoverFocus,
+} from "./popover";
 import "./ValueField.css";
 
 interface ValueFieldProps {
@@ -11,18 +16,23 @@ interface ValueFieldProps {
   frozenAt?: string | undefined;
   error?: string | undefined;
   onInput: (value: string) => void;
-  onGenerate: (kind: "uuid" | "timestamp") => void;
+  onGenerate?: ((kind: "uuid" | "timestamp") => void) | undefined;
 }
 
 /**
  * Value input with the Insert menu for generated values. Inserting writes the
  * actual string — never a token — and the note under the field says exactly
- * what that means: frozen at save, not per request.
+ * what that means: frozen at save, not per request. The field grows with its
+ * content so a long credential reads from its start, and a pasted value is
+ * trimmed of the surrounding whitespace the clipboard adds: that is a clipboard
+ * artifact, not something the user typed.
  */
 export function ValueField(props: ValueFieldProps) {
   const id = useId();
+  const [newlineRemoved, setNewlineRemoved] = useState(false);
   const describedBy = [
     ...(props.generated === undefined ? [] : [`${id}-note`]),
+    ...(newlineRemoved ? [`${id}-newline-note`] : []),
     ...(props.error === undefined ? [] : [`${id}-error`]),
   ].join(" ");
 
@@ -33,29 +43,75 @@ export function ValueField(props: ValueFieldProps) {
       </label>
       <div class="editor-control">
         <div class="value-row">
-          <input
+          <textarea
             id={`${id}-input`}
-            class="field mono"
-            type="text"
+            class="field mono value-input"
+            rows={2}
+            wrap="soft"
+            placeholder={copy.editor.placeholders.value}
+            value={props.value}
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
-            value={props.value}
-            onInput={(event) => props.onInput(event.currentTarget.value)}
+            onInput={(event) => {
+              const raw = event.currentTarget.value;
+              if (/\r|\n/.test(raw)) {
+                setNewlineRemoved(true);
+                props.onInput(stripLineBreaks(raw));
+              } else {
+                setNewlineRemoved(false);
+                props.onInput(raw);
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !(event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
+            onPaste={(event) => {
+              const pasted = event.clipboardData?.getData("text/plain") ?? "";
+              const cleaned = stripLineBreaks(pasted.trim());
+              if (cleaned === pasted) {
+                return;
+              }
+              event.preventDefault();
+              const field = event.currentTarget;
+              const start = field.selectionStart;
+              const end = field.selectionEnd;
+              props.onInput(
+                `${props.value.slice(0, start)}${cleaned}${props.value.slice(end)}`,
+              );
+              setNewlineRemoved(/\r|\n/.test(pasted.trim()));
+            }}
           />
-          <InsertMenu onGenerate={props.onGenerate} />
+          {props.onGenerate !== undefined && (
+            <InsertMenu onGenerate={props.onGenerate} />
+          )}
         </div>
         {props.generated !== undefined && (
           <p class="editor-micro" id={`${id}-note`}>
             {props.frozenAt === undefined
               ? copy.generatedValue.note
-              : `${copy.generatedValue.frozen(props.frozenAt)} · `}{" "}
-            <button
-              type="button"
-              class="link-btn"
-              onClick={() => props.onGenerate(props.generated?.kind ?? "uuid")}
-            >
-              {copy.actions.regenerate}
-            </button>
+              : copy.generatedValue.frozen(props.frozenAt)}
+            {props.onGenerate !== undefined && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  class="link-btn"
+                  onClick={() =>
+                    props.onGenerate?.(props.generated?.kind ?? "uuid")
+                  }
+                >
+                  {copy.actions.regenerate}
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        {newlineRemoved && (
+          <p class="editor-micro value-newline-note" id={`${id}-newline-note`}>
+            {copy.editor.newlineRemoved}
           </p>
         )}
         {props.error !== undefined && (
@@ -66,6 +122,10 @@ export function ValueField(props: ValueFieldProps) {
       </div>
     </div>
   );
+}
+
+function stripLineBreaks(value: string): string {
+  return value.replace(/(?:\r\n|\r|\n)+/g, " ");
 }
 
 function InsertMenu({
@@ -84,10 +144,15 @@ function InsertMenu({
   };
 
   // Focus moves into the opened menu; Esc and item activation restore it.
-  useEffect(() => {
-    if (open) {
-      menuRef.current?.querySelector("button")?.focus();
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const trigger = buttonRef.current;
+    if (!open || menu === null || trigger === null) {
+      return;
     }
+    openPositionedPopover(menu, trigger, "end");
+    menu.querySelector("button")?.focus();
+    return () => closePopover(menu);
   }, [open]);
 
   return (
@@ -105,10 +170,15 @@ function InsertMenu({
       {open && (
         <div
           class="menu-pop insert-menu"
+          popover="manual"
           role="menu"
           aria-label={copy.editor.insert}
           ref={menuRef}
           onKeyDown={(event) => {
+            if (event.key === "Tab" && menuRef.current !== null) {
+              trapPopoverFocus(event, menuRef.current);
+              return;
+            }
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();

@@ -5,7 +5,6 @@ import { createV1Seed } from "../../src/core/schema";
 import {
   expect,
   getDynamicRules,
-  grantAllSitesViaDetails,
   readEcho,
   seedState,
   test,
@@ -145,28 +144,15 @@ test("h2 echo server negotiates HTTP/2", async ({ context, echoServers }) => {
   expect(protocol).toBe("h2");
 });
 
-test("granted rule modifies the header on the wire", async ({
-  context,
-  serviceWorker,
-  extensionId,
-  echoServers,
-}) => {
+test("granted rule modifies the header on the wire", {
+  tag: "@host-access",
+}, async ({ context, serviceWorker, echoServers }) => {
   const doc = ruleDoc("localhost");
   await seedState(serviceWorker, doc);
   const desired = compileDynamic(doc);
   await expect
     .poll(() => getDynamicRules(serviceWorker).then((rules) => rules.length))
     .toBe(desired.length);
-
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(
-    !granted,
-    "Chrome exposes no automatable grant for the optional wildcard host permission in headless mode for this manifest posture; the on-wire modification is gated on the managed-policy grant path (see e2e/README.md).",
-  );
 
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/`);

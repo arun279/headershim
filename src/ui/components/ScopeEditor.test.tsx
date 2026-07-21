@@ -13,6 +13,7 @@ function Harness({
     domains: ["api.example.com"],
     pattern: "",
     regex: "",
+    hosts: [],
   } as ScopeDraft,
 }) {
   const [scope, setScope] = useState(initialScope);
@@ -32,7 +33,7 @@ function mount(props: Parameters<typeof Harness>[0] = {}) {
   return {
     root,
     radios: () =>
-      [...root.querySelectorAll(".segments input")] as HTMLInputElement[],
+      [...root.querySelectorAll(".segmented input")] as HTMLInputElement[],
     chipInput: () =>
       root.querySelector(".domain-chip-input") as HTMLInputElement,
     chips: () =>
@@ -50,11 +51,14 @@ function mount(props: Parameters<typeof Harness>[0] = {}) {
 }
 
 describe("ScopeEditor match type", () => {
-  it("renders the three segments as a native radio group, Domains checked", () => {
+  it("renders four peer segments as a native radio group, Domains checked", () => {
     const ctx = mount();
-    expect(ctx.root.querySelector('[role="radiogroup"]')).not.toBeNull();
+    expect(ctx.root.querySelector('[role="radiogroup"]')?.className).toBe(
+      "segmented",
+    );
     expect(ctx.radios().map((radio) => radio.checked)).toEqual([
       true,
+      false,
       false,
       false,
     ]);
@@ -62,35 +66,37 @@ describe("ScopeEditor match type", () => {
     expect(new Set(ctx.radios().map((radio) => radio.name)).size).toBe(1);
   });
 
-  it("switches to URL pattern with the syntax hint and the grant note", () => {
+  it("switches to URL pattern with its syntax helper and the grant-hosts disclosure", () => {
     const ctx = mount();
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
-    expect(ctx.micros().slice(0, 2)).toEqual([
+    expect(ctx.micros()).toEqual([
       sentenceText(copy.editor.patternHint),
-      copy.editor.grantNote,
+      copy.editor.grantHostsAllSites,
     ]);
   });
 
-  it("shows the grant note on regex too", () => {
+  it("shows the RE2 helper on regex and discloses the empty-hosts all-sites grant", () => {
     const ctx = mount();
     fire(() => ctx.radios()[2]?.click());
     expect(ctx.root.querySelector('[aria-label="Regex"]')).not.toBeNull();
-    expect(ctx.micros()).toContain(copy.editor.grantNote);
+    expect(ctx.micros()).toEqual([
+      copy.editor.regexHint,
+      copy.editor.grantHostsAllSites,
+    ]);
   });
 
-  it("keeps All sites a subordinate link, not a fourth segment", () => {
+  it("selects All sites as the fourth scope segment", () => {
     const ctx = mount();
-    const link = ctx.root.querySelector(".all-sites") as HTMLButtonElement;
-    expect(link.getAttribute("aria-pressed")).toBe("false");
-    expect(ctx.radios()).toHaveLength(3);
-    fire(() => link.click());
-    expect(
-      (ctx.root.querySelector(".all-sites") as HTMLElement).getAttribute(
-        "aria-pressed",
-      ),
-    ).toBe("true");
-    expect(ctx.radios().every((radio) => !radio.checked)).toBe(true);
+    expect(ctx.radios()).toHaveLength(4);
+    fire(() => ctx.radios()[3]?.click());
+    expect(ctx.radios().map((radio) => radio.checked)).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ]);
+    expect(ctx.micros()).toEqual([copy.editor.allSitesHelper]);
   });
 });
 
@@ -105,6 +111,13 @@ describe("ScopeEditor domain chips", () => {
     typeInto(ctx.chipInput(), "api.example.com");
     press(ctx.chipInput(), ",");
     expect(ctx.chips()).toEqual(["api.example.com", "cdn.example.com"]);
+  });
+
+  it("shows the Enter hint beside the chip input", () => {
+    const ctx = mount();
+    const hint = ctx.root.querySelector(".chip-field-hint") as HTMLElement;
+    expect(hint.textContent).toBe(copy.editor.addChipHint);
+    expect(ctx.chipInput().getAttribute("aria-describedby")).toContain(hint.id);
   });
 
   it("commits pending text when the field blurs", () => {
@@ -133,6 +146,18 @@ describe("ScopeEditor domain chips", () => {
   it("carries the subdomain helper line", () => {
     const ctx = mount();
     expect(ctx.micros()).toContain(copy.editor.domainsHelper);
+    expect(ctx.micros()).not.toContain(copy.editor.requestTarget);
+  });
+
+  it("replaces it with the request-target caveat for subresource-only rules", () => {
+    const ctx = mount({ initialTypes: ["xhr"] });
+    expect(ctx.micros()).toContain(copy.editor.requestTarget);
+    expect(ctx.micros()).not.toContain(copy.editor.domainsHelper);
+  });
+
+  it("keeps the caveat for cross-page resources selected with subframes", () => {
+    const ctx = mount({ initialTypes: ["subframes", "xhr"] });
+    expect(ctx.micros()).toEqual([copy.editor.requestTarget]);
   });
 
   it("moves focus to a surviving chip control when a middle chip is removed", () => {
@@ -142,6 +167,7 @@ describe("ScopeEditor domain chips", () => {
         domains: ["a.example.com", "b.example.com", "c.example.com"],
         pattern: "",
         regex: "",
+        hosts: [],
       },
     });
     const xs = [
@@ -157,11 +183,37 @@ describe("ScopeEditor domain chips", () => {
   });
 });
 
+describe("ScopeEditor grant hosts", () => {
+  const grantInput = (root: HTMLElement) =>
+    root.querySelector(".grant-chip-input") as HTMLInputElement;
+
+  it("offers no grant-hosts field for a domains scope", () => {
+    const ctx = mount();
+    expect(ctx.root.querySelector(".grant-chip-input")).toBeNull();
+  });
+
+  it("bounds a regex to a typed host and flips the disclosure to per-site", () => {
+    const ctx = mount();
+    fire(() => ctx.radios()[2]?.click());
+    expect(ctx.micros()).toContain(copy.editor.grantHostsAllSites);
+
+    typeInto(grantInput(ctx.root), "Google.com");
+    press(grantInput(ctx.root), "Enter");
+    expect(
+      [...ctx.root.querySelectorAll(".grant-chip .mono")].map(
+        (chip) => chip.textContent,
+      ),
+    ).toEqual(["google.com"]);
+    expect(ctx.micros()).toContain(copy.editor.grantHostsBounded);
+    expect(ctx.micros()).not.toContain(copy.editor.grantHostsAllSites);
+  });
+});
+
 describe("ScopeEditor resource types", () => {
-  it("defaults to All types and says top-level pages are included", () => {
+  it("defaults to All types without adding a second helper line", () => {
     const ctx = mount();
     expect(ctx.disclosure().textContent).toContain(copy.editor.allTypes);
-    expect(ctx.micros()).toContain(copy.editor.includesPages);
+    expect(ctx.micros()).toEqual([copy.editor.domainsHelper]);
   });
 
   it("opens a checkbox group of the ten groupings, all checked by default", () => {
@@ -173,11 +225,10 @@ describe("ScopeEditor resource types", () => {
     expect(boxes.every((box) => box.checked)).toBe(true);
   });
 
-  it("drops the pages helper when Pages is unchecked and counts the rest", () => {
+  it("counts the remaining groups when Pages is unchecked", () => {
     const ctx = mount();
     fire(() => ctx.disclosure().click());
     fire(() => ctx.checkboxes()[0]?.click());
-    expect(ctx.micros()).not.toContain(copy.editor.includesPages);
     expect(ctx.disclosure().textContent).toContain(copy.resourceTypes.count(9));
   });
 

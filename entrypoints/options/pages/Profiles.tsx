@@ -1,35 +1,28 @@
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
   BADGE_COLORS,
   type Profile,
-  type Rule,
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
-import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
-import { ProfileRulesPanel } from "../../../src/ui/components/ProfileRulesPanel";
+import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { Toast } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
-import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
+import { useToast } from "../useToast";
+import "./Profiles.css";
 
-type Undo =
-  | { kind: "profile"; profile: Profile; index: number }
-  | {
-      kind: "rules";
-      profileId: string;
-      removed: readonly { rule: Rule; index: number }[];
-    };
+const text = copy.options.profiles;
 
 /**
- * The Profiles management page: create, rename, clone, delete (confirm + undo),
- * reorder, badge editing, and bulk rule actions — all through the shared
- * mutations API, which enforces the caps and byte budget inside its lock.
+ * Profile management: create, rename, clone, delete (confirm + undo), reorder,
+ * badge editing, and activation. Deleting a profile takes every rule in it, so
+ * that one keeps its confirmation where a rule delete needs only an undo.
  */
 export function ProfilesPage({
   doc,
@@ -38,70 +31,49 @@ export function ProfilesPage({
   doc: StateDoc;
   mutations: Mutations;
 }) {
-  const [openId, setOpenId] = useState(doc.focusedProfileId);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [openId, setOpenId] = useState(
+    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.id ??
+      doc.profiles[0]?.id,
+  );
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
-  const [toast, setToast] = useState<string | undefined>(undefined);
-  const [undo, setUndo] = useState<Undo | undefined>(undefined);
+  const {
+    toast,
+    action: toastAction,
+    showUndoable,
+    flash,
+    dismiss,
+    retireUndo,
+  } = useToast();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const announce = useAnnounce();
-  // A freshly mounted role=status toast is not reliably re-announced, so every
-  // toast also speaks through the persistent polite region.
-  const showToast = (message: string) => {
-    setToast(message);
-    announce(message);
-  };
 
-  const open =
-    doc.profiles.find((profile) => profile.id === openId) ??
-    doc.profiles.find((profile) => profile.id === doc.focusedProfileId) ??
-    doc.profiles[0];
-  // The store always seeds at least one profile (deleting the last recreates
-  // Default), so an empty document never reaches render.
-  if (open === undefined) {
-    return null;
-  }
-
-  // Passive counter, appears only past 4,000 of the 4,500 enabled-rule cap;
-  // the count mirrors the enabled set the cap governs.
-  const enabledRuleCount = doc.profiles
-    .filter((profile) => profile.enabled)
-    .reduce(
-      (total, profile) =>
-        total + profile.rules.filter((rule) => rule.enabled).length,
-      0,
-    );
-
-  const flash = (error: MutationError) => {
-    const message = blockedCommitCopy(error);
-    if (message !== undefined) {
-      showToast(message);
+  useEffect(() => {
+    if (doc.activeProfileId !== undefined) {
+      setOpenId(doc.activeProfileId);
     }
-  };
+  }, [doc.activeProfileId]);
 
-  // A successful commit retires any pending undo; a blocked one surfaces its
-  // copy and leaves the undo intact.
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
       if (outcome.ok) {
-        setUndo(undefined);
+        retireUndo();
       } else {
         flash(outcome.error);
       }
     });
   };
 
+  const enabledRuleCount =
+    doc.profiles
+      .find((profile) => profile.id === doc.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled).length ?? 0;
+
   const create = () => {
-    const name = availableProfileName(
-      copy.options.profiles.newName,
-      doc.profiles,
-      [],
-    );
     void mutations
       .createProfile({
-        name,
+        name: availableProfileName(text.newName, doc.profiles, []),
         color:
           BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
           BADGE_COLORS[0],
@@ -109,7 +81,7 @@ export function ProfilesPage({
       })
       .then((outcome) => {
         if (outcome.ok) {
-          setUndo(undefined);
+          retireUndo();
           setOpenId(outcome.value.id);
         } else {
           flash(outcome.error);
@@ -117,16 +89,15 @@ export function ProfilesPage({
       });
   };
 
-  const clone = (profileId: string) => {
+  const clone = (profileId: string) =>
     void mutations.cloneProfile(profileId).then((outcome) => {
       if (outcome.ok) {
-        setUndo(undefined);
+        retireUndo();
         setOpenId(outcome.value.id);
       } else {
         flash(outcome.error);
       }
     });
-  };
 
   const deleteProfile = (profile: Profile) => {
     setConfirmDelete(undefined);
@@ -135,60 +106,20 @@ export function ProfilesPage({
         flash(outcome.error);
         return;
       }
-      setUndo({ kind: "profile", ...outcome.value });
-      showToast(copy.toast.profileDeleted(profile.name));
-      // The confirm modal restored focus to the now-unmounting profile card's
-      // Delete button; land it on the stable page heading instead of <body>
-      // (WCAG 2.4.3).
+      const { profile: deleted, index } = outcome.value;
+      showUndoable(copy.toast.profileDeleted(profile.name), () =>
+        mutations.restoreProfile(deleted, index),
+      );
       titleRef.current?.focus();
     });
   };
 
-  const deleteRules = (ruleIds: readonly string[]) => {
-    void mutations.deleteRules(open.id, ruleIds).then((outcome) => {
-      if (!outcome.ok) {
-        flash(outcome.error);
-        return;
-      }
-      setUndo({
-        kind: "rules",
-        profileId: open.id,
-        removed: outcome.value.removed,
-      });
-      showToast(copy.toast.rulesDeleted(outcome.value.removed.length));
-    });
-  };
-
-  const runUndo = () => {
-    if (undo === undefined) {
-      return;
-    }
-    const mutation =
-      undo.kind === "profile"
-        ? mutations.restoreProfile(undo.profile, undo.index)
-        : mutations.restoreRules(undo.profileId, undo.removed);
-    void mutation.then((outcome) => {
-      setUndo(undefined);
-      const message = outcome.ok ? undefined : blockedCommitCopy(outcome.error);
-      if (message === undefined) {
-        setToast(undefined);
-      } else {
-        showToast(message);
-      }
-    });
-  };
-
   return (
-    <section class="page" aria-labelledby="profiles-title">
-      <div class="page-head">
+    <section class="wb-page profiles-page" aria-labelledby="profiles-title">
+      <div class="wb-head">
         <div>
-          <h1
-            class="page-title"
-            id="profiles-title"
-            ref={titleRef}
-            tabIndex={-1}
-          >
-            {copy.options.profiles.title}
+          <h1 class="wb-title" id="profiles-title" ref={titleRef} tabIndex={-1}>
+            {text.title}
           </h1>
           {shouldShowRuleCountWarning(enabledRuleCount) && (
             <p class="rule-counter">
@@ -197,53 +128,45 @@ export function ProfilesPage({
           )}
         </div>
         <Button kind="primary" onClick={create}>
-          {copy.options.profiles.new}
+          <PlusGlyph />
+          {copy.options.profiles.newProfile}
         </Button>
       </div>
 
-      <ProfileList
-        profiles={doc.profiles}
-        openProfileId={open.id}
-        onOpen={setOpenId}
-        onToggle={(id, enabled) =>
-          run(mutations.setProfileEnabled(id, enabled))
-        }
-        onReorder={(id, toIndex) => run(mutations.reorderProfile(id, toIndex))}
-        onRename={(id, name) => run(mutations.renameProfile(id, name))}
-        onClone={clone}
-        onDelete={(id) => {
-          const profile = doc.profiles.find((candidate) => candidate.id === id);
-          if (profile !== undefined) {
-            setConfirmDelete(profile);
+      <div class="profiles-card">
+        <ProfileList
+          profiles={doc.profiles}
+          activeProfileId={doc.activeProfileId}
+          openProfileId={openId}
+          onOpen={setOpenId}
+          onToggle={(id, enabled) =>
+            run(mutations.activateProfile(enabled ? id : undefined))
           }
-        }}
-        onBadgeChange={(id, badgeText, color) =>
-          run(mutations.setProfileBadge(id, { badgeText, color }))
-        }
-      />
-
-      <ProfileRulesPanel
-        profile={open}
-        moveTargets={doc.profiles.filter((profile) => profile.id !== open.id)}
-        onSetEnabled={(ruleIds, enabled) =>
-          run(mutations.setRulesEnabled(open.id, ruleIds, enabled))
-        }
-        onDelete={deleteRules}
-        onMove={(ruleIds, toProfileId) =>
-          run(mutations.moveRulesToProfile(open.id, ruleIds, toProfileId))
-        }
-      />
+          onReorder={(id, toIndex) =>
+            run(mutations.reorderProfile(id, toIndex))
+          }
+          onRename={(id, name) => run(mutations.renameProfile(id, name))}
+          onClone={clone}
+          onDelete={(id) => {
+            const profile = doc.profiles.find(
+              (candidate) => candidate.id === id,
+            );
+            if (profile !== undefined) setConfirmDelete(profile);
+          }}
+          onBadgeChange={(id, badgeText, color) =>
+            run(mutations.setProfileBadge(id, { badgeText, color }))
+          }
+        />
+      </div>
 
       {confirmDelete !== undefined && (
         <Modal
-          title={copy.options.profiles.deleteConfirm.title(confirmDelete.name)}
+          title={text.deleteConfirm.title(confirmDelete.name)}
           onClose={() => setConfirmDelete(undefined)}
           initialFocus={cancelDeleteRef}
         >
           <p class="modal-text">
-            {copy.options.profiles.deleteConfirm.body(
-              confirmDelete.rules.length,
-            )}
+            {text.deleteConfirm.body(confirmDelete.rules.length)}
           </p>
           <div class="modal-actions">
             <button
@@ -254,8 +177,8 @@ export function ProfilesPage({
             >
               {copy.actions.cancel}
             </button>
-            <Button kind="primary" onClick={() => deleteProfile(confirmDelete)}>
-              {copy.options.profiles.deleteConfirm.confirm}
+            <Button kind="quiet" onClick={() => deleteProfile(confirmDelete)}>
+              {text.deleteConfirm.confirm}
             </Button>
           </div>
         </Modal>
@@ -263,15 +186,13 @@ export function ProfilesPage({
 
       {toast !== undefined && (
         <Toast
-          onDismiss={() => setToast(undefined)}
-          // While an undo is live the toast holds open (no 6s timer), so the
-          // Undo control stays reachable until the next mutation retires it —
-          // the options page's persistent-undo affordance (WCAG 2.2.1).
-          persist={undo !== undefined}
-          actionLabel={undo !== undefined ? copy.actions.undo : undefined}
-          onAction={undo !== undefined ? runUndo : undefined}
+          nonce={toast.nonce}
+          onDismiss={dismiss}
+          persist={toastAction !== undefined}
+          actionLabel={toastAction?.label}
+          onAction={toastAction?.run}
         >
-          {toast}
+          {toast.message}
         </Toast>
       )}
     </section>

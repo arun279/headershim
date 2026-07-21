@@ -30,7 +30,10 @@ import {
 } from "./echo-servers";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const extensionPath = path.join(root, ".output", "chrome-mv3");
+
+interface ExtensionBuildOptions {
+  extensionBuild: "host-access" | "shipped";
+}
 
 interface WorkerFixtures {
   echoServers: EchoServers;
@@ -42,7 +45,11 @@ interface TestFixtures {
   extensionId: string;
 }
 
-export const test = base.extend<TestFixtures, WorkerFixtures>({
+export const test = base.extend<
+  ExtensionBuildOptions & TestFixtures,
+  WorkerFixtures
+>({
+  extensionBuild: ["shipped", { option: true }],
   echoServers: [
     // biome-ignore lint/correctness/noEmptyPattern: Playwright resolves fixture dependencies from this parameter's destructuring; it declares none.
     async ({}, use) => {
@@ -53,10 +60,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { scope: "worker" },
   ],
 
-  // biome-ignore lint/correctness/noEmptyPattern: Playwright resolves fixture dependencies from this parameter's destructuring; it declares none.
-  context: async ({}, use) => {
+  context: async ({ extensionBuild }, use) => {
     const userDataDir = await mkdtemp(path.join(tmpdir(), "headershim-e2e-"));
     const { HEADED } = process.env;
+    const extensionPath = path.join(
+      root,
+      ".output",
+      extensionBuild === "host-access"
+        ? "chrome-mv3-e2e-hostaccess"
+        : "chrome-mv3",
+    );
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",
       // Try pure headless first (the harness proves it works); flip via HEADED=1
@@ -89,37 +102,6 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 export { expect };
 
-export const ON_WIRE_GRANT_UNAVAILABLE =
-  "Chrome exposes no automatable grant for the optional wildcard host permission in headless mode for this manifest posture; the on-wire assertion requires a grant that grantAllSitesViaDetails could not obtain (see e2e/README.md).";
-
-export const DUAL_GRANT_TRANSITION_UNAVAILABLE =
-  "Chrome exposes no automatable per-origin grant in headless mode for this unpacked manifest posture, so the harness cannot establish the destination-only starting state required to add the initiator grant (see e2e/README.md).";
-
-// getMatchedRules needs either the declarativeNetRequestFeedback permission
-// (barred by the manifest policy) or an activeTab grant from a real user
-// gesture on the extension action. Chrome's action click and the
-// _execute_action command are both browser-level UI that neither Playwright nor
-// CDP can synthesize headless, so every match-tally, edit-window
-// attribution, quota, and count-badge *number* assertion self-skips here and
-// is verified manually against real Chrome before release (see e2e/README.md).
-export const MATCHED_RULES_GESTURE_UNAVAILABLE =
-  "getMatchedRules requires an activeTab-granting user gesture (action click / _execute_action) that is not scriptable in headless Chromium, and the declarativeNetRequestFeedback permission is barred by the manifest policy (see e2e/README.md).";
-
-// Distinguishing a same-site or SPA navigation (override continues) from a
-// cross-site one (override ends) relies on tab.url in tabs.onUpdated, which the
-// browser only exposes while the activeTab grant is live. Without that grant the
-// background reads url === undefined on every navigation and prunes
-// conservatively, so only the cross-site-ends half is observable headless.
-export const SAME_SITE_LIFETIME_GRANT_UNAVAILABLE =
-  "The same-site/SPA continues half of the This-tab lifetime needs the activeTab grant that populates tab.url; without it the background prunes on every navigation, so only the cross-site-ends half runs headless (see e2e/README.md).";
-
-// Whether individually granted sites survive revoking a broad all-sites
-// grant. Staging it needs a real all-sites grant to revoke, which the
-// unpacked headless posture cannot obtain (grantAllSitesViaDetails governs only
-// declared host patterns, and none are declared).
-export const BROAD_GRANT_REVOCATION_UNAVAILABLE =
-  "The broad-grant revocation-survival question needs a real all-sites grant to then revoke; Chrome exposes none to the unpacked headless posture, so it is verified manually against real Chrome before release (see e2e/README.md).";
-
 interface SessionSeed {
   nextNum: number;
   tabs: { [tabId: number]: TabOverride[] };
@@ -146,7 +128,7 @@ export async function getSessionRules(worker: Worker): Promise<DnrRule[]> {
   return rules as DnrRule[];
 }
 
-export function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
+function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
   // Same "state" lock the background holds around its session pruning, so a
   // seed cannot interleave with an in-flight onUpdated/onRemoved cleanup.
   return worker.evaluate(
@@ -248,10 +230,8 @@ export async function readEcho(page: Page): Promise<Record<string, string>> {
 }
 
 export interface EchoFetchInit {
-  body?: string;
   cache?: "default" | "reload";
   headers?: Record<string, string>;
-  method?: "GET" | "POST";
 }
 
 export interface EchoFetchResult {
@@ -284,32 +264,4 @@ export function fetchEcho(
     },
     { requestUrl: url, requestInit: init },
   );
-}
-
-// Drives the extension's own Details page to grant the optional wildcard host
-// permission. Returns whether the grant actually landed — see e2e/README.md for
-// why it currently does not in headless Chromium for this permission posture.
-export async function grantAllSitesViaDetails(
-  context: BrowserContext,
-  extensionId: string,
-  worker: Worker,
-): Promise<boolean> {
-  await toggleAllSitesViaDetails(context, extensionId);
-  return worker.evaluate(() =>
-    chrome.permissions.contains({ origins: ["*://*/*"] }),
-  );
-}
-
-async function toggleAllSitesViaDetails(
-  context: BrowserContext,
-  extensionId: string,
-): Promise<void> {
-  const page = await context.newPage();
-  await page.goto(`chrome://extensions/?id=${extensionId}`);
-  const toggle = page.locator("extensions-toggle-row#allHostsToggle cr-toggle");
-  await toggle.waitFor({ state: "attached" });
-  if ((await toggle.getAttribute("aria-pressed")) !== "true") {
-    await toggle.click();
-  }
-  await page.close();
 }

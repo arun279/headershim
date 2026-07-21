@@ -1,0 +1,89 @@
+.chip-field-label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.chip-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.domain-chips {
+  margin-top: var(--sp-2);
+  padding: var(--sp-1);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
+  border-radius: var(--r-ctl);
+}
+
+.chip-field-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  background: var(--panel);
+  border-radius: var(--r-chip);
+  font-size: 12px;
+}
+
+.domain-chip {
+  padding-left: var(--sp-3);
+  border: var(--hairline) solid var(--line);
+}
+
+.grant-chip {
+  gap: var(--sp-1);
+  padding: 2px var(--sp-1) 2px var(--sp-2);
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
+}
+
+.chip-field-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  color: var(--ink2);
+}
+
+.chip-field-input {
+  flex: 1;
+  min-width: 72px;
+  min-height: 24px;
+  padding: 2px var(--sp-2);
+  font-size: 12px;
+  color: var(--ink);
+  background: none;
+  border: none;
+}
+
+.chip-field-input::placeholder {
+  color: var(--ink2);
+}
+
+.chip-field-hint {
+  flex: none;
+  padding-right: var(--sp-1);
+  font-size: 10.5px;
+  color: var(--ink2);
+}
+
+.grant-field {
+  margin-top: var(--sp-3);
+}
+
+.grant-chip-input {
+  min-width: 96px;
+  font-size: 11px;
+  background: var(--raise2);
+  border: var(--hairline) solid var(--line-strong);
+  border-radius: var(--r-ctl);
+}
+
+.grant-chip .mono {
+  font-size: 11px;
+}

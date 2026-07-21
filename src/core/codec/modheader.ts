@@ -17,6 +17,8 @@ import {
   type ImportError,
   type ImportedProfile,
   type ImportPlan,
+  type SensitiveRuleWarning,
+  sensitiveRuleWarnings,
 } from "./headershim";
 
 const PROFILE_ARRAY_FIELDS = [
@@ -124,18 +126,14 @@ export type ModHeaderImportWarning =
 
 export type RegexValidator = (regex: string) => Promise<Result<void, unknown>>;
 
+/** Everything an import plan can flag, whichever codec decoded the file. */
+export type ImportPlanWarning = ModHeaderImportWarning | SensitiveRuleWarning;
+
 export async function importModHeader(
-  raw: string,
+  parsed: unknown,
   existingProfiles: readonly Profile[],
   validateRegex: RegexValidator,
-): Promise<Result<ImportPlan<ModHeaderImportWarning>, ImportError>> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return err({ kind: "parse-failure" });
-  }
-
+): Promise<Result<ImportPlan<ImportPlanWarning>, ImportError>> {
   if (detectImportFormat(parsed) !== "modheader") {
     return err({ kind: "unrecognized-format" });
   }
@@ -144,7 +142,7 @@ export async function importModHeader(
   }
 
   const profiles: ImportedProfile[] = [];
-  const warnings: ModHeaderImportWarning[] = [];
+  const warnings: ImportPlanWarning[] = [];
   for (const source of parsed) {
     const mapped = await mapProfile(
       source,
@@ -158,6 +156,7 @@ export async function importModHeader(
     profiles.push(mapped.value.profile);
     warnings.push(...mapped.value.warnings);
   }
+  warnings.push(...sensitiveRuleWarnings(profiles));
 
   return ok({ profiles, warnings });
 }
@@ -307,7 +306,6 @@ async function mapProfile(
       name,
       badgeText: normalizeBadgeText(source.shortTitle ?? source.title),
       color: nearestBadgeColor(source.backgroundColor),
-      enabled: false,
       rules: mappings.map(({ rule }) =>
         scopeResult.value.invalidPatterns.length === 0
           ? rule

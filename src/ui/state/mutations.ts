@@ -255,32 +255,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    reorderRule(
-      profileId: string,
-      ruleId: string,
-      toIndex: number,
-    ): MutationResult<void> {
-      return commit((doc) => {
-        const profile = findProfile(doc, profileId);
-        const rule = profile?.rules.find(
-          (candidate) => candidate.id === ruleId,
-        );
-        if (profile === undefined || rule === undefined) {
-          return notFound();
-        }
-        return ok([
-          withRules(doc, profileId, (list) =>
-            insertAt(
-              list.filter((candidate) => candidate.id !== ruleId),
-              rule,
-              toIndex,
-            ),
-          ),
-          undefined,
-        ]);
-      });
-    },
-
     moveRuleToProfile(
       fromProfileId: string,
       ruleId: string,
@@ -304,158 +278,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    // Bulk actions from the options Profiles page. Each is one
-    // commit under the shared lock, so the enabled-set cap, regex re-validation,
-    // and byte budget in guardCommit gate the whole batch atomically rather than
-    // rule by rule.
-    setRulesEnabled(
-      profileId: string,
-      ruleIds: readonly string[],
-      enabled: boolean,
-    ): MutationResult<void> {
-      return commit((doc) => {
-        if (findProfile(doc, profileId) === undefined) {
-          return notFound();
-        }
-        const ids = new Set(ruleIds);
-        return ok([
-          withRules(doc, profileId, (list) =>
-            list.map((rule) =>
-              ids.has(rule.id) ? { ...rule, enabled } : rule,
-            ),
-          ),
-          undefined,
-        ]);
-      });
-    },
-
-    deleteRules(
-      profileId: string,
-      ruleIds: readonly string[],
-    ): MutationResult<{ removed: readonly { rule: Rule; index: number }[] }> {
-      return commit((doc) => {
-        const profile = findProfile(doc, profileId);
-        if (profile === undefined) {
-          return notFound();
-        }
-        const ids = new Set(ruleIds);
-        const removed = profile.rules
-          .map((rule, index) => ({ rule, index }))
-          .filter((entry) => ids.has(entry.rule.id));
-        return ok([
-          withRules(doc, profileId, (list) =>
-            list.filter((rule) => !ids.has(rule.id)),
-          ),
-          { removed },
-        ]);
-      });
-    },
-
-    restoreRules(
-      profileId: string,
-      removed: readonly { rule: Rule; index: number }[],
-    ): MutationResult<void> {
-      return commit((doc) => {
-        if (findProfile(doc, profileId) === undefined) {
-          return notFound();
-        }
-        const present = new Set(
-          doc.profiles.flatMap((profile) =>
-            profile.rules.map((rule) => rule.id),
-          ),
-        );
-        // Re-insert at the original positions in ascending order so each stored
-        // index still addresses the slot it was removed from.
-        const toInsert = removed
-          .filter((entry) => !present.has(entry.rule.id))
-          .sort((a, b) => a.index - b.index);
-        return ok([
-          withRules(doc, profileId, (list) =>
-            toInsert.reduce(
-              (next, entry) => insertAt(next, entry.rule, entry.index),
-              [...list],
-            ),
-          ),
-          undefined,
-        ]);
-      });
-    },
-
-    moveRulesToProfile(
-      fromProfileId: string,
-      ruleIds: readonly string[],
-      toProfileId: string,
-    ): MutationResult<void> {
-      return commit((doc) => {
-        const from = findProfile(doc, fromProfileId);
-        if (from === undefined || findProfile(doc, toProfileId) === undefined) {
-          return notFound();
-        }
-        const ids = new Set(ruleIds);
-        const moving = from.rules.filter((rule) => ids.has(rule.id));
-        if (fromProfileId === toProfileId || moving.length === 0) {
-          return ok([doc, undefined]);
-        }
-        const removed = withRules(doc, fromProfileId, (list) =>
-          list.filter((rule) => !ids.has(rule.id)),
-        );
-        return ok([
-          withRules(removed, toProfileId, (list) => [...list, ...moving]),
-          undefined,
-        ]);
-      });
-    },
-
-    duplicateRule(profileId: string, ruleId: string): MutationResult<Rule> {
-      return commit((doc) => {
-        const profile = findProfile(doc, profileId);
-        const index =
-          profile?.rules.findIndex((rule) => rule.id === ruleId) ?? -1;
-        const source = profile?.rules[index];
-        if (source === undefined) {
-          return notFound();
-        }
-        const [copy, next] = cloneRule(doc, source);
-        return ok([
-          withRules(next, profileId, (list) => insertAt(list, copy, index + 1)),
-          copy,
-        ]);
-      });
-    },
-
-    regenerateValue(
-      profileId: string,
-      ruleId: string,
-      now = new Date(),
-    ): MutationResult<Rule> {
-      return commit((doc) => {
-        const source = findRule(doc, profileId, ruleId);
-        const generated = source?.generated;
-        if (
-          source === undefined ||
-          generated === undefined ||
-          // A remove rule carries no value to regenerate.
-          source.operation === "remove"
-        ) {
-          return notFound();
-        }
-        const at = now.toISOString();
-        const rule: Rule = {
-          ...source,
-          value: generated.kind === "uuid" ? crypto.randomUUID() : at,
-          generated: { kind: generated.kind, at },
-        };
-        return ok([
-          withRules(doc, profileId, (list) =>
-            list.map((candidate) =>
-              candidate.id === ruleId ? rule : candidate,
-            ),
-          ),
-          rule,
-        ]);
-      });
-    },
-
     createProfile(input: {
       name: string;
       badgeText?: string;
@@ -463,24 +285,24 @@ export function createMutations({ validateRegex }: MutationDeps) {
       enabled: boolean;
     }): MutationResult<Profile> {
       return commit((doc) => {
-        const name = input.name.trim();
-        if (!isProfileNameAvailable(doc.profiles, name)) {
-          return err({ kind: "profile-name-unavailable", name } as const);
-        }
-        const profile = buildProfile({
-          name,
-          badgeText: input.badgeText ?? defaultBadgeText(name),
-          color: input.color,
-          enabled: input.enabled,
-        });
-        const next: StateDoc = {
-          ...doc,
-          profiles: [...doc.profiles, profile],
-          // Enabling a profile focuses it; creating one enabled is
-          // the same gesture.
-          ...(input.enabled ? { focusedProfileId: profile.id } : {}),
+        const available = availableName(doc, input.name);
+        if (!available.ok) return available;
+        const name = available.value;
+        const profile: Profile = {
+          ...buildProfile({
+            name,
+            badgeText: input.badgeText ?? defaultBadgeText(name),
+            color: input.color,
+          }),
         };
-        return ok([next, profile]);
+        return ok([
+          {
+            ...doc,
+            profiles: [...doc.profiles, profile],
+            ...(input.enabled ? { activeProfileId: profile.id } : {}),
+          },
+          profile,
+        ]);
       });
     },
 
@@ -489,17 +311,12 @@ export function createMutations({ validateRegex }: MutationDeps) {
         if (findProfile(doc, profileId) === undefined) {
           return notFound();
         }
-        const trimmed = name.trim();
-        if (!isProfileNameAvailable(doc.profiles, trimmed, profileId)) {
-          return err({
-            kind: "profile-name-unavailable",
-            name: trimmed,
-          } as const);
-        }
+        const available = availableName(doc, name, profileId);
+        if (!available.ok) return available;
         return ok([
           withProfile(doc, profileId, (profile) => ({
             ...profile,
-            name: trimmed,
+            name: available.value,
           })),
           undefined,
         ]);
@@ -519,7 +336,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
           name: cloneName(source.name, doc.profiles),
           badgeText: source.badgeText,
           color: source.color,
-          enabled: source.enabled,
         });
         let next = doc;
         const copies: Rule[] = [];
@@ -560,16 +376,13 @@ export function createMutations({ validateRegex }: MutationDeps) {
                   name: "Default",
                   badgeText: "DE",
                   color: "indigo",
-                  enabled: true,
                 }),
               ];
         const next: StateDoc = {
           ...doc,
           profiles,
-          focusedProfileId:
-            doc.focusedProfileId === profileId
-              ? topmostFocus(profiles)
-              : doc.focusedProfileId,
+          activeProfileId:
+            doc.activeProfileId === profileId ? undefined : doc.activeProfileId,
         };
         return ok([next, { profile: removed, index }]);
       });
@@ -611,50 +424,22 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    setProfileEnabled(
-      profileId: string,
-      enabled: boolean,
-    ): MutationResult<void> {
+    activateProfile(profileId: string | undefined): MutationResult<void> {
       return commit((doc) => {
+        if (profileId === undefined) {
+          return ok([{ ...doc, activeProfileId: undefined }, undefined]);
+        }
         const profile = findProfile(doc, profileId);
         if (profile === undefined) {
           return notFound();
         }
-        if (profile.enabled === enabled) {
-          return ok([doc, undefined]);
+        const limits = checkEnabledRuleLimits(
+          profile.rules.filter((rule) => rule.enabled),
+        );
+        if (!limits.ok) {
+          return limits;
         }
-        const next = withProfile(doc, profileId, (candidate) => ({
-          ...candidate,
-          enabled,
-        }));
-        // Focus follows enablement: enabling focuses the profile;
-        // disabling the focused one moves focus to the topmost enabled
-        // profile, or the topmost profile when none is enabled.
-        const focusedProfileId = enabled
-          ? profileId
-          : doc.focusedProfileId === profileId
-            ? topmostFocus(next.profiles)
-            : doc.focusedProfileId;
-        return ok([{ ...next, focusedProfileId }, undefined]);
-      });
-    },
-
-    activateProfile(profileId: string): MutationResult<void> {
-      return commit((doc) => {
-        if (findProfile(doc, profileId) === undefined) {
-          return notFound();
-        }
-        return ok([
-          {
-            ...doc,
-            focusedProfileId: profileId,
-            profiles: doc.profiles.map((profile) => ({
-              ...profile,
-              enabled: profile.id === profileId,
-            })),
-          },
-          undefined,
-        ]);
+        return ok([{ ...doc, activeProfileId: profileId }, undefined]);
       });
     },
 
@@ -683,10 +468,6 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
     setTheme(theme: Settings["theme"]): MutationResult<void> {
       return updateSettings({ theme });
-    },
-
-    setBadgeMode(badgeMode: Settings["badgeMode"]): MutationResult<void> {
-      return updateSettings({ badgeMode });
     },
 
     applyImport(plan: ImportPlan): MutationResult<void> {
@@ -824,9 +605,11 @@ function normalizeHosts(hosts: readonly string[]): string[] {
 }
 
 function enabledRules(doc: StateDoc): Rule[] {
-  return doc.profiles
-    .filter((profile) => profile.enabled)
-    .flatMap((profile) => profile.rules.filter((rule) => rule.enabled));
+  return (
+    doc.profiles
+      .find((profile) => profile.id === doc.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled) ?? []
+  );
 }
 
 function regexCount(rules: readonly Rule[]): number {
@@ -835,6 +618,17 @@ function regexCount(rules: readonly Rule[]): number {
 
 function findProfile(doc: StateDoc, profileId: string): Profile | undefined {
   return doc.profiles.find((profile) => profile.id === profileId);
+}
+
+function availableName(
+  doc: StateDoc,
+  candidate: string,
+  excludedProfileId?: string,
+): Result<string, MutationError> {
+  const name = candidate.trim();
+  return isProfileNameAvailable(doc.profiles, name, excludedProfileId)
+    ? ok(name)
+    : err({ kind: "profile-name-unavailable", name } as const);
 }
 
 function findRule(
@@ -873,14 +667,6 @@ function insertAt<T>(list: readonly T[], item: T, index: number): T[] {
   const next = [...list];
   next.splice(Math.max(0, Math.min(index, list.length)), 0, item);
   return next;
-}
-
-function topmostFocus(profiles: readonly Profile[]): string {
-  const target = profiles.find((profile) => profile.enabled) ?? profiles[0];
-  if (target === undefined) {
-    throw new Error("state document has no profiles");
-  }
-  return target.id;
 }
 
 function defaultBadgeText(name: string): string {

@@ -1,6 +1,6 @@
 .value-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-2);
 }
 
@@ -9,8 +9,20 @@
   min-width: 0;
 }
 
+/* Grows with the value so a long credential reads from its first character,
+   and scrolls rather than growing without bound. The native resize grabber is
+   dropped with it: the field already sizes itself. */
+.value-input {
+  field-sizing: content;
+  min-height: 44px;
+  max-height: 168px;
+  line-height: 1.45;
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .insert {
-  position: relative;
   flex: none;
 }
 
@@ -19,13 +31,11 @@
   padding: 2px var(--sp-3);
   font-size: 12px;
   color: var(--ink);
-  background: var(--panel-0);
-  border: var(--hairline) solid var(--bezel-strong);
-  border-radius: var(--radius-inner);
+  background: var(--paper);
+  border: var(--hairline) solid var(--line-strong);
+  border-radius: var(--r-ctl);
 }
 
 .insert-menu {
-  right: 0;
-  top: calc(100% + var(--sp-1));
   min-width: 168px;
 }

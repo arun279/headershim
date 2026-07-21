@@ -1,26 +1,21 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
-import type { Profile, Rule } from "../core/model";
+import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
-import {
-  profile,
-  resetFixtures,
-  rule,
-  rules,
-  stateDoc,
-} from "../ui/test/fixtures";
+import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 async function seed(
   profiles: Profile[],
-  focusedProfileId = profiles[0]?.id ?? "",
+  activeProfileId = profiles[0]?.id,
 ): Promise<void> {
-  await write(stateDoc(profiles, { focusedProfileId }));
+  await write(stateDoc(profiles, { activeProfileId }));
 }
 
-async function mount() {
+async function mount(hash = "#profiles") {
+  window.location.hash = hash;
   const root = render(<App />);
   await settle();
   return root;
@@ -57,6 +52,16 @@ function openCard(root: HTMLElement, index: number): void {
   );
 }
 
+async function openBadgeText(badgeText: string): Promise<{
+  root: HTMLElement;
+  input: HTMLInputElement;
+}> {
+  await seed([profile("p1", { name: "Default", badgeText })]);
+  const root = await mount();
+  openCard(root, 0);
+  return { root, input: within(root, ".badge-text-input") as HTMLInputElement };
+}
+
 function within(root: HTMLElement, selector: string): HTMLElement {
   const el = root.querySelector<HTMLElement>(selector);
   if (el === null) {
@@ -65,18 +70,25 @@ function within(root: HTMLElement, selector: string): HTMLElement {
   return el;
 }
 
+async function mountTwoProfiles(): Promise<HTMLElement> {
+  await seed([
+    profile("p1", { name: "Alpha" }),
+    profile("p2", { name: "Beta" }),
+  ]);
+  return mount();
+}
+
+async function activateSecondProfile(root: HTMLElement): Promise<void> {
+  const beta = cards(root)[1];
+  if (beta === undefined) throw new Error("missing second profile");
+  fire(() => within(beta, '[role="switch"]').click());
+  await settle();
+}
+
 /** Opens the card, clicks one of its [Rename][Clone][Delete] actions. */
 function cardAction(root: HTMLElement, index: number, label: string): void {
   openCard(root, index);
   fire(() => findButton(within(root, ".profile-actions"), label).click());
-}
-
-/** Selects every rule, then runs one bulk toolbar action. */
-function bulkAction(root: HTMLElement, label: string): void {
-  fire(() =>
-    (within(root, ".bulk-select-all input") as HTMLInputElement).click(),
-  );
-  fire(() => findButton(within(root, ".bulk-actions"), label).click());
 }
 
 beforeEach(() => {
@@ -84,46 +96,76 @@ beforeEach(() => {
   window.location.hash = "";
 });
 
-describe("options frame", () => {
-  it("renders the wordmark, version, and a four-item section nav", async () => {
+describe("workbench frame", () => {
+  it("renders the wordmark, version, and full navigation", async () => {
     await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
+    const root = await mount("");
 
     expect(root.querySelector(".wordmark")?.textContent).toBe("HeaderShim");
-    expect(root.querySelector(".version")?.textContent).toMatch(/^v/);
-    const links = [
-      ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),
-    ];
+    expect(root.querySelector(".wb-version")?.textContent).toMatch(/^v/);
+    const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
     expect(links.map((link) => link.textContent)).toEqual([
+      copy.options.nav.allRules,
       copy.options.nav.profiles,
-      copy.options.nav.importExport,
       copy.options.nav.siteAccess,
+      copy.options.nav.traffic,
+      copy.options.nav.importExport,
+      copy.options.nav.settings,
       copy.options.nav.about,
     ]);
+    // The default route is the fleet; its nav link carries the marker.
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
   });
 
   it("roves the nav tab stop with vertical arrow keys", async () => {
     await seed([profile("p1", { name: "Default" })]);
-    const root = await mount();
-    const links = [
-      ...root.querySelectorAll<HTMLAnchorElement>(".options-nav-link"),
-    ];
+    const root = await mount("");
+    const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
 
-    expect(links.map((link) => link.tabIndex)).toEqual([0, -1, -1, -1]);
+    expect(links.map((link) => link.tabIndex)).toEqual([
+      0, -1, -1, -1, -1, -1, -1,
+    ]);
     press(links[0] as HTMLElement, "ArrowDown");
     expect(document.activeElement).toBe(links[1]);
     press(links[1] as HTMLElement, "End");
-    expect(document.activeElement).toBe(links[3]);
-    press(links[3] as HTMLElement, "Home");
+    expect(document.activeElement).toBe(links[links.length - 1]);
+    press(links[links.length - 1] as HTMLElement, "Home");
     expect(document.activeElement).toBe(links[0]);
+  });
+
+  it("moves focus to the section heading after hash navigation", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount("");
+
+    window.location.hash = "#settings";
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    await settle();
+    await vi.waitFor(() => {
+      if (root.querySelector("#settings-title") === null) {
+        throw new Error("settings page is still loading");
+      }
+    });
+
+    expect(document.activeElement).toBe(within(root, "#settings-title"));
+  });
+
+  it("leaves existing focus alone on initial load", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    await seed([profile("p1", { name: "Default" })]);
+
+    await mount("");
+
+    expect(document.activeElement).toBe(outside);
+    outside.remove();
   });
 
   it("stamps the stored theme on the document root", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const doc = await read();
     await write({ ...doc, settings: { ...doc.settings, theme: "dark" } });
-    await mount();
+    await mount("");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 });
@@ -133,7 +175,9 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    fire(() => findButton(root, copy.options.profiles.new).click());
+    const create = findButton(root, copy.options.profiles.newProfile);
+    expect(create.className).toBe("btn primary");
+    fire(() => create.click());
     await settle();
 
     expect(cardNames(root)).toEqual(["Default", copy.options.profiles.newName]);
@@ -206,6 +250,9 @@ describe("profile lifecycle", () => {
     expect(modal.querySelector(".modal-title")?.textContent).toBe(
       copy.options.profiles.deleteConfirm.title("Alpha"),
     );
+    expect(
+      findButton(modal, copy.options.profiles.deleteConfirm.confirm).className,
+    ).toBe("btn quiet");
     fire(() =>
       findButton(modal, copy.options.profiles.deleteConfirm.confirm).click(),
     );
@@ -239,6 +286,43 @@ describe("profile lifecycle", () => {
 
     expect(cardNames(root)).toEqual(["Default"]);
     expect((await read()).profiles).toHaveLength(1);
+  });
+});
+
+describe("profile activation", () => {
+  it("switches with one active id and no per-profile liveness bits", async () => {
+    const root = await mountTwoProfiles();
+    await activateSecondProfile(root);
+
+    const stored = await read();
+    expect(stored.activeProfileId).toBe("p2");
+    for (const candidate of stored.profiles) {
+      expect(candidate).not.toHaveProperty("enabled");
+    }
+  });
+
+  it("moves the open detail panel to the newly active profile", async () => {
+    const root = await mountTwoProfiles();
+    await activateSecondProfile(root);
+
+    const [alphaAfter, betaAfter] = cards(root);
+    expect(alphaAfter?.classList.contains("open")).toBe(false);
+    expect(alphaAfter?.querySelector(".profile-detail")).toBeNull();
+    expect(betaAfter?.classList.contains("open")).toBe(true);
+    expect(betaAfter?.querySelector(".profile-detail")).not.toBeNull();
+  });
+
+  it("keeps the profile detail open when its active switch is turned off", async () => {
+    const root = await mountTwoProfiles();
+    const alpha = cards(root)[0];
+    if (alpha === undefined) throw new Error("missing first profile");
+
+    fire(() => within(alpha, '[role="switch"]').click());
+    await settle();
+
+    expect((await read()).activeProfileId).toBeUndefined();
+    expect(alpha.classList.contains("open")).toBe(true);
+    expect(alpha.querySelector(".profile-detail")).not.toBeNull();
   });
 });
 
@@ -309,106 +393,27 @@ describe("badge editor", () => {
     await settle();
 
     expect((await read()).profiles[0]?.color).toBe("teal");
+    expect(teal?.checked).toBe(true);
+    expect(teal?.closest(".badge-swatch")).not.toBeNull();
   });
 
   it("commits badge text on Enter", async () => {
-    await seed([profile("p1", { name: "Default", badgeText: "DE" })]);
-    const root = await mount();
-    openCard(root, 0);
-
-    const input = within(root, ".badge-text-input") as HTMLInputElement;
+    const { input } = await openBadgeText("DE");
     typeInto(input, "QA");
     press(input, "Enter");
     await settle();
 
     expect((await read()).profiles[0]?.badgeText).toBe("QA");
   });
-});
 
-describe("bulk rule actions", () => {
-  async function mountWithRules(rulesForOpen: Rule[], others: Profile[] = []) {
-    await seed(
-      [profile("open", { name: "Open", rules: rulesForOpen }), ...others],
-      "open",
-    );
-    return mount();
-  }
+  it("clamps badge text to two grapheme clusters while typing", async () => {
+    const { root, input } = await openBadgeText("DE");
+    typeInto(input, "🇺🇸USA");
 
-  it("enables every selected rule in one action", async () => {
-    const root = await mountWithRules([
-      rule({ enabled: false }),
-      rule({ enabled: false }),
-    ]);
-
-    bulkAction(root, copy.options.rules.enable);
+    expect(input.value).toBe("🇺🇸U");
+    expect(within(root, ".badge-preview").textContent).toBe("🇺🇸U");
+    press(input, "Enter");
     await settle();
-
-    expect((await read()).profiles[0]?.rules.every((r) => r.enabled)).toBe(
-      true,
-    );
-  });
-
-  it("deletes a selection and restores it via undo", async () => {
-    const root = await mountWithRules([rule(), rule()]);
-
-    bulkAction(root, copy.options.rules.delete);
-    await settle();
-
-    expect((await read()).profiles[0]?.rules).toHaveLength(0);
-    expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.toast.rulesDeleted(2),
-    );
-    fire(() => findButton(root, copy.actions.undo).click());
-    await settle();
-    expect((await read()).profiles[0]?.rules).toHaveLength(2);
-  });
-
-  it("moves a selection to another profile", async () => {
-    const moved = rule({ header: "x-move" });
-    const root = await mountWithRules(
-      [moved],
-      [profile("dest", { name: "Dest" })],
-    );
-
-    bulkAction(root, copy.options.rules.move);
-    fire(() => findButton(within(root, ".bulk-move-targets"), "Dest").click());
-    await settle();
-
-    const stored = await read();
-    expect(stored.profiles[0]?.rules).toHaveLength(0);
-    expect(stored.profiles[1]?.rules[0]?.header).toBe("x-move");
-    // Picking a move target unmounted its button; focus lands on the panel
-    // heading, never <body> (WCAG 2.4.3).
-    expect(document.activeElement).toBe(within(root, ".rules-panel-label"));
-  });
-
-  it("blocks a bulk-enable that crosses the 4,500 cap with the section-8 copy", async () => {
-    const disabled = rule({ enabled: false });
-    const root = await mountWithRules(
-      [disabled],
-      [profile("big", { name: "Big", rules: rules(4_500) })],
-    );
-
-    bulkAction(root, copy.options.rules.enable);
-    await settle();
-
-    expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.errors.ruleCap,
-    );
-    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
-  });
-
-  it("allows the enable that lands exactly on the 4,500 boundary", async () => {
-    const disabled = rule({ enabled: false });
-    const root = await mountWithRules(
-      [disabled],
-      [profile("big", { name: "Big", rules: rules(4_499) })],
-    );
-
-    bulkAction(root, copy.options.rules.enable);
-    await settle();
-
-    expect(root.querySelector(".toast-msg")).toBeNull();
-    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(true);
+    expect((await read()).profiles[0]?.badgeText).toBe("🇺🇸U");
   });
 });

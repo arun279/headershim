@@ -1,6 +1,6 @@
 import {
   createProfile,
-  isProfileNameAvailable,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type Rule,
@@ -68,7 +68,18 @@ export function migrate(doc: unknown): Result<StateDoc, MigrationError> {
   }
   /* v8 ignore stop */
 
-  return isStateDoc(migrated) ? ok(migrated) : err({ kind: "corrupt" });
+  if (!isStateDoc(migrated)) {
+    return err({ kind: "corrupt" });
+  }
+
+  const { activeProfileId } = migrated;
+  if (
+    activeProfileId !== undefined &&
+    !migrated.profiles.some((profile) => profile.id === activeProfileId)
+  ) {
+    return ok({ ...migrated, activeProfileId: undefined });
+  }
+  return ok(migrated);
 }
 
 export function createV1Seed(): StateDoc {
@@ -76,18 +87,16 @@ export function createV1Seed(): StateDoc {
     name: "Default",
     badgeText: "DE",
     color: "indigo",
-    enabled: true,
   });
 
   return {
     v: CURRENT,
     profiles: [profile],
-    focusedProfileId: profile.id,
+    activeProfileId: profile.id,
     nextRuleNum: 1,
     settings: {
       paused: false,
       theme: "system",
-      badgeMode: "count",
     },
   };
 }
@@ -113,13 +122,13 @@ function isStateDoc(value: unknown): value is StateDoc {
     return false;
   }
 
-  const { v, profiles, focusedProfileId, nextRuleNum, settings } = value;
+  const { v, profiles, activeProfileId, nextRuleNum, settings } = value;
   if (
     v !== CURRENT ||
     !Array.isArray(profiles) ||
     profiles.length === 0 ||
     !profiles.every(isProfile) ||
-    typeof focusedProfileId !== "string" ||
+    (activeProfileId !== undefined && typeof activeProfileId !== "string") ||
     typeof nextRuleNum !== "number" ||
     !Number.isSafeInteger(nextRuleNum) ||
     nextRuleNum < 1 ||
@@ -135,9 +144,8 @@ function isStateDoc(value: unknown): value is StateDoc {
 
   return (
     hasUniqueValues(profileIds) &&
-    profileIds.includes(focusedProfileId) &&
     profiles.every((profile) =>
-      isProfileNameAvailable(profiles, profile.name, profile.id),
+      isStoredProfileNameValid(profiles, profile.name, profile.id),
     ) &&
     hasUniqueValues(ruleIds) &&
     hasUniqueValues(ruleNums) &&
@@ -150,16 +158,15 @@ function isProfile(value: unknown): value is Profile {
     return false;
   }
 
-  const { id, name, badgeText, color, enabled, rules } = value;
+  const { id, name, badgeText, color, rules } = value;
   return (
     typeof id === "string" &&
     id.length > 0 &&
     typeof name === "string" &&
-    isProfileNameAvailable([], name) &&
+    isStoredProfileNameValid([], name) &&
     typeof badgeText === "string" &&
     normalizeBadgeText(badgeText) === badgeText &&
     isOneOf(color, BADGE_COLORS) &&
-    typeof enabled === "boolean" &&
     Array.isArray(rules) &&
     rules.every(isRule)
   );
@@ -209,11 +216,10 @@ function isSettings(value: unknown): value is Settings {
     return false;
   }
 
-  const { paused, theme, badgeMode } = value;
+  const { paused, theme } = value;
   return (
     typeof paused === "boolean" &&
-    (theme === "system" || theme === "light" || theme === "dark") &&
-    (badgeMode === "count" || badgeMode === "initials")
+    (theme === "system" || theme === "light" || theme === "dark")
   );
 }
 

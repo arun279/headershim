@@ -1,9 +1,16 @@
-import { useId, useRef, useState } from "preact/hooks";
 import {
-  coversSubresourceTypes,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "preact/hooks";
+import {
+  ALL_SITES_ORIGIN,
   type GrantSnapshot,
-  missingGrants,
+  isAllSitesOrigin,
   originGranted,
+  requiredOrigins,
 } from "../../core/grants";
 import type {
   Direction,
@@ -21,18 +28,34 @@ import {
   headerValueEmptyErrors,
 } from "../state/header-errors";
 import type { MutationError } from "../state/mutations";
-import {
-  GrantPanel,
-  type GrantSelection,
-  type InitiatorControl,
-} from "./GrantPanel";
+import { AdvisorySlot } from "./AdvisorySlot";
+import { Button } from "./Button";
+import { handleEditorCommitKey } from "./editorKeys";
 import { HeaderFields } from "./HeaderFields";
+import { HeaderNameInput } from "./HeaderNameInput";
+import { parseHeaderLine } from "./headerLine";
+import { CloseGlyph } from "./readout/glyphs";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
-import { useInlineCommit } from "./useInlineCommit";
+import { Sheet } from "./Sheet";
+import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
 
+/** The profiles a rule can be authored into; the editor writes to the picked one. */
+export interface EditorProfile {
+  readonly id: string;
+  readonly name: string;
+}
+
 interface RuleEditorProps {
+  profileName: string;
+  /**
+   * Every profile the rule may be saved into. Present on surfaces that author
+   * across profiles; the popup composes into the tab's own profile and omits it.
+   */
+  profiles?: readonly EditorProfile[] | undefined;
+  /** The profile the rule currently lives in; the select's initial choice. */
+  profileId?: string | undefined;
   /** Absent for a new rule. */
   rule?: Rule | undefined;
   /** Domain of the tab the popup opened on; pre-fills a new Domains scope. */
@@ -46,25 +69,32 @@ interface RuleEditorProps {
   grants: GrantSnapshot;
   /** Origin of the tab the popup opened on: the inferred initiator. */
   tabDomain?: string | undefined;
+  /** `profileId` is the picked profile, or undefined where no choice is offered. */
   onSave: (
     ruleId: string | undefined,
     draft: RuleDraft,
+    profileId: string | undefined,
   ) => Promise<Result<Rule, MutationError>>;
-  /** Fires the in-gesture permission prompt; resolves to Chrome's decision. */
+  /**
+   * Deletes the rule being edited. Present only where an undo is offered: the
+   * editor asks nothing before calling it.
+   */
+  onDelete?: (() => void) | undefined;
+  /** Fires the permission prompt after a successful save. */
   onRequestGrant: (origins: string[]) => Promise<boolean>;
-  /** A grant landed: the now-active sites, for the "Active on …" toast. */
+  /** A grant landed: the sites named by the result message. */
   onGranted?: (sites: readonly string[]) => void;
+  /** The rule was saved, but the permission prompt was declined. */
+  onGrantDeclined?: (host: string) => void;
+  onCommitted?: (kind: "create" | "edit") => void;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
-}
-
-interface GrantStep {
-  rule: Rule;
-  scopeType: Scope["type"];
-  targets: string[];
-  editableTargets: boolean;
-  targetPrefill: string[];
-  initiator: InitiatorControl;
+  /** Options hosts the same editor inline instead of as a modal popup mode. */
+  modal?: boolean | undefined;
+  /** A parent-owned close request, such as choosing another options profile. */
+  closeRequest?: number | undefined;
+  /** The requested close was cancelled in the dirty-draft confirmation. */
+  onCloseRequestCancelled?: (() => void) | undefined;
 }
 
 interface Draft {
@@ -76,6 +106,7 @@ interface Draft {
   scope: ScopeDraft;
   resourceTypes: ResourceGroup[] | "all";
   comment: string;
+  profileId: string | undefined;
 }
 
 interface FieldErrors {
@@ -87,39 +118,36 @@ interface FieldErrors {
   editor?: string;
 }
 
-/**
- * The inline editor. No save ceremony: Enter or focus-leave commits when the
- * required fields hold up, Esc reverts, and there is no Apply button anywhere.
- * Every blocking save rule renders its exact copy inline under the offending
- * field with the input preserved; an untouched editor abandons quietly when
- * focus leaves it.
- */
+interface CommitGrant {
+  draft: RuleDraft;
+  host: string;
+  origins: string[];
+  sites: string[];
+}
+
+/** Full-popup rule editor with explicit save and guarded discard. */
 export function RuleEditor(props: RuleEditorProps) {
   const id = useId();
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [grantStep, setGrantStep] = useState<GrantStep | undefined>(undefined);
-  // The saved rule's id survives a new-rule commit so the grant step can persist
-  // its collected sites onto that same rule rather than creating a second one.
-  const savedIdRef = useRef(props.rule?.id);
-  const grantOpenRef = useRef(false);
-  grantOpenRef.current = grantStep !== undefined;
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [pastedLineSplit, setPastedLineSplit] = useState(false);
+  const initialFocusRef = useRef<HTMLInputElement>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const fieldsRef = useRef<HTMLDivElement>(null);
+  const previousCloseRequest = useRef(props.closeRequest);
+  const { draft, draftRef, dirtyRef, busyRef, update } = useDraftState<Draft>(
+    () =>
+      initialDraft(
+        props.rule,
+        props.prefillDomain,
+        props.prefill,
+        props.profileId,
+      ),
+    () => setErrors({}),
+  );
 
-  // Handlers that fire mid-gesture (chip blur, then the editor's focus-leave
-  // commit in the same event turn) must see each other's writes, so the draft
-  // and interaction flags live in refs; focus leaving an open grant step
-  // abandons it rather than committing.
-  const { draft, draftRef, busyRef, rootRef, update, onKeyDown, onFocusOut } =
-    useInlineCommit<Draft>(
-      () => initialDraft(props.rule, props.prefillDomain, props.prefill),
-      {
-        commit: (grantImmediately) => void commit(grantImmediately),
-        onClose: props.onClose,
-        clearErrors: () => setErrors({}),
-        abandon: () => grantOpenRef.current,
-      },
-    );
-
-  const commit = async (grantImmediately = false) => {
+  const commit = async () => {
     if (busyRef.current) {
       return;
     }
@@ -129,11 +157,15 @@ export function RuleEditor(props: RuleEditorProps) {
       setErrors(empties);
       return;
     }
+    const ruleDraft = toRuleDraft(current, props.rule);
+    const grant = planCommitGrant(ruleDraft, props.grants, props.tabDomain);
     busyRef.current = true;
+    setBusy(true);
     try {
       const outcome = await props.onSave(
-        savedIdRef.current,
-        toRuleDraft(current, props.rule),
+        props.rule?.id,
+        grant?.draft ?? ruleDraft,
+        current.profileId,
       );
       if (!outcome.ok) {
         const mapped = mapError(outcome.error, current.scope.type);
@@ -144,63 +176,88 @@ export function RuleEditor(props: RuleEditorProps) {
         }
         return;
       }
-      const saved = outcome.value;
-      savedIdRef.current = saved.id;
-      const step = planGrant(saved, props.grants, props.tabDomain);
-      if (step === undefined) {
-        props.onClose();
-        return;
+      let granted: boolean | undefined;
+      if (grant !== undefined) {
+        try {
+          granted = await props.onRequestGrant(grant.origins);
+        } catch {
+          granted = false;
+        }
       }
-      setGrantStep(step);
-      if (grantImmediately) {
-        // Ctrl/Cmd+Enter: prompt in the same gesture, with the panel's defaults.
-        allow(step, defaultSelection(step));
+      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
+      if (grant !== undefined) {
+        if (granted === true) {
+          props.onGranted?.(grant.sites);
+        } else {
+          props.onGrantDeclined?.(grant.host);
+        }
       }
+      props.onClose();
     } finally {
       busyRef.current = false;
+      setBusy(false);
     }
   };
 
-  // The permission prompt is created synchronously here so it stays inside the
-  // click/keydown gesture; the store write and the prompt's outcome are awaited
-  // afterwards. Granting a host permission itself never recompiles — the
-  // permissions.onChanged event drives only the badge (background lifecycle).
-  const allow = (step: GrantStep, selection: GrantSelection) => {
-    const origins = [
-      ...new Set(
-        [...selection.targetHosts, ...selection.initiators].map(
-          originPatternForDomain,
-        ),
-      ),
-    ];
-    const granted =
-      origins.length === 0
-        ? Promise.resolve(true)
-        : props.onRequestGrant(origins);
-    void finishGrant(step.rule, selection, granted);
+  const requestClose = () => {
+    if (busyRef.current) {
+      return;
+    }
+    if (!dirtyRef.current) {
+      props.onClose();
+      return;
+    }
+    setConfirmDiscard(true);
   };
 
-  const finishGrant = async (
-    rule: Rule,
-    selection: GrantSelection,
-    granted: Promise<boolean>,
-  ) => {
-    const persisted = withGrantScope(rule, selection);
-    if (persisted !== undefined) {
-      // Best-effort: the grant itself has already landed, and the loud surfaces
-      // read the live permission snapshot, not this write. A rare failure here
-      // (byte budget, a concurrent edit) leaves the rule running but its granted
-      // sites unrecorded, so a later revoke can't relight it — no worse than the
-      // grant never having been offered, and nothing the closing popup can undo.
-      await props.onSave(rule.id, persisted);
+  const keepEditing = () => {
+    setConfirmDiscard(false);
+    props.onCloseRequestCancelled?.();
+    queueMicrotask(() => initialFocusRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (props.closeRequest === previousCloseRequest.current) {
+      return;
     }
-    const sites = [
-      ...new Set([...selection.targetHosts, ...selection.initiators]),
-    ];
-    if ((await granted) && sites.length > 0) {
-      props.onGranted?.(sites);
+    previousCloseRequest.current = props.closeRequest;
+    requestClose();
+  }, [props.closeRequest]);
+
+  useEffect(() => {
+    if (confirmDiscard) {
+      keepEditingRef.current?.focus();
     }
-    props.onClose();
+  }, [confirmDiscard]);
+
+  // A rejected commit leaves focus on the button that was rejected. Every field
+  // already marks itself aria-invalid, so the first one in document order is the
+  // first one on screen.
+  useLayoutEffect(() => {
+    if (Object.keys(errors).length === 0) {
+      return;
+    }
+    fieldsRef.current
+      ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      ?.focus();
+  }, [errors]);
+
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (confirmDiscard) {
+        keepEditing();
+      } else {
+        requestClose();
+      }
+      return;
+    }
+    if (handleEditorCommitKey(event, () => void commit())) {
+      return;
+    }
   };
 
   const generate = (kind: "uuid" | "timestamp") => {
@@ -212,86 +269,285 @@ export function RuleEditor(props: RuleEditorProps) {
     }));
   };
 
-  const title =
-    props.rule === undefined ? copy.editor.newRule : copy.editor.editRule;
+  const mode = props.rule === undefined ? "new" : "edit";
+  const title = copy.editor.heading(mode, props.profileName);
+  const commitGrant = planCommitGrant(
+    toRuleDraft(draft, props.rule),
+    props.grants,
+    props.tabDomain,
+  );
+  const saveLabel =
+    commitGrant === undefined
+      ? mode === "new"
+        ? copy.actions.createRule
+        : copy.actions.saveChanges
+      : mode === "new"
+        ? copy.actions.createRuleAndAllow(commitGrant.host)
+        : copy.actions.saveChangesAndAllow(commitGrant.host);
 
   return (
-    <fieldset
-      class="rule-editor inline-editor-well"
-      ref={rootRef}
+    <Sheet
+      label={title}
+      class="editor-sheet"
+      modal={props.modal ?? true}
+      initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
-      onFocusOut={onFocusOut}
+      header={
+        <>
+          <Button kind="ghost" label={copy.editor.close} onClick={requestClose}>
+            <CloseGlyph />
+          </Button>
+          <h1 class="editor-title">{title}</h1>
+        </>
+      }
+      pinned={
+        <>
+          <AdvisorySlot
+            header={draft.header}
+            direction={draft.direction}
+            operation={draft.operation}
+          />
+          <div class="editor-actions">
+            {confirmDiscard ? (
+              <>
+                <strong class="discard-title">
+                  {copy.editor.discardConfirm.title}
+                </strong>
+                <button
+                  type="button"
+                  class="editor-cancel"
+                  ref={keepEditingRef}
+                  onClick={keepEditing}
+                >
+                  {copy.editor.discardConfirm.keepEditing}
+                </button>
+                <Button kind="quiet" onClick={props.onClose}>
+                  {copy.editor.discardConfirm.discard}
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* A draft that was never saved has nothing to delete; Cancel
+                    already discards it. */}
+                {props.onDelete !== undefined && props.rule !== undefined && (
+                  <button
+                    type="button"
+                    class="editor-delete"
+                    disabled={busy}
+                    onClick={props.onDelete}
+                  >
+                    {copy.editor.delete}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  class="editor-cancel"
+                  onClick={requestClose}
+                >
+                  {copy.actions.cancel}
+                </button>
+                <Button
+                  kind="primary"
+                  disabled={busy}
+                  onClick={() => void commit()}
+                >
+                  {saveLabel}
+                </Button>
+              </>
+            )}
+          </div>
+        </>
+      }
     >
-      <legend class="silk editor-title">{title}</legend>
-
-      <HeaderFields idBase={id} draft={draft} errors={errors} update={update} />
-
-      {draft.operation !== "remove" && (
-        <ValueField
-          value={draft.value}
-          generated={draft.generated}
-          frozenAt={
-            draft.generated !== undefined &&
-            draft.generated.at === props.rule?.generated?.at
-              ? formatFrozenAt(draft.generated.at)
-              : undefined
-          }
-          error={errors.value}
-          onInput={(value) =>
-            update((current) => ({ ...current, value, generated: undefined }))
-          }
-          onGenerate={generate}
+      <div class="rule-editor" ref={fieldsRef}>
+        <HeaderFields
+          idBase={id}
+          draft={draft}
+          errors={errors}
+          update={update}
         />
-      )}
 
-      <ScopeEditor
-        scope={draft.scope}
-        resourceTypes={draft.resourceTypes}
-        error={errors.scope}
-        typesError={errors.types}
-        onScope={(scope) => update((current) => ({ ...current, scope }))}
-        onResourceTypes={(resourceTypes) =>
-          update((current) => ({ ...current, resourceTypes }))
-        }
-      />
+        <HeaderNameInput
+          value={draft.header}
+          error={errors.name}
+          autoFocus
+          inputRef={(element) => {
+            initialFocusRef.current = element;
+          }}
+          onInput={(header) => {
+            setPastedLineSplit(false);
+            update((current) => ({ ...current, header }));
+          }}
+          onPasteLine={(text) => {
+            const line = parseHeaderLine(text);
+            if (line === undefined) {
+              return false;
+            }
+            setPastedLineSplit(true);
+            update((current) => ({
+              ...current,
+              header: line.name,
+              value: line.value,
+              generated: undefined,
+            }));
+            return true;
+          }}
+        />
 
-      <div class="editor-field">
-        <label class="editor-label" for={`${id}-comment`}>
+        {pastedLineSplit && (
+          <p class="editor-micro" role="status">
+            {copy.editor.pastedLineSplit}
+          </p>
+        )}
+
+        {draft.operation !== "remove" && (
+          <ValueField
+            value={draft.value}
+            generated={draft.generated}
+            frozenAt={
+              draft.generated !== undefined &&
+              draft.generated.at === props.rule?.generated?.at
+                ? formatFrozenAt(draft.generated.at)
+                : undefined
+            }
+            error={errors.value}
+            onInput={(value) =>
+              update((current) => ({
+                ...current,
+                value,
+                generated: undefined,
+              }))
+            }
+            onGenerate={generate}
+          />
+        )}
+
+        {props.profiles !== undefined && draft.profileId !== undefined && (
+          <ProfileField
+            id={`${id}-profile`}
+            profiles={props.profiles}
+            profileId={draft.profileId}
+            onProfile={(profileId) =>
+              update((current) => ({ ...current, profileId }))
+            }
+          />
+        )}
+
+        <ScopeEditor
+          scope={draft.scope}
+          resourceTypes={draft.resourceTypes}
+          error={errors.scope}
+          typesError={errors.types}
+          defaultResourceTypesOpen={
+            props.rule !== undefined && props.rule.resourceTypes !== "all"
+          }
+          onScope={(scope) => update((current) => ({ ...current, scope }))}
+          onResourceTypes={(resourceTypes) =>
+            update((current) => ({ ...current, resourceTypes }))
+          }
+        />
+
+        <CommentDisclosure
+          id={`${id}-comment`}
+          value={draft.comment}
+          onInput={(comment) => update((current) => ({ ...current, comment }))}
+        />
+
+        {errors.editor !== undefined && (
+          <p class="editor-error editor-error-global" role="alert">
+            {errors.editor}
+          </p>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function CommentDisclosure({
+  id,
+  value,
+  onInput,
+}: {
+  id: string;
+  value: string;
+  onInput: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const summary = value.trim();
+  return (
+    <div class="editor-option">
+      <button
+        type="button"
+        class="disclosure"
+        aria-expanded={open}
+        aria-controls={open ? `${id}-panel` : undefined}
+        title={summary === "" ? undefined : summary}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span>
           {copy.editor.labels.comment}
-        </label>
-        <div class="editor-control">
+          {summary === "" ? "" : ` · ${summary}`}
+        </span>
+        <span
+          class={open ? "disclosure-chevron open" : "disclosure-chevron"}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
+      {open && (
+        <div id={`${id}-panel`}>
+          <label class="sr-only" for={id}>
+            {copy.editor.labels.comment}
+          </label>
           <input
-            id={`${id}-comment`}
+            id={id}
             class="field"
             type="text"
-            value={draft.comment}
-            onInput={(event) => {
-              const comment = event.currentTarget.value;
-              update((current) => ({ ...current, comment }));
-            }}
+            value={value}
+            onInput={(event) => onInput(event.currentTarget.value)}
           />
         </div>
-      </div>
-
-      {errors.editor !== undefined && (
-        <p class="editor-error editor-error-global" role="alert">
-          {errors.editor}
-        </p>
       )}
+    </div>
+  );
+}
 
-      {grantStep !== undefined && (
-        <GrantPanel
-          scopeType={grantStep.scopeType}
-          targetHosts={grantStep.targets}
-          editableTargets={grantStep.editableTargets}
-          targetPrefill={grantStep.targetPrefill}
-          initiator={grantStep.initiator}
-          onAllow={(selection) => allow(grantStep, selection)}
-          onNotNow={props.onClose}
-          onAllSites={props.onClose}
-        />
-      )}
-    </fieldset>
+/**
+ * Which profile the rule is saved in. Choosing a profile that is not running
+ * parks the rule there: it is authored and stored, and live traffic is untouched
+ * until that profile is switched on.
+ */
+function ProfileField({
+  id,
+  profiles,
+  profileId,
+  onProfile,
+}: {
+  id: string;
+  profiles: readonly EditorProfile[];
+  profileId: string;
+  onProfile: (profileId: string) => void;
+}) {
+  return (
+    <div class="editor-field">
+      <label class="editor-label" for={id}>
+        {copy.editor.labels.profile}
+      </label>
+      <select
+        id={id}
+        class="field editor-profile-select"
+        value={profileId}
+        onChange={(event) => onProfile(event.currentTarget.value)}
+      >
+        {profiles.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.name}
+          </option>
+        ))}
+      </select>
+      <p class="editor-micro">{copy.editor.profileHelper}</p>
+    </div>
   );
 }
 
@@ -299,6 +555,7 @@ function initialDraft(
   rule: Rule | undefined,
   prefillDomain: string | undefined,
   prefill: RuleDraft | undefined,
+  profileId: string | undefined,
 ): Draft {
   const source = rule ?? prefill;
   if (source === undefined) {
@@ -313,9 +570,11 @@ function initialDraft(
         domains: prefillDomain === undefined ? [] : [prefillDomain],
         pattern: "",
         regex: "",
+        hosts: [],
       },
       resourceTypes: "all",
       comment: "",
+      profileId,
     };
   }
   return {
@@ -329,10 +588,15 @@ function initialDraft(
       domains: source.scope.type === "domains" ? [...source.scope.domains] : [],
       pattern: source.scope.type === "pattern" ? source.scope.pattern : "",
       regex: source.scope.type === "regex" ? source.scope.regex : "",
+      hosts:
+        source.scope.type === "pattern" || source.scope.type === "regex"
+          ? [...source.scope.hosts]
+          : [],
     },
     resourceTypes:
       source.resourceTypes === "all" ? "all" : [...source.resourceTypes],
     comment: source.comment ?? "",
+    profileId,
   };
 }
 
@@ -403,7 +667,7 @@ function toRuleDraft(draft: Draft, rule: Rule | undefined): RuleDraft {
     operation: draft.operation,
     header: draft.header,
     ...(draft.operation === "remove" ? {} : { value: draft.value }),
-    scope: toScope(draft.scope, rule),
+    scope: toScope(draft.scope),
     resourceTypes: draft.resourceTypes,
     initiators: rule === undefined ? [] : [...rule.initiators],
     enabled: rule?.enabled ?? true,
@@ -414,7 +678,7 @@ function toRuleDraft(draft: Draft, rule: Rule | undefined): RuleDraft {
   };
 }
 
-function toScope(scope: ScopeDraft, rule: Rule | undefined): Scope {
+function toScope(scope: ScopeDraft): Scope {
   switch (scope.type) {
     case "domains":
       return { type: "domains", domains: [...scope.domains] };
@@ -422,181 +686,88 @@ function toScope(scope: ScopeDraft, rule: Rule | undefined): Scope {
       return {
         type: "pattern",
         pattern: scope.pattern,
-        hosts: keptHosts(rule, "pattern"),
+        hosts: [...scope.hosts],
       };
     case "regex":
-      return {
-        type: "regex",
-        regex: scope.regex,
-        hosts: keptHosts(rule, "regex"),
-      };
+      return { type: "regex", regex: scope.regex, hosts: [...scope.hosts] };
     case "all":
       return { type: "all" };
   }
 }
 
-/** Grant hosts collected for a pattern/regex scope survive edits of the same type. */
-function keptHosts(
-  rule: Rule | undefined,
-  type: "pattern" | "regex",
-): string[] {
-  return rule !== undefined && rule.scope.type === type
-    ? [...rule.scope.hosts]
-    : [];
-}
-
-/**
- * Whether a just-committed rule still needs a grant the popup can prompt for,
- * and the shape of the panel that collects it. All-sites scopes route through
- * the buried options flow, never a popup prompt; a fully-granted rule
- * needs no panel at all.
- */
-function planGrant(
-  rule: Rule,
+/** Builds the permission request and the rule metadata committed with it. */
+function planCommitGrant(
+  draft: RuleDraft,
   grants: GrantSnapshot,
   tabDomain: string | undefined,
-): GrantStep | undefined {
-  if (grants.allSites || rule.scope.type === "all") {
+): CommitGrant | undefined {
+  if (grants.allSites) {
     return undefined;
   }
-  const covers = coversSubresourceTypes(rule);
-  const { scope } = rule;
-
-  if (scope.type === "pattern" || scope.type === "regex") {
-    const initiator: InitiatorControl = covers
-      ? {
-          kind: "chips",
-          prefill: tabDomain !== undefined ? [tabDomain] : [...rule.initiators],
-        }
-      : { kind: "none" };
-    // A configured pattern rule whose named hosts are all granted asks nothing
-    // — unless the inferred initiator page is a still-ungranted subresource gap.
-    if (
-      scope.hosts.length > 0 &&
-      missingGrants(rule, grants).length === 0 &&
-      !initiatorNeedsGrant(initiator, grants)
-    ) {
-      return undefined;
-    }
+  // One honest signal for the whole editor: the all-sites scope and a
+  // pattern/regex left with no grant host both surface here, so the button
+  // discloses broad access before Chrome's own dialog rather than committing a
+  // rule that later needs all sites in silence. An empty grant-host field is an
+  // explicit all-sites request, so the rule is committed exactly as authored —
+  // no host is inferred from the expression behind the user's back.
+  if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
-      rule,
-      scopeType: scope.type,
-      targets: [],
-      editableTargets: true,
-      targetPrefill: tabDomain !== undefined ? [tabDomain] : [...scope.hosts],
-      initiator,
+      draft,
+      host: copy.scopeSummary.allSites,
+      origins: [ALL_SITES_ORIGIN],
+      sites: [copy.scopeSummary.allSites],
     };
   }
-
-  const targets = [...scope.domains];
-  const initiator = domainInitiator(rule, tabDomain, covers, targets);
-  // The target domains can already be granted while the inferred initiator page
-  // isn't: a cross-host subresource rule still needs that page granted to run,
-  // and the rule's own initiators list can't reveal a page it hasn't recorded.
-  if (
-    missingGrants(rule, grants).length === 0 &&
-    !initiatorNeedsGrant(initiator, grants)
-  ) {
+  const targets = targetHosts(draft.scope);
+  if (targets.length === 0) {
     return undefined;
   }
-  return {
-    rule,
-    scopeType: "domains",
-    targets,
-    editableTargets: false,
-    targetPrefill: [],
-    initiator,
-  };
-}
-
-/** An inferred initiator worth a panel: one whose host isn't granted yet. */
-function initiatorNeedsGrant(
-  initiator: InitiatorControl,
-  grants: GrantSnapshot,
-): boolean {
-  switch (initiator.kind) {
-    case "checkbox":
-      return !originGranted(initiator.host, grants);
-    case "chips":
-      return initiator.prefill.some((host) => !originGranted(host, grants));
-    case "none":
-      return false;
-  }
-}
-
-/**
- * The honest split for a Domains rule reaching subresources: pre-check the
- * tab's own origin when it differs from the target (the inferred initiator);
- * offer an explicit optional input when no page context could be captured;
- * ask nothing when the rule stays on navigations or the tab is the target.
- */
-function domainInitiator(
-  rule: Rule,
-  tabDomain: string | undefined,
-  covers: boolean,
-  targets: readonly string[],
-): InitiatorControl {
-  if (!covers) {
-    return { kind: "none" };
-  }
-  if (tabDomain === undefined) {
-    return { kind: "chips", prefill: [...rule.initiators] };
-  }
-  if (!targets.includes(tabDomain)) {
-    return {
-      kind: "checkbox",
-      host: tabDomain,
-      target: targets[0] ?? tabDomain,
-    };
-  }
-  return { kind: "none" };
-}
-
-function defaultSelection(step: GrantStep): GrantSelection {
-  return {
-    targetHosts: step.editableTargets
-      ? [...step.targetPrefill]
-      : [...step.targets],
-    initiators:
-      step.initiator.kind === "checkbox"
-        ? [step.initiator.host]
-        : step.initiator.kind === "chips"
-          ? [...step.initiator.prefill]
-          : [],
-  };
-}
-
-/**
- * The rule draft that records what the grant panel collected — target hosts on
- * a pattern/regex scope, initiators on the rule — or undefined when the
- * selection adds nothing new. Target hosts drive grant computation alone;
- * initiators also narrow the match to those pages (initiatorDomains), so a
- * newly named initiator recompiles the rule while a new target host does not.
- */
-function withGrantScope(
-  rule: Rule,
-  selection: GrantSelection,
-): RuleDraft | undefined {
-  const addedInitiators = selection.initiators.filter(
-    (host) => !rule.initiators.includes(host),
-  );
-  const { scope } = rule;
-  const addedHosts =
-    scope.type === "pattern" || scope.type === "regex"
-      ? selection.targetHosts.filter((host) => !scope.hosts.includes(host))
-      : [];
-  if (addedInitiators.length === 0 && addedHosts.length === 0) {
+  const reachesSubresources =
+    draft.resourceTypes === "all" ||
+    draft.resourceTypes.some(
+      (group) => group !== "pages" && group !== "subframes",
+    );
+  const inferredInitiator =
+    reachesSubresources &&
+    tabDomain !== undefined &&
+    !targets.includes(tabDomain)
+      ? tabDomain
+      : undefined;
+  const initiators = unique([
+    ...draft.initiators,
+    ...(inferredInitiator === undefined ? [] : [inferredInitiator]),
+  ]);
+  const sites = unique([
+    ...targets,
+    ...(reachesSubresources ? initiators : []),
+  ]);
+  const missing = sites.filter((site) => !originGranted(site, grants));
+  if (missing.length === 0) {
     return undefined;
   }
-  const { id: _id, num: _num, ...draft } = rule;
+  const firstTarget = targets.find((target) => missing.includes(target));
   return {
-    ...draft,
-    scope:
-      scope.type === "pattern" || scope.type === "regex"
-        ? { ...scope, hosts: [...scope.hosts, ...addedHosts] }
-        : scope,
-    initiators: [...rule.initiators, ...addedInitiators],
+    draft: { ...draft, initiators },
+    host: firstTarget ?? (missing[0] as string),
+    origins: missing.map(originPatternForDomain),
+    sites: missing,
   };
+}
+
+function targetHosts(scope: Scope): string[] {
+  switch (scope.type) {
+    case "domains":
+      return [...scope.domains];
+    case "pattern":
+    case "regex":
+      return [...scope.hosts];
+    case "all":
+      return [];
+  }
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 /** "2026-07-12T14:03:27.000Z" → "2026-07-12 14:03 UTC" (the designed reading). */

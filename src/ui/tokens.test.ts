@@ -1,14 +1,29 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { BADGE_PALETTE } from "../core/badge";
+import { BADGE_COLORS } from "../core/model";
 
-// The focus-indicator ratios these tokens carry (the checked-segment ring vs its
-// fill, and the ring vs the surface) are non-text contrast that axe's
-// color-contrast rule does not evaluate — only tokens.css prose asserts them.
-// Parse the real values and hold both the documented ratio and the 3:1 WCAG
-// non-text floor, so reverting the ring to an invisible hue fails here.
+// The readout's whole claim to WCAG AA rides on these token values: text pairs
+// must clear 4.5:1 and graphical/UI pairs 3:1, in both themes. axe checks
+// rendered text, but the tinted roles (a live spine on paper, white on the amber
+// Grant fill) are chosen here, so this file is their only gate. It parses the
+// real palette and follows var() aliases to their hex, so a regression to an
+// invisible hue fails the build.
 const css = readFileSync(
   fileURLToPath(new URL("./tokens.css", import.meta.url)),
+  "utf8",
+);
+const buttonCss = readFileSync(
+  fileURLToPath(new URL("./components/Button.css", import.meta.url)),
+  "utf8",
+);
+const segmentedCss = readFileSync(
+  fileURLToPath(new URL("./components/Segmented.css", import.meta.url)),
+  "utf8",
+);
+const toggleCss = readFileSync(
+  fileURLToPath(new URL("./components/Toggle.css", import.meta.url)),
   "utf8",
 );
 
@@ -21,22 +36,45 @@ function block(selector: string): string {
   return match[1];
 }
 
-function hex(source: string, token: string): string {
-  const match = new RegExp(`--${token}:\\s*(#[0-9A-Fa-f]{3,6})`).exec(source);
-  if (match?.[1] === undefined) {
-    throw new Error(`no --${token} in block`);
+const ROOT = block(":root");
+
+function valueIn(source: string, token: string): string | undefined {
+  return new RegExp(`--${token}:\\s*([^;]+);`).exec(source)?.[1]?.trim();
+}
+
+function value(source: string, token: string): string {
+  const raw = valueIn(source, token);
+  if (raw === undefined) throw new Error(`no --${token} in block`);
+  return raw;
+}
+
+/**
+ * Follows var(--x) aliases to their hex the way the cascade resolves them: a
+ * theme block only overrides the base tokens, so an alias or an unoverridden
+ * token falls back to its :root definition.
+ */
+function resolve(source: string, token: string): string {
+  const raw = valueIn(source, token) ?? value(ROOT, token);
+  const alias = /^var\(--([a-z0-9-]+)\)$/.exec(raw);
+  if (alias?.[1] !== undefined) {
+    return resolve(source, alias[1]);
   }
-  return match[1];
+  if (!/^#[0-9A-Fa-f]{3,6}$/.test(raw)) {
+    throw new Error(`--${token} is neither a hex nor a single alias: ${raw}`);
+  }
+  return raw;
 }
 
 function relativeLuminance(color: string): number {
-  const value = Number.parseInt(color.slice(1), 16);
-  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map(
-    (raw) => {
-      const srgb = raw / 255;
-      return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
-    },
-  );
+  const numeric = Number.parseInt(color.slice(1), 16);
+  const channels = [
+    (numeric >> 16) & 255,
+    (numeric >> 8) & 255,
+    numeric & 255,
+  ].map((raw) => {
+    const srgb = raw / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  });
   return (
     0.2126 * (channels[0] ?? 0) +
     0.7152 * (channels[1] ?? 0) +
@@ -44,46 +82,111 @@ function relativeLuminance(color: string): number {
   );
 }
 
-function contrast(a: string, b: string): number {
-  const la = relativeLuminance(a);
-  const lb = relativeLuminance(b);
+function contrast(source: string, a: string, b: string): number {
+  const la = relativeLuminance(resolve(source, a));
+  const lb = relativeLuminance(resolve(source, b));
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
-describe("focus-indicator token contrast", () => {
-  const themes = [
-    { name: "light", selector: ":root", trace: 5.59, focus: 5.07 },
-    {
-      name: "dark",
-      selector: ':root[data-theme="dark"]',
-      trace: 7.66,
-      focus: 8.26,
-    },
-  ];
+const THEMES = [
+  { name: "light", selector: ":root" },
+  { name: "dark", selector: ':root[data-theme="dark"]' },
+] as const;
 
-  it("keeps --focus resolving to --trace so the ring hue is the interactive hue", () => {
-    expect(block(":root")).toMatch(/--focus:\s*var\(--trace\)/);
+// [text, background] pairs that carry meaning and must read as text (4.5:1).
+const TEXT_PAIRS: readonly [string, string][] = [
+  ["ink", "paper"],
+  ["ink2", "paper"],
+  ["ink3", "paper"],
+  ["live-ink", "paper"],
+  ["amber", "paper"],
+  ["stop", "paper"],
+  ["on-live", "live-fill"],
+  ["on-amber", "amber"],
+];
+
+// Graphical/UI pairs that carry state and must clear the 3:1 non-text floor.
+const UI_PAIRS: readonly [string, string][] = [
+  ["live", "paper"], // the live spine, glyph, and toggle-on track
+  ["sw-off", "paper"], // the toggle off track
+  ["focus", "paper"], // the focus ring
+];
+
+describe.each(THEMES)("$name palette contrast", ({ selector }) => {
+  const source = block(selector);
+
+  it.each(TEXT_PAIRS)("%s on %s clears 4.5:1", (text, background) => {
+    expect(contrast(source, text, background)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(
-    themes,
-  )("$name: the checked-segment ring and the focus ring clear their documented ratios and the 3:1 floor", ({
-    selector,
-    trace,
-    focus,
-  }) => {
-    const source = block(selector);
-    // The checked-segment ring is --trace-ink over the --trace
-    // fill; --focus is --trace over the --panel-0 surface.
-    const ringOnFill = contrast(hex(source, "trace"), hex(source, "trace-ink"));
-    const ringOnSurface = contrast(
-      hex(source, "trace"),
-      hex(source, "panel-0"),
-    );
+  it.each(UI_PAIRS)("%s on %s clears 3:1", (fore, background) => {
+    expect(contrast(source, fore, background)).toBeGreaterThanOrEqual(3);
+  });
+});
 
-    expect(ringOnFill).toBeCloseTo(trace, 1);
-    expect(ringOnSurface).toBeCloseTo(focus, 1);
-    expect(ringOnFill).toBeGreaterThanOrEqual(3);
-    expect(ringOnSurface).toBeGreaterThanOrEqual(3);
+describe("the accent, doubled and reserved", () => {
+  it("resolves the focus ring to the interactive text hue", () => {
+    expect(value(block(":root"), "focus")).toBe("var(--live-ink)");
+  });
+
+  it("keeps the toggle tracks on distinct semantic roles", () => {
+    const source = block(":root");
+    expect(value(source, "sw-off")).toBe("#8b9096");
+    expect(
+      [...source.matchAll(/--sw-([a-z-]+):/g)].map((match) => match[1]).sort(),
+    ).toEqual(["off"]);
+    expect(toggleCss).toMatch(
+      /\.sw\[aria-checked="true"\]::before\s*\{[^}]*background:\s*var\(--live\)/s,
+    );
+    expect(toggleCss).toMatch(
+      /\.sw\.sw-paused\[aria-checked="true"\]::before\s*\{[^}]*background:\s*var\(--amber\)/s,
+    );
+  });
+});
+
+describe("profile badge palette", () => {
+  it.each(
+    BADGE_COLORS,
+  )("keeps --badge-%s aligned with the core palette", (color) => {
+    expect(resolve(ROOT, `badge-${color}`).toLowerCase()).toBe(
+      BADGE_PALETTE[color].toLowerCase(),
+    );
+  });
+});
+
+describe("shared control skins inherit the palette", () => {
+  it("draws the only primary button with the live fill and control radius", () => {
+    expect(buttonCss).toMatch(
+      /\.btn\s*\{[^}]*border-radius:\s*var\(--r-ctl\)/s,
+    );
+    expect(buttonCss).toMatch(
+      /\.btn\.primary\s*\{[^}]*background:\s*var\(--live-fill\)/s,
+    );
+  });
+
+  it("draws radio and pressed segments on the one inset track", () => {
+    expect(segmentedCss).toMatch(
+      /\.segmented\s*\{[^}]*border-radius:\s*var\(--r-chip\)[^}]*background:\s*var\(--raise2\)/s,
+    );
+    expect(segmentedCss).toMatch(
+      /\.segmented button\[aria-pressed="true"\],[^{]*\.segmented-option:has\(input:checked\)\s*\{[^}]*background:\s*var\(--panel\)/s,
+    );
+  });
+
+  it("defines only the new radius scale", () => {
+    expect(
+      [...ROOT.matchAll(/--(r-(?:card|ctl|chip)):/g)].map((match) => match[1]),
+    ).toEqual(["r-card", "r-ctl", "r-chip"]);
+    expect(
+      ["r-card", "r-ctl", "r-chip"].map((token) => value(ROOT, token)),
+    ).toEqual(["13px", "9px", "8px"]);
+  });
+
+  it.each(THEMES)("$name: the checked segment text clears 4.5:1", ({
+    selector,
+  }) => {
+    expect(contrast(block(selector), "ink", "panel")).toBeGreaterThanOrEqual(
+      4.5,
+    );
   });
 });

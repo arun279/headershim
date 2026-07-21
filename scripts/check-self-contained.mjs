@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // Guards against committed code/docs/tests referencing material that isn't in
@@ -113,6 +113,7 @@ function trackedFiles() {
   return execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8" })
     .split("\n")
     .filter((file) => file.length > 0)
+    .filter((file) => existsSync(path.join(root, file)))
     .filter((file) => !EXCLUDED_FILES.has(file))
     .filter(
       (file) =>

@@ -1,86 +1,31 @@
-/* .about-card takes the shared options card recipe (App.css). */
-
-.about-radios {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  border: none;
-}
-
-.about-radios legend {
-  float: left;
-  margin-right: var(--sp-5);
-  font-weight: 500;
-}
-
-/* Whole label is the target, kept at the 24px minimum (WCAG 2.5.8). */
-.about-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-height: 24px;
-}
-
-.about-radio input {
-  accent-color: var(--trace);
-  width: 16px;
-  height: 16px;
-}
-
-.about-link-button {
-  color: var(--trace);
-  font-weight: 500;
-  padding: var(--sp-2) 0;
-}
-
-.about-group {
-  margin-top: var(--sp-4);
-}
-
+/* Base card recipe lives in App.css; About adds nothing to it. */
 .about-build {
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
 }
-
-.about-table-scroll {
-  overflow-x: auto;
-}
-
-.about-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.about-table th,
-.about-table td {
-  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: var(--hairline) solid var(--bezel);
-}
-
-.about-table thead th {
-  color: var(--ink-mute);
+.about-build .mono {
   font-weight: 600;
 }
 
-.about-table tbody th {
-  font-weight: 400;
-  overflow-wrap: anywhere;
+.about-description {
+  max-width: 62ch;
+  color: var(--ink2);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
-.about-never,
-.about-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding-left: var(--sp-5);
+.about-card > p {
+  font-size: 12.5px;
+  color: var(--ink2);
 }
 
 .about-links {
-  margin-top: var(--sp-4);
-  color: var(--ink-mute);
+  padding-top: var(--sp-3);
+  border-top: var(--hairline) solid var(--line);
+  color: var(--ink3);
 }
-
 .about-link {
-  color: var(--trace);
+  color: var(--live-ink);
+  font-weight: 600;
 }

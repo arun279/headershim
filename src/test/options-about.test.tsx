@@ -2,18 +2,28 @@
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
+import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
+import { THEME_CACHE_KEY } from "../ui/theme";
 
 const text = copy.options.about;
+const settings = copy.options.settings;
 
-async function mount(): Promise<HTMLElement> {
+async function mount(hash = "#about"): Promise<HTMLElement> {
   await write(stateDoc([profile("p1")]));
-  window.location.hash = "#about";
+  window.location.hash = hash;
   const root = render(<App />);
   await settle();
+  if (hash === "#settings") {
+    await vi.waitFor(() => {
+      if (root.querySelector("#settings-title") === null) {
+        throw new Error("settings page is still loading");
+      }
+    });
+  }
   return root;
 }
 
@@ -34,98 +44,121 @@ function check(input: HTMLInputElement): void {
   });
 }
 
-describe("options about", () => {
+describe("options settings", () => {
   beforeEach(() => {
     resetFixtures();
     document.documentElement.removeAttribute("data-theme");
   });
 
   it("persists the theme choice and stamps data-theme on the root", async () => {
-    const root = await mount();
-    expect(radio(root, "theme", "system").checked).toBe(true);
+    const root = await mount("#settings");
+    expect(root.querySelectorAll(".settings-row")).toHaveLength(2);
+    expect(root.querySelector('[role="radiogroup"]')?.className).toBe(
+      "segmented",
+    );
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
+    expect(radio(root, "theme", "system").checked).toBe(true);
+    expect(
+      [...root.querySelectorAll('input[name="theme"]')].map(
+        (input) => input.parentElement?.textContent,
+      ),
+    ).toEqual(["System", "Light", "Dark"]);
 
     check(radio(root, "theme", "dark"));
     await settle();
 
     expect((await read()).settings.theme).toBe("dark");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(localStorage.getItem(THEME_CACHE_KEY)).toBe("dark");
+
+    expect(radio(root, "theme", "dark").checked).toBe(true);
 
     check(radio(root, "theme", "system"));
     await settle();
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
   });
 
-  it("persists the badge mode choice", async () => {
-    const root = await mount();
-    expect(radio(root, "badge-mode", "count").checked).toBe(true);
-
-    check(radio(root, "badge-mode", "initials"));
-    await settle();
-
-    expect((await read()).settings.badgeMode).toBe("initials");
-    expect(radio(root, "badge-mode", "initials").checked).toBe(true);
-  });
-
   it("opens the browser shortcut manager from the shortcuts control", async () => {
     const create = vi.spyOn(fakeBrowser.tabs, "create");
-    const root = await mount();
-    const button = [...root.querySelectorAll("button")].find((candidate) =>
-      candidate.textContent?.includes(text.shortcuts),
+    const root = await mount("#settings");
+    const link = [...root.querySelectorAll("a")].find((candidate) =>
+      candidate.textContent?.includes(settings.shortcuts),
     );
-    if (button === undefined) {
+    if (link === undefined) {
       throw new Error("no shortcuts control");
     }
 
-    fire(() => button.click());
+    fire(() => link.click());
 
     expect(create).toHaveBeenCalledWith({
-      url: "chrome://extensions/shortcuts",
+      url: "about:addons",
     });
   });
 
-  it("shows the version, commit, and first-run tagline verbatim", async () => {
+  it("chooses the shortcut manager supported by the browser runtime", () => {
+    expect(shortcutManagerUrl({})).toBe("chrome://extensions/shortcuts");
+    expect(shortcutManagerUrl({ getBrowserInfo: () => undefined })).toBe(
+      "about:addons",
+    );
+  });
+});
+
+describe("options about", () => {
+  beforeEach(() => {
+    resetFixtures();
+  });
+
+  it("keeps appearance controls out of the identity card", async () => {
     const root = await mount();
+    expect(root.querySelector(".settings-card")).toBeNull();
+    expect(root.querySelector('input[name="badge-mode"]')).toBeNull();
+    expect(root.textContent).not.toContain(settings.shortcuts);
+  });
+
+  it("shows the injected build identity and one factual description", async () => {
+    const root = await mount();
+    expect(root.querySelector(".wb-title")?.textContent).toBe(text.title);
     expect(root.textContent).toContain(
       sentenceText(text.build("1.0.0", "test")),
     );
-    expect(root.textContent).toContain(copy.app.tagline);
-  });
-
-  it("justifies every manifest permission plus optional site access", async () => {
-    const root = await mount();
-    const rows = [
-      ...root.querySelectorAll<HTMLElement>(".about-table tbody th"),
-    ].map((cell) => cell.textContent);
-
-    expect(rows).toEqual([
-      "declarativeNetRequestWithHostAccess",
-      "storage",
-      "activeTab",
-      "Site access (optional)",
-    ]);
-    expect(root.textContent).toContain(text.permissions.intro);
-  });
-
-  it("renders the full never-list and the build-verification procedure", async () => {
-    const root = await mount();
-    const items = [...root.querySelectorAll<HTMLElement>(".about-never li")];
-
+    expect(root.querySelector(".about-description")?.textContent).toBe(
+      text.description,
+    );
+    expect(root.querySelectorAll(".about-description")).toHaveLength(1);
+    expect(root.textContent).toContain(text.license);
+    expect(root.textContent).not.toContain(copy.app.tagline);
     expect(
-      items.map((item) => item.querySelector("strong")?.textContent),
-    ).toEqual(text.neverList.items.map((item) => item.lead));
-    expect(root.textContent).toContain(text.verifyBuild.caveat);
-    expect(root.textContent).toContain("sha256sum -c SHA256SUMS");
+      root.querySelectorAll(".about-card h2, .about-card h3"),
+    ).toHaveLength(0);
   });
 
-  it("links the repository, issues, and changelog", async () => {
+  it("contains none of the removed manifesto sections", () => {
+    expect(text).not.toHaveProperty("trustHeading");
+    expect(text).not.toHaveProperty("summary");
+    expect(text).not.toHaveProperty("permissions");
+    expect(text).not.toHaveProperty("storage");
+    expect(text).not.toHaveProperty("neverList");
+    expect(text).not.toHaveProperty("security");
+    expect(text).not.toHaveProperty("verifyBuild");
+  });
+
+  it("links the repository, license, issues, and releases", async () => {
     const root = await mount();
-    const links = [...root.querySelectorAll<HTMLAnchorElement>("a.about-link")];
+    const links = [
+      ...root.querySelectorAll<HTMLAnchorElement>(".about-links a.about-link"),
+    ];
 
     expect(links.map((link) => link.href)).toEqual([
       text.links.repositoryUrl,
+      text.links.licenseUrl,
       text.links.issuesUrl,
-      text.links.changelogUrl,
+      text.links.releasesUrl,
+    ]);
+    expect(links.map((link) => link.textContent?.replace(" ↗", ""))).toEqual([
+      text.links.repository,
+      text.links.license,
+      text.links.issues,
+      text.links.releases,
     ]);
   });
 });

@@ -8,8 +8,8 @@ import {
   type HeadershimEnvelope,
 } from "../../src/core/codec/headershim";
 import {
+  type ImportPlanWarning,
   importModHeader,
-  type ModHeaderImportWarning,
   type RegexValidator,
 } from "../../src/core/codec/modheader";
 import {
@@ -70,7 +70,6 @@ function roundTripDoc(): StateDoc {
       name: "Staging",
       badgeText: "ST",
       color: "blue",
-      enabled: true,
     }),
     rules: [staging, disabled],
   };
@@ -79,14 +78,13 @@ function roundTripDoc(): StateDoc {
       name: "Local",
       badgeText: "LO",
       color: "teal",
-      enabled: false,
     }),
     rules: [local],
   };
   return {
     ...doc,
     profiles: [stagingProfile, localProfile],
-    focusedProfileId: stagingProfile.id,
+    activeProfileId: stagingProfile.id,
   };
 }
 
@@ -160,9 +158,10 @@ test("an export round-trips through the options UI to an equivalent state, off",
       "Staging",
       "Local",
     ]);
-    for (const profile of imported.profiles.slice(1)) {
-      expect(profile.enabled).toBe(false);
-    }
+    expect(imported.activeProfileId).toBe(imported.profiles[0]?.id);
+    expect(imported.profiles.every((profile) => !("enabled" in profile))).toBe(
+      true,
+    );
 
     const before = exportedByName(original);
     const after = exportedByName(imported);
@@ -171,19 +170,22 @@ test("an export round-trips through the options UI to an equivalent state, off",
       if (expected === undefined) {
         throw new Error(`original is missing ${name}`);
       }
-      // Everything survives except the deliberate off-on-import: rules, their
-      // own enabled flags, scopes, operations, badge, and color are identical.
-      expect(after.get(name)).toEqual({ ...expected, enabled: false });
+      // Rules, their enabled flags, scopes, operations, badge, and color are
+      // identical; importing does not change the active profile.
+      expect(after.get(name)).toEqual(expected);
     }
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
 });
 
-// The thirteen ModHeader warning kinds the fixture is built to produce; four of
-// them (tab/tab-group/window/time) deliberately share one copy string, so rows
-// are matched on their distinct name plus detail, not the detail alone.
-const WARNING_KINDS: readonly ModHeaderImportWarning["kind"][] = [
+// Every warning class the two import codecs can raise — the fixture is built to
+// exercise all of them. Four of the dropped-filter kinds (tab/tab-group/window/
+// time) deliberately share one copy string, so rows are matched on their
+// distinct name plus detail, not the detail alone.
+const WARNING_KINDS: readonly ImportPlanWarning["kind"][] = [
+  "credential",
+  "security-response",
   "request-append-degraded",
   "dynamic-token",
   "cookie-semantics-degraded",
@@ -218,13 +220,17 @@ test("a ModHeader import surfaces every warning class on the summary", async ({
   const raw = await readFile(ALL_WARNINGS_FIXTURE, "utf8");
   const rejectLookaround: RegexValidator = async (pattern) =>
     /\(\?[=!<]/.test(pattern) ? err(undefined) : ok(undefined);
-  const decoded = await importModHeader(raw, [], rejectLookaround);
+  const decoded = await importModHeader(JSON.parse(raw), [], rejectLookaround);
   if (!decoded.ok) {
     throw new Error(`fixture failed to decode: ${decoded.error.kind}`);
   }
   const { warnings: decodedWarnings } = decoded.value;
-  expect(decodedWarnings.map((warning) => warning.kind).sort()).toEqual(
-    [...WARNING_KINDS].sort(),
+  // Class coverage, not an ordered count: the fixture emits more warnings than
+  // there are classes because `credential` fires once per credential-bearing
+  // header (authorization, cookie, set-cookie). A set equality pins that every
+  // class appears and no unknown class leaks, without freezing the multiplicity.
+  expect(new Set(decodedWarnings.map((warning) => warning.kind))).toEqual(
+    new Set(WARNING_KINDS),
   );
 
   const page = await context.newPage();

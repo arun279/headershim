@@ -7,6 +7,7 @@ import {
 import type { StateDoc, TabOverride } from "../../core/model";
 import { migrate } from "../../core/schema";
 import { computeStatus, type SystemStatus } from "../../core/status";
+import { resolveRegexSupport } from "../../platform/dnr";
 import {
   snapshot as grantSnapshot,
   onChanged as onGrantsChanged,
@@ -30,13 +31,19 @@ export type AppState =
       readonly status: SystemStatus;
       readonly grants: GrantSnapshot;
       readonly grantGaps: readonly RuleGrantGap[];
+      readonly isRegexSupported: (regex: string) => boolean;
       /** The active tab's id; undefined on chrome:// and store pages. */
       readonly tabId: number | undefined;
       /** This-tab session overrides for the active tab, in insertion order. */
       readonly overrides: readonly TabOverride[];
     };
 
-type DocSource = { readonly doc: StateDoc } | { readonly newerVersion: number };
+type DocSource =
+  | {
+      readonly doc: StateDoc;
+      readonly isRegexSupported: (regex: string) => boolean;
+    }
+  | { readonly newerVersion: number };
 
 /**
  * Projects the popup's world from its two buses: the state document over
@@ -72,7 +79,10 @@ export function useAppState(): AppState {
         return;
       }
       if (outcome.ok) {
-        setDocSource({ doc: outcome.value });
+        const isRegexSupported = await resolveRegexSupport(outcome.value);
+        if (!disposed) {
+          setDocSource({ doc: outcome.value, isRegexSupported });
+        }
       } else if (outcome.error.kind === "newer-store") {
         setDocSource({ newerVersion: outcome.error.foundVersion });
       }
@@ -124,6 +134,7 @@ export function useAppState(): AppState {
     status: computeStatus({ doc: docSource.doc, grantGaps, reconcileError }),
     grants,
     grantGaps,
+    isRegexSupported: docSource.isRegexSupported,
     tabId,
     overrides: tabId === undefined ? [] : (session.tabs[tabId] ?? []),
   };

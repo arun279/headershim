@@ -41,17 +41,24 @@ export function focusOnRemoval(anchor: HTMLElement): void {
 
 interface FocusTrapOptions {
   initialFocus?: RefObject<HTMLElement | null> | undefined;
+  focusOnActivate?: boolean | undefined;
+  trapFocus?: boolean | undefined;
 }
 
 /**
- * Confines Tab/Shift+Tab to `containerRef` while `active`, moves focus inside on
- * activation, and returns it to the previously focused element on deactivation.
- * Layers (modal, verify, editor) share this so focus never escapes an open layer.
+ * Moves focus into `containerRef` while `active` and returns it to the
+ * previously focused element on deactivation. Modal callers can additionally
+ * confine Tab/Shift+Tab to the container; inline modes keep normal page Tab
+ * order while retaining the same enter/restore focus lifecycle.
  */
 export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
   active: boolean,
-  { initialFocus }: FocusTrapOptions = {},
+  {
+    initialFocus,
+    focusOnActivate = true,
+    trapFocus = true,
+  }: FocusTrapOptions = {},
 ): void {
   useEffect(() => {
     const container = containerRef.current;
@@ -60,7 +67,13 @@ export function useFocusTrap(
     const previouslyFocused = container.ownerDocument
       .activeElement as HTMLElement | null;
 
-    (initialFocus?.current ?? getFocusable(container)[0] ?? container).focus();
+    if (focusOnActivate) {
+      (
+        initialFocus?.current ??
+        getFocusable(container)[0] ??
+        container
+      ).focus();
+    }
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -81,10 +94,14 @@ export function useFocusTrap(
       }
     };
 
-    container.addEventListener("keydown", onKeyDown);
+    if (trapFocus) {
+      container.addEventListener("keydown", onKeyDown);
+    }
     return () => {
-      container.removeEventListener("keydown", onKeyDown);
+      if (trapFocus) {
+        container.removeEventListener("keydown", onKeyDown);
+      }
       previouslyFocused?.focus();
     };
-  }, [active, containerRef, initialFocus]);
+  }, [active, containerRef, focusOnActivate, initialFocus, trapFocus]);
 }

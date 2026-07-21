@@ -1,9 +1,9 @@
 import { type ComponentChildren, createContext } from "preact";
-import { useCallback, useContext, useState } from "preact/hooks";
+import { useCallback, useContext, useRef, useState } from "preact/hooks";
 
-type Announce = (message: string, options?: { assertive?: boolean }) => void;
+type Announce = (message: string, options?: { assertive?: boolean }) => number;
 
-const AnnounceContext = createContext<Announce>(() => {});
+const AnnounceContext = createContext<Announce>(() => 0);
 
 /**
  * Hosts the popup's two persistent live regions — polite (toasts, saves, verify
@@ -19,9 +19,16 @@ export function LiveRegionProvider({
 }) {
   const [polite, setPolite] = useState({ message: "", nonce: 0 });
   const [assertive, setAssertive] = useState({ message: "", nonce: 0 });
+  const politeNonce = useRef(0);
+  const assertiveNonce = useRef(0);
   const announce = useCallback<Announce>((message, options) => {
-    const setter = options?.assertive === true ? setAssertive : setPolite;
-    setter((prev) => ({ message, nonce: prev.nonce + 1 }));
+    const assertiveAnnouncement = options?.assertive === true;
+    const nonceRef = assertiveAnnouncement ? assertiveNonce : politeNonce;
+    nonceRef.current += 1;
+    const nonce = nonceRef.current;
+    const setter = assertiveAnnouncement ? setAssertive : setPolite;
+    setter({ message, nonce });
+    return nonce;
   }, []);
 
   return (

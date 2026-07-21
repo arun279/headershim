@@ -1,0 +1,259 @@
+/*
+ * The rule list reuses the popup's one grammar: a severity spine (teal live,
+ * amber a grant away, red refused, faint where only Chrome can settle it,
+ * grey-dashed at rest), the op glyph in the spine's color, sans narrating and
+ * mono for every wire byte. Denser than the popup, because this is where every
+ * rule is read at once.
+ */
+
+.rules-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.fleet {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fleet-group {
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.fleet-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 15px;
+  background: var(--raise);
+  border-bottom: var(--hairline) solid var(--line);
+}
+.fleet-host {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.fleet-host.cross {
+  font-family: var(--font-ui);
+}
+.fleet-group-note {
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+.fleet-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
+.fleet-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- one row, the severity spine ---- */
+.fleet-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 9px 15px 9px 13px;
+  position: relative;
+}
+.fleet-row + .fleet-row {
+  border-top: var(--hairline) solid var(--line2);
+}
+.fleet-row:hover {
+  background: var(--raise);
+}
+.fleet-row .spine {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--live);
+}
+.fleet-row.needs-access .spine,
+.fleet-row.managed .spine,
+.fleet-row.out-of-sync .spine {
+  background: var(--amber);
+}
+.fleet-row.refused .spine {
+  background: var(--stop);
+}
+.fleet-row.unconfirmed .spine {
+  background: var(--faint);
+}
+.fleet-row.off .spine,
+.fleet-row.overridden .spine,
+.fleet-row.paused .spine {
+  background: transparent;
+  border-left: 3px dashed var(--faint);
+}
+.fleet-row .op {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--live);
+}
+.fleet-row .op svg {
+  width: 16px;
+  height: 16px;
+}
+.fleet-row.needs-access .op,
+.fleet-row.managed .op,
+.fleet-row.out-of-sync .op {
+  color: var(--amber);
+}
+.fleet-row.refused .op {
+  color: var(--stop);
+}
+.fleet-row.unconfirmed .op {
+  color: var(--faint);
+}
+.fleet-row.off .op,
+.fleet-row.overridden .op,
+.fleet-row.paused .op {
+  color: var(--faint);
+}
+
+/* The whole readout opens the editor; the controls sit outside it. */
+.fleet-open {
+  min-width: 0;
+  display: block;
+  text-align: left;
+  padding: 2px 0;
+  border-radius: var(--r-chip);
+}
+.fleet-open .say {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fleet-open .verb {
+  color: var(--ink2);
+  font-size: 12px;
+}
+.fleet-open .k {
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fleet-open .to {
+  color: var(--ink3);
+  font-family: var(--font-data);
+  font-size: 12px;
+}
+/* The value takes what the header leaves, and is measured against that: sized by
+   its own content it would measure itself, and settle a character short. */
+.fleet-open .v {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-data);
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.fleet-row.off .fleet-open .k,
+.fleet-row.off .fleet-open .v,
+.fleet-row.overridden .fleet-open .v {
+  color: var(--ink3);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.fleet-row.overridden .fleet-open .k,
+.fleet-row.paused .fleet-open .k,
+.fleet-row.paused .fleet-open .v,
+.fleet-row.paused .fleet-open .verb {
+  color: var(--ink3);
+}
+
+/* Second line: a reason where one is owed, else the scope in the by-header lens. */
+.fleet-open .why {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.fleet-open .why .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: none;
+}
+.fleet-open .why.stop {
+  color: var(--stop);
+}
+.fleet-open .why.stop .dot {
+  background: var(--stop);
+}
+.fleet-open .why.amber {
+  color: var(--amber);
+}
+.fleet-open .why.amber .dot {
+  background: var(--amber);
+}
+.fleet-open .why.rest {
+  color: var(--ink3);
+}
+.fleet-open .why.rest .dot {
+  background: transparent;
+  border: 1.5px solid var(--faint);
+}
+.fleet-scope {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink3);
+}
+
+.fleet-row .line-control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+.fleet-row .grant {
+  flex: none;
+  font-weight: 650;
+  font-size: 11.5px;
+  color: var(--on-amber);
+  background: var(--amber);
+  border-radius: var(--r-chip);
+  padding: 6px 12px;
+}
+
+/* The empty state is the page's content, not a caption stranded above a void:
+   it fills the card the rule groups would have filled. */
+.rules-card-empty {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
+}
+
+.editor-loading {
+  padding: var(--sp-5);
+  color: var(--ink3);
+}

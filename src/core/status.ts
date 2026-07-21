@@ -2,9 +2,10 @@ import { domainFromOriginPattern, type RuleGrantGap } from "./grants";
 import type { StateDoc } from "./model";
 
 /**
- * The one system-status precedence ladder. The annunciator, the badge, and
- * Verify's hints all read this selector, so the three surfaces can never
- * disagree about what state the product is in.
+ * The one system-status precedence ladder. The annunciator, the badge, the
+ * popup readout and the Workbench fleet all read this selector, so the surfaces
+ * cannot disagree about what state the product is in: when it reports
+ * out-of-sync, no line anywhere may still read live.
  */
 export type SystemStatus =
   | { readonly kind: "paused" }
@@ -14,14 +15,11 @@ export type SystemStatus =
       readonly ruleCount: number;
       readonly hosts: readonly string[];
     }
-  | {
-      readonly kind: "live";
-      /** Enabled rules in enabled profiles — the numerator of "N of M enabled". */
-      readonly ruleCount: number;
-      /** All rules in enabled profiles — the denominator; the configured total. */
-      readonly totalRuleCount: number;
-      readonly profileCount: number;
-    }
+  // No count rides along: a rule being enabled is not a rule Chrome is running
+  // (the compiler drops whatever uncompilableReason names), so any tally here
+  // would be a claim this selector cannot make. Surfaces that need one count
+  // the projected lines, which carry each rule's real state.
+  | { readonly kind: "live" }
   | { readonly kind: "off" };
 
 export interface StatusInput {
@@ -51,23 +49,9 @@ export function computeStatus({
     };
   }
 
-  const enabled = doc.profiles.filter((profile) => profile.enabled);
-  if (enabled.length === 0) {
-    return { kind: "off" };
-  }
-  return {
-    kind: "live",
-    ruleCount: enabled.reduce(
-      (count, profile) =>
-        count + profile.rules.filter((rule) => rule.enabled).length,
-      0,
-    ),
-    totalRuleCount: enabled.reduce(
-      (count, profile) => count + profile.rules.length,
-      0,
-    ),
-    profileCount: enabled.length,
-  };
+  return doc.profiles.some((profile) => profile.id === doc.activeProfileId)
+    ? { kind: "live" }
+    : { kind: "off" };
 }
 
 function gapHosts(gaps: readonly RuleGrantGap[]): string[] {

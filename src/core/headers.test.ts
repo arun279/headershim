@@ -3,6 +3,8 @@ import {
   classifyHeaderName,
   HEADER_ADVISORY_COPY_IDS,
   HEADER_ERROR_COPY_IDS,
+  headerSensitivity,
+  isSecretHeader,
   normalizeHeaderName,
   REQUEST_APPEND_HEADERS,
   validateHeader,
@@ -268,6 +270,24 @@ describe("header advisories", () => {
     }
   });
 
+  it("recognizes credential headers by name and by the x-*-token shape", () => {
+    for (const header of [
+      "authorization",
+      "proxy-authorization",
+      "cookie",
+      "set-cookie",
+      "api-key",
+      "x-api-key",
+      "  X-Session-Token  ",
+      "x-csrf-token",
+    ]) {
+      expect(isSecretHeader(header)).toBe(true);
+    }
+    for (const header of ["x-debug", "accept", "token", "x-token-count"]) {
+      expect(isSecretHeader(header)).toBe(false);
+    }
+  });
+
   it("maps each error and advisory class to one distinct copy id", () => {
     const errorClasses = Object.keys(HEADER_ERROR_COPY_IDS);
     const errorCopyIds = Object.values(HEADER_ERROR_COPY_IDS);
@@ -281,5 +301,83 @@ describe("header advisories", () => {
     expect(new Set([...errorCopyIds, ...advisoryCopyIds]).size).toBe(
       errorCopyIds.length + advisoryCopyIds.length,
     );
+  });
+});
+
+describe("header sensitivity", () => {
+  const credential = { kind: "credential", copyId: "header-credential" };
+  const securityResponse = {
+    kind: "security-response",
+    copyId: "header-security-response",
+  };
+
+  it("cautions on any credential the rule writes, whichever direction carries it", () => {
+    expect(headerSensitivity(input({ header: "authorization" }))).toEqual([
+      credential,
+    ]);
+    expect(
+      headerSensitivity(input({ header: "set-cookie", direction: "response" })),
+    ).toEqual([credential]);
+    expect(
+      headerSensitivity(
+        input({ header: "x-session-token", operation: "append" }),
+      ),
+    ).toEqual([credential]);
+  });
+
+  it("stays quiet when a rule strips a credential instead of writing one", () => {
+    expect(
+      headerSensitivity(
+        input({ header: "authorization", operation: "remove" }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("cautions on a response protection the rule sets or takes away", () => {
+    for (const header of [
+      "access-control-allow-credentials",
+      "access-control-allow-origin",
+      "content-security-policy",
+      "cross-origin-embedder-policy",
+      "cross-origin-opener-policy",
+      "cross-origin-resource-policy",
+      "permissions-policy",
+      "referrer-policy",
+      "strict-transport-security",
+      "x-content-type-options",
+      "x-frame-options",
+    ]) {
+      for (const operation of ["set", "remove"] as const) {
+        expect(
+          headerSensitivity(
+            input({ header, direction: "response", operation }),
+          ),
+        ).toEqual([securityResponse]);
+      }
+    }
+  });
+
+  it("stays quiet for an append, which can only add a further constraint", () => {
+    expect(
+      headerSensitivity(
+        input({
+          header: "content-security-policy",
+          direction: "response",
+          operation: "append",
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("stays quiet on the request side, where the site never sent the protection", () => {
+    expect(
+      headerSensitivity(
+        input({ header: "content-security-policy", direction: "request" }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("stays quiet for an ordinary header", () => {
+    expect(headerSensitivity(input({ header: "x-debug" }))).toEqual([]);
   });
 });

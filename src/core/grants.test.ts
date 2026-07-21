@@ -107,6 +107,13 @@ describe("requiredOrigins", () => {
 describe("missingGrants", () => {
   const none: GrantSnapshot = { origins: [], allSites: false };
 
+  it.each<Scope>([
+    { type: "pattern", pattern: "||example.com^", hosts: [] },
+    { type: "regex", regex: "^https://x/", hosts: [] },
+  ])("reports broad access for an ungranted $type rule with no named sites", (scope) => {
+    expect(missingGrants(rule(scope, "all"), none)).toEqual([ALL_SITES_ORIGIN]);
+  });
+
   it("reports an ungranted domain target", () => {
     expect(
       missingGrants(
@@ -129,6 +136,26 @@ describe("missingGrants", () => {
         { origins: [target], allSites: false },
       ),
     ).toEqual([originPatternForDomain("app.example.com")]);
+  });
+
+  it("clears the initiator gap when destination-only access gains the initiator grant", () => {
+    const target = originPatternForDomain("api.example.com");
+    const initiator = originPatternForDomain("app.example.com");
+    const subject = rule(
+      { type: "domains", domains: ["api.example.com"] },
+      ["xhr"],
+      ["app.example.com"],
+    );
+
+    expect(
+      missingGrants(subject, { origins: [target], allSites: false }),
+    ).toEqual([initiator]);
+    expect(
+      missingGrants(subject, {
+        origins: [target, initiator],
+        allSites: false,
+      }),
+    ).toEqual([]);
   });
 
   it("accepts a parent-domain grant for a required subdomain", () => {
@@ -220,7 +247,7 @@ describe("missingGrants", () => {
 describe("docMissingGrants", () => {
   const none: GrantSnapshot = { origins: [], allSites: false };
 
-  it("reports gaps only for enabled rules inside enabled profiles", () => {
+  it("reports gaps only for enabled rules inside the active profile", () => {
     const ungranted = rule(
       { type: "domains", domains: ["api.example.com"] },
       "all",
@@ -238,7 +265,6 @@ describe("docMissingGrants", () => {
           name: "On",
           badgeText: "ON",
           color: "blue",
-          enabled: true,
           rules: [ungranted, disabledRule],
         },
         {
@@ -246,13 +272,12 @@ describe("docMissingGrants", () => {
           name: "Off",
           badgeText: "OF",
           color: "teal",
-          enabled: false,
           rules: [{ ...ungranted, id: "rule-3" }],
         },
       ],
-      focusedProfileId: "profile-on",
+      activeProfileId: "profile-on",
       nextRuleNum: 4,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
     };
 
     expect(docMissingGrants(doc, none)).toEqual([
@@ -273,19 +298,19 @@ describe("siteAccessView", () => {
     return {
       v: 1,
       profiles,
-      focusedProfileId: profiles[0]?.id ?? "",
+      activeProfileId: profiles[0]?.id,
       nextRuleNum: 100,
-      settings: { paused: false, theme: "system", badgeMode: "count" },
+      settings: { paused: false, theme: "system" },
     };
   }
 
-  function profile(id: string, enabled: boolean, rules: Rule[]): Profile {
-    return { id, name: id, badgeText: "PR", color: "blue", enabled, rules };
+  function profile(id: string, rules: Rule[]): Profile {
+    return { id, name: id, badgeText: "PR", color: "blue", rules };
   }
 
   it("aggregates needed origins across rules, sorted by domain", () => {
     const subject = doc([
-      profile("p1", true, [
+      profile("p1", [
         rule({ type: "domains", domains: ["zeta.example.com"] }, "all"),
         {
           ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
@@ -320,7 +345,7 @@ describe("siteAccessView", () => {
   });
 
   it("routes broad needs to the all-sites card, never a needed row", () => {
-    const subject = doc([profile("p1", true, [rule({ type: "all" }, "all")])]);
+    const subject = doc([profile("p1", [rule({ type: "all" }, "all")])]);
 
     expect(siteAccessView(subject, none).needed).toEqual([]);
   });
@@ -328,7 +353,7 @@ describe("siteAccessView", () => {
   it("counts every rule that references a grant, enabled or not", () => {
     const granted = originPatternForDomain("api.example.com");
     const subject = doc([
-      profile("p1", false, [
+      profile("p1", [
         { ...rule({ type: "domains", domains: ["api.example.com"] }, "all") },
         {
           ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
@@ -368,23 +393,23 @@ describe("siteAccessView", () => {
     ]);
 
     expect(
-      siteAccessView(doc([profile("p1", true, [bare])]), none).initiatorNote,
+      siteAccessView(doc([profile("p1", [bare])]), none).initiatorNote,
     ).toBe(true);
     expect(
       siteAccessView(
         doc([
-          profile("p1", true, [
+          profile("p1", [
             { ...bare, initiators: ["app.example.com"] },
             { ...bare, id: "rule-2", resourceTypes: ["pages"] },
             { ...bare, id: "rule-3", enabled: false },
           ]),
-          profile("p2", false, [{ ...bare, id: "rule-4" }]),
+          profile("p2", [{ ...bare, id: "rule-4" }]),
         ]),
         none,
       ).initiatorNote,
     ).toBe(false);
     expect(
-      siteAccessView(doc([profile("p1", true, [bare])]), {
+      siteAccessView(doc([profile("p1", [bare])]), {
         origins: [ALL_SITES_ORIGIN],
         allSites: true,
       }).initiatorNote,

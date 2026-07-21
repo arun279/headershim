@@ -7,7 +7,6 @@
       "name": "Default",
       "badge": "DE",
       "color": "indigo",
-      "enabled": true,
       "rules": [
         {
           "direction": "request",
@@ -55,7 +54,6 @@
       "name": "Staging",
       "badge": "S",
       "color": "slate",
-      "enabled": false,
       "rules": [
         {
           "direction": "response",

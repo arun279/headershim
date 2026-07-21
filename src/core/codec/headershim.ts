@@ -1,3 +1,4 @@
+import { headerSensitivity } from "../headers";
 import {
   type BadgeColor,
   createProfile,
@@ -55,7 +56,6 @@ interface ExportedProfile {
   readonly name: string;
   readonly badge: string;
   readonly color: BadgeColor;
-  readonly enabled: boolean;
   readonly rules: readonly ExportedRule[];
 }
 
@@ -70,7 +70,6 @@ export interface ImportedProfile {
   readonly name: string;
   readonly badgeText: string;
   readonly color: BadgeColor;
-  readonly enabled: false;
   readonly rules: readonly RuleDraft[];
 }
 
@@ -82,6 +81,17 @@ interface ImportWarning {
 export interface ImportPlan<Warning extends ImportWarning = ImportWarning> {
   readonly profiles: readonly ImportedProfile[];
   readonly warnings: readonly Warning[];
+}
+
+/**
+ * A rule the import review must not let pass unread: one that carries a
+ * credential, or one that takes away a protection the site sent. Both codecs
+ * emit these, so a file reviews the same however it was authored.
+ */
+export interface SensitiveRuleWarning {
+  readonly kind: "credential" | "security-response";
+  readonly ruleName: string;
+  readonly header: string;
 }
 
 export type ImportError =
@@ -124,16 +134,9 @@ export function exportHeadershim(
 }
 
 export function importHeadershim(
-  raw: string,
+  parsed: unknown,
   existingProfiles: readonly Profile[],
-): Result<ImportPlan, ImportError> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return err({ kind: "parse-failure" });
-  }
-
+): Result<ImportPlan<SensitiveRuleWarning>, ImportError> {
   if (detectImportFormat(parsed) !== "headershim") {
     return err({ kind: "unrecognized-format" });
   }
@@ -206,7 +209,6 @@ export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
       name: importedProfile.name,
       badgeText: importedProfile.badgeText,
       color: importedProfile.color,
-      enabled: false,
     });
     const rules = [];
 
@@ -230,7 +232,6 @@ function exportProfile(profile: Profile): ExportedProfile {
     name: profile.name,
     badge: profile.badgeText,
     color: profile.color,
-    enabled: profile.enabled,
     rules: profile.rules.map(exportRule),
   };
 }
@@ -284,7 +285,7 @@ function exportScope(
 function createImportPlan(
   envelope: HeadershimEnvelope,
   existingProfiles: readonly Profile[],
-): ImportPlan {
+): ImportPlan<SensitiveRuleWarning> {
   const profiles: ImportedProfile[] = [];
 
   for (const exported of envelope.profiles) {
@@ -292,12 +293,36 @@ function createImportPlan(
       name: availableProfileName(exported.name, existingProfiles, profiles),
       badgeText: exported.badge,
       color: exported.color,
-      enabled: false,
       rules: exported.rules.map(importRuleDraft),
     });
   }
 
-  return { profiles, warnings: [] };
+  return { profiles, warnings: sensitiveRuleWarnings(profiles) };
+}
+
+/**
+ * Every sensitive rule in a plan, itemized by the name the summary shows it
+ * under. Reads `headerSensitivity`, the same classifier the editor's advisory
+ * band reads, so the review and the editor cannot disagree about what is
+ * sensitive.
+ */
+export function sensitiveRuleWarnings(
+  profiles: readonly ImportedProfile[],
+): readonly SensitiveRuleWarning[] {
+  return profiles.flatMap((profile) =>
+    profile.rules.flatMap((rule) =>
+      headerSensitivity(rule).map((advisory) => ({
+        kind: advisory.kind,
+        ruleName: draftRuleName(rule),
+        header: rule.header,
+      })),
+    ),
+  );
+}
+
+/** The name a plan's rule is itemized under: its comment, else its header. */
+export function draftRuleName(rule: RuleDraft): string {
+  return rule.comment?.trim() || rule.header;
 }
 
 function importRuleDraft(rule: ExportedRule): RuleDraft {
@@ -409,14 +434,13 @@ function isExportedProfile(value: unknown): value is ExportedProfile {
     return false;
   }
 
-  const { name, badge, color, enabled, rules } = value;
+  const { name, badge, color, rules } = value;
   return (
     typeof name === "string" &&
     isProfileNameAvailable([], name) &&
     typeof badge === "string" &&
     normalizeBadgeText(badge) === badge &&
     isOneOf(color, BADGE_COLORS) &&
-    typeof enabled === "boolean" &&
     Array.isArray(rules) &&
     rules.every(isExportedRule)
   );

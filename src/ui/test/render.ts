@@ -40,10 +40,27 @@ export function press(target: HTMLElement, key: string): void {
 }
 
 /** Sets an input's value the way a user would: value + bubbling input event. */
-export function typeInto(input: HTMLInputElement, value: string): void {
+export function typeInto(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
   act(() => {
     input.value = value;
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Pastes plain text into a field the way the clipboard delivers it. */
+export function pasteInto(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  text: string,
+): void {
+  act(() => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: { getData: () => text },
+    });
+    input.dispatchEvent(event);
   });
 }
 

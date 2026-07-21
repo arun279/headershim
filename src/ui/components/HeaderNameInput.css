@@ -1,21 +1,12 @@
-.combobox {
-  position: relative;
-}
-
 /* Max 6 visible options; the rest scroll inside the popover. */
 .combo-list {
-  position: absolute;
-  top: calc(100% - var(--sp-1));
-  left: 0;
-  right: 0;
-  z-index: 2;
+  position: fixed;
+  inset: auto;
+  width: min(360px, calc(100% - 16px));
+  margin: 0;
   max-height: 168px;
   overflow-y: auto;
   list-style: none;
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel-strong);
-  border-radius: var(--radius-inner);
-  box-shadow: var(--shadow-pop);
 }
 
 .combo-option {
@@ -29,10 +20,10 @@
 }
 
 .combo-option.active {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 .combo-hint {
   font-size: 11px;
-  color: var(--ink-mute);
+  color: var(--ink2);
 }

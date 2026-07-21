@@ -28,21 +28,41 @@ export function headerValueEmptyErrors(draft: {
   return Object.keys(errors).length === 0 ? undefined : errors;
 }
 
+/**
+ * What the save was refused for, in one reading. Editors route it to the field
+ * that owns it; surfaces with no field to point at raise the same words in a
+ * toast, so the two can never explain the same refusal differently.
+ */
+export function headerErrorMessage(error: HeaderValidationError): string {
+  switch (error.kind) {
+    case "name-required":
+      return copy.errors.headerNameRequired;
+    case "name-invalid":
+      return copy.errors.headerNameInvalid;
+    case "name-not-modifiable":
+      return copy.errors.headerNotModifiable;
+    case "value-required":
+      return copy.errors.valueRequired;
+    case "value-line-break":
+      return copy.errors.valueLineBreak;
+    case "request-append-not-allowed":
+      return copy.errors.appendDisallowed(error.header);
+  }
+}
+
 export function headerErrorToFieldError(
   error: HeaderValidationError,
 ): HeaderFieldError {
+  const message = headerErrorMessage(error);
   switch (error.kind) {
     case "name-required":
-      return { name: copy.errors.headerNameRequired };
     case "name-invalid":
-      return { name: copy.errors.headerNameInvalid };
     case "name-not-modifiable":
-      return { name: copy.errors.headerNotModifiable };
+      return { name: message };
     case "value-required":
-      return { value: copy.errors.valueRequired };
     case "value-line-break":
-      return { value: copy.errors.valueLineBreak };
+      return { value: message };
     case "request-append-not-allowed":
-      return { operation: copy.errors.appendDisallowed(error.header) };
+      return { operation: message };
   }
 }

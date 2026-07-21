@@ -1,19 +1,16 @@
 import type { Direction, HeaderOp } from "../../core/model";
 import { copy } from "../copy";
-import { HeaderNameInput } from "./HeaderNameInput";
+import { Segmented } from "./Segmented";
 
 interface HeaderDraft {
   direction: Direction;
   operation: HeaderOp;
-  header: string;
 }
 
 /**
- * The direction / operation / header-name trio shared by the rule editor and
- * the This-tab composer, so both speak one control grammar. It reads and folds
- * the three fields straight into the caller's draft via `update`, keeping the
- * two editors' field markup in exactly one place. `idBase` keys the labels and
- * the radio group and must be unique on the page.
+ * Direction and operation: the same "pick one of N" job, so the same control.
+ * Native radios under the segment paint keep one tab stop and arrow-key
+ * movement while reading as the segmented control the rest of the product uses.
  */
 export function HeaderFields<D extends HeaderDraft>({
   idBase,
@@ -23,75 +20,71 @@ export function HeaderFields<D extends HeaderDraft>({
 }: {
   idBase: string;
   draft: D;
-  errors: { name?: string; operation?: string };
+  errors: { operation?: string };
   update: (transform: (draft: D) => D) => void;
 }) {
   return (
-    <>
-      <div class="editor-field">
-        <span class="editor-label" id={`${idBase}-dir`}>
-          {copy.editor.labels.direction}
-        </span>
-        <div
-          class="editor-control editor-radios"
-          role="radiogroup"
-          aria-labelledby={`${idBase}-dir`}
-        >
-          {(["request", "response"] as const).map((value) => (
-            <label class="editor-radio" key={value}>
-              <input
-                type="radio"
-                name={`${idBase}-dir`}
-                checked={draft.direction === value}
-                onChange={() =>
-                  update((current) => ({ ...current, direction: value }))
-                }
-              />
-              {copy.editor.direction[value]}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div class="editor-field">
-        <label class="editor-label" for={`${idBase}-op`}>
-          {copy.editor.labels.operation}
-        </label>
-        <div class="editor-control">
-          <select
-            id={`${idBase}-op`}
-            class="field editor-select"
-            value={draft.operation}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              if (value === "set" || value === "append" || value === "remove") {
-                update((current) => ({ ...current, operation: value }));
-              }
-            }}
-          >
-            {(["set", "append", "remove"] as const).map((value) => (
-              <option value={value} key={value}>
-                {copy.editor.operation[value]}
-              </option>
-            ))}
-          </select>
-          {errors.operation !== undefined && (
-            <p class="editor-error" role="alert">
-              {errors.operation}
-            </p>
-          )}
-        </div>
-      </div>
-
-      <HeaderNameInput
-        value={draft.header}
-        operation={draft.operation}
-        error={errors.name}
-        autoFocus
-        onInput={(value) =>
-          update((current) => ({ ...current, header: value }))
-        }
+    <div class="editor-primary-grid">
+      <SegmentedField
+        name={`${idBase}-dir`}
+        label={copy.editor.labels.direction}
+        options={["request", "response"]}
+        selected={draft.direction}
+        optionLabel={(value) => copy.editor.direction[value]}
+        onPick={(direction) => update((current) => ({ ...current, direction }))}
       />
-    </>
+
+      <SegmentedField
+        name={`${idBase}-op`}
+        label={copy.editor.labels.operation}
+        options={["set", "append", "remove"]}
+        selected={draft.operation}
+        optionLabel={(value) => copy.editor.operation[value]}
+        error={errors.operation}
+        onPick={(operation) => update((current) => ({ ...current, operation }))}
+      />
+    </div>
+  );
+}
+
+function SegmentedField<V extends string>({
+  name,
+  label,
+  options,
+  selected,
+  optionLabel,
+  error,
+  onPick,
+}: {
+  name: string;
+  label: string;
+  options: readonly V[];
+  selected: V;
+  optionLabel: (value: V) => string;
+  error?: string | undefined;
+  onPick: (value: V) => void;
+}) {
+  return (
+    <fieldset class="editor-primary-field">
+      <legend class="editor-label" id={name}>
+        {label}
+      </legend>
+      <Segmented
+        semantics="radio"
+        name={name}
+        labelledBy={name}
+        value={selected}
+        options={options.map((value) => ({
+          value,
+          label: optionLabel(value),
+        }))}
+        onChange={onPick}
+      />
+      {error !== undefined && (
+        <p class="editor-error" role="alert">
+          {error}
+        </p>
+      )}
+    </fieldset>
   );
 }

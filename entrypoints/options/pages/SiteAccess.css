@@ -1,20 +1,18 @@
-/* .sa-card takes the shared options card recipe (App.css). */
-
+/* Base card recipe lives in App.css. */
 .sa-all-on {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
 }
-
 .sa-all-on-line {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .sa-group:not(:first-child) {
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-4);
 }
 
 .sa-list {
@@ -22,52 +20,75 @@
   display: flex;
   flex-direction: column;
 }
-
 .sa-row {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
+  gap: var(--sp-4);
+  padding: 9px 0;
 }
-
 .sa-row + .sa-row {
-  border-top: var(--hairline) solid var(--bezel);
+  border-top: var(--hairline) solid var(--line2);
 }
 
 .sa-glyph {
   flex: none;
   display: inline-flex;
 }
-
 .sa-glyph.granted {
-  color: var(--advisory);
+  color: var(--live-ink);
 }
-
 .sa-glyph.needed {
-  color: var(--caution-lamp);
+  color: var(--amber);
 }
 
 .sa-domain {
+  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
+  font-size: 13px;
+  color: var(--ink);
 }
-
 .sa-count {
   margin-left: auto;
-  color: var(--ink-mute);
+  font-size: 11.5px;
+  color: var(--ink3);
   white-space: nowrap;
 }
 
 .sa-empty,
 .sa-note {
-  color: var(--ink-mute);
+  color: var(--ink3);
+  font-size: 12.5px;
 }
 
 .sa-all-heading {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
+  color: var(--ink);
+}
+.sa-all-body {
+  color: var(--ink2);
+  font-size: 12.5px;
 }
 
-.sa-all-body {
-  color: var(--ink-mute);
+.sa-disclosure {
+  align-self: flex-start;
+  min-height: 28px;
+  color: var(--live-ink);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.sa-all-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-left: 3px solid var(--amber);
+  background: var(--amber-soft);
+  border-radius: 0 var(--r-chip) var(--r-chip) 0;
+}
+.sa-all-warning {
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.5;
 }

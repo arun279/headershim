@@ -12,7 +12,9 @@ export interface GrantSnapshot {
   readonly allSites: boolean;
 }
 
-export function requiredOrigins(rule: Rule): string[] {
+export function requiredOrigins(
+  rule: Pick<Rule, "scope" | "resourceTypes" | "initiators">,
+): string[] {
   // A pattern/regex rule names no host to grant. Without one Chrome applies
   // nothing unless all-sites is granted, so the honest requirement is broad
   // access — not the empty set, which would read as already-live (initiators
@@ -78,15 +80,16 @@ export function docMissingGrants(
   doc: StateDoc,
   granted: GrantSnapshot,
 ): RuleGrantGap[] {
-  return doc.profiles.flatMap((profile) =>
-    profile.enabled
-      ? profile.rules.flatMap((rule) => {
-          const missing = rule.enabled ? missingGrants(rule, granted) : [];
-          return missing.length === 0
-            ? []
-            : [{ profileId: profile.id, ruleId: rule.id, missing }];
-        })
-      : [],
+  const profile = doc.profiles.find(
+    (candidate) => candidate.id === doc.activeProfileId,
+  );
+  return (
+    profile?.rules.flatMap((rule) => {
+      const missing = rule.enabled ? missingGrants(rule, granted) : [];
+      return missing.length === 0
+        ? []
+        : [{ profileId: profile.id, ruleId: rule.id, missing }];
+    }) ?? []
   );
 }
 
@@ -146,17 +149,15 @@ export function siteAccessView(
       .sort(byDomain),
     initiatorNote:
       !granted.allSites &&
-      doc.profiles.some(
-        (profile) =>
-          profile.enabled &&
-          profile.rules.some(
-            (rule) =>
-              rule.enabled &&
-              rule.initiators.length === 0 &&
-              rule.scope.type !== "all" &&
-              subresourceScopedRule(rule),
-          ),
-      ),
+      doc.profiles
+        .find((profile) => profile.id === doc.activeProfileId)
+        ?.rules.some(
+          (rule) =>
+            rule.enabled &&
+            rule.initiators.length === 0 &&
+            rule.scope.type !== "all" &&
+            subresourceScopedRule(rule),
+        ) === true,
   };
 }
 
@@ -177,7 +178,7 @@ function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
  * require the initiating page granted too, so only then can an unnamed
  * initiator be a silent gap worth a standing note.
  */
-export function coversSubresourceTypes(rule: Rule): boolean {
+function coversSubresourceTypes(rule: Pick<Rule, "resourceTypes">): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",
@@ -191,7 +192,7 @@ export function coversSubresourceTypes(rule: Rule): boolean {
  * granting too. A default all-types rule includes main_frame — the common
  * direct-navigation case the user is not surprised by — so it stays quiet.
  */
-export function subresourceScopedRule(rule: Rule): boolean {
+function subresourceScopedRule(rule: Rule): boolean {
   const expanded = expandResourceTypes(rule.resourceTypes);
   return (
     !expanded.includes("main_frame") &&

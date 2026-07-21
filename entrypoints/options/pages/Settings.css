@@ -1,0 +1,41 @@
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: var(--hairline) solid var(--line);
+  border-radius: 11px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  min-height: 52px;
+  padding: var(--sp-4) 20px;
+  border: 0;
+}
+.settings-row + .settings-row {
+  border-top: var(--hairline) solid var(--line);
+}
+.settings-row > :first-child {
+  min-width: 150px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-radios legend {
+  float: left;
+  margin-right: var(--sp-5);
+}
+.settings-radios {
+  flex-wrap: wrap;
+}
+
+.settings-link {
+  color: var(--live-ink);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.settings-shortcuts .settings-link {
+  min-width: 0;
+}

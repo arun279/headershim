@@ -11,8 +11,8 @@
   width: 100%;
   max-width: 400px;
   padding: var(--sp-5);
-  background: var(--panel-1);
-  border-radius: var(--radius-outer);
+  background: var(--panel);
+  border-radius: var(--r-card);
   box-shadow: var(--shadow-pop);
 }
 

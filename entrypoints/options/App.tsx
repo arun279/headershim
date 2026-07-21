@@ -8,77 +8,142 @@ import { EmptyState } from "../../src/ui/components/EmptyState";
 import { copy } from "../../src/ui/copy";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
+import { applyTheme } from "../../src/ui/theme";
 import { AboutPage } from "./pages/About";
 import { ImportExportPage } from "./pages/ImportExport";
 import { ProfilesPage } from "./pages/Profiles";
+import { RulesPage } from "./pages/Rules";
+import { SettingsPage } from "./pages/Settings";
 import { SiteAccessPage } from "./pages/SiteAccess";
+import { TrafficPage } from "./pages/Traffic";
+import { Wordmark } from "./Wordmark";
 import "./App.css";
 
 const mutations = createMutations({ validateRegex: isRegexSupported });
 const VERSION = browser.runtime.getManifest().version;
 
-const SECTIONS = [
-  { id: "profiles", label: copy.options.nav.profiles },
-  { id: "import-export", label: copy.options.nav.importExport },
-  { id: "site-access", label: copy.options.nav.siteAccess },
-  { id: "about", label: copy.options.nav.about },
-] as const;
+type SectionId =
+  | "rules"
+  | "profiles"
+  | "site-access"
+  | "traffic"
+  | "import-export"
+  | "settings"
+  | "about";
 
-type SectionId = (typeof SECTIONS)[number]["id"];
+interface NavSection {
+  readonly id: SectionId;
+  readonly label: string;
+}
+interface NavGroup {
+  readonly label: string;
+  readonly sections: readonly NavSection[];
+}
+
+const GROUPS: readonly NavGroup[] = [
+  {
+    label: copy.options.nav.groupRules,
+    sections: [
+      { id: "rules", label: copy.options.nav.allRules },
+      { id: "profiles", label: copy.options.nav.profiles },
+    ],
+  },
+  {
+    label: copy.options.nav.groupManage,
+    sections: [
+      { id: "site-access", label: copy.options.nav.siteAccess },
+      { id: "traffic", label: copy.options.nav.traffic },
+      { id: "import-export", label: copy.options.nav.importExport },
+      { id: "settings", label: copy.options.nav.settings },
+      { id: "about", label: copy.options.nav.about },
+    ],
+  },
+];
+
+const SECTIONS: readonly NavSection[] = GROUPS.flatMap(
+  (group) => group.sections,
+);
 
 export function App() {
   const app = useAppState();
   const section = useHashRoute();
-  const theme = app.phase === "ready" ? app.doc.settings.theme : "system";
-  // The token stylesheet follows the OS unless the stored theme stamps the
-  // root; System leaves it unset (tokens.css contract).
+  const previousSection = useRef(section);
+  const theme = app.phase === "ready" ? app.doc.settings.theme : undefined;
   useEffect(() => {
-    if (theme === "system") {
-      document.documentElement.removeAttribute("data-theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", theme);
+    if (theme !== undefined) {
+      applyTheme(theme);
     }
   }, [theme]);
+  useEffect(() => {
+    const changed = previousSection.current !== section;
+    previousSection.current = section;
+    if (!changed || app.phase !== "ready") {
+      return;
+    }
+    queueMicrotask(() => {
+      document.getElementById(`${section}-title`)?.focus();
+    });
+  }, [section, app.phase]);
 
   return (
     <LiveRegionProvider>
-      <div class="options">
-        <header class="options-header">
-          <span class="wordmark">{copy.app.name}</span>
-          <span class="version mono">{copy.options.version(VERSION)}</span>
-        </header>
-        <div class="options-body">
-          <OptionsNav current={section} />
-          <main class="options-content">
-            {app.phase === "initializing" ? (
-              <div aria-busy="true" />
-            ) : app.phase === "newer-store" ? (
+      <div class="wb">
+        <div class="wb-nav">
+          <div class="wb-brand">
+            <Wordmark />
+            <span class="wb-version mono">{copy.options.version(VERSION)}</span>
+          </div>
+          <SectionNav current={section} />
+        </div>
+        <main class="wb-main">
+          {app.phase === "initializing" ? (
+            <div aria-busy="true" />
+          ) : app.phase === "newer-store" ? (
+            <div class="wb-page">
               <EmptyState
                 message={copy.errors.newerStore(app.foundVersion, CURRENT)}
               />
-            ) : section === "profiles" ? (
-              <ProfilesPage doc={app.doc} mutations={mutations} />
-            ) : section === "import-export" ? (
-              <ImportExportPage doc={app.doc} mutations={mutations} />
-            ) : section === "site-access" ? (
-              <SiteAccessPage doc={app.doc} grants={app.grants} />
-            ) : (
-              <AboutPage doc={app.doc} mutations={mutations} />
-            )}
-          </main>
-        </div>
+            </div>
+          ) : section === "rules" ? (
+            <RulesPage
+              doc={app.doc}
+              grants={app.grants}
+              status={app.status}
+              isRegexSupported={app.isRegexSupported}
+              mutations={mutations}
+            />
+          ) : section === "profiles" ? (
+            <ProfilesPage doc={app.doc} mutations={mutations} />
+          ) : section === "site-access" ? (
+            <SiteAccessPage doc={app.doc} grants={app.grants} />
+          ) : section === "traffic" ? (
+            <TrafficPage
+              doc={app.doc}
+              grants={app.grants}
+              status={app.status}
+              isRegexSupported={app.isRegexSupported}
+            />
+          ) : section === "import-export" ? (
+            <ImportExportPage doc={app.doc} mutations={mutations} />
+          ) : section === "settings" ? (
+            <SettingsPage doc={app.doc} mutations={mutations} />
+          ) : (
+            <AboutPage />
+          )}
+        </main>
       </div>
     </LiveRegionProvider>
   );
 }
 
-function OptionsNav({ current }: { current: SectionId }) {
+function SectionNav({ current }: { current: SectionId }) {
   const links = useRef<(HTMLAnchorElement | null)[]>([]);
   const currentIndex = Math.max(
     0,
     SECTIONS.findIndex((entry) => entry.id === current),
   );
   const [roving, setRoving] = useState(currentIndex);
+  useEffect(() => setRoving(currentIndex), [currentIndex]);
 
   const moveTo = (index: number) => {
     const target = Math.max(0, Math.min(index, SECTIONS.length - 1));
@@ -106,26 +171,36 @@ function OptionsNav({ current }: { current: SectionId }) {
     event.preventDefault();
   };
 
+  let index = -1;
   return (
     <nav
-      class="options-nav"
+      class="wb-nav-groups"
       aria-label={copy.options.nav.label}
       onKeyDown={onKeyDown}
     >
-      {SECTIONS.map((entry, index) => (
-        <a
-          key={entry.id}
-          href={`#${entry.id}`}
-          class="options-nav-link"
-          aria-current={entry.id === current ? "page" : undefined}
-          tabIndex={index === roving ? 0 : -1}
-          ref={(node) => {
-            links.current[index] = node;
-          }}
-          onFocus={() => setRoving(index)}
-        >
-          {entry.label}
-        </a>
+      {GROUPS.map((group) => (
+        <div key={group.label} class="wb-nav-group">
+          <span class="wb-nav-grouplabel silk">{group.label}</span>
+          {group.sections.map((entry) => {
+            index += 1;
+            const linkIndex = index;
+            return (
+              <a
+                key={entry.id}
+                href={`#${entry.id}`}
+                class="wb-nav-link"
+                aria-current={entry.id === current ? "page" : undefined}
+                tabIndex={linkIndex === roving ? 0 : -1}
+                ref={(node) => {
+                  links.current[linkIndex] = node;
+                }}
+                onFocus={() => setRoving(linkIndex)}
+              >
+                {entry.label}
+              </a>
+            );
+          })}
+        </div>
       ))}
     </nav>
   );
@@ -135,7 +210,7 @@ function currentSection(): SectionId {
   const id = window.location.hash.replace(/^#/, "");
   return SECTIONS.some((entry) => entry.id === id)
     ? (id as SectionId)
-    : SECTIONS[0].id;
+    : "rules";
 }
 
 function useHashRoute(): SectionId {

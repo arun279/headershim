@@ -4,8 +4,6 @@ import type { RuleDraft, StateDoc } from "../../src/core/model";
 import {
   expect,
   fetchEcho,
-  grantAllSitesViaDetails,
-  ON_WIRE_GRANT_UNAVAILABLE,
   readEcho,
   seedStateAndWait,
   stateWithRules,
@@ -101,12 +99,9 @@ test("reordering changes the set operation that takes effect", () => {
   ]);
 });
 
-test("Chrome applies set/append/remove conflicts in visible order", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+test("Chrome applies set/append/remove conflicts in visible order", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const scenarios = [
     {
       drafts: [
@@ -137,13 +132,6 @@ test("Chrome applies set/append/remove conflicts in visible order", async ({
   ] as const;
 
   await seedStateAndWait(serviceWorker, stateWithRules(scenarios[0].drafts));
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
-
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/conflict-source`);
   for (const [index, scenario] of scenarios.entries()) {
@@ -167,12 +155,9 @@ test("Chrome applies set/append/remove conflicts in visible order", async ({
   }
 });
 
-test("default resource types include top-level navigation", async ({
-  context,
-  echoServers,
-  extensionId,
-  serviceWorker,
-}) => {
+test("default resource types include top-level navigation", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const header = "x-headershim-main-frame";
   const value = "default-pages";
   const desired = await seedStateAndWait(
@@ -191,13 +176,6 @@ test("default resource types include top-level navigation", async ({
     ]),
   );
   expect(desired[0]?.condition.resourceTypes).toContain("main_frame");
-
-  const granted = await grantAllSitesViaDetails(
-    context,
-    extensionId,
-    serviceWorker,
-  );
-  test.skip(!granted, ON_WIRE_GRANT_UNAVAILABLE);
 
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/main-frame-default`);

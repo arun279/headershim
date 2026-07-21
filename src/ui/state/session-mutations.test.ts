@@ -7,6 +7,8 @@ import {
   type OverrideDraft,
   pruneForeignOrigins,
   removeOverride,
+  setOverrideEnabled,
+  updateOverrideValue,
 } from "./session-mutations";
 
 const draft: OverrideDraft = {
@@ -25,6 +27,7 @@ function row(num: number, tabId: number, originHost: string): TabOverride {
     operation: "set",
     header: "x-tab",
     value: "on",
+    enabled: true,
   };
 }
 
@@ -101,6 +104,42 @@ describe("session mutations", () => {
     ]);
 
     await removeOverride(5, 2);
+    expect((await readSession()).tabs).toEqual({});
+  });
+
+  it("toggles one row without changing its identity or neighbors", async () => {
+    const first = row(1, 5, "app.example.com");
+    const second = row(2, 5, "app.example.com");
+    await write({ nextNum: 3, tabs: { 5: [first, second] } });
+
+    await setOverrideEnabled(5, 1, false);
+
+    expect((await readSession()).tabs[5]).toEqual([
+      { ...first, enabled: false },
+      second,
+    ]);
+  });
+
+  it("updates only a row's complete value through header validation", async () => {
+    const first = row(1, 5, "app.example.com");
+    await write({ nextNum: 2, tabs: { 5: [first] } });
+
+    const updated = await updateOverrideValue(5, 1, "rotated");
+    expect(updated.ok).toBe(true);
+    expect((await readSession()).tabs[5]?.[0]).toEqual({
+      ...first,
+      value: "rotated",
+    });
+
+    const rejected = await updateOverrideValue(5, 1, "line\nbreak");
+    expect(rejected.ok).toBe(false);
+    expect((await readSession()).tabs[5]?.[0]?.value).toBe("rotated");
+  });
+
+  it("returns an empty success when the row was removed before the update", async () => {
+    const outcome = await updateOverrideValue(5, 1, "rotated");
+
+    expect(outcome).toEqual({ ok: true, value: undefined });
     expect((await readSession()).tabs).toEqual({});
   });
 

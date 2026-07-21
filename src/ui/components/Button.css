@@ -4,27 +4,33 @@
   gap: var(--sp-2);
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--radius-outer);
+  border-radius: var(--r-ctl);
   font-size: 12.5px;
   font-weight: 600;
 }
 
 .btn.primary {
-  background: var(--trace);
-  color: var(--trace-ink);
+  flex: none;
+  background: var(--live-fill);
+  color: var(--on-live);
+  white-space: nowrap;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.04);
 }
 
 .btn.quiet {
-  background: var(--panel-0);
-  border: var(--hairline) solid var(--bezel-strong);
+  background: var(--paper);
+  border: var(--hairline) solid var(--line-strong);
   color: var(--ink);
 }
 
 /* Caution-outline: only ever used inside caution surfaces. */
 .btn.caution {
   background: transparent;
-  border: var(--hairline) solid var(--caution);
-  color: var(--caution);
+  border: var(--hairline) solid var(--amber);
+  color: var(--amber);
 }
 
 .icon-btn {
@@ -32,23 +38,25 @@
   place-items: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-inner);
-  color: var(--ink-mute);
+  border-radius: var(--r-chip);
+  color: var(--ink2);
 }
 
 .icon-btn:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 /* Shared popover surface for menus; each menu adds its own placement. */
 .menu-pop {
-  position: absolute;
+  position: fixed;
+  inset: auto;
+  margin: 0;
   z-index: 2;
   padding: var(--sp-2);
-  background: var(--panel-1);
-  border: var(--hairline) solid var(--bezel-strong);
-  border-radius: var(--radius-outer);
-  box-shadow: var(--shadow-pop);
+}
+
+.menu-pop[data-popover-open] {
+  display: block;
 }
 
 .menu-item {
@@ -57,17 +65,17 @@
   width: 100%;
   min-height: 28px;
   padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--radius-inner);
+  border-radius: var(--r-chip);
   font-size: 12.5px;
   text-align: left;
 }
 
 .menu-item:hover {
-  background: var(--panel-2);
+  background: var(--raise2);
 }
 
 .menu-item.destructive {
-  color: var(--caution);
+  color: var(--amber);
 }
 
 .btn:disabled,

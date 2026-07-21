@@ -322,155 +322,16 @@ describe("enable-path grammar re-validation", () => {
     expect(await read()).toEqual(doc);
   });
 
-  it("setRulesEnabled refuses a bad rule entering the batch", async () => {
-    const invalid = rule({ enabled: false, value: "a\r\nb" });
-    const doc = await seed([profile("p1", { rules: [invalid] })]);
-
-    expect(
-      errorKind(await mutations.setRulesEnabled("p1", [invalid.id], true)),
-    ).toBe("value-line-break");
-    expect(await read()).toEqual(doc);
-  });
-
-  it("setProfileEnabled refuses a profile carrying a bad enabled rule", async () => {
+  it("activateProfile refuses a profile carrying a bad enabled rule", async () => {
     const invalid = rule({ header: ":authority" });
-    const doc = await seed([
-      profile("p1", { rules: [invalid], enabled: false }),
-    ]);
+    const doc = await seed([profile("p1", { rules: [invalid] })], {
+      activeProfileId: undefined,
+    });
 
-    expect(errorKind(await mutations.setProfileEnabled("p1", true))).toBe(
+    expect(errorKind(await mutations.activateProfile("p1"))).toBe(
       "name-not-modifiable",
     );
     expect(await read()).toEqual(doc);
-  });
-
-  it("moveRulesToProfile re-checks a rule crossing into an enabled profile", async () => {
-    const invalid = rule({ value: "a\r\nb" });
-    const doc = await seed([
-      profile("p1", { rules: [invalid], enabled: false }),
-      profile("p2", { rules: [], enabled: true }),
-    ]);
-
-    expect(
-      errorKind(await mutations.moveRulesToProfile("p1", [invalid.id], "p2")),
-    ).toBe("value-line-break");
-    expect(await read()).toEqual(doc);
-  });
-});
-
-describe("bulk rule actions", () => {
-  it("enables and disables the named rules in one commit", async () => {
-    const a = rule({ enabled: false });
-    const b = rule({ enabled: false });
-    const c = rule({ enabled: false });
-    await seed([profile("p1", { rules: [a, b, c] })]);
-
-    expect((await mutations.setRulesEnabled("p1", [a.id, c.id], true)).ok).toBe(
-      true,
-    );
-    const enabled = (await read()).profiles[0]?.rules.map((r) => r.enabled);
-    expect(enabled).toEqual([true, false, true]);
-  });
-
-  it("stops the whole batch at the cap boundary and changes nothing", async () => {
-    const offA = rule({ enabled: false });
-    const offB = rule({ enabled: false });
-    const doc = await seed([
-      profile("p1", { rules: [...rules(4_499), offA, offB] }),
-    ]);
-
-    // 4,499 enabled + 2 more crosses 4,500; the batch is all-or-nothing.
-    expect(
-      errorKind(
-        await mutations.setRulesEnabled("p1", [offA.id, offB.id], true),
-      ),
-    ).toBe("enabled-rule-limit-exceeded");
-    expect(await read()).toEqual(doc);
-
-    // Enabling exactly one lands us on the 4,500 boundary.
-    expect((await mutations.setRulesEnabled("p1", [offA.id], true)).ok).toBe(
-      true,
-    );
-  });
-
-  it("deletes a selection with indices and restores it in place", async () => {
-    const [a, b, c, d] = [rule(), rule(), rule(), rule()];
-    await seed([profile("p1", { rules: [a, b, c, d] })]);
-
-    const deleted = await mutations.deleteRules("p1", [b.id, d.id]);
-    expect(deleted.ok && deleted.value.removed).toEqual([
-      { rule: b, index: 1 },
-      { rule: d, index: 3 },
-    ]);
-    expect(await storedRuleIds()).toEqual([a.id, c.id]);
-
-    expect(
-      deleted.ok &&
-        (await mutations.restoreRules("p1", deleted.value.removed)).ok,
-    ).toBe(true);
-    expect(await storedRuleIds()).toEqual([a.id, b.id, c.id, d.id]);
-  });
-
-  it("is idempotent, and its restore honours the cap on the growth path", async () => {
-    const doomed = rule();
-    const stored = await seed([
-      profile("p1", { rules: [doomed, ...rules(4_500)] }),
-    ]);
-
-    // Restoring a rule that is still present is a no-op.
-    expect(
-      (await mutations.restoreRules("p1", [{ rule: doomed, index: 0 }])).ok,
-    ).toBe(true);
-    expect(await read()).toEqual(stored);
-
-    // After removal the enabled set has room; putting it back would overflow.
-    const deleted = await mutations.deleteRules("p1", [doomed.id]);
-    expect(
-      deleted.ok &&
-        errorKind(await mutations.restoreRules("p1", deleted.value.removed)),
-    ).toBe("enabled-rule-limit-exceeded");
-  });
-
-  it("moves a selection to another profile, preserving order and enabled flags", async () => {
-    const [a, b, c] = [rule(), rule({ enabled: false }), rule()];
-    await seed([
-      profile("p1", { rules: [a, b, c] }),
-      profile("p2", { rules: [] }),
-    ]);
-
-    expect(
-      (await mutations.moveRulesToProfile("p1", [a.id, b.id], "p2")).ok,
-    ).toBe(true);
-    const stored = await read();
-    expect(stored.profiles[0]?.rules.map((r) => r.id)).toEqual([c.id]);
-    expect(stored.profiles[1]?.rules).toEqual([a, b]);
-  });
-
-  it("move to a full enabled destination cannot exceed the enabled cap", async () => {
-    const target = rule();
-    await seed([
-      profile("p1", { rules: rules(4_500) }),
-      profile("p2", { rules: [target], enabled: false }),
-    ]);
-
-    expect(
-      errorKind(await mutations.moveRulesToProfile("p2", [target.id], "p1")),
-    ).toBe("enabled-rule-limit-exceeded");
-  });
-
-  it("reports not-found for a missing source or destination profile", async () => {
-    const target = rule();
-    await seed([profile("p1", { rules: [target] })]);
-
-    expect(
-      errorKind(await mutations.setRulesEnabled("nope", [target.id], true)),
-    ).toBe("not-found");
-    expect(errorKind(await mutations.deleteRules("nope", [target.id]))).toBe(
-      "not-found",
-    );
-    expect(
-      errorKind(await mutations.moveRulesToProfile("p1", [target.id], "nope")),
-    ).toBe("not-found");
   });
 });
 
@@ -478,7 +339,7 @@ async function storedRuleIds(): Promise<string[]> {
   return (await read()).profiles[0]?.rules.map((r) => r.id) ?? [];
 }
 
-describe("delete, restore, reorder, move, duplicate", () => {
+describe("delete, restore, and move", () => {
   it("delete returns the rule and its index; restore puts it back", async () => {
     const first = rule();
     const second = rule();
@@ -515,19 +376,6 @@ describe("delete, restore, reorder, move, duplicate", () => {
     );
   });
 
-  it("reorders within the profile and clamps out-of-range targets", async () => {
-    const first = rule();
-    const second = rule();
-    const third = rule();
-    await seed([profile("p1", { rules: [first, second, third] })]);
-
-    await mutations.reorderRule("p1", third.id, 0);
-    expect(await storedRuleIds()).toEqual([third.id, first.id, second.id]);
-
-    await mutations.reorderRule("p1", third.id, 99);
-    expect(await storedRuleIds()).toEqual([first.id, second.id, third.id]);
-  });
-
   it("moves a rule to the end of another profile", async () => {
     const moving = rule();
     const resident = rule();
@@ -551,93 +399,17 @@ describe("delete, restore, reorder, move, duplicate", () => {
     const moving = rule();
     await seed([
       profile("p1", { rules: rules(4_500) }),
-      profile("p2", { enabled: false, rules: [moving] }),
+      profile("p2", { rules: [moving] }),
     ]);
 
     expect(
       errorKind(await mutations.moveRuleToProfile("p2", moving.id, "p1")),
     ).toBe("enabled-rule-limit-exceeded");
   });
-
-  it("duplicates a rule right after the original with a fresh identity", async () => {
-    const source = rule();
-    const trailing = rule();
-    await seed([profile("p1", { rules: [source, trailing] })]);
-
-    const copied = await mutations.duplicateRule("p1", source.id);
-    expect(copied.ok).toBe(true);
-    const stored = await read();
-    const ids = stored.profiles[0]?.rules.map((r) => r.id);
-    expect(ids).toHaveLength(3);
-    expect(ids?.[0]).toBe(source.id);
-    expect(ids?.[2]).toBe(trailing.id);
-    expect(copied.ok && copied.value).toMatchObject({
-      header: source.header,
-      num: 3,
-    });
-  });
-
-  it("cap-checks duplicating an enabled rule at the boundary", async () => {
-    const source = rule();
-    await seed([profile("p1", { rules: [source, ...rules(4_499)] })]);
-    expect(errorKind(await mutations.duplicateRule("p1", source.id))).toBe(
-      "enabled-rule-limit-exceeded",
-    );
-  });
-});
-
-describe("regenerateValue", () => {
-  const frozenAt = "2026-07-01T00:00:00.000Z";
-  const now = new Date("2026-07-13T09:30:00.000Z");
-
-  async function regenerateFrozen(kind: "uuid" | "timestamp", value: string) {
-    const frozen = rule({ value, generated: { kind, at: frozenAt } });
-    await seed([profile("p1", { rules: [frozen] })]);
-    return mutations.regenerateValue("p1", frozen.id, now);
-  }
-
-  it("re-freezes a uuid value and stamps the regeneration time", async () => {
-    const uuid = "5e0e2a1c-59c4-4b0c-a41e-0d76f7ea54b9";
-    const outcome = await regenerateFrozen("uuid", uuid);
-    expect(outcome.ok).toBe(true);
-    if (outcome.ok) {
-      expect(outcome.value.value).toMatch(/^[0-9a-f-]{36}$/);
-      expect(outcome.value.value).not.toBe(uuid);
-      expect(outcome.value.generated).toEqual({
-        kind: "uuid",
-        at: now.toISOString(),
-      });
-    }
-  });
-
-  it("writes the regeneration instant as a timestamp value", async () => {
-    const outcome = await regenerateFrozen("timestamp", frozenAt);
-    expect(outcome.ok && outcome.value.value).toBe(now.toISOString());
-  });
-
-  it("refuses on a rule without a generated value", async () => {
-    const plain = rule();
-    await seed([profile("p1", { rules: [plain] })]);
-    expect(errorKind(await mutations.regenerateValue("p1", plain.id))).toBe(
-      "not-found",
-    );
-  });
-
-  it("refuses on a remove rule, which must stay value-free", async () => {
-    const removal = rule({
-      operation: "remove",
-      generated: { kind: "uuid", at: frozenAt },
-    });
-    const { value: _value, ...valueless } = removal;
-    await seed([profile("p1", { rules: [valueless] })]);
-    expect(errorKind(await mutations.regenerateValue("p1", removal.id))).toBe(
-      "not-found",
-    );
-  });
 });
 
 describe("profile operations", () => {
-  it("creates a profile, derives badge initials, and focuses it when enabled", async () => {
+  it("creates a profile, derives badge initials, and activates it atomically", async () => {
     await seed([profile("p1")]);
     const created = await mutations.createProfile({
       name: "Staging auth",
@@ -651,10 +423,13 @@ describe("profile operations", () => {
     });
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.focusedProfileId).toBe(created.ok ? created.value.id : "");
+    expect(stored.activeProfileId).toBe(created.ok ? created.value.id : "");
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
-  it("does not move focus when the new profile arrives off", async () => {
+  it("does not change activation when the new profile arrives inactive", async () => {
     const doc = await seed([profile("p1")]);
     const created = await mutations.createProfile({
       name: "QA roles",
@@ -663,7 +438,7 @@ describe("profile operations", () => {
       enabled: false,
     });
     expect(created.ok).toBe(true);
-    expect((await read()).focusedProfileId).toBe(doc.focusedProfileId);
+    expect((await read()).activeProfileId).toBe(doc.activeProfileId);
   });
 
   it.each([
@@ -721,33 +496,44 @@ describe("profile operations", () => {
     expect(cloned.ok && cloned.value.name).toBe(`${"x".repeat(43)} copy`);
   });
 
-  it("cap-checks cloning an enabled profile", async () => {
+  it("clones an active profile without making the clone active", async () => {
     await seed([profile("p1", { rules: rules(2_300) })]);
-    expect(errorKind(await mutations.cloneProfile("p1"))).toBe(
-      "enabled-rule-limit-exceeded",
-    );
+    const cloned = await mutations.cloneProfile("p1");
+    expect(cloned.ok).toBe(true);
+    const stored = await read();
+    expect(stored.activeProfileId).toBe("p1");
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
-  it("deletes a profile and moves focus to the topmost enabled one", async () => {
-    await seed(
-      [profile("p1"), profile("p2", { enabled: false }), profile("p3")],
-      { focusedProfileId: "p1" },
-    );
+  it("clears activation when deleting the active profile", async () => {
+    await seed([profile("p1"), profile("p2"), profile("p3")], {
+      activeProfileId: "p1",
+    });
 
     const deleted = await mutations.deleteProfile("p1");
     expect(deleted.ok && deleted.value.index).toBe(0);
-    expect((await read()).focusedProfileId).toBe("p3");
+    expect((await read()).activeProfileId).toBeUndefined();
   });
 
-  it("falls back to the topmost profile when none is enabled", async () => {
-    await seed([profile("p1"), profile("p2", { enabled: false })], {
-      focusedProfileId: "p1",
+  it("keeps activation cleared when restoring the deleted active profile", async () => {
+    await seed([profile("p1"), profile("p2")], {
+      activeProfileId: "p1",
     });
-    await mutations.deleteProfile("p1");
-    expect((await read()).focusedProfileId).toBe("p2");
+
+    const deleted = await mutations.deleteProfile("p1");
+    if (!deleted.ok) {
+      throw new Error("fixture profile must be deletable");
+    }
+    await mutations.restoreProfile(deleted.value.profile, deleted.value.index);
+
+    const stored = await read();
+    expect(stored.profiles.map((candidate) => candidate.id)).toContain("p1");
+    expect(stored.activeProfileId).toBeUndefined();
   });
 
-  it("recreates an enabled, focused Default when the last profile is deleted", async () => {
+  it("recreates an inactive Default when the last profile is deleted", async () => {
     await seed([profile("p1")]);
     expect((await mutations.deleteProfile("p1")).ok).toBe(true);
 
@@ -756,10 +542,10 @@ describe("profile operations", () => {
     expect(stored.profiles[0]).toMatchObject({
       name: "Default",
       badgeText: "DE",
-      enabled: true,
       rules: [],
     });
-    expect(stored.focusedProfileId).toBe(stored.profiles[0]?.id);
+    expect(stored.activeProfileId).toBeUndefined();
+    expect(stored.profiles[0]).not.toHaveProperty("enabled");
   });
 
   it("restores a deleted profile at its index, suffixing a retaken name", async () => {
@@ -774,8 +560,13 @@ describe("profile operations", () => {
     });
     expect((await mutations.restoreProfile(doomed, 1)).ok).toBe(true);
 
-    const names = (await read()).profiles.map((p) => p.name);
+    const stored = await read();
+    const names = stored.profiles.map((p) => p.name);
     expect(names).toEqual(["p1", "p2 2", "p3", "p2"]);
+    expect(stored.activeProfileId).toBe("p1");
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
   it("reorders profiles and clamps the target index", async () => {
@@ -801,81 +592,56 @@ describe("profile operations", () => {
   });
 });
 
-describe("enable semantics", () => {
-  it("activateProfile is the exclusive switch: target on, others off, focused", async () => {
-    await seed([
-      profile("p1"),
-      profile("p2", { enabled: false }),
-      profile("p3"),
-    ]);
+describe("activation semantics", () => {
+  it("switches profiles with one foreign key so two-active is unrepresentable", async () => {
+    await seed([profile("p1"), profile("p2"), profile("p3")]);
 
     expect((await mutations.activateProfile("p2")).ok).toBe(true);
     const stored = await read();
-    expect(stored.profiles.map((p) => p.enabled)).toEqual([false, true, false]);
-    expect(stored.focusedProfileId).toBe("p2");
+    expect(stored.activeProfileId).toBe("p2");
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
-  it("toggling a profile on flips only it and focuses it", async () => {
-    await seed([profile("p1"), profile("p2", { enabled: false })]);
+  it("deactivates every profile by clearing the foreign key", async () => {
+    await seed([profile("p1"), profile("p2")]);
 
-    expect((await mutations.setProfileEnabled("p2", true)).ok).toBe(true);
+    expect((await mutations.activateProfile(undefined)).ok).toBe(true);
     const stored = await read();
-    expect(stored.profiles.map((p) => p.enabled)).toEqual([true, true]);
-    expect(stored.focusedProfileId).toBe("p2");
+    expect(stored.activeProfileId).toBeUndefined();
+    expect(
+      stored.profiles.every((candidate) => !("enabled" in candidate)),
+    ).toBe(true);
   });
 
-  it("disabling the focused profile moves focus to the topmost enabled one", async () => {
-    await seed([profile("p1"), profile("p2")], { focusedProfileId: "p2" });
-    await mutations.setProfileEnabled("p2", false);
-    expect((await read()).focusedProfileId).toBe("p1");
+  it("reports not-found for an unknown profile", async () => {
+    const doc = await seed([profile("p1")]);
+    expect(errorKind(await mutations.activateProfile("missing"))).toBe(
+      "not-found",
+    );
+    expect(await read()).toEqual(doc);
   });
 
-  it("disabling the last enabled focused profile falls back to the topmost", async () => {
-    await seed([profile("p1", { enabled: false }), profile("p2")], {
-      focusedProfileId: "p2",
-    });
-    await mutations.setProfileEnabled("p2", false);
-    expect((await read()).focusedProfileId).toBe("p1");
-  });
+  it("blocks activating a profile past the 4,500 cap before commit", async () => {
+    const doc = await seed(
+      [profile("p1"), profile("p2", { rules: rules(4_501) })],
+      { activeProfileId: "p1" },
+    );
 
-  it("disabling a non-focused profile leaves focus alone", async () => {
-    await seed([profile("p1"), profile("p2")], { focusedProfileId: "p1" });
-    await mutations.setProfileEnabled("p2", false);
-    expect((await read()).focusedProfileId).toBe("p1");
-  });
-
-  it("blocks enabling a profile that would cross the 4,500 cap, before commit", async () => {
-    const doc = await seed([
-      profile("p1", { rules: rules(4_000) }),
-      profile("p2", { enabled: false, rules: rules(600) }),
-    ]);
-
-    expect(errorKind(await mutations.setProfileEnabled("p2", true))).toBe(
+    expect(errorKind(await mutations.activateProfile("p2"))).toBe(
       "enabled-rule-limit-exceeded",
     );
     expect(await read()).toEqual(doc);
   });
 
-  it("blocks the exclusive switch onto an oversized profile with the same error", async () => {
-    await seed([
-      profile("p1"),
-      profile("p2", { enabled: false, rules: rules(4_501) }),
-    ]);
-    expect(errorKind(await mutations.activateProfile("p2"))).toBe(
-      "enabled-rule-limit-exceeded",
-    );
-  });
-
-  it("re-validates regex scopes when a profile enable brings them into the enabled set", async () => {
+  it("re-validates regex scopes when activation brings them into the enabled set", async () => {
     const imported = rule({
       scope: { type: "regex", regex: "(?<broken", hosts: [] },
     });
-    await seed([
-      profile("p1"),
-      profile("p2", { enabled: false, rules: [imported] }),
-    ]);
+    await seed([profile("p1"), profile("p2", { rules: [imported] })]);
 
-    const outcome = await strictMutations.setProfileEnabled("p2", true);
+    const outcome = await strictMutations.activateProfile("p2");
     expect(errorKind(outcome)).toBe("regex-invalid");
     if (!outcome.ok && outcome.error.kind === "regex-invalid") {
       expect(outcome.error.regex).toBe("(?<broken");
@@ -884,22 +650,20 @@ describe("enable semantics", () => {
 });
 
 describe("settings and import", () => {
-  it("round-trips pause, theme, and badge mode", async () => {
+  it("round-trips pause and theme", async () => {
     await seed([profile("p1")]);
 
     await mutations.setPaused(true);
     await mutations.setTheme("dark");
-    await mutations.setBadgeMode("initials");
     expect((await read()).settings).toEqual({
       paused: true,
       theme: "dark",
-      badgeMode: "initials",
     });
     await mutations.setPaused(false);
     expect((await read()).settings.paused).toBe(false);
   });
 
-  it("applies an import plan: profiles arrive off with fresh rule numbers", async () => {
+  it("applies an import plan without activating profiles and with fresh rule numbers", async () => {
     const doc = await seed([profile("p1")]);
     const outcome = await mutations.applyImport({
       profiles: [
@@ -907,7 +671,6 @@ describe("settings and import", () => {
           name: "Imported",
           badgeText: "IM",
           color: "blue",
-          enabled: false,
           rules: [
             {
               direction: "request",
@@ -927,10 +690,9 @@ describe("settings and import", () => {
 
     expect(outcome.ok).toBe(true);
     const stored = await read();
-    expect(stored.profiles[1]).toMatchObject({
-      name: "Imported",
-      enabled: false,
-    });
+    expect(stored.profiles[1]).toMatchObject({ name: "Imported" });
+    expect(stored.profiles[1]).not.toHaveProperty("enabled");
+    expect(stored.activeProfileId).toBe("p1");
     expect(stored.profiles[1]?.rules[0]?.num).toBe(doc.nextRuleNum);
   });
 
@@ -942,7 +704,6 @@ describe("settings and import", () => {
           name: "p1",
           badgeText: "P1",
           color: "blue",
-          enabled: false,
           rules: [],
         },
       ],
@@ -961,7 +722,6 @@ describe("settings and import", () => {
           name: "Huge",
           badgeText: "HU",
           color: "blue",
-          enabled: false,
           rules: [
             {
               direction: "request",

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  activateNextProfile,
+  activateProfile,
   allocateRuleNum,
   cloneRule,
   createProfile,
@@ -10,16 +12,15 @@ import {
   type Rule,
   type RuleDraft,
   type StateDoc,
-  switchToNextProfile,
 } from "./model";
 
 function emptyDoc(nextRuleNum = 1): StateDoc {
   return {
     v: 1,
     profiles: [],
-    focusedProfileId: "profile-1",
+    activeProfileId: undefined,
     nextRuleNum,
-    settings: { paused: false, theme: "system", badgeMode: "count" },
+    settings: { paused: false, theme: "system" },
   };
 }
 
@@ -29,9 +30,27 @@ function profile(id: string, name: string): Profile {
     name,
     badgeText: "P",
     color: "blue",
-    enabled: true,
     rules: [],
   };
+}
+
+function docWith(profiles: Profile[], activeProfileId?: string): StateDoc {
+  return { ...emptyDoc(), profiles, activeProfileId };
+}
+
+function bulkProfile(id: string, name: string, count: number): Profile {
+  return { ...profile(id, name), rules: bulkRules(count) };
+}
+
+function bulkRegexRules(count: number): Rule[] {
+  return bulkRules(count).map((rule) => ({
+    ...rule,
+    scope: {
+      type: "regex",
+      regex: "^https://api\\.example\\.com/",
+      hosts: ["api.example.com"],
+    },
+  }));
 }
 
 const baseDraft: RuleDraft = {
@@ -126,7 +145,6 @@ describe("profile invariants", () => {
       name: "Production",
       badgeText: "👩🏽‍💻AB",
       color: "plum",
-      enabled: false,
     });
 
     expect(normalizeBadgeText("")).toBe("");
@@ -139,12 +157,8 @@ describe("profile invariants", () => {
   });
 });
 
-describe("switchToNextProfile", () => {
-  function docWith(profiles: Profile[], focusedProfileId: string): StateDoc {
-    return { ...emptyDoc(), profiles, focusedProfileId };
-  }
-
-  it("enables exactly the profile after the focused one and focuses it", () => {
+describe("activateProfile", () => {
+  it("represents activation with one foreign key and no per-profile bits", () => {
     const doc = docWith(
       [
         profile("one", "Default"),
@@ -154,79 +168,71 @@ describe("switchToNextProfile", () => {
       "one",
     );
 
-    const next = switchToNextProfile(doc);
+    const next = activateProfile(doc, "two");
 
-    expect(next.focusedProfileId).toBe("two");
-    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([
-      false,
+    expect(next.activeProfileId).toBe("two");
+    expect(next.profiles).toBe(doc.profiles);
+    expect(next.profiles.every((candidate) => !("enabled" in candidate))).toBe(
       true,
-      false,
-    ]);
-  });
-
-  it("wraps from the last profile to the first", () => {
-    const doc = docWith(
-      [profile("one", "Default"), profile("two", "Staging")],
-      "two",
     );
-
-    expect(switchToNextProfile(doc).focusedProfileId).toBe("one");
   });
 
-  it("keeps a single profile enabled and focused", () => {
-    const doc = docWith(
-      [{ ...profile("one", "Default"), enabled: false }],
-      "one",
-    );
+  it("returns the document unchanged for an unknown profile", () => {
+    const doc = docWith([profile("one", "Default")], "one");
 
-    const next = switchToNextProfile(doc);
-
-    expect(next.focusedProfileId).toBe("one");
-    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([true]);
+    expect(activateProfile(doc, "missing")).toBe(doc);
   });
 
-  it("returns the document unchanged when it has no profiles", () => {
+  it("returns the document unchanged when it has no matching profile", () => {
     const doc = emptyDoc();
 
-    expect(switchToNextProfile(doc)).toBe(doc);
+    expect(activateProfile(doc, "one")).toBe(doc);
   });
 
-  it("skips a profile whose enabled rules exceed the live caps", () => {
-    const oversized: Profile = {
-      ...profile("two", "Bulk"),
-      enabled: false,
-      rules: bulkRules(4_501),
-    };
+  it("refuses a profile whose enabled rules exceed the live caps", () => {
+    const oversized = bulkProfile("two", "Bulk", 4_501);
     const doc = docWith(
       [profile("one", "Default"), oversized, profile("three", "QA")],
       "one",
     );
 
-    const next = switchToNextProfile(doc);
+    const next = activateProfile(doc, "two");
 
-    expect(next.focusedProfileId).toBe("three");
-    expect(next.profiles.map(({ enabled }) => enabled)).toEqual([
-      false,
-      false,
-      true,
-    ]);
+    expect(next).toBe(doc);
+    expect(next.activeProfileId).toBe("one");
   });
 
-  it("keeps the document unchanged when every candidate exceeds the caps", () => {
-    const regexRules = bulkRules(1_001).map((rule) => ({
-      ...rule,
-      scope: {
-        type: "regex" as const,
-        regex: "^https://api\\.example\\.com/",
-        hosts: ["api.example.com"],
-      },
-    }));
+  it("refuses a profile whose enabled regex rules exceed the live cap", () => {
     const doc = docWith(
-      [{ ...profile("one", "Default"), rules: regexRules }],
+      [{ ...profile("one", "Default"), rules: bulkRegexRules(1_001) }],
       "one",
     );
 
-    expect(switchToNextProfile(doc)).toBe(doc);
+    expect(activateProfile(doc, "one")).toBe(doc);
+  });
+});
+
+describe("activateNextProfile", () => {
+  it("skips a profile whose enabled rules exceed the live caps", () => {
+    const oversized = bulkProfile("two", "Bulk", 4_501);
+    const doc = docWith(
+      [profile("one", "Default"), oversized, profile("three", "QA")],
+      "one",
+    );
+
+    const next = activateNextProfile(doc);
+
+    expect(next.activeProfileId).toBe("three");
+    expect(next.profiles).toBe(doc.profiles);
+  });
+
+  it("returns the document unchanged when every candidate exceeds the caps", () => {
+    const doc = docWith(
+      [{ ...profile("one", "Default"), rules: bulkRegexRules(1_001) }],
+      "one",
+    );
+
+    expect(activateNextProfile(doc)).toBe(doc);
   });
 });
 

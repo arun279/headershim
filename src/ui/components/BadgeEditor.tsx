@@ -1,5 +1,9 @@
 import { useId, useState } from "preact/hooks";
-import { BADGE_COLORS, type BadgeColor } from "../../core/model";
+import {
+  BADGE_COLORS,
+  type BadgeColor,
+  normalizeBadgeText,
+} from "../../core/model";
 import { copy } from "../copy";
 import "./BadgeEditor.css";
 
@@ -40,9 +44,10 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
         <input
           class="badge-text-input inset-field mono"
           type="text"
-          maxLength={2}
           value={text}
-          onInput={(event) => setText(event.currentTarget.value)}
+          onInput={(event) =>
+            setText(normalizeBadgeText(event.currentTarget.value))
+          }
           onBlur={commitText}
           onKeyDown={(event) => {
             if (event.key === "Enter") {

@@ -1,0 +1,431 @@
+// @vitest-environment happy-dom
+import { fakeBrowser } from "@webext-core/fake-browser";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { App } from "../../entrypoints/options/App";
+import type { Profile } from "../core/model";
+import { originPatternForDomain } from "../core/scope";
+import { setReconcileError } from "../platform/session-store";
+import { read, write } from "../platform/store";
+import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
+import { copy } from "../ui/copy";
+import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
+import { fire, render, settle } from "../ui/test/render";
+
+const text = copy.options.allRules;
+
+/** One enabled rule in one profile: the smallest list that has a row to act on. */
+function oneRule(): Profile[] {
+  return [
+    profile("p1", { name: "Staging", rules: [rule({ header: "x-flag" })] }),
+  ];
+}
+
+async function seed(profiles: Profile[]): Promise<void> {
+  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id }));
+}
+
+async function mount(hash = "#rules") {
+  window.location.hash = hash;
+  const root = render(<App />);
+  await settle();
+  return root;
+}
+
+function within(root: HTMLElement, selector: string): HTMLElement {
+  const el = root.querySelector<HTMLElement>(selector);
+  if (el === null) throw new Error(`missing ${selector}`);
+  return el;
+}
+
+function findButton(root: ParentNode, label: string): HTMLButtonElement {
+  const button = [...root.querySelectorAll<HTMLButtonElement>("button")].find(
+    (candidate) => candidate.textContent === label,
+  );
+  if (button === undefined) throw new Error(`no button "${label}"`);
+  return button;
+}
+
+beforeEach(() => {
+  resetFixtures();
+  window.location.hash = "";
+});
+
+/**
+ * One rule of each severity the list has to tell apart: granted and running, a
+ * grant away, and the Host rule Chrome always refuses.
+ */
+async function seedOneOfEachSeverity(): Promise<void> {
+  await fakeBrowser.permissions.request({
+    origins: [originPatternForDomain("api.example.com")],
+  });
+  await seed([
+    profile("p1", {
+      name: "Staging",
+      rules: [
+        rule({
+          header: "x-live",
+          scope: { type: "domains", domains: ["api.example.com"] },
+        }),
+        rule({
+          header: "x-blocked",
+          scope: { type: "domains", domains: ["other.example.com"] },
+        }),
+        rule({
+          header: "host",
+          scope: { type: "domains", domains: ["api.example.com"] },
+        }),
+        rule({
+          header: "connection",
+          scope: { type: "domains", domains: ["api.example.com"] },
+        }),
+      ],
+    }),
+  ]);
+}
+
+describe("all rules", () => {
+  it("groups rules by site and reads each in the severity grammar", async () => {
+    await seedOneOfEachSeverity();
+    const root = await mount();
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
+
+    const hosts = [...root.querySelectorAll(".fleet-host")].map(
+      (host) => host.textContent,
+    );
+    expect(hosts).toContain("api.example.com");
+    expect(hosts).toContain("other.example.com");
+
+    // A granted rule is live; the Host rule is refused; the managed rule is
+    // inert; the ungranted rule needs access and offers a Grant.
+    expect(root.querySelector(".fleet-row.live")).not.toBeNull();
+    expect(root.querySelector(".fleet-row.refused")).not.toBeNull();
+    expect(
+      root.querySelector(".fleet-row.managed .why")?.textContent,
+    ).toContain(copy.readout.managedReason);
+    const blocked = within(root, ".fleet-row.needs-access");
+    expect(blocked.querySelector(".grant")?.textContent).toBe(
+      copy.readout.grant,
+    );
+  });
+
+  it("keeps the running tone off the switch of a rule Chrome refuses", async () => {
+    await seedOneOfEachSeverity();
+    const root = await mount();
+
+    // Both rules are switched on, but only one of them is running: a refused
+    // rule wearing the live hue contradicts the reason printed beside it.
+    const live = within(root, '.fleet-row.live [role="switch"]');
+    const refused = within(root, '.fleet-row.refused [role="switch"]');
+    const managed = within(root, '.fleet-row.managed [role="switch"]');
+    const needsAccess = within(root, '.fleet-row.needs-access [role="switch"]');
+    expect(live.getAttribute("aria-checked")).toBe("true");
+    expect(refused.getAttribute("aria-checked")).toBe("true");
+    expect(managed.getAttribute("aria-checked")).toBe("true");
+    expect(needsAccess.getAttribute("aria-checked")).toBe("true");
+    expect(live.className).toBe("sw");
+    expect(refused.className).toBe("sw sw-blocked");
+    expect(managed.className).toBe("sw sw-inert");
+    expect(needsAccess.className).toBe("sw sw-inert");
+  });
+
+  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+    await seed(oneRule());
+    await setReconcileError(true);
+    const root = await mount();
+
+    const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.className).toBe("sw sw-inert");
+    expect(toggle.className).not.toBe("sw");
+  });
+
+  it("keeps the running tone off a configured-on rule in an off profile", async () => {
+    const active = profile("p1", { name: "Active" });
+    const inactive = profile("p2", {
+      name: "Inactive",
+      rules: [rule({ header: "x-held" })],
+    });
+    await seed([active, inactive]);
+    const root = await mount();
+
+    const row = within(root, ".fleet-row.off");
+    expect(row.textContent).toContain(text.profileOff);
+    expect(row.querySelector('[role="switch"]')?.className).toBe("sw sw-inert");
+  });
+
+  it("truncates a long value to the ceiling every surface shares", async () => {
+    const value = "a".repeat(600);
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [rule({ header: "x-flag", value })],
+      }),
+    ]);
+    const root = await mount();
+
+    const rendered = within(root, ".fleet-open .v");
+    expect(rendered.textContent?.length).toBeLessThanOrEqual(
+      TRUNCATION_LIMITS.value,
+    );
+    expect(rendered.title).toBe(value);
+  });
+
+  it("renders generated metadata in place of an absent literal value", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-trace-id",
+            value: "",
+            generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    expect(within(root, ".fleet-open .v").textContent).toBe(
+      copy.rules.generated(copy.editor.generatedKind.uuid),
+    );
+  });
+
+  it("defaults to the by-header lens", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-env",
+            scope: { type: "domains", domains: ["a.com"] },
+          }),
+          rule({
+            header: "x-env",
+            scope: { type: "domains", domains: ["b.com"] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    const heads = () =>
+      [...root.querySelectorAll(".fleet-host")].map((head) => head.textContent);
+    expect(
+      root.querySelector("fieldset.segmented")?.getAttribute("aria-label"),
+    ).toBe(text.lensLabel);
+    // Both rules collapse under one header group.
+    expect(heads()).toEqual(["x-env"]);
+    expect(findButton(root, text.byHeader).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(findButton(root, text.bySite).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    expect(findButton(root, text.newRule).className).toBe("btn primary");
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
+    expect(heads()).toEqual(["a.com", "b.com"]);
+
+    fire(() => findButton(root, text.byHeader).click());
+    await settle();
+    expect(heads()).toEqual(["x-env"]);
+    expect(findButton(root, text.byHeader).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("states all-sites reach unconditionally", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "authorization",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          rule({ header: "authorization", scope: { type: "all" } }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    expect(within(root, ".fleet-count").textContent).toBe(
+      `reaches ${text.scope.all}`,
+    );
+  });
+
+  it("toggles a rule off from its switch", async () => {
+    await seed(oneRule());
+    const root = await mount();
+
+    fire(() => within(root, '.fleet-row [role="switch"]').click());
+    await settle();
+
+    expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
+  });
+
+  it("opens the shared editor to author a new rule", async () => {
+    await seed([profile("p1", { name: "Staging" })]);
+    const root = await mount();
+
+    fire(() => findButton(root, text.newRule).click());
+    // The editor is a lazy chunk; wait for it to mount before asserting.
+    await vi.waitFor(() => {
+      if (root.querySelector('[role="combobox"]') === null) {
+        throw new Error("rule editor is still loading");
+      }
+    });
+
+    expect(document.activeElement).toBe(
+      root.querySelector('[role="combobox"]'),
+    );
+  });
+
+  // groupBySite draws one row per rule x domain, so a two-domain rule is two
+  // rows whose switches are the same switch. The row has to own up to its reach.
+  it("says how far a rule reaches when one rule is drawn under several sites", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-env",
+            scope: {
+              type: "domains",
+              domains: ["api.stripe.com", "api.github.com"],
+            },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    fire(() => findButton(root, text.bySite).click());
+    await settle();
+
+    const rows = [...root.querySelectorAll(".fleet-row")];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.textContent).toContain(text.sharedRule(2));
+      expect(
+        row.querySelector('[role="switch"]')?.getAttribute("aria-label"),
+      ).toBe(copy.rules.switchLabel("x-env", true, 2));
+    }
+  });
+
+  it("leaves a single-site rule to say nothing about its reach", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-env",
+            scope: { type: "domains", domains: ["api.stripe.com"] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+    expect(root.textContent).not.toContain(text.sharedRule(2));
+  });
+
+  it("puts the one action in the empty state and nowhere else", async () => {
+    await seed([profile("p1", { name: "Staging" })]);
+    const root = await mount();
+
+    expect(
+      [...root.querySelectorAll("button")].filter(
+        (button) => button.textContent === text.newRule,
+      ),
+    ).toHaveLength(1);
+    expect(within(root, ".empty-state").textContent).toContain(text.empty);
+    expect(root.querySelector(".segmented")).toBeNull();
+  });
+});
+
+describe("rule delete", () => {
+  it("deletes from the editor with no confirmation and restores on undo", async () => {
+    await seed(oneRule());
+    const root = await mount();
+
+    fire(() => within(root, ".fleet-open").click());
+    await vi.waitFor(() => {
+      if (root.querySelector(".rule-editor") === null) {
+        throw new Error("rule editor is still loading");
+      }
+    });
+
+    fire(() => findButton(root, copy.editor.delete).click());
+    await settle();
+    expect((await read()).profiles[0]?.rules).toEqual([]);
+    expect(root.textContent).toContain(copy.toast.ruleDeleted);
+
+    fire(() => findButton(root, copy.actions.undo).click());
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.header).toBe("x-flag");
+  });
+});
+
+describe("configured changes", () => {
+  it("lists live and refused stamps and never carries a value", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "authorization",
+            value: "Bearer super-secret",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          rule({
+            header: "host",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+          rule({ header: "connection", scope: { type: "all" } }),
+          rule({ header: "x-off", enabled: false }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+
+    expect(root.querySelector("#traffic-title")?.textContent).toBe(
+      copy.options.traffic.title,
+    );
+    const rows = [...root.querySelectorAll(".tape-row")];
+    expect(rows.length).toBe(3);
+    expect(root.querySelector(".tape-row.refused")).not.toBeNull();
+    expect(root.querySelector(".tape-row.managed")).not.toBeNull();
+    expect(root.querySelector(".tape-row.live")).not.toBeNull();
+    expect(
+      root.querySelector(".tape-row.managed .tape-status")?.textContent,
+    ).toBe(copy.options.traffic.status.managed);
+    // The page carries header names, never values, so a secret cannot reach it.
+    expect(root.textContent).not.toContain("super-secret");
+  });
+
+  it("shows the append refusal reason from the compiler", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            operation: "append",
+            header: "content-type",
+            scope: { type: "all" },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+
+    expect(within(root, ".tape-status").textContent).toBe(
+      copy.readout.refusedReason.append,
+    );
+  });
+});

@@ -1,4 +1,4 @@
-import { HTTP_TOKEN, normalizeHeaderName } from "./headers";
+import { classifyHeaderName, HTTP_TOKEN, normalizeHeaderName } from "./headers";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -8,6 +8,7 @@ import type { HeaderOp, Rule, StateDoc, TabOverride } from "./model";
 import {
   type DnrResourceType,
   expandResourceTypes,
+  isDomainSupported,
   scopeCondition,
   validateUrlFilter,
 } from "./scope";
@@ -46,7 +47,7 @@ export interface DnrRule {
 // An untrusted writer can seed the enabled set with a rule Chrome rejects: a
 // ModHeader/headershim import preserves each rule's enabled flag and scope
 // verbatim (no header/urlFilter/regex grammar check), and the next-profile
-// command enables a stored profile without passing the commit guard. compileDynamic
+// command activates a stored profile without passing the commit guard. compileDynamic
 // would emit that rule and updateDynamicRules would reject the whole atomic batch,
 // freezing the live ruleset at its last-good revision until the user finds the one
 // bad rule. Dropping every uncompilable rule from the compiled input before it
@@ -61,11 +62,13 @@ export function dropUncompilable(
   return {
     ...state,
     profiles: state.profiles.map((profile) =>
-      profile.enabled
+      profile.id === state.activeProfileId
         ? {
             ...profile,
             rules: profile.rules.filter(
-              (rule) => !rule.enabled || isCompilable(rule, isRegexSupported),
+              (rule) =>
+                !rule.enabled ||
+                uncompilableReason(rule, isRegexSupported) === undefined,
             ),
           }
         : profile,
@@ -73,42 +76,69 @@ export function dropUncompilable(
   };
 }
 
-function isCompilable(
+export type UncompilableReason =
+  | "header"
+  | "append"
+  | "value"
+  | "pattern"
+  | "regex"
+  | "domains";
+
+/**
+ * Why Chrome would refuse this rule, or undefined when it will run it. This is
+ * the one answer to "will Chrome run this rule": the compiler drops whatever it
+ * names, so any surface that reads the same reason states the same fact the
+ * engine acted on, and no line can claim to run a rule that never reached the
+ * batch.
+ */
+export function uncompilableReason(
   rule: Rule,
   isRegexSupported: (regex: string) => boolean,
-): boolean {
+): UncompilableReason | undefined {
   // The header-shape checks Chrome enforces before it admits a modifyHeaders
   // rule to the atomic batch: a token-grammar name that is not a pseudo-header,
   // and a value with no line break. Kept to the shared grammar primitives (not
   // the full validateHeader) so this stays lean in the background bundle.
   const header = normalizeHeaderName(rule.header);
+  if (!HTTP_TOKEN.test(header)) {
+    return "header";
+  }
   if (
-    header.length === 0 ||
-    header.startsWith(":") ||
-    !HTTP_TOKEN.test(header)
+    rule.operation === "append" &&
+    rule.direction === "request" &&
+    classifyHeaderName(header).requestAppend !== "allowed"
   ) {
-    return false;
+    return "append";
   }
   if (
     rule.operation !== "remove" &&
     rule.value !== undefined &&
     /[\r\n]/.test(rule.value)
   ) {
-    return false;
+    return "value";
   }
-  if (rule.scope.type === "pattern") {
-    return validateUrlFilter(rule.scope.pattern).ok;
+  switch (rule.scope.type) {
+    case "pattern":
+      return validateUrlFilter(rule.scope.pattern).ok ? undefined : "pattern";
+    case "regex":
+      return isRegexSupported(rule.scope.regex) ? undefined : "regex";
+    case "domains":
+      // Chrome refuses an empty requestDomains list outright, and any entry
+      // with a non-ASCII character in it.
+      return rule.scope.domains.length > 0 &&
+        rule.scope.domains.every(isDomainSupported)
+        ? undefined
+        : "domains";
+    case "all":
+      return undefined;
   }
-  if (rule.scope.type === "regex") {
-    return isRegexSupported(rule.scope.regex);
-  }
-  return true;
 }
 
 export function compileDynamic(state: StateDoc): DnrRule[] {
-  const enabledRules = state.profiles.flatMap((profile) =>
-    profile.enabled ? profile.rules.filter((rule) => rule.enabled) : [],
-  );
+  const enabledRules =
+    state.profiles
+      .find((profile) => profile.id === state.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled) ?? [];
   if (enabledRules.length > MAX_ENABLED_RULES) {
     throw new RangeError(
       `Cannot compile ${enabledRules.length} enabled rules; the limit is ${MAX_ENABLED_RULES}`,
@@ -130,30 +160,44 @@ export function compileDynamic(state: StateDoc): DnrRule[] {
     id: rule.num,
     priority: DYNAMIC_PRIORITY_TOP - index,
     action: headerAction(rule),
-    condition: {
-      ...scopeCondition(rule.scope),
-      ...(rule.initiators.length === 0
-        ? {}
-        : { initiatorDomains: [...rule.initiators] }),
-      resourceTypes: expandResourceTypes(rule.resourceTypes),
-    },
+    condition: compileRuleCondition(rule),
   }));
+}
+
+function compileRuleCondition(rule: Rule): DnrRuleCondition {
+  return {
+    ...scopeCondition(rule.scope),
+    ...(rule.initiators.length === 0
+      ? {}
+      : { initiatorDomains: [...rule.initiators] }),
+    resourceTypes: expandResourceTypes(rule.resourceTypes),
+  };
+}
+
+export function settlesPerRequest(rule: Rule): boolean {
+  const condition = compileRuleCondition(rule);
+  return (
+    condition.urlFilter !== undefined ||
+    condition.regexFilter !== undefined ||
+    condition.initiatorDomains !== undefined
+  );
 }
 
 export function compileSession(
   overrides: readonly TabOverride[],
   paused: boolean,
 ): DnrRule[] {
-  if (overrides.length > MAX_SESSION_OVERRIDES) {
+  const enabledOverrides = overrides.filter((override) => override.enabled);
+  if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
-      `Cannot compile ${overrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
+      `Cannot compile ${enabledOverrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
     );
   }
   if (paused) {
     return [];
   }
 
-  return overrides.map((override, index) => ({
+  return enabledOverrides.map((override, index) => ({
     id: override.num,
     priority: SESSION_PRIORITY_TOP - index,
     action: headerAction(override),

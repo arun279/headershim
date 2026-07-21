@@ -50,7 +50,6 @@ function profileSet(): StateDoc {
       name: "Default",
       badgeText: "DE",
       color: "indigo",
-      enabled: true,
       rules: [
         storedRule(
           "rule-domains",
@@ -80,7 +79,6 @@ function profileSet(): StateDoc {
       name: "Staging",
       badgeText: "S",
       color: "slate",
-      enabled: false,
       rules: [
         storedRule(
           "rule-regex",
@@ -120,9 +118,9 @@ function profileSet(): StateDoc {
   return {
     v: 1,
     profiles,
-    focusedProfileId: profiles[0]?.id ?? "",
+    activeProfileId: profiles[0]?.id,
     nextRuleNum: 5,
-    settings: { paused: true, theme: "dark", badgeMode: "initials" },
+    settings: { paused: true, theme: "dark" },
   };
 }
 
@@ -135,19 +133,18 @@ function targetDoc(): StateDoc {
         name: "Existing",
         badgeText: "EX",
         color: "blue",
-        enabled: true,
         rules: [],
       },
     ],
-    focusedProfileId: "profile-existing",
+    activeProfileId: "profile-existing",
     nextRuleNum: 50,
-    settings: { paused: false, theme: "light", badgeMode: "count" },
+    settings: { paused: false, theme: "light" },
   };
 }
 
 function importExported(doc = profileSet(), target = targetDoc()) {
   const result = importHeadershim(
-    exportHeadershim(doc, new Date("2026-07-12T19:03:00.000Z")),
+    JSON.parse(exportHeadershim(doc, new Date("2026-07-12T19:03:00.000Z"))),
     target.profiles,
   );
   if (!result.ok) {
@@ -161,7 +158,6 @@ function withoutStorageIdentity(profile: Profile): unknown {
     name: profile.name,
     badgeText: profile.badgeText,
     color: profile.color,
-    enabled: profile.enabled,
     rules: profile.rules.map(({ id: _id, num: _num, ...rule }) => rule),
   };
 }
@@ -226,9 +222,7 @@ describe("headershim import", () => {
     const original = profileSet();
     const { applied } = importExported(original);
     const imported = applied.profiles.slice(1).map(withoutStorageIdentity);
-    const expected = original.profiles.map((profile) =>
-      withoutStorageIdentity({ ...profile, enabled: false }),
-    );
+    const expected = original.profiles.map(withoutStorageIdentity);
 
     expect(imported).toEqual(expected);
   });
@@ -252,15 +246,17 @@ describe("headershim import", () => {
     expect(applied.nextRuleNum).toBe(54);
   });
 
-  it("turns imported profiles off while preserving every rule enabled flag", () => {
+  it("leaves imported profiles inactive while preserving every rule enabled flag", () => {
     const original = profileSet();
     const { plan, applied } = importExported(original);
 
-    expect(plan.profiles.map(({ enabled }) => enabled)).toEqual([false, false]);
-    expect(applied.profiles.slice(1).map(({ enabled }) => enabled)).toEqual([
-      false,
-      false,
-    ]);
+    expect(plan.profiles.every((profile) => !("enabled" in profile))).toBe(
+      true,
+    );
+    expect(applied.activeProfileId).toBe("profile-existing");
+    expect(
+      applied.profiles.slice(1).every((profile) => !("enabled" in profile)),
+    ).toBe(true);
     expect(
       applied.profiles
         .slice(1)
@@ -274,7 +270,7 @@ describe("headershim import", () => {
     const target = targetDoc();
     const snapshot = structuredClone(target);
     const result = importHeadershim(
-      exportHeadershim(profileSet()),
+      JSON.parse(exportHeadershim(profileSet())),
       target.profiles,
     );
     if (!result.ok) {
@@ -285,9 +281,8 @@ describe("headershim import", () => {
 
     expect(target).toEqual(snapshot);
     expect(result.value).toEqual(planSnapshot);
-    expect(applied.focusedProfileId).toBe(target.focusedProfileId);
+    expect(applied.activeProfileId).toBe(target.activeProfileId);
     expect(applied.settings).toBe(target.settings);
-    expect(result.value.warnings).toEqual([]);
   });
 
   it("resolves collisions without case and reserves names within the plan", () => {
@@ -308,7 +303,10 @@ describe("headershim import", () => {
       { ...existingProfile, name: "DEFAULT" },
       { ...existingProfile, id: "profile-two", name: "Default 2" },
     ];
-    const result = importHeadershim(exportHeadershim(doc), existing);
+    const result = importHeadershim(
+      JSON.parse(exportHeadershim(doc)),
+      existing,
+    );
 
     expect(result).toMatchObject({
       ok: true,
@@ -331,7 +329,10 @@ describe("headershim import", () => {
       throw new Error("fixture must contain a profile");
     }
     const existing = [{ ...existingProfile, name }];
-    const result = importHeadershim(exportHeadershim(selected), existing);
+    const result = importHeadershim(
+      JSON.parse(exportHeadershim(selected)),
+      existing,
+    );
 
     expect(result).toMatchObject({
       ok: true,
@@ -339,12 +340,52 @@ describe("headershim import", () => {
     });
   });
 
-  it("returns typed failures for newer, non-JSON, and unknown input", () => {
+  it("itemizes every sensitive rule so no imported file reviews as clean", () => {
+    const doc = profileSet();
+    const profile = doc.profiles[0];
+    if (profile === undefined) {
+      throw new Error("fixture must contain a profile");
+    }
+    profile.rules = [
+      ...profile.rules,
+      {
+        id: "rule-csp",
+        num: 9,
+        direction: "response",
+        operation: "remove",
+        header: "content-security-policy",
+        scope: { type: "all" },
+        resourceTypes: "all",
+        initiators: [],
+        comment: "unframe the docs",
+        enabled: true,
+      },
+    ];
+
     expect(
-      importHeadershim(
-        JSON.stringify({ app: "headershim", schemaVersion: 2 }),
-        [],
-      ),
+      importHeadershim(JSON.parse(exportHeadershim(doc)), []),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        warnings: [
+          {
+            kind: "credential",
+            ruleName: "development",
+            header: "authorization",
+          },
+          {
+            kind: "security-response",
+            ruleName: "unframe the docs",
+            header: "content-security-policy",
+          },
+        ],
+      },
+    });
+  });
+
+  it("returns typed failures for newer and unknown input", () => {
+    expect(
+      importHeadershim({ app: "headershim", schemaVersion: 2 }, []),
     ).toEqual({
       ok: false,
       error: {
@@ -353,11 +394,7 @@ describe("headershim import", () => {
         supportedVersion: 1,
       },
     });
-    expect(importHeadershim("{not json", [])).toEqual({
-      ok: false,
-      error: { kind: "parse-failure" },
-    });
-    expect(importHeadershim(JSON.stringify({ profiles: [] }), [])).toEqual({
+    expect(importHeadershim({ profiles: [] }, [])).toEqual({
       ok: false,
       error: { kind: "unrecognized-format" },
     });
@@ -369,9 +406,7 @@ describe("headershim import", () => {
       exportedAt: "2026-07-12T14:03:00Z",
     };
 
-    expect(importHeadershim(JSON.stringify(envelope), [])).toMatchObject({
-      ok: true,
-    });
+    expect(importHeadershim(envelope, [])).toMatchObject({ ok: true });
   });
 
   it("rejects malformed recognized envelopes without throwing", () => {
@@ -397,7 +432,6 @@ describe("headershim import", () => {
       { ...valid, profiles: [{ ...profile, name: "x".repeat(49) }] },
       { ...valid, profiles: [{ ...profile, badge: "ABC" }] },
       { ...valid, profiles: [{ ...profile, color: "amber" }] },
-      { ...valid, profiles: [{ ...profile, enabled: 1 }] },
       { ...valid, profiles: [{ ...profile, rules: null }] },
       { ...valid, profiles: [{ ...profile, rules: [null] }] },
       withRule(valid, { direction: "both" }),
@@ -421,9 +455,8 @@ describe("headershim import", () => {
     ];
 
     for (const envelope of malformed) {
-      const raw = JSON.stringify(envelope);
-      expect(() => importHeadershim(raw, [])).not.toThrow();
-      expect(importHeadershim(raw, [])).toEqual({
+      expect(() => importHeadershim(envelope, [])).not.toThrow();
+      expect(importHeadershim(envelope, [])).toEqual({
         ok: false,
         error: { kind: "invalid-export" },
       });

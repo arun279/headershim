@@ -2,7 +2,10 @@ import "./Toggle.css";
 
 interface ToggleProps {
   checked: boolean;
-  /** Names the thing switched, e.g. "Rule on: authorization" or "Global pause". */
+  /**
+   * Names the thing switched, e.g. "Turn off: authorization" or "All header
+   * changes". Checked always means that thing is on, never that it is stopped.
+   */
   label: string;
   onChange: (next: boolean) => void;
   disabled?: boolean;
@@ -14,6 +17,8 @@ interface ToggleProps {
   ariaDisabled?: boolean | undefined;
   /** -1 inside roving-tabindex composites; the owning row carries the tab stop. */
   tabIndex?: number;
+  /** Checked controls that are paused, blocked, or inert do not look live. */
+  tone?: "paused" | "blocked" | "inert" | undefined;
 }
 
 export function Toggle({
@@ -23,6 +28,7 @@ export function Toggle({
   disabled,
   ariaDisabled,
   tabIndex,
+  tone,
 }: ToggleProps) {
   return (
     <button
@@ -31,10 +37,13 @@ export function Toggle({
       aria-checked={checked}
       aria-label={label}
       aria-disabled={ariaDisabled}
-      class="sw"
+      class={tone === undefined ? "sw" : `sw sw-${tone}`}
       disabled={disabled}
       tabIndex={tabIndex}
-      onClick={() => onChange(!checked)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onChange(!checked);
+      }}
     />
   );
 }
