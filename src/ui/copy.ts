@@ -394,6 +394,10 @@ export const copy = {
         // Chrome shows this exact warning before it can grant broad access.
         warning:
           'Chrome will warn: "Read and change all your data on all websites". Your rules still only apply where their scopes say, and you can revoke this access here at any time.',
+        sensitive: (count: number) =>
+          count === 1
+            ? "1 enabled rule attaches a credential or changes a security header and needs all-sites access to run. Allowing all sites lets it run wherever it matches."
+            : `${count} enabled rules attach a credential or change a security header and need all-sites access to run. Allowing all sites lets them run wherever they match.`,
         button: "Allow on all sites",
         on: "All-sites access is on",
         revoked: "All-sites access revoked",

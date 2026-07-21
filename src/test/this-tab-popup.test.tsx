@@ -107,6 +107,39 @@ describe("popup This-tab overrides", () => {
     );
   });
 
+  it("shows sensitivity advice while composing a credential header", async () => {
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+
+    const header = root.querySelector(".cin.name") as HTMLInputElement;
+    typeInto(header, "authorization");
+    expect(root.querySelector(".advisory-slot")?.textContent).toContain(
+      copy.advisories.credential,
+    );
+
+    typeInto(header, "x-custom");
+    expect(root.querySelector(".advisory-slot")).toBeNull();
+  });
+
+  it("threads the composer direction into the advisory", async () => {
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+
+    const [directionGroup] = root.querySelectorAll<HTMLElement>(
+      ".compose fieldset.segmented",
+    );
+    fire(() => directionGroup?.querySelectorAll("button")[1]?.click());
+    typeInto(
+      root.querySelector(".cin.name") as HTMLInputElement,
+      "content-security-policy",
+    );
+    expect(root.querySelector(".advisory-slot")?.textContent).toContain(
+      copy.advisories.securityResponse,
+    );
+  });
+
   it("keeps both composer choices as labelled pressed-button groups", async () => {
     const root = await mount(createV1Seed());
     press(root.querySelector(".popup") as HTMLElement, "t");

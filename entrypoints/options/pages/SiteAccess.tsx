@@ -4,9 +4,11 @@ import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
   isAllSitesOrigin,
+  requiredOrigins,
   type SiteAccessEntry,
   siteAccessView,
 } from "../../../src/core/grants";
+import { headerSensitivity } from "../../../src/core/headers";
 import type { StateDoc } from "../../../src/core/model";
 import {
   remove as removePermissions,
@@ -43,6 +45,18 @@ export function SiteAccessPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
   const view = siteAccessView(doc, grants);
+  const activeProfile = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  // A sensitive rule cautions only when its honest requirement is broad access:
+  // requiredOrigins yields the all-sites origin for all-scope or hostless
+  // pattern/regex rules, the only ones widened beyond one-at-a-time host grants.
+  const broadSensitiveCount = (activeProfile?.rules ?? []).filter(
+    (rule) =>
+      rule.enabled &&
+      requiredOrigins(rule).some(isAllSitesOrigin) &&
+      headerSensitivity(rule).length > 0,
+  ).length;
   // Under the broad grant no rule can want for access, so a per-site list has
   // nothing left to say; the narrow grants that outlived it are still revocable
   // and keep the panel. Otherwise the page would answer "granted" and "nothing
@@ -173,6 +187,11 @@ export function SiteAccessPage({
           {allSitesOpen && (
             <div class="sa-all-details" id="all-sites-details">
               <p class="sa-all-warning">{text.allSites.warning}</p>
+              {broadSensitiveCount > 0 && (
+                <p class="sa-all-caution">
+                  {text.allSites.sensitive(broadSensitiveCount)}
+                </p>
+              )}
               <div>
                 <Button kind="quiet" onClick={grantAllSites}>
                   {text.allSites.button}

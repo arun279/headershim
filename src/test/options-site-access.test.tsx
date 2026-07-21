@@ -3,7 +3,7 @@ import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import { ALL_SITES_ORIGIN } from "../core/grants";
-import type { Profile } from "../core/model";
+import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
 import { write } from "../platform/store";
 import { copy } from "../ui/copy";
@@ -67,6 +67,19 @@ function expectAllSitesCollapsed(root: HTMLElement): void {
   expect(root.textContent).toContain(text.allSites.consequence);
   expect(root.textContent).not.toContain(text.allSites.warning);
   expect(() => findButton(root, text.allSites.button)).toThrow();
+}
+
+function openAllSitesReview(root: HTMLElement): void {
+  const disclosure = root.querySelector<HTMLButtonElement>(".sa-disclosure");
+  if (disclosure === null) throw new Error("no all-sites disclosure");
+  fire(() => disclosure.click());
+}
+
+/** The sensitive-rule caution text shown under an open all-sites review, if any. */
+async function allSitesCaution(rules: Rule[]): Promise<string | null> {
+  const root = await mount([profile("p1", { rules })]);
+  openAllSitesReview(root);
+  return root.querySelector(".sa-all-caution")?.textContent ?? null;
 }
 
 describe("options site access", () => {
@@ -193,6 +206,97 @@ describe("options site access", () => {
     expect(
       await fakeBrowser.permissions.contains({ origins: [ALL_SITES_ORIGIN] }),
     ).toBe(false);
+  });
+
+  it("cautions when an enabled sensitive rule is scoped to all sites", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          operation: "set",
+          header: "authorization",
+          scope: { type: "all" },
+        }),
+      ]),
+    ).toBe(text.allSites.sensitive(1));
+  });
+
+  it("cautions for a sensitive pattern rule with no grant hosts", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          operation: "set",
+          header: "authorization",
+          scope: {
+            type: "pattern",
+            pattern: "||example.com^",
+            hosts: [],
+          },
+        }),
+      ]),
+    ).toBe(text.allSites.sensitive(1));
+  });
+
+  it("does not caution for a sensitive pattern rule bounded by its grant hosts", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          operation: "set",
+          header: "authorization",
+          scope: {
+            type: "pattern",
+            pattern: "||example.com^",
+            hosts: ["example.com"],
+          },
+        }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("cautions for a broad rule that changes a security response header", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          direction: "response",
+          operation: "set",
+          header: "content-security-policy",
+          value: "default-src 'none'",
+          scope: { type: "all" },
+        }),
+      ]),
+    ).toBe(text.allSites.sensitive(1));
+  });
+
+  it("counts every broad sensitive rule in the caution", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          operation: "set",
+          header: "authorization",
+          scope: { type: "all" },
+        }),
+        rule({ operation: "set", header: "cookie", scope: { type: "all" } }),
+      ]),
+    ).toBe(text.allSites.sensitive(2));
+  });
+
+  it("does not caution for a broad rule that carries no credential or protection", async () => {
+    expect(
+      await allSitesCaution([
+        rule({ operation: "set", header: "x-custom", scope: { type: "all" } }),
+      ]),
+    ).toBeNull();
+  });
+
+  it("does not caution for a narrowly scoped sensitive rule", async () => {
+    expect(
+      await allSitesCaution([
+        rule({
+          operation: "set",
+          header: "authorization",
+          scope: { type: "domains", domains: ["example.com"] },
+        }),
+      ]),
+    ).toBeNull();
   });
 
   it("preserves individual grants when all-sites access is revoked", async () => {
