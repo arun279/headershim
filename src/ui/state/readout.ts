@@ -18,14 +18,15 @@ import { findOverriddenRules } from "../../core/conflicts";
 import type { GrantSnapshot } from "../../core/grants";
 import { missingGrants } from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
-import type {
-  Direction,
-  HeaderOp,
-  Profile,
-  Rule,
-  Scope,
-  StateDoc,
-  TabOverride,
+import {
+  activeProfile,
+  type Direction,
+  type HeaderOp,
+  type Profile,
+  type Rule,
+  type Scope,
+  type StateDoc,
+  type TabOverride,
 } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
 import {
@@ -122,9 +123,7 @@ export function computeReadout({
   const overrideLines = overrides.map((override) =>
     overrideChange(override, paused, outOfSync),
   );
-  const activeProfile = doc.profiles.find(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const profile = activeProfile(doc);
 
   if (host === undefined) {
     return {
@@ -141,8 +140,7 @@ export function computeReadout({
   // A rule Chrome settles per request is carried with its doubt, never dropped
   // from the list and never counted as a match.
   const applying: { profile: Profile; rule: Rule; reach: Reach }[] = [];
-  if (activeProfile !== undefined) {
-    const profile = activeProfile;
+  if (profile !== undefined) {
     for (const rule of profile.rules) {
       const reach = ruleReach(rule, host);
       if (reach !== "no") {
@@ -151,10 +149,9 @@ export function computeReadout({
     }
   }
 
-  const compilableProfile = dropUncompilable(
-    doc,
-    isRegexSupported,
-  ).profiles.find((profile) => profile.id === doc.activeProfileId);
+  const compilableProfile = activeProfile(
+    dropUncompilable(doc, isRegexSupported),
+  );
   const compilableRules = compilableProfile?.rules ?? [];
   const overriddenBy = new Map<string, string>();
   const rulesById = new Map<string, Rule>();
@@ -222,12 +219,16 @@ function summarize(changes: readonly TabChange[]): ReadoutSummary {
     total: changes.filter(
       (change) => change.status === "live" || change.status === "unconfirmed",
     ).length,
-    needsAccess: changes.filter((c) => c.status === "needs-access").length,
-    refused: changes.filter((c) => c.status === "refused").length,
-    managed: changes.filter((c) => c.status === "managed").length,
-    overridden: changes.filter((c) => c.status === "overridden").length,
-    unconfirmed: changes.filter((c) => c.status === "unconfirmed").length,
-    outOfSync: changes.filter((c) => c.status === "out-of-sync").length,
+    needsAccess: changes.filter((change) => change.status === "needs-access")
+      .length,
+    refused: changes.filter((change) => change.status === "refused").length,
+    managed: changes.filter((change) => change.status === "managed").length,
+    overridden: changes.filter((change) => change.status === "overridden")
+      .length,
+    unconfirmed: changes.filter((change) => change.status === "unconfirmed")
+      .length,
+    outOfSync: changes.filter((change) => change.status === "out-of-sync")
+      .length,
   };
 }
 
@@ -459,7 +460,7 @@ export function previewSwitch(
   return { drops, adds };
 }
 
-function ruleLabel(rule: Rule): string {
+export function ruleLabel(rule: Rule): string {
   const comment = rule.comment?.trim();
   return comment === undefined || comment.length === 0
     ? `${rule.header} rule`
@@ -468,6 +469,12 @@ function ruleLabel(rule: Rule): string {
 
 function ruleReach(rule: Rule, host: string): Reach {
   const scoped = scopeReach(rule.scope, host);
+  if (
+    scoped === "no" &&
+    rule.initiators.some((initiator) => hostUnder(host, initiator))
+  ) {
+    return "unknown";
+  }
   return scoped === "yes" && settlesPerRequest(rule) ? "unknown" : scoped;
 }
 

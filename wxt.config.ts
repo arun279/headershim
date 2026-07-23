@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
 import { BRAND_NAME } from "./src/brand";
+import { ALL_SITES_ORIGIN } from "./src/core/grants";
+import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
 
 // E2E traffic checks need a host grant that Chromium cannot grant through its
 // native optional-permission prompt in headless mode. This flag produces a
@@ -38,20 +40,16 @@ export default defineConfig({
     // The single display name (chrome://extensions, the install prompt, the
     // store card); without it WXT falls back to the lowercase package id.
     name: BRAND_NAME,
-    // The highest-versioned API the extension actually calls is
-    // action.setBadgeTextColor (Chrome 110); every other version-gated API it
-    // uses lands earlier (requestDomains/initiatorDomains 101, storage.session
-    // 102, displayActionCountAsBadgeText 88, isRegexSupported 87, modifyHeaders
-    // 86). The larger session-rule cap and storage.session quota are platform
-    // values HeaderShim stays well under, so they don't raise the floor.
-    minimum_chrome_version: "110",
+    // Chrome 120 split dynamic and session rules into separate limits. Earlier
+    // versions share a 5,000-rule cap that cannot hold both product maxima.
+    minimum_chrome_version: String(MINIMUM_CHROME_VERSION),
     permissions: [
       "declarativeNetRequestWithHostAccess",
       "storage",
       "activeTab",
     ],
-    ...(e2eHostAccess ? { host_permissions: ["*://*/*"] } : {}),
-    optional_host_permissions: ["*://*/*"],
+    ...(e2eHostAccess ? { host_permissions: [ALL_SITES_ORIGIN] } : {}),
+    optional_host_permissions: [ALL_SITES_ORIGIN],
     // HeaderShim reads and writes headers through declarativeNetRequest and
     // never talks to a network endpoint itself. connect-src 'none' is the
     // browser-enforced form of that: it blocks fetch, XHR, WebSocket,
@@ -61,7 +59,7 @@ export default defineConfig({
       extension_pages:
         "script-src 'self'; object-src 'self'; connect-src 'none';",
     },
-    // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
+    // The default tooltip; the badge state machine swaps in its paused title
     // while paused and clears back to this on exit.
     action: { default_title: BRAND_NAME },
     commands: {

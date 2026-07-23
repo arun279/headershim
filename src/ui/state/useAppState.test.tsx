@@ -39,6 +39,15 @@ function RegexProbe() {
   );
 }
 
+function DocProbe() {
+  const app = useAppState();
+  return (
+    <output>
+      {app.phase === "ready" ? app.doc.profiles[0]?.name : app.phase}
+    </output>
+  );
+}
+
 function probe(root: HTMLElement) {
   const output = root.querySelector("output") as HTMLElement;
   return {
@@ -179,5 +188,34 @@ describe("useAppState", () => {
     await settle();
     expect(root.querySelector("output")?.textContent).toBe("false");
     expect(checkRegex).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards an older document when regex resolution finishes out of order", async () => {
+    const pending = Promise.withResolvers<{
+      isSupported: boolean;
+    }>();
+    const checkRegex = vi.fn(() => pending.promise);
+    Object.assign(fakeBrowser.declarativeNetRequest, {
+      isRegexSupported: checkRegex,
+    });
+    await write(
+      doc({
+        name: "Older",
+        rules: [
+          rule({
+            scope: { type: "regex", regex: "^https://older/", hosts: [] },
+          }),
+        ],
+      }),
+    );
+
+    const root = render(<DocProbe />);
+    await vi.waitFor(() => expect(checkRegex).toHaveBeenCalledOnce());
+    await write(doc({ name: "Newer" }));
+    await settle();
+    pending.resolve({ isSupported: true });
+    await settle();
+
+    expect(root.querySelector("output")?.textContent).toBe("Newer");
   });
 });

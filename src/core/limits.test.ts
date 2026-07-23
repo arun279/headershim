@@ -7,6 +7,7 @@ import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
+  MINIMUM_CHROME_VERSION,
   RULE_COUNT_WARNING_THRESHOLD,
   serializedStateDocBytes,
   shouldShowRuleCountWarning,
@@ -102,6 +103,13 @@ function expectBoundary(
 }
 
 describe("enabled rule limits", () => {
+  it("requires separate dynamic and session rule limits at the manifest floor", () => {
+    expect(
+      MAX_ENABLED_RULES + MAX_SESSION_OVERRIDES <= 5_000 ||
+        MINIMUM_CHROME_VERSION >= 120,
+    ).toBe(true);
+  });
+
   it("checks an enabled rule created by a save at both boundaries", () => {
     const enabledSave = state(profile("saved", rules(MAX_ENABLED_RULES - 1)));
     enabledSave.profiles[0]?.rules.push(storedRule(MAX_ENABLED_RULES));

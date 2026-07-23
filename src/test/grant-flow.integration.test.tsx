@@ -189,8 +189,8 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
   });
 });
 
-describe("grant flow — persisting target hosts never recompiles", () => {
-  it("writes pattern target hosts to scope.hosts as a converged no-op", async () => {
+describe("grant flow — persisting target hosts bounds compiled reach", () => {
+  it("writes pattern target hosts to requestDomains", async () => {
     background.main();
     const doc = seed({
       type: "pattern",
@@ -207,10 +207,9 @@ describe("grant flow — persisting target hosts never recompiles", () => {
     if (profile === undefined || rule === undefined) {
       throw new Error("seed produced no rule");
     }
-    // scope.hosts records which concrete sites a pattern was granted for; it
-    // drives grant computation only and is never part of a DNR condition, so
-    // the reconcile after this write converges to a no-op. (Initiators, by
-    // contrast, compile to initiatorDomains and legitimately recompile.)
+    // scope.hosts records which concrete sites a pattern was granted for and
+    // compiles to requestDomains, keeping the filter bounded even if the
+    // extension later receives all-sites access.
     const outcome = await mutations.saveRule(profile.id, rule.id, {
       direction: rule.direction,
       operation: rule.operation,
@@ -228,8 +227,12 @@ describe("grant flow — persisting target hosts never recompiles", () => {
     await settle();
 
     expect(outcome.ok).toBe(true);
-    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
+    expect((await dnr.fake.getDynamicRules())[0]?.condition).toMatchObject({
+      requestDomains: ["api.acme.dev"],
+      urlFilter: "||api.acme.dev^",
+    });
 
     // Read storage back: the write landed and the pattern now records the site
     // it was granted for, so a later revoke has a host to relight against.

@@ -309,7 +309,7 @@ describe("background lifecycle", () => {
     expect(setOptions).toHaveBeenLastCalledWith({
       displayActionCountAsBadgeText: false,
     });
-    expect(await browser.action.getBadgeText({})).toBe("");
+    expect(await browser.action.getBadgeText({})).toBe("!");
 
     dnr.updateDynamicRules.mockImplementation((options) =>
       dnr.fake.updateDynamicRules(options),
@@ -591,7 +591,7 @@ describe("background lifecycle", () => {
     });
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
     expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
-    expect(await browser.action.getBadgeText({})).toBe("");
+    expect(await browser.action.getBadgeText({})).toBe("II");
   });
 
   it("restores the needs-access badge on startup", async () => {
@@ -604,7 +604,7 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(setBackground).toHaveBeenCalledWith({ color: "#B07B00" });
-    expect(await browser.action.getBadgeText({})).toBe("");
+    expect(await browser.action.getBadgeText({})).toBe("!");
   });
 
   it("switches to the next profile with one active id on command", async () => {

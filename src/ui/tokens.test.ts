@@ -145,13 +145,14 @@ describe("the accent, doubled and reserved", () => {
 });
 
 describe("profile badge palette", () => {
-  it.each(
-    BADGE_COLORS,
-  )("keeps --badge-%s aligned with the core palette", (color) => {
-    expect(resolve(ROOT, `badge-${color}`).toLowerCase()).toBe(
-      BADGE_PALETTE[color].toLowerCase(),
-    );
-  });
+  it.each(BADGE_COLORS)(
+    "keeps --badge-%s aligned with the core palette",
+    (color) => {
+      expect(resolve(ROOT, `badge-${color}`).toLowerCase()).toBe(
+        BADGE_PALETTE[color].toLowerCase(),
+      );
+    },
+  );
 });
 
 describe("shared control skins inherit the palette", () => {
@@ -182,11 +183,12 @@ describe("shared control skins inherit the palette", () => {
     ).toEqual(["13px", "9px", "8px"]);
   });
 
-  it.each(THEMES)("$name: the checked segment text clears 4.5:1", ({
-    selector,
-  }) => {
-    expect(contrast(block(selector), "ink", "panel")).toBeGreaterThanOrEqual(
-      4.5,
-    );
-  });
+  it.each(THEMES)(
+    "$name: the checked segment text clears 4.5:1",
+    ({ selector }) => {
+      expect(contrast(block(selector), "ink", "panel")).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    },
+  );
 });

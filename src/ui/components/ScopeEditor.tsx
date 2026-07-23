@@ -1,6 +1,10 @@
 import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
-import type { ResourceGroup, Scope } from "../../core/model";
+import {
+  RESOURCE_GROUPS,
+  type ResourceGroup,
+  type Scope,
+} from "../../core/model";
 import { copy } from "../copy";
 import { ChipField } from "./ChipField";
 import { Segmented } from "./Segmented";
@@ -28,20 +32,12 @@ interface ScopeEditorProps {
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }
 
-const SEGMENTS = ["domains", "pattern", "regex", "all"] as const;
-
-const GROUPS: readonly ResourceGroup[] = [
-  "pages",
-  "subframes",
-  "xhr",
-  "scripts",
-  "stylesheets",
-  "images",
-  "fonts",
-  "media",
-  "websockets",
-  "other",
-];
+const SEGMENTS = [
+  "domains",
+  "pattern",
+  "regex",
+  "all",
+] as const satisfies readonly Scope["type"][];
 
 /**
  * Scope = match type + resource types. The segmented control carries radio
@@ -251,7 +247,7 @@ function ResourceTypes({
 }) {
   const id = useId();
   const [open, setOpen] = useState(defaultOpen);
-  const selected = resourceTypes === "all" ? GROUPS : resourceTypes;
+  const selected = resourceTypes === "all" ? RESOURCE_GROUPS : resourceTypes;
 
   const toggle = (group: ResourceGroup) => {
     const next = new Set(selected);
@@ -261,9 +257,9 @@ function ResourceTypes({
       next.add(group);
     }
     onResourceTypes(
-      next.size === GROUPS.length
+      next.size === RESOURCE_GROUPS.length
         ? "all"
-        : GROUPS.filter((candidate) => next.has(candidate)),
+        : RESOURCE_GROUPS.filter((candidate) => next.has(candidate)),
     );
   };
 
@@ -291,7 +287,7 @@ function ResourceTypes({
             id={`${id}-panel`}
             aria-label={copy.editor.labels.resourceTypes}
           >
-            {GROUPS.map((group) => (
+            {RESOURCE_GROUPS.map((group) => (
               <label class="rt-item" key={group}>
                 <input
                   type="checkbox"

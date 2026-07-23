@@ -3,7 +3,7 @@ import {
   domainFromOriginPattern,
   type GrantSnapshot,
 } from "../../../src/core/grants";
-import type { StateDoc } from "../../../src/core/model";
+import { activeProfile, type StateDoc } from "../../../src/core/model";
 import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
@@ -112,9 +112,6 @@ export function RulesPage({
         if (!outcome.ok) flash(outcome.error);
       });
 
-  // Saving into another profile is two settled steps, not one: the rule is
-  // written where it already lives, so a rejected header is reported before
-  // anything moves, and only a clean save relocates it.
   const save = async (
     ruleId: string | undefined,
     draft: Parameters<Mutations["saveRule"]>[2],
@@ -125,16 +122,7 @@ export function RulesPage({
     if (ruleId === undefined) {
       return mutations.saveRule(target, undefined, draft);
     }
-    const saved = await mutations.saveRule(fromProfileId, ruleId, draft);
-    if (!saved.ok || target === fromProfileId) {
-      return saved;
-    }
-    const moved = await mutations.moveRuleToProfile(
-      fromProfileId,
-      ruleId,
-      target,
-    );
-    return moved.ok ? saved : moved;
+    return mutations.saveRuleToProfile(fromProfileId, ruleId, draft, target);
   };
 
   // No confirmation: the toast carries the whole rule back, and asking first
@@ -167,9 +155,7 @@ export function RulesPage({
   };
 
   const newRule = () => {
-    const target =
-      doc.profiles.find((profile) => profile.id === doc.activeProfileId) ??
-      doc.profiles[0];
+    const target = activeProfile(doc) ?? doc.profiles[0];
     if (target !== undefined) {
       setEditing({ profileId: target.id, ruleId: undefined });
     }
@@ -242,9 +228,7 @@ export function RulesPage({
     );
   }
 
-  const noProfilesOn = !doc.profiles.some(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const noProfilesOn = activeProfile(doc) === undefined;
   const empty = fleet.length === 0;
 
   return (

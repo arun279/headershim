@@ -1,4 +1,4 @@
-import type { Rule, StateDoc } from "./model";
+import { activeProfile, type Rule, type StateDoc } from "./model";
 import { expandResourceTypes, originPatternForDomain } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
@@ -80,9 +80,7 @@ export function docMissingGrants(
   doc: StateDoc,
   granted: GrantSnapshot,
 ): RuleGrantGap[] {
-  const profile = doc.profiles.find(
-    (candidate) => candidate.id === doc.activeProfileId,
-  );
+  const profile = activeProfile(doc);
   return (
     profile?.rules.flatMap((rule) => {
       const missing = rule.enabled ? missingGrants(rule, granted) : [];
@@ -149,15 +147,13 @@ export function siteAccessView(
       .sort(byDomain),
     initiatorNote:
       !granted.allSites &&
-      doc.profiles
-        .find((profile) => profile.id === doc.activeProfileId)
-        ?.rules.some(
-          (rule) =>
-            rule.enabled &&
-            rule.initiators.length === 0 &&
-            rule.scope.type !== "all" &&
-            subresourceScopedRule(rule),
-        ) === true,
+      activeProfile(doc)?.rules.some(
+        (rule) =>
+          rule.enabled &&
+          rule.initiators.length === 0 &&
+          rule.scope.type !== "all" &&
+          subresourceScopedRule(rule),
+      ) === true,
   };
 }
 
@@ -205,15 +201,32 @@ function originPatternContains(granted: string, required: string): boolean {
     return true;
   }
 
-  const grantedDomain = domainFromOriginPattern(granted);
-  const requiredDomain = domainFromOriginPattern(required);
-  if (grantedDomain === undefined) {
+  const grantedPattern = parseOriginPattern(granted);
+  const requiredPattern = parseOriginPattern(required);
+  if (
+    grantedPattern === undefined ||
+    requiredPattern === undefined ||
+    !grantedPattern[1]
+  ) {
     return false;
   }
-  return requiredDomain?.endsWith(`.${grantedDomain}`) ?? false;
+  return (
+    requiredPattern[0] === grantedPattern[0] ||
+    requiredPattern[0].endsWith(`.${grantedPattern[0]}`)
+  );
 }
 
 export function domainFromOriginPattern(pattern: string): string | undefined {
-  const match = /^\*:\/\/\*\.([^/]+)\/\*$/.exec(pattern);
-  return match?.[1];
+  return parseOriginPattern(pattern)?.[0];
+}
+
+function parseOriginPattern(
+  pattern: string,
+): readonly [domain: string, includesSubdomains: boolean] | undefined {
+  const match = /^\*:\/\/(\*\.)?([^/]+)\/\*$/.exec(pattern);
+  const domain = match?.[2];
+  if (domain === undefined || domain === "*") {
+    return undefined;
+  }
+  return [domain, match?.[1] !== undefined];
 }

@@ -1,5 +1,5 @@
 import { domainFromOriginPattern, type RuleGrantGap } from "./grants";
-import type { StateDoc } from "./model";
+import { activeProfile, type StateDoc } from "./model";
 
 /**
  * The one system-status precedence ladder. The annunciator, the badge, the
@@ -49,9 +49,7 @@ export function computeStatus({
     };
   }
 
-  return doc.profiles.some((profile) => profile.id === doc.activeProfileId)
-    ? { kind: "live" }
-    : { kind: "off" };
+  return activeProfile(doc) !== undefined ? { kind: "live" } : { kind: "off" };
 }
 
 function gapHosts(gaps: readonly RuleGrantGap[]): string[] {

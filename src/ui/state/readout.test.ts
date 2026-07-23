@@ -68,6 +68,14 @@ function computeReadout(
   });
 }
 
+function expectSingleUnconfirmed(
+  readout: ReturnType<typeof computeReadout>,
+): void {
+  expect(readout.request[0]?.status).toBe("unconfirmed");
+  expect(readout.unconfirmed).toBe(1);
+  expect(readout.total).toBe(1);
+}
+
 function override(overrides: Partial<TabOverride> = {}): TabOverride {
   return {
     num: 1,
@@ -151,16 +159,19 @@ describe("computeReadout", () => {
   it.each([
     ["request", "connection"],
     ["response", "content-length"],
-  ] as const)("marks a %s network-managed header managed and uncounted", (direction, header) => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({ rules: [rule({ direction, header })] }),
-    });
-    const line = [...readout.request, ...readout.response][0];
-    expect(line?.status).toBe("managed");
-    expect(readout.managed).toBe(1);
-    expect(readout.total).toBe(0);
-  });
+  ] as const)(
+    "marks a %s network-managed header managed and uncounted",
+    (direction, header) => {
+      const readout = computeReadout({
+        ...base,
+        activeProfile: profile({ rules: [rule({ direction, header })] }),
+      });
+      const line = [...readout.request, ...readout.response][0];
+      expect(line?.status).toBe("managed");
+      expect(readout.managed).toBe(1);
+      expect(readout.total).toBe(0);
+    },
+  );
 
   it("lets compiler refusal outrank network-managed classification", () => {
     const readout = computeReadout({
@@ -322,9 +333,28 @@ describe("computeReadout", () => {
     });
     // Granted on this host, but the urlFilter is what Chrome matches on, and
     // this projection cannot evaluate it.
-    expect(readout.request[0]?.status).toBe("unconfirmed");
-    expect(readout.unconfirmed).toBe(1);
-    expect(readout.total).toBe(1);
+    expectSingleUnconfirmed(readout);
+  });
+
+  it("includes cross-origin requests initiated by the current tab", () => {
+    const readout = computeReadout({
+      ...base,
+      host: "mysite.com",
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: {
+              type: "domains",
+              domains: ["api.example.com"],
+            },
+            resourceTypes: ["xhr"],
+            initiators: ["mysite.com"],
+          }),
+        ],
+      }),
+    });
+
+    expectSingleUnconfirmed(readout);
   });
 
   const hostlessRegexProfile = () =>

@@ -29,6 +29,18 @@ async function seed(
   return doc;
 }
 
+async function deleteAndRestoreProfile(profileId: string): Promise<StateDoc> {
+  const deleted = await mutations.deleteProfile(profileId);
+  if (!deleted.ok) {
+    throw new Error("fixture profile must be deletable");
+  }
+  const restored = await mutations.restoreProfile(deleted.value);
+  if (!restored.ok) {
+    throw new Error("fixture profile must be restorable");
+  }
+  return read();
+}
+
 function draft(overrides: Partial<RuleDraft> = {}): RuleDraft {
   return {
     direction: "request",
@@ -137,13 +149,16 @@ describe("saveRule", () => {
     ],
     [draft({ scope: { type: "domains", domains: [" "] } }), "scope-empty"],
     [draft({ scope: { type: "regex", regex: "", hosts: [] } }), "scope-empty"],
-  ] as const)("blocks the save and changes nothing: %#", async (input, kind) => {
-    const doc = await seed([profile("p1")]);
-    const saved = await mutations.saveRule("p1", undefined, input);
+  ] as const)(
+    "blocks the save and changes nothing: %#",
+    async (input, kind) => {
+      const doc = await seed([profile("p1")]);
+      const saved = await mutations.saveRule("p1", undefined, input);
 
-    expect(errorKind(saved)).toBe(kind);
-    expect(await read()).toEqual(doc);
-  });
+      expect(errorKind(saved)).toBe(kind);
+      expect(await read()).toEqual(doc);
+    },
+  );
 
   it("allows append on an allowlisted request header", async () => {
     await seed([profile("p1")]);
@@ -312,15 +327,18 @@ describe("enable-path grammar re-validation", () => {
       { scope: { type: "pattern", pattern: "||*", hosts: [] } },
       "pattern-invalid",
     ],
-  ])("setRuleEnabled refuses %s and leaves the doc untouched", async (_label, overrides, kind) => {
-    const invalid = rule({ enabled: false, ...overrides });
-    const doc = await seed([profile("p1", { rules: [invalid] })]);
+  ])(
+    "setRuleEnabled refuses %s and leaves the doc untouched",
+    async (_label, overrides, kind) => {
+      const invalid = rule({ enabled: false, ...overrides });
+      const doc = await seed([profile("p1", { rules: [invalid] })]);
 
-    expect(
-      errorKind(await mutations.setRuleEnabled("p1", invalid.id, true)),
-    ).toBe(kind);
-    expect(await read()).toEqual(doc);
-  });
+      expect(
+        errorKind(await mutations.setRuleEnabled("p1", invalid.id, true)),
+      ).toBe(kind);
+      expect(await read()).toEqual(doc);
+    },
+  );
 
   it("activateProfile refuses a profile carrying a bad enabled rule", async () => {
     const invalid = rule({ header: ":authority" });
@@ -406,6 +424,24 @@ describe("delete, restore, and move", () => {
       errorKind(await mutations.moveRuleToProfile("p2", moving.id, "p1")),
     ).toBe("enabled-rule-limit-exceeded");
   });
+
+  it("leaves an edit untouched when its move is rejected", async () => {
+    const moving = rule({ header: "x-before" });
+    const doc = await seed([
+      profile("p1", { rules: rules(4_500) }),
+      profile("p2", { rules: [moving] }),
+    ]);
+
+    const outcome = await mutations.saveRuleToProfile(
+      "p2",
+      moving.id,
+      draft({ header: "x-after" }),
+      "p1",
+    );
+
+    expect(errorKind(outcome)).toBe("enabled-rule-limit-exceeded");
+    expect(await read()).toEqual(doc);
+  });
 });
 
 describe("profile operations", () => {
@@ -441,20 +477,21 @@ describe("profile operations", () => {
     expect((await read()).activeProfileId).toBe(doc.activeProfileId);
   });
 
-  it.each([
-    "p1",
-    "P1",
-    "  p1  ",
-    "",
-    "x".repeat(49),
-  ])("rejects an unavailable or invalid name: %j", async (name) => {
-    await seed([profile("p1")]);
-    expect(
-      errorKind(
-        await mutations.createProfile({ name, color: "blue", enabled: false }),
-      ),
-    ).toBe("profile-name-unavailable");
-  });
+  it.each(["p1", "P1", "  p1  ", "", "x".repeat(49)])(
+    "rejects an unavailable or invalid name: %j",
+    async (name) => {
+      await seed([profile("p1")]);
+      expect(
+        errorKind(
+          await mutations.createProfile({
+            name,
+            color: "blue",
+            enabled: false,
+          }),
+        ),
+      ).toBe("profile-name-unavailable");
+    },
+  );
 
   it("renames with case-insensitive uniqueness, allowing a self-rename", async () => {
     await seed([profile("p1"), profile("p2")]);
@@ -517,20 +554,14 @@ describe("profile operations", () => {
     expect((await read()).activeProfileId).toBeUndefined();
   });
 
-  it("keeps activation cleared when restoring the deleted active profile", async () => {
+  it("restores activation with a deleted active profile", async () => {
     await seed([profile("p1"), profile("p2")], {
       activeProfileId: "p1",
     });
 
-    const deleted = await mutations.deleteProfile("p1");
-    if (!deleted.ok) {
-      throw new Error("fixture profile must be deletable");
-    }
-    await mutations.restoreProfile(deleted.value.profile, deleted.value.index);
-
-    const stored = await read();
+    const stored = await deleteAndRestoreProfile("p1");
     expect(stored.profiles.map((candidate) => candidate.id)).toContain("p1");
-    expect(stored.activeProfileId).toBeUndefined();
+    expect(stored.activeProfileId).toBe("p1");
   });
 
   it("recreates an inactive Default when the last profile is deleted", async () => {
@@ -548,6 +579,14 @@ describe("profile operations", () => {
     expect(stored.profiles[0]).not.toHaveProperty("enabled");
   });
 
+  it("removes the placeholder when restoring the last active profile", async () => {
+    await seed([profile("p1")], { activeProfileId: "p1" });
+
+    const stored = await deleteAndRestoreProfile("p1");
+    expect(stored.profiles.map((candidate) => candidate.id)).toEqual(["p1"]);
+    expect(stored.activeProfileId).toBe("p1");
+  });
+
   it("restores a deleted profile at its index, suffixing a retaken name", async () => {
     const doomed = profile("p2");
     await seed([profile("p1"), doomed, profile("p3")]);
@@ -558,7 +597,15 @@ describe("profile operations", () => {
       color: "blue",
       enabled: false,
     });
-    expect((await mutations.restoreProfile(doomed, 1)).ok).toBe(true);
+    expect(
+      (
+        await mutations.restoreProfile({
+          profile: doomed,
+          index: 1,
+          wasActive: false,
+        })
+      ).ok,
+    ).toBe(true);
 
     const stored = await read();
     const names = stored.profiles.map((p) => p.name);

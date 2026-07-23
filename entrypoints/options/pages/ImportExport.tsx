@@ -2,7 +2,6 @@ import type { JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { detectImportFormat } from "../../../src/core/codec/detect";
 import {
-  draftRuleName,
   exportHeadershim,
   type ImportError,
   type ImportPlan,
@@ -248,23 +247,16 @@ function convert(plan: Plan, warningIndex: number): Plan {
   }
   const convertible = new Set<string>(warning.conversionOffer.tokens);
 
-  let frozen = false;
-  const profiles = plan.profiles.map((profile) => ({
+  const profiles = plan.profiles.map((profile, profileIndex) => ({
     ...profile,
-    rules: profile.rules.map((rule) => {
+    rules: profile.rules.map((rule, ruleIndex) => {
       if (
-        frozen ||
-        draftRuleName(rule) !== warning.ruleName ||
+        profileIndex !== warning.profileIndex ||
+        ruleIndex !== warning.ruleIndex ||
         rule.value === undefined
       ) {
         return rule;
       }
-      if (
-        ![...convertible].some((token) => rule.value?.includes(`{{${token}}}`))
-      ) {
-        return rule;
-      }
-      frozen = true;
       return freezeTokens(rule, convertible);
     }),
   }));
@@ -278,6 +270,8 @@ function convert(plan: Plan, warningIndex: number): Plan {
             ? {
                 kind: "dynamic-token" as const,
                 ruleName: warning.ruleName,
+                profileIndex: warning.profileIndex,
+                ruleIndex: warning.ruleIndex,
                 tokens: remaining,
               }
             : entry,

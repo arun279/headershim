@@ -67,7 +67,7 @@ interface RuleEditorProps {
   prefill?: RuleDraft | undefined;
   /** Live grant snapshot, so the grant moment fires only when needed. */
   grants: GrantSnapshot;
-  /** Origin of the tab the popup opened on: the inferred initiator. */
+  /** Origin of the tab the popup opened on, used to plan subresource access. */
   tabDomain?: string | undefined;
   /** `profileId` is the picked profile, or undefined where no choice is offered. */
   onSave: (
@@ -119,7 +119,6 @@ interface FieldErrors {
 }
 
 interface CommitGrant {
-  draft: RuleDraft;
   host: string;
   origins: string[];
   sites: string[];
@@ -164,7 +163,7 @@ export function RuleEditor(props: RuleEditorProps) {
     try {
       const outcome = await props.onSave(
         props.rule?.id,
-        grant?.draft ?? ruleDraft,
+        ruleDraft,
         current.profileId,
       );
       if (!outcome.ok) {
@@ -695,7 +694,7 @@ function toScope(scope: ScopeDraft): Scope {
   }
 }
 
-/** Builds the permission request and the rule metadata committed with it. */
+/** Builds the permission request needed by the authored rule. */
 function planCommitGrant(
   draft: RuleDraft,
   grants: GrantSnapshot,
@@ -712,7 +711,6 @@ function planCommitGrant(
   // no host is inferred from the expression behind the user's back.
   if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
-      draft,
       host: copy.scopeSummary.allSites,
       origins: [ALL_SITES_ORIGIN],
       sites: [copy.scopeSummary.allSites],
@@ -747,7 +745,6 @@ function planCommitGrant(
   }
   const firstTarget = targets.find((target) => missing.includes(target));
   return {
-    draft: { ...draft, initiators },
     host: firstTarget ?? (missing[0] as string),
     origins: missing.map(originPatternForDomain),
     sites: missing,

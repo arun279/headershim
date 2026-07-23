@@ -9,7 +9,7 @@ import {
   siteAccessView,
 } from "../../../src/core/grants";
 import { headerSensitivity } from "../../../src/core/headers";
-import type { StateDoc } from "../../../src/core/model";
+import { activeProfile, type StateDoc } from "../../../src/core/model";
 import {
   remove as removePermissions,
   request as requestPermissions,
@@ -45,13 +45,11 @@ export function SiteAccessPage({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
   const view = siteAccessView(doc, grants);
-  const activeProfile = doc.profiles.find(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const profile = activeProfile(doc);
   // A sensitive rule cautions only when its honest requirement is broad access:
   // requiredOrigins yields the all-sites origin for all-scope or hostless
   // pattern/regex rules, the only ones widened beyond one-at-a-time host grants.
-  const broadSensitiveCount = (activeProfile?.rules ?? []).filter(
+  const broadSensitiveCount = (profile?.rules ?? []).filter(
     (rule) =>
       rule.enabled &&
       requiredOrigins(rule).some(isAllSitesOrigin) &&

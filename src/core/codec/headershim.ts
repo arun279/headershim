@@ -1,4 +1,4 @@
-import { headerSensitivity } from "../headers";
+import { headerSensitivity, normalizeHeaderName } from "../headers";
 import {
   type BadgeColor,
   createProfile,
@@ -321,7 +321,7 @@ export function sensitiveRuleWarnings(
 }
 
 /** The name a plan's rule is itemized under: its comment, else its header. */
-export function draftRuleName(rule: RuleDraft): string {
+function draftRuleName(rule: RuleDraft): string {
   return rule.comment?.trim() || rule.header;
 }
 
@@ -466,7 +466,7 @@ function isExportedRule(value: unknown): value is ExportedRule {
     isOneOf(operation, HEADER_OPERATIONS) &&
     typeof header === "string" &&
     header.length > 0 &&
-    header === header.trim().toLowerCase() &&
+    header === normalizeHeaderName(header) &&
     hasValidHeaderValue(value) &&
     (comment === undefined || typeof comment === "string") &&
     typeof enabled === "boolean" &&

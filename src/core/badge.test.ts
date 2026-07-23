@@ -66,7 +66,7 @@ function settings(overrides: Partial<Settings>): Settings {
 }
 
 describe("planBadge precedence", () => {
-  it("paints paused grey over every other state, with no text anywhere", () => {
+  it("paints paused grey over every other state with a visible pause mark", () => {
     const paused = doc({ settings: settings({ paused: true }) });
 
     expect(
@@ -80,7 +80,7 @@ describe("planBadge precedence", () => {
     ).toEqual({
       state: {
         kind: "manual",
-        text: "",
+        text: "II",
         backgroundColor: PAUSED_GREY,
         textColor: WHITE,
       },
@@ -92,7 +92,7 @@ describe("planBadge precedence", () => {
     expect(planBadge(input({ doc: doc(), reconcileError: true }))).toEqual({
       state: {
         kind: "manual",
-        text: "",
+        text: "!",
         backgroundColor: CANT_RUN_AMBER,
         textColor: WHITE,
       },
@@ -108,7 +108,7 @@ describe("planBadge precedence", () => {
 
     expect(needs.state).toMatchObject({
       kind: "manual",
-      text: "",
+      text: "!",
       backgroundColor: CANT_RUN_AMBER,
     });
     expect(both).toEqual(needs);
@@ -159,7 +159,7 @@ describe("planBadge single-winner precedence across the input space", () => {
             expect(plan.state.kind === "count").toBe(!paused && !cantRun);
 
             if (plan.state.kind === "manual") {
-              expect(plan.state.text).toBe("");
+              expect(plan.state.text).toBe(paused ? "II" : "!");
             }
 
             // One background wins the whole precedence ladder.

@@ -1,4 +1,9 @@
-import type { Direction, HeaderOp } from "../../core/model";
+import {
+  DIRECTIONS,
+  type Direction,
+  HEADER_OPERATIONS,
+  type HeaderOp,
+} from "../../core/model";
 import { copy } from "../copy";
 import { Segmented } from "./Segmented";
 
@@ -28,7 +33,7 @@ export function HeaderFields<D extends HeaderDraft>({
       <SegmentedField
         name={`${idBase}-dir`}
         label={copy.editor.labels.direction}
-        options={["request", "response"]}
+        options={DIRECTIONS}
         selected={draft.direction}
         optionLabel={(value) => copy.editor.direction[value]}
         onPick={(direction) => update((current) => ({ ...current, direction }))}
@@ -37,7 +42,7 @@ export function HeaderFields<D extends HeaderDraft>({
       <SegmentedField
         name={`${idBase}-op`}
         label={copy.editor.labels.operation}
-        options={["set", "append", "remove"]}
+        options={HEADER_OPERATIONS}
         selected={draft.operation}
         optionLabel={(value) => copy.editor.operation[value]}
         error={errors.operation}

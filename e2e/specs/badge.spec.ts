@@ -45,7 +45,7 @@ test("paints the paused Chrome badge grey", async ({ serviceWorker }) => {
   });
 
   await expect.poll(() => getBadgeColor(serviceWorker)).toEqual(GREY);
-  expect(await getBadgeText(serviceWorker)).toBe("");
+  expect(await getBadgeText(serviceWorker)).toBe("II");
 });
 
 test("paints the needs-access Chrome badge amber", async ({
@@ -68,5 +68,5 @@ test("paints the needs-access Chrome badge amber", async ({
   );
 
   await expect.poll(() => getBadgeColor(serviceWorker)).toEqual(AMBER);
-  expect(await getBadgeText(serviceWorker)).toBe("");
+  expect(await getBadgeText(serviceWorker)).toBe("!");
 });

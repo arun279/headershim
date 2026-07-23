@@ -65,6 +65,7 @@ export function useAppState(): AppState {
 
   useEffect(() => {
     let disposed = false;
+    let docGeneration = 0;
     const assign =
       <T>(set: (value: T) => void) =>
       (value: T) => {
@@ -74,13 +75,14 @@ export function useAppState(): AppState {
       };
 
     const loadDoc = async () => {
+      const generation = ++docGeneration;
       const outcome = migrate(await readRaw());
-      if (disposed) {
+      if (disposed || generation !== docGeneration) {
         return;
       }
       if (outcome.ok) {
         const isRegexSupported = await resolveRegexSupport(outcome.value);
-        if (!disposed) {
+        if (!disposed && generation === docGeneration) {
           setDocSource({ doc: outcome.value, isRegexSupported });
         }
       } else if (outcome.error.kind === "newer-store") {

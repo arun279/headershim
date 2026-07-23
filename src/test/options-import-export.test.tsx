@@ -12,6 +12,25 @@ import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
 
 const MODHEADER = JSON.stringify(modheaderFixture);
+const SAME_NAMED_TOKENS = JSON.stringify([
+  {
+    title: "Same names",
+    headers: [
+      {
+        enabled: true,
+        name: "x-first",
+        value: "first {{uuid}}",
+        comment: "duplicate",
+      },
+      {
+        enabled: true,
+        name: "x-second",
+        value: "second {{uuid}}",
+        comment: "duplicate",
+      },
+    ],
+  },
+]);
 
 const text = copy.options.importExport;
 
@@ -316,6 +335,30 @@ describe("import summary and apply", () => {
     expect(authRule?.value).not.toContain("{{uuid}}");
     expect(authRule?.value).not.toContain("{{timestamp}}");
     expect(authRule?.value).toContain("{{url_hostname}}");
+  });
+
+  it("converts the selected warning when rule names are duplicated", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    await pick(root, SAME_NAMED_TOKENS);
+    const convertButtons = [
+      ...root.querySelectorAll<HTMLButtonElement>("button"),
+    ].filter((button) => button.textContent === text.convert);
+    const second = convertButtons[1];
+    if (second === undefined) {
+      throw new Error("fixture must render two conversion offers");
+    }
+    fire(() => second.click());
+    await settle();
+    fire(() => findButton(summary(root) as HTMLElement, text.import).click());
+    await settle();
+
+    const imported = (await read()).profiles.find(
+      (candidate) => candidate.name === "Same names",
+    );
+    expect(imported?.rules[0]?.value).toBe("first {{uuid}}");
+    expect(imported?.rules[1]?.value).not.toContain("{{uuid}}");
   });
 });
 

@@ -9,6 +9,7 @@ import {
   type DnrResourceType,
   expandResourceTypes,
   isDomainSupported,
+  isRegexFilterSupported,
   scopeCondition,
   validateUrlFilter,
 } from "./scope";
@@ -117,11 +118,23 @@ export function uncompilableReason(
   ) {
     return "value";
   }
+  if (!rule.initiators.every(isDomainSupported)) {
+    return "domains";
+  }
+  if (
+    (rule.scope.type === "pattern" || rule.scope.type === "regex") &&
+    !rule.scope.hosts.every(isDomainSupported)
+  ) {
+    return "domains";
+  }
   switch (rule.scope.type) {
     case "pattern":
       return validateUrlFilter(rule.scope.pattern).ok ? undefined : "pattern";
     case "regex":
-      return isRegexSupported(rule.scope.regex) ? undefined : "regex";
+      return isRegexFilterSupported(rule.scope.regex) &&
+        isRegexSupported(rule.scope.regex)
+        ? undefined
+        : "regex";
     case "domains":
       // Chrome refuses an empty requestDomains list outright, and any entry
       // with a non-ASCII character in it.

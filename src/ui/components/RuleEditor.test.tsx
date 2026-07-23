@@ -548,26 +548,29 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
   it.each([
     ["syntaxError", copy.errors.regexInvalid],
     ["memoryLimitExceeded", copy.errors.regexOversize],
-  ])("renders the regex copy for %s under the scope field", async (reason, message) => {
-    const ctx = mount(
-      {},
-      { error: { kind: "regex-invalid", regex: "(a|b", reason } },
-    );
-    const regexRadio = ctx.root.querySelector(
-      '.segmented input[value="regex"]',
-    ) as HTMLInputElement;
-    fire(() => regexRadio.click());
-    const regexInput = ctx.root.querySelector(
-      '[aria-label="Regex"]',
-    ) as HTMLInputElement;
-    typeInto(regexInput, "(a|b");
-    await fillAndCommit(ctx);
-    expect(ctx.errors()).toContain(message);
-    expect(
-      (ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement)
-        .value,
-    ).toBe("(a|b");
-  });
+  ])(
+    "renders the regex copy for %s under the scope field",
+    async (reason, message) => {
+      const ctx = mount(
+        {},
+        { error: { kind: "regex-invalid", regex: "(a|b", reason } },
+      );
+      const regexRadio = ctx.root.querySelector(
+        '.segmented input[value="regex"]',
+      ) as HTMLInputElement;
+      fire(() => regexRadio.click());
+      const regexInput = ctx.root.querySelector(
+        '[aria-label="Regex"]',
+      ) as HTMLInputElement;
+      typeInto(regexInput, "(a|b");
+      await fillAndCommit(ctx);
+      expect(ctx.errors()).toContain(message);
+      expect(
+        (ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement)
+          .value,
+      ).toBe("(a|b");
+    },
+  );
 
   it.each([
     [
@@ -582,13 +585,16 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       { kind: "doc-byte-limit-exceeded", bytes: 1, limit: 4194304 },
       copy.errors.storageBudget,
     ],
-  ] as const)("renders cap and budget errors at editor level", async (error, message) => {
-    const ctx = mount({}, { error: error as MutationError });
-    await fillAndCommit(ctx);
-    expect(ctx.onClose).not.toHaveBeenCalled();
-    expect(ctx.errors()).toContain(message);
-    expect(ctx.nameInput().value).toBe("x-custom");
-  });
+  ] as const)(
+    "renders cap and budget errors at editor level",
+    async (error, message) => {
+      const ctx = mount({}, { error: error as MutationError });
+      await fillAndCommit(ctx);
+      expect(ctx.onClose).not.toHaveBeenCalled();
+      expect(ctx.errors()).toContain(message);
+      expect(ctx.nameInput().value).toBe("x-custom");
+    },
+  );
 });
 
 describe("RuleEditor delete", () => {
@@ -713,7 +719,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
 
-  it("includes and records a different tab origin when the rule reaches subresources", async () => {
+  it("requests a different tab origin without changing the authored initiators", async () => {
     const differs = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
@@ -726,7 +732,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(differs.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
 
@@ -743,6 +749,16 @@ describe("RuleEditor grant moment", () => {
       undefined,
       expect.objectContaining({ initiators: [] }),
       undefined,
+    );
+
+    const broad = mount({
+      grants: GRANTED_ALL,
+      prefillDomain: "api.example.com",
+      tabDomain: "app.example.com",
+    });
+    await fillAndCommit(broad, "authorization");
+    expect(broad.onSave.mock.calls[0]?.[1].initiators).toEqual(
+      differs.onSave.mock.calls[0]?.[1].initiators,
     );
   });
 
@@ -1018,7 +1034,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(ctx.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
     expect(ctx.onClose).toHaveBeenCalledOnce();
