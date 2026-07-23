@@ -91,6 +91,16 @@ function summary(root: HTMLElement): HTMLElement | null {
   return root.querySelector<HTMLElement>(".import-summary");
 }
 
+/** Seeds a store, picks the HeaderShim fixture, and confirms the import. */
+async function importInto(profiles: Profile[]): Promise<HTMLElement> {
+  await seed(profiles);
+  const root = await mount();
+  await pick(root, HEADERSHIM);
+  fire(() => findButton(summary(root) as HTMLElement, text.import).click());
+  await settle();
+  return root;
+}
+
 const HEADERSHIM = JSON.stringify({
   app: "headershim",
   schemaVersion: 1,
@@ -281,6 +291,36 @@ describe("import summary and apply", () => {
     expect(stored.profiles[1]).not.toHaveProperty("enabled");
   });
 
+  // The summary that named the import is gone the moment it applies, so a write
+  // of profiles and credentials with no visible confirmation leaves the reader
+  // looking at the screen they started on. Every other write on these pages
+  // raises a toast, and this one carries the fact they have to act on.
+  it("says on screen that the import landed, and that it landed turned off", async () => {
+    const root = await importInto([profile("p1", { name: "Default" })]);
+
+    const toast = root.querySelector<HTMLElement>(".toast");
+    expect(toast?.textContent).toBe(text.imported(1));
+    expect(toast?.textContent).toContain("turned off");
+  });
+
+  // The badge is the only mark that tells one profile's rules from another's in
+  // the rule lists, so an imported file cannot hand a second profile a badge one
+  // already wears.
+  it("re-derives an imported badge that a profile already carries", async () => {
+    await importInto([profile("p1", { name: "Default", badgeText: "SA" })]);
+
+    expect((await read()).profiles.map((one) => one.badgeText)).toEqual([
+      "SA",
+      "ST",
+    ]);
+  });
+
+  it("keeps an imported badge that collides with nothing", async () => {
+    await importInto([profile("p1", { name: "Default" })]);
+
+    expect((await read()).profiles[1]?.badgeText).toBe("SA");
+  });
+
   it("cancels a pending import, leaving the store untouched", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
@@ -295,7 +335,10 @@ describe("import summary and apply", () => {
     expect((await read()).profiles).toHaveLength(1);
   });
 
-  it("itemizes ModHeader mapping warnings, naming each rule", async () => {
+  // Each warning is filed under the header the rule writes, not the comment on
+  // it: a comment is free text of any length and drops a paragraph of prose into
+  // a label slot, and two warnings about one rule have to read as one rule.
+  it("itemizes ModHeader mapping warnings, naming each by its header", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
@@ -304,8 +347,9 @@ describe("import summary and apply", () => {
     const names = [
       ...root.querySelectorAll<HTMLElement>(".import-warning-name"),
     ].map((node) => node.textContent);
-    expect(names).toContain("literal token header");
-    expect(names).toContain("api policy");
+    expect(names).toContain("authorization");
+    expect(names).toContain("content-security-policy");
+    expect(names).not.toContain("literal token header");
   });
 
   it("converts a frozen value before apply, clearing the offered tokens", async () => {

@@ -16,6 +16,7 @@ import { request as requestPermissions } from "../../src/platform/permissions";
 import { activeTabDomain } from "../../src/platform/tabs";
 import { LiveRegionProvider, useAnnounce } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
+import { DataNote } from "../../src/ui/components/DataNote";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { ChangeLine } from "../../src/ui/components/readout/ChangeLine";
@@ -401,6 +402,7 @@ function Ready({
           onCommitted={() => showToast(copy.toast.ruleCreated)}
           onGranted={() => showToast(copy.toast.ruleLive)}
           onClose={() => setAddingTo(undefined)}
+          note={<DataNote />}
         />
         {toastNode}
       </main>
@@ -436,9 +438,10 @@ function Ready({
           {copy.readout.pausedBanner}
         </div>
       )}
-      {/* Pause is drawn where it is true: every line reads paused in the
-          readout's own grammar, and desaturating the region on top of that
-          would grey live controls with the platform's word for disabled. */}
+      {/* Pause is drawn where it is true: the count says how many are held and
+          each held line says what it would do, so the state is in the words and
+          not only in the hue. Desaturating the region on top of that would grey
+          live controls with the platform's word for disabled. */}
       <div class="popup-body">
         {composing && (
           <ThisTabComposer
@@ -513,6 +516,7 @@ function Ready({
         </span>
       </footer>
       {toastNode}
+      <DataNote />
     </main>
   );
 }
@@ -586,7 +590,9 @@ function ThisTabStrip({
   );
 }
 
-// One honest sentence and, where there is a site to change, one action.
+// One honest sentence and one action: add a change where there is a site to
+// change, and otherwise the list of rules, which is the only thing left to look
+// at from a tab with no site to read.
 function ReadoutEmpty({
   host,
   onAdd,
@@ -601,7 +607,16 @@ function ReadoutEmpty({
           ? copy.readout.noHost
           : sentence(copy.readout.empty(host))}
       </p>
-      {host !== undefined && (
+      {host === undefined ? (
+        <button
+          type="button"
+          class="add"
+          onClick={() => void browser.runtime.openOptionsPage()}
+        >
+          <GearGlyph />
+          {copy.readout.seeAllRules}
+        </button>
+      ) : (
         <button type="button" class="add" onClick={onAdd}>
           <PlusGlyph />
           {copy.readout.addChange}

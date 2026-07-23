@@ -8,17 +8,18 @@ import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
+import { DataNote } from "../../../src/ui/components/DataNote";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
-import { OpGlyph, PlusGlyph } from "../../../src/ui/components/readout/glyphs";
+import {
+  DirectionGlyph,
+  PlusGlyph,
+} from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
 import { Segmented } from "../../../src/ui/components/Segmented";
 import { sentence } from "../../../src/ui/components/sentence";
 import { Toast } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
-import {
-  TRUNCATION_LIMITS,
-  Truncate,
-} from "../../../src/ui/components/Truncate";
+import { HeaderValue, Truncate } from "../../../src/ui/components/Truncate";
 import { toneForStatus } from "../../../src/ui/components/toggleTone";
 import { copy } from "../../../src/ui/copy";
 import { grantLabel } from "../../../src/ui/grantLabel";
@@ -194,6 +195,7 @@ export function RulesPage({
             rule={editingRule}
             grants={grants}
             modal={false}
+            note={<DataNote />}
             onSave={(ruleId, draft, profileId) =>
               save(ruleId, draft, profileId, editProfile.id)
             }
@@ -357,16 +359,21 @@ function ByHeader({ fleet, onToggle, onGrant, onEdit }: LensProps) {
           class="fleet-group"
           aria-label={group.header}
         >
-          <div class="fleet-group-head">
-            <span class="fleet-host mono">{group.header}</span>
-            <span class="fleet-count">
-              {group.allSites
-                ? sentence(text.allReach(text.scope.all))
-                : group.broad && group.siteCount === 0
-                  ? text.broadReach
-                  : sentence(text.reaches(group.siteCount, group.broad))}
-            </span>
-          </div>
+          {/* A group of one has no aggregate to state: its head would print the
+              header name the row prints below it, and a reach the row's own
+              scope already gives. The head earns its space from two rules up. */}
+          {group.rules.length > 1 && (
+            <div class="fleet-group-head">
+              <span class="fleet-host mono">{group.header}</span>
+              <span class="fleet-count">
+                {group.allSites
+                  ? sentence(text.allReach(text.scope.all))
+                  : group.broad && group.siteCount === 0
+                    ? text.broadReach
+                    : sentence(text.reaches(group.siteCount, group.broad))}
+              </span>
+            </div>
+          )}
           <div class="fleet-rows">
             {group.rules.map((rule) => (
               <FleetRow
@@ -404,12 +411,15 @@ function FleetRow({
     <div class={`fleet-row ${rule.status}`} data-key={rule.key}>
       <span class="spine" aria-hidden="true" />
       <span class="op">
-        <OpGlyph operation={rule.operation} />
+        <DirectionGlyph direction={rule.direction} />
       </span>
       <button
         type="button"
         class="fleet-open"
-        aria-label={text.editRule(rule.header)}
+        aria-label={text.editRule(
+          copy.readout.direction[rule.direction],
+          rule.header,
+        )}
         onClick={() =>
           onEdit({ profileId: rule.profileId, ruleId: rule.ruleId })
         }
@@ -428,16 +438,20 @@ function FleetRow({
               <span class="to" aria-hidden="true">
                 {copy.readout.to}
               </span>{" "}
-              <Truncate
-                mode="middle"
+              <HeaderValue
                 value={rule.display}
-                maxChars={TRUNCATION_LIMITS.value}
+                secret={rule.secret}
                 class="v"
               />
             </>
           )}
         </span>
         <FleetWhy rule={rule} showScope={showScope} sharedSites={sharedSites} />
+        {/* The rule's own note is the one field that says why it exists, and it
+            appeared nowhere but the editor that wrote it. */}
+        {rule.comment !== undefined && (
+          <Truncate mode="end" value={rule.comment} class="fleet-note" />
+        )}
       </button>
       <div class="line-control">
         {rule.status === "needs-access" && (

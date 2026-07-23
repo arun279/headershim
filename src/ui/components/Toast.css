@@ -1,12 +1,16 @@
-/* Slides up over the footer, one at a time, self-dismissing (no close control). */
+/* Slides up over the footer, one at a time, self-dismissing (no close control).
+   Inverted: panel on panel is a 1.18:1 step, so only its shadow separated the
+   toast from the footer it lands on and its bordered action read as a field
+   addon. The page's own ink and paper, swapped, make it a message rather than a
+   row, in both themes and without adding a colour to the vocabulary. */
 .toast {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   max-width: 376px;
   padding: var(--sp-2) var(--sp-4);
-  background: var(--panel);
-  border: var(--hairline) solid var(--line);
+  background: var(--ink);
+  color: var(--paper);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-toast);
 }
@@ -20,9 +24,14 @@
   flex: none;
   min-height: 24px;
   padding: var(--sp-1) var(--sp-3);
-  border: var(--hairline) solid var(--line-strong);
+  border: var(--hairline) solid
+    color-mix(in srgb, currentColor 45%, transparent);
   border-radius: var(--r-chip);
-  color: var(--ink);
+  color: inherit;
   font-size: 12px;
   font-weight: 600;
+}
+
+.toast-action:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
 }

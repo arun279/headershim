@@ -116,6 +116,8 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
           class="field mono"
           placeholder={copy.editor.placeholders.headerName}
           type="text"
+          spellcheck={false}
+          autocomplete="off"
           role="combobox"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}

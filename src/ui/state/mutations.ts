@@ -17,6 +17,8 @@ import {
   createProfile as buildProfile,
   cloneRule,
   createRule,
+  deriveBadgeText,
+  isDerivedBadgeText,
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
@@ -330,7 +332,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
         const profile: Profile = {
           ...buildProfile({
             name,
-            badgeText: input.badgeText ?? defaultBadgeText(name),
+            badgeText: input.badgeText ?? deriveBadgeText(name, badges(doc)),
             color: input.color,
           }),
         };
@@ -353,9 +355,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
         const available = availableName(doc, name, profileId);
         if (!available.ok) return available;
         return ok([
+          // A badge still following the old name follows the new one; a badge
+          // the user typed is theirs and stays.
           withProfile(doc, profileId, (profile) => ({
             ...profile,
             name: available.value,
+            ...(isDerivedBadgeText(profile.name, profile.badgeText)
+              ? {
+                  badgeText: deriveBadgeText(
+                    available.value,
+                    badges(doc, profileId),
+                  ),
+                }
+              : {}),
           })),
           undefined,
         ]);
@@ -371,9 +383,12 @@ export function createMutations({ validateRegex }: MutationDeps) {
         if (source === undefined) {
           return notFound();
         }
+        // The copy takes its own badge: two profiles wearing one badge make the
+        // provenance mark on every rule row useless.
+        const name = cloneName(source.name, doc.profiles);
         const shell = buildProfile({
-          name: cloneName(source.name, doc.profiles),
-          badgeText: source.badgeText,
+          name,
+          badgeText: deriveBadgeText(name, badges(doc)),
           color: source.color,
         });
         let next = doc;
@@ -722,10 +737,11 @@ function insertAt<T>(list: readonly T[], item: T, index: number): T[] {
   return next;
 }
 
-function defaultBadgeText(name: string): string {
-  // Default badge text is the name's first two significant characters,
-  // uppercased to match the seeded Default profile's initials style.
-  return normalizeBadgeText(name.replace(/\s+/g, "")).toUpperCase();
+/** The badges already in use, so a derived one can avoid them. */
+function badges(doc: StateDoc, excludedProfileId?: string): string[] {
+  return doc.profiles
+    .filter((profile) => profile.id !== excludedProfileId)
+    .map((profile) => profile.badgeText);
 }
 
 function cloneName(base: string, profiles: readonly Profile[]): string {

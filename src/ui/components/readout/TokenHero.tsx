@@ -68,6 +68,9 @@ export function TokenHero({
               {masked.hasTail && <span class="last">{masked.last4}</span>}
             </div>
           )}
+          {!swapping && change.status === "paused" && (
+            <p class="tk-held">{copy.token.held}</p>
+          )}
         </div>
         {!swapping &&
           (needsAccess ? (
@@ -99,7 +102,9 @@ export function TokenHero({
         <div class="fresh">
           {fresh.kind === "countdown" ? (
             <>
-              {fresh.fraction !== undefined && (
+              {/* An empty track is a bar that reports no share of a life left.
+                  When none is left the words beside it already say "expired". */}
+              {fresh.fraction !== undefined && fresh.fraction > 0 && (
                 <div class="fresh-track" aria-hidden="true">
                   <div
                     class={`fresh-fill${fresh.warn ? " warn" : ""}`}

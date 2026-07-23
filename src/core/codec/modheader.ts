@@ -360,7 +360,9 @@ function mapHeaderRule(
     classifyHeaderName(header).requestAppend === "disallowed"
       ? "set"
       : requestedOperation;
-  const ruleName = source.comment?.trim() || header;
+  // The header, not the comment: the warning is about the header, and it is
+  // one short token where a comment is free text of any length.
+  const ruleName = header;
   const warnings: ModHeaderImportWarning[] = [];
   if (operation !== requestedOperation) {
     warnings.push({
@@ -402,7 +404,10 @@ function mapSpecialRule(
   resourceTypes: ResourceGroup[] | "all",
   location: RuleLocation,
 ): RuleMapping {
-  const ruleName = source.comment?.trim() || source.name;
+  // The header the rule ends up writing, the same identifier every other
+  // warning on this rule is filed under. A per-cookie source names one cookie,
+  // which would file two warnings about one rule under two different names.
+  const ruleName = header;
   const warnings: ModHeaderImportWarning[] = [{ kind: warningKind, ruleName }];
   appendDynamicTokenWarning(value, ruleName, location, warnings);
 

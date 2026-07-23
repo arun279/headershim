@@ -504,6 +504,41 @@ describe("profile operations", () => {
     expect((await read()).profiles[0]?.name).toBe("Staging");
   });
 
+  // The badge is the only mark that tells one profile's rules from another's in
+  // the rule lists, so it cannot outlive the name it was taken from, and two
+  // profiles cannot wear the same one.
+  it("re-derives a name-following badge on rename and leaves a typed one alone", async () => {
+    await seed([
+      profile("p1", { name: "Default", badgeText: "DE" }),
+      profile("p2", { name: "QA roles", badgeText: "ZZ" }),
+    ]);
+
+    expect(
+      (await mutations.renameProfile("p1", "Staging environment")).ok,
+    ).toBe(true);
+    expect((await mutations.renameProfile("p2", "Preview")).ok).toBe(true);
+
+    const stored = await read();
+    expect(stored.profiles.map((candidate) => candidate.badgeText)).toEqual([
+      "ST",
+      "ZZ",
+    ]);
+  });
+
+  it("passes over a badge another profile already wears", async () => {
+    await seed([profile("p1", { name: "Netlify", badgeText: "NE" })]);
+
+    const created = await mutations.createProfile({
+      name: "Nexus",
+      color: "teal",
+      enabled: false,
+    });
+    expect(created.ok && created.value.badgeText).toBe("NX");
+
+    const cloned = await mutations.cloneProfile("p1");
+    expect(cloned.ok && cloned.value.badgeText).toBe("NT");
+  });
+
   it("clones deep with fresh rule identities and a ' copy' suffix", async () => {
     const source = rule();
     await seed([profile("p1", { rules: [source] }), profile("p2")]);

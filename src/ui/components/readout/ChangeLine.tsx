@@ -3,7 +3,7 @@ import { copy } from "../../copy";
 import { grantLabel } from "../../grantLabel";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
-import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
+import { HeaderValue, Truncate } from "../Truncate";
 import { toneForStatus } from "../toggleTone";
 import { OpGlyph } from "./glyphs";
 
@@ -19,7 +19,9 @@ interface ChangeLineProps {
  * One change, in the one grammar: a severity spine (teal live, amber a grant
  * away, managed, or not applied yet, red refused, faint where only Chrome can
  * settle the match, grey-dashed at rest), the operation glyph, and the wire
- * bytes. A live line is silent; only an exception adds a reason, said once.
+ * bytes. A live line adds no reason; the two things that do speak are an
+ * exception, said once, and a reach past this tab, because the switch on the row
+ * is the rule's switch and turning it off here turns it off there.
  */
 export function ChangeLine({
   change,
@@ -30,10 +32,22 @@ export function ChangeLine({
 }: ChangeLineProps) {
   const [editing, setEditing] = useState(false);
   const canEdit = change.operation !== "remove" && change.value !== undefined;
+  // Pause changes the sentence, not only the colour it is set in: a held line
+  // says what it would do rather than claiming to be doing it.
+  const verb =
+    change.status === "paused"
+      ? copy.readout.heldVerb[change.operation]
+      : copy.readout.verb[change.operation];
+  const reach =
+    change.widerReach === undefined
+      ? undefined
+      : change.widerReach === "broad"
+        ? copy.readout.widerReach.broad
+        : copy.readout.widerReach.sites(change.widerReach);
   const toggleLabel =
     change.source === "override"
       ? copy.readout.overrideToggle(change.header, change.enabled)
-      : copy.readout.ruleToggle(change.header, change.enabled);
+      : copy.readout.ruleToggle(change.header, change.enabled, reach);
 
   return (
     <div class={`change-line ${change.status}`} data-key={change.key}>
@@ -55,7 +69,7 @@ export function ChangeLine({
           />
         ) : (
           <p class="say">
-            <span class="verb">{copy.readout.verb[change.operation]}</span>{" "}
+            <span class="verb">{verb}</span>{" "}
             <Truncate mode="end" value={change.header} class="k" />
             {change.display !== undefined && (
               <>
@@ -70,10 +84,18 @@ export function ChangeLine({
                     aria-label={copy.readout.editValue(change.header)}
                     onClick={() => setEditing(true)}
                   >
-                    <ValueText value={change.display} />
+                    <HeaderValue
+                      value={change.display}
+                      secret={change.secret}
+                      class="v"
+                    />
                   </button>
                 ) : (
-                  <ValueText value={change.display} />
+                  <HeaderValue
+                    value={change.display}
+                    secret={change.secret}
+                    class="v"
+                  />
                 )}
               </>
             )}
@@ -110,6 +132,12 @@ export function ChangeLine({
             {copy.readout.unconfirmedReason}
           </p>
         )}
+        {reach !== undefined && (
+          <p class="why rest">
+            <span class="dot" aria-hidden="true" />
+            {reach}
+          </p>
+        )}
       </div>
       <div class="line-control">
         {change.status === "needs-access" ? (
@@ -138,18 +166,6 @@ export function ChangeLine({
         )}
       </div>
     </div>
-  );
-}
-
-/** Middle mode: the tail is what tells one value from another. */
-function ValueText({ value }: { value: string }) {
-  return (
-    <Truncate
-      mode="middle"
-      value={value}
-      maxChars={TRUNCATION_LIMITS.value}
-      class="v"
-    />
   );
 }
 

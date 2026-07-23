@@ -1,9 +1,11 @@
 import type { GrantSnapshot } from "../../../src/core/grants";
 import type { StateDoc } from "../../../src/core/model";
+import { originPatternForDomain } from "../../../src/core/scope";
 import type { SystemStatus } from "../../../src/core/status";
+import { request as requestPermissions } from "../../../src/platform/permissions";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
 import {
-  OpGlyph,
+  DirectionGlyph,
   StatusGlyph,
 } from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
@@ -86,8 +88,9 @@ function TapeLine({ row }: { row: TapeRow }) {
       <Truncate mode="middle" value={host} class="mono tape-host" />
       <span class="tape-stamp mono">
         <span class="tape-op" aria-hidden="true">
-          <OpGlyph operation={row.operation} />
+          <DirectionGlyph direction={row.direction} />
         </span>
+        <span class="tape-verb">{copy.readout.verb[row.operation]}</span>
         <Truncate
           mode="middle"
           value={row.header}
@@ -95,7 +98,23 @@ function TapeLine({ row }: { row: TapeRow }) {
           class="tape-header"
         />
       </span>
-      <span class="tape-status">{statusLabel(row)}</span>
+      {/* A row that says "needs access" and offers no way to give it leaves the
+          reader to go and find the Site access page. A concrete host is one
+          request away; a cross-site row names no single site to ask for. */}
+      {row.status === "needs-access" && row.kind === "domain" ? (
+        <button
+          type="button"
+          class="grant tape-status"
+          aria-label={copy.options.siteAccess.grantLabel(row.host)}
+          onClick={() =>
+            void requestPermissions([originPatternForDomain(row.host)])
+          }
+        >
+          {copy.options.siteAccess.grant}
+        </button>
+      ) : (
+        <span class="tape-status">{statusLabel(row)}</span>
+      )}
     </li>
   );
 }

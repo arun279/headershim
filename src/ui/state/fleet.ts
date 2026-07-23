@@ -76,6 +76,8 @@ export interface FleetRule {
   readonly siteCount: number;
   /** True when the scope is not a concrete domain list (all / pattern / regex). */
   readonly crossSite: boolean;
+  /** The author's own note on the rule, when they left one. */
+  readonly comment?: string;
 }
 
 export interface FleetInput {
@@ -179,6 +181,9 @@ function fleetRule(
     secret: isSecretHeader(rule.header),
     enabled: rule.enabled,
     profileEnabled: context.active,
+    ...(rule.comment === undefined || rule.comment === ""
+      ? {}
+      : { comment: rule.comment }),
     status,
     // The collision winner is named only where the loser is actually running;
     // an off rule is off, not overridden.

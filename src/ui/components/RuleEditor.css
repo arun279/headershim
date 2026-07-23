@@ -78,12 +78,16 @@
   color: var(--ink2);
 }
 
+/* Red, not amber: this says the save did not happen, which is the refused role,
+   and it is already the colour the this-tab composer gives the same sentence.
+   Amber says a rule is held or a grant short, and the standing caution band sits
+   in that hue on this very screen. */
 .editor-error {
   margin-top: var(--sp-1);
   font-size: 11px;
   line-height: 1.4;
   font-weight: 600;
-  color: var(--amber);
+  color: var(--stop);
 }
 
 .editor-error-global {
@@ -103,6 +107,20 @@
 
 .editor-option .disclosure {
   max-width: 100%;
+}
+
+/* The label holds its words and hands the rest of the row to the comment, so the
+   truncation primitive measures the room it really has. */
+.disclosure-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.disclosure-note {
+  min-width: 0;
+  color: var(--ink2);
 }
 
 .editor-option .field {

@@ -1,5 +1,65 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { copy, sentenceText } from "./copy";
+
+const privacyPolicy = readFileSync(
+  new URL("../../PRIVACY.md", import.meta.url),
+  "utf8",
+);
+
+/** One About row read end to end: its lead sentence plus every detail under it. */
+function permissionRow(name: string): string {
+  const row = copy.options.about.permissions.items.find(
+    (item) => item.name === name,
+  );
+  if (row === undefined) {
+    throw new Error(`About discloses no ${name} permission`);
+  }
+  return [row.reason, ...row.details].join("\n");
+}
+
+// A representative, not exhaustive, denylist of header-extension competitors
+// and notable extension incidents. "ModHeader" is the sole sanctioned name and
+// is checked separately in expectHouseVoice.
+const DENYLIST = [
+  "requestly",
+  "header editor",
+  "simple modify headers",
+  "modify header value",
+  "the great suspender",
+  "dataspii",
+  "nano adblocker",
+  "nano defender",
+  "stylish",
+  "hola",
+];
+
+/** The house voice rules, applied to one piece of copy a user can read. */
+function expectHouseVoice(text: string): void {
+  const lower = text.toLowerCase();
+  expect(text, `em-dash in: ${text}`).not.toMatch(/[–—]/);
+  expect(text, `spaced-hyphen separator in: ${text}`).not.toContain(" - ");
+  expect(text, `exclamation mark in: ${text}`).not.toContain("!");
+  expect(text, `emoji in: ${text}`).not.toMatch(/\p{Extended_Pictographic}/u);
+  // A forward promise binds every future version; copy describes the one that
+  // is installed. Rewrite into a present-tense, checkable statement.
+  expect(lower, `forward promise in: ${text}`).not.toMatch(
+    /\b(never|always|forever)\b/,
+  );
+  expect(lower, `apology-as-decoration in: ${text}`).not.toMatch(/oops|uh-oh/);
+  for (const name of DENYLIST) {
+    expect(
+      lower,
+      `competitor/incident name "${name}" in: ${text}`,
+    ).not.toContain(name);
+  }
+  // ModHeader is allowed only as an import/export format label.
+  if (lower.includes("modheader")) {
+    expect(lower, `ModHeader outside import context: ${text}`).toMatch(
+      /import|export/,
+    );
+  }
+}
 
 describe("copy", () => {
   it("answers the tab-scoped question and counts only exceptions", () => {
@@ -127,7 +187,14 @@ describe("copy", () => {
     );
     expect(copy.options.settings.theme.label).toBe("Theme");
     expect(Object.keys(copy.options.about).sort()).toEqual(
-      ["build", "description", "license", "links", "title"].sort(),
+      [
+        "build",
+        "description",
+        "license",
+        "links",
+        "permissions",
+        "title",
+      ].sort(),
     );
     expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
     expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");
@@ -141,8 +208,57 @@ describe("copy", () => {
     ).toBe("api.example.com grant removed. All-sites access still covers it.");
   });
 
-  // A global guard on the copy voice rules and the naming denylist below, so
-  // a new string can't ship an exclamation, emoji, apology-as-decoration, or a
+  // The About rows are the source of the long disclosure and PRIVACY.md is the
+  // same disclosure read end to end, so the expectation is taken from the About
+  // rows rather than typed out a third time here: reword one surface alone and
+  // this goes red, reword both together and it stays green. PRIVACY.md is free
+  // to add to what it carries, which is where the platform's own names for the
+  // storage areas live.
+  it("carries every About permission sentence in the privacy policy verbatim", () => {
+    for (const item of copy.options.about.permissions.items) {
+      for (const text of [item.reason, ...item.details]) {
+        expect(
+          privacyPolicy,
+          `the privacy policy does not carry, in these words: ${text}`,
+        ).toContain(text);
+      }
+    }
+  });
+
+  // The popup note and the export hint are compressions of the same facts, too
+  // short to carry a whole sentence of the long form, so what is pinned is the
+  // clause each shares with it. The popup's clause about reach is deliberately
+  // the scope alone: a short note that overstates exposure is safe, one that
+  // understates it is not.
+  it("compresses the shared facts into the popup note and the export hint", () => {
+    const aboutStorage = permissionRow("storage");
+    const aboutRulesEngine = permissionRow(
+      "declarativeNetRequestWithHostAccess",
+    );
+
+    expect(copy.readout.dataNote).toContain(
+      "stored on this device without encryption",
+    );
+    expect(aboutStorage).toContain("stored on this device without encryption");
+    expect(copy.readout.dataNote).toContain("to every site it matches");
+    expect(aboutRulesEngine).toContain("to every site it matches");
+
+    expect(copy.options.importExport.secretsReminder).toContain(
+      "Treat it like a credentials file.",
+    );
+    expect(aboutStorage).toContain("Treat it like a credentials file.");
+  });
+
+  // The About page links the privacy policy, so it is product copy reached from
+  // the product and holds the same voice rules as the strings below.
+  it("holds the copy voice rules in the privacy policy too", () => {
+    for (const line of privacyPolicy.split("\n")) {
+      expectHouseVoice(line);
+    }
+  });
+
+  // A global guard on the copy voice rules, so a new string can't ship an
+  // exclamation, emoji, apology-as-decoration, forward promise, or a
   // competitor/vendor/incident name without a test going red. Function-valued
   // copy is resolved with sample args of every shape to reach its branches.
   it("holds the copy voice and naming invariants for every reachable string", () => {
@@ -189,46 +305,9 @@ describe("copy", () => {
     };
     collect(copy);
 
-    // A representative, not exhaustive, denylist of header-extension
-    // competitors and notable extension incidents. "ModHeader" is the sole
-    // sanctioned name and is checked separately below.
-    const denylist = [
-      "requestly",
-      "header editor",
-      "simple modify headers",
-      "modify header value",
-      "the great suspender",
-      "dataspii",
-      "nano adblocker",
-      "nano defender",
-      "stylish",
-      "hola",
-    ];
-
     expect(strings.length).toBeGreaterThan(100);
     for (const text of strings) {
-      const lower = text.toLowerCase();
-      expect(text, `em-dash in: ${text}`).not.toMatch(/[–—]/);
-      expect(text, `spaced-hyphen separator in: ${text}`).not.toContain(" - ");
-      expect(text, `exclamation mark in: ${text}`).not.toContain("!");
-      expect(text, `emoji in: ${text}`).not.toMatch(
-        /\p{Extended_Pictographic}/u,
-      );
-      expect(lower, `apology-as-decoration in: ${text}`).not.toMatch(
-        /oops|uh-oh/,
-      );
-      for (const name of denylist) {
-        expect(
-          lower,
-          `competitor/incident name "${name}" in: ${text}`,
-        ).not.toContain(name);
-      }
-      // ModHeader is allowed only as an import/export format label.
-      if (lower.includes("modheader")) {
-        expect(lower, `ModHeader outside import context: ${text}`).toMatch(
-          /import|export/,
-        );
-      }
+      expectHouseVoice(text);
     }
   });
 });

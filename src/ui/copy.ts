@@ -7,6 +7,11 @@
 
 import { BRAND_NAME } from "../brand";
 import {
+  ALL_SITES_ORIGIN,
+  MANIFEST_PERMISSIONS,
+  type ManifestPermission,
+} from "../core/grants";
+import {
   MAX_DOC_BYTES,
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -39,6 +44,58 @@ const sites = (n: number) => (n === 1 ? "site" : "sites");
 const managedHeader =
   "Chrome's network stack manages this header itself; a rule here usually has no effect.";
 
+/**
+ * Why each declared permission is there, keyed by the ids the manifest is built
+ * from, so a permission cannot reach the manifest without a reason to show
+ * beside it. The title is the row's heading, in the words the product uses
+ * elsewhere; the manifest id sits under it as the mapping. One lead sentence
+ * answers what the permission is for; the details under it are one fact each, so
+ * a reader looking for where a header value ends up finds that line instead of a
+ * paragraph. Plain words here; the storage-area and API literals stay in
+ * PRIVACY.md, which maps the two vocabularies. Every string below is also a
+ * sentence of PRIVACY.md, and copy.test.ts holds the two together.
+ */
+interface PermissionReason {
+  readonly title: string;
+  readonly reason: string;
+  readonly details: readonly string[];
+}
+
+const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
+  declarativeNetRequestWithHostAccess: {
+    title: "Changing headers",
+    reason: `${BRAND_NAME} applies your header rules through Chrome's rules engine, which runs a rule only where Chrome's own host access covers the request. The engine does not hand ${BRAND_NAME} request or response content.`,
+    details: [
+      "A request rule sends the value you typed to every site it matches and you have granted, so where that value goes is limited by the rule's scope and by the sites you have granted. A response rule changes what this browser sees.",
+      "While header changes are running, each rule you turn on in the active profile that Chrome accepts is handed to the rules engine as a dynamic rule, with the header value in the clear; a rule in a profile that is not active is not. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage.",
+      "Turning the rule off, deleting it, switching to another profile, or pausing every header change takes it back out of the dynamic ruleset.",
+      "A this-tab change goes to the session ruleset instead, which Chrome clears when the browser shuts down.",
+    ],
+  },
+  storage: {
+    title: "Storing your rules",
+    reason: `${BRAND_NAME} keeps your rules, profiles, and settings in Chrome's local extension storage, in this browser on this device.`,
+    details: [
+      "Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file.",
+      "Chrome's synced storage is not used, so nothing is copied to your Google account.",
+      "The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.",
+      "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the hostname it belongs to, the direction, the operation, the header name, the value you typed, and whether it is on.",
+      `${BRAND_NAME} removes it when you close the tab or when the tab navigates away from that host, and Chrome clears session storage when the browser shuts down.`,
+      `If ${BRAND_NAME} cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data.`,
+    ],
+  },
+  activeTab: {
+    title: "Reading the current tab",
+    reason:
+      "Opening the popup on a site reads that tab's address and reduces it to a hostname, to show what applies there and prefill a new rule's scope.",
+    details: [
+      "Full addresses are not stored.",
+      `Chrome reports that tab's address as it navigates, for as long as the tab stays on that site, and ${BRAND_NAME} uses that to end a this-tab change when the tab leaves the site it was made for.`,
+      `Opening the popup is a gesture Chrome answers with temporary host access to that tab, which lasts while the tab stays on that site. That access is Chrome's to give and take back; the access a rule needs is the site grant you approve, and ${BRAND_NAME} asks for that separately.`,
+    ],
+  },
+};
+
 /** "5h 18m" / "8m" / "3d 4h", the coarsest two units that stay honest. */
 function duration(ms: number): string {
   const totalMinutes = Math.max(0, Math.round(ms / 60_000));
@@ -64,6 +121,12 @@ export const copy = {
       data(count),
       ` ${changes(count)} on this tab`,
     ],
+    // The same fact while everything is paused. The count is the honest summary
+    // of an unusual state, so pause changes its verb rather than removing it.
+    heldStatus: (count: number): Sentence => [
+      data(count),
+      ` ${changes(count)} held on this tab`,
+    ],
     newChange: "New change on this tab",
     // Substatus segments, shown only when a count is nonzero.
     needsAccess: (count: number) => `${count} needs access`,
@@ -79,6 +142,13 @@ export const copy = {
     attentionLabel: "Needs attention",
     direction: { request: "Request", response: "Response" },
     verb: { set: "Set", append: "Append", remove: "Remove" },
+    // While everything is paused a line states what it would do, not what it
+    // does. Pause has to change the sentence, not only the colour it is set in.
+    heldVerb: {
+      set: "Would set",
+      append: "Would append",
+      remove: "Would remove",
+    },
     to: "→",
     overriddenBy: (winner: string) => `overridden by ${winner}`,
     refusedReason: {
@@ -105,8 +175,14 @@ export const copy = {
     // A rule Chrome can only run with broad access says so on the button, so the
     // click is honest before Chrome's own all-sites dialog appears.
     grantAllSites: "Grant all sites",
-    ruleToggle: (header: string, on: boolean) =>
-      `${on ? "Turn off" : "Turn on"}: ${header}`,
+    ruleToggle: (header: string, on: boolean, reach?: string) =>
+      `${on ? "Turn off" : "Turn on"}: ${header}${reach === undefined ? "" : `; ${reach}`}`,
+    // The switch on a popup line is the rule's switch, not this tab's, so a rule
+    // that reaches past this tab says how far before anyone flips it.
+    widerReach: {
+      sites: (count: number) => `also on ${count} other ${sites(count)}`,
+      broad: "also on every other site it matches",
+    },
     editValue: (header: string) => `Edit ${header} value`,
     // Two different permanences, so two different words: the footer opens a
     // saved rule, the composer commits a change that dies with the tab.
@@ -123,7 +199,23 @@ export const copy = {
       data(host),
       ".",
     ],
-    noHost: `Open the popup on a website to see what ${BRAND_NAME} does there.`,
+    // The tab has no site to read: a Chrome page, a new tab, a local file, or
+    // another extension. Say why the screen is empty rather than asking for
+    // something the reader has already done.
+    noHost: `${BRAND_NAME} changes headers on websites, and this tab is not on one.`,
+    seeAllRules: "See all rules",
+    // The standing data note: one sentence, because it stands under every
+    // readout and every editor, and a disclosure that costs four lines of a
+    // 600px popup is a disclosure people learn to look past. It carries the two
+    // facts that matter while a credential is in the clipboard: where the value
+    // comes to rest, and that turning the rule on is what sends it out. Both
+    // hold wherever a value can be read or typed, including a chrome:// page
+    // with no site to read. Reach is stated as the scope alone, without the
+    // grant that narrows it, so the short form overstates exposure rather than
+    // understating it; the exact statement, scope and grant together, is the
+    // About page, also in the product.
+    dataNote:
+      "The values you type are stored on this device without encryption, and a request rule sends them to every site it matches.",
     thisTabTag: "This tab only",
     thisTabClears: "clears when you close the tab",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
@@ -155,10 +247,15 @@ export const copy = {
     opaque: "opaque token · no expiry to read",
     expiresIn: (remainingMs: number) =>
       remainingMs <= 0 ? "expired" : `expires in ${duration(remainingMs)}`,
-    warnNote: "swap before it lapses",
+    warnNote: "replace it before it lapses",
     valueLabel: (header: string) => header,
-    swap: "Swap",
+    // The verb the field it opens commits with, and the verb the expiry note
+    // asks for. It shares the row with a live credential, so it is one word.
+    swap: "Replace",
     swapOn: (host: string): Sentence => ["on ", data(host)],
+    // Pause has to reach the hero in words, the way it reaches every line: a
+    // dimmed card beside a live-looking button says nothing on its own.
+    held: "held while header changes are paused",
     pasteLabel: "Paste the new token",
     // Where the new bytes land, said before you commit them: a swap rewrites
     // whichever change is carrying the token, and those two live different lives.
@@ -238,7 +335,10 @@ export const copy = {
           ...(more > 0 ? [" +", data(more)] : []),
         ],
       },
-      editRule: (header: string) => `Edit rule: ${header}`,
+      // Direction is what two otherwise identical rows differ by, so the name
+      // that reaches assistive technology carries it too.
+      editRule: (direction: string, header: string) =>
+        `Edit rule: ${direction} ${header}`,
       profileOff: "its profile is off",
       empty: "No rules yet.",
       emptyProfileOff:
@@ -260,7 +360,10 @@ export const copy = {
         paused: "paused",
       },
       crossSiteHost: "cross-site",
-      empty: "Nothing is running yet. Turn on a rule or grant a site.",
+      // The page lists what the ruleset holds, which includes rules a grant
+      // away from running, so an empty page means no rule is on, not that
+      // nothing is running.
+      empty: "No changes configured yet. Turn a rule on to see it here.",
     },
     profiles: {
       title: "Profiles",
@@ -316,7 +419,8 @@ export const copy = {
       exportEverything: "Export everything",
       exportOne: "Export one profile",
       exportChoiceLabel: "Profile to export",
-      // Shown verbatim on every export.
+      // A standing hint between the Export heading and the export buttons, read
+      // before a download rather than raised by one.
       secretsReminder:
         "This file contains the header values you typed, including any tokens or keys. Treat it like a credentials file.",
       everythingFilename: "headershim-export.json",
@@ -425,9 +529,33 @@ export const copy = {
       description: `${BRAND_NAME} modifies HTTP request and response headers using scoped rules, profiles, and tab-specific overrides.`,
       license:
         "Open source under the MIT license. Provided as is, without warranty.",
+      // The three permissions the manifest declares, in the order it declares
+      // them, then the optional site access it asks for at runtime.
+      permissions: {
+        heading: "Permissions",
+        items: [
+          ...MANIFEST_PERMISSIONS.map((name) => ({
+            name,
+            ...PERMISSION_REASONS[name],
+          })),
+          {
+            name: ALL_SITES_ORIGIN,
+            title: "Site access",
+            reason: `${BRAND_NAME} asks Chrome for the sites a rule's scope needs, and the grants you approve are the host access it asks for.`,
+            details: [
+              "A rule scoped to named domains asks for those domains. A rule scoped to all sites asks for all sites, whether the request comes from that rule's own Grant button or from the Site access page, and it is a request you can decline.",
+              "The Site access page lists every grant and revokes any of them.",
+              `While a site is granted, Chrome reports the address of every tab that navigates there, not only the tab the popup was opened on. ${BRAND_NAME} reduces each one to a hostname. Full addresses are not stored.`,
+            ],
+          },
+        ],
+      },
       links: {
         repository: "Repository",
         repositoryUrl: "https://github.com/arun279/headershim",
+        privacy: "Privacy",
+        privacyUrl:
+          "https://github.com/arun279/headershim/blob/main/PRIVACY.md",
         license: "License",
         licenseUrl: "https://github.com/arun279/headershim/blob/main/LICENSE",
         issues: "Issues",
@@ -444,6 +572,9 @@ export const copy = {
     createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
     saveChanges: "Save changes",
     saveChangesAndAllow: (host: string) => `Save changes and allow ${host}`,
+    // What a commit is about to ask Chrome for, when it is more than one site.
+    // Naming the first of several understates the reach the click discloses.
+    allowSites: (count: number) => `${count} ${sites(count)}`,
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands; there is no
@@ -481,7 +612,9 @@ export const copy = {
     menuLabel: (header: string) => `Rule actions: ${header}`,
     direction: { request: "request", response: "response" },
     operation: { set: "set", append: "append", remove: "remove" },
-    redacted: "…redacted",
+    // Withheld, not elided: the ellipsis is the truncation primitive's mark for
+    // a value that was cut, so a value being held back cannot borrow it.
+    redacted: "[hidden]",
     generated: (kind: string) => `${kind} · generated`,
     profileOffDetail: "This profile is off · its rules aren't running.",
     needsAccess: (host: string, moreSites: number): Sentence => [
@@ -540,9 +673,6 @@ export const copy = {
       `${mode === "new" ? "New rule" : "Edit rule"} · ${profile}`,
     close: "Close editor",
     delete: "Delete rule",
-    // The editor writes into whichever profile is picked here, so a rule can be
-    // authored into one that is not running without touching live traffic.
-    profileHelper: "The profile this rule is saved in",
     discardConfirm: {
       title: "Discard this rule?",
       keepEditing: "Keep editing",
@@ -558,9 +688,11 @@ export const copy = {
       comment: "Comment",
       resourceTypes: "Resource types",
     },
+    // A header name has one shape whatever the rule, so an example teaches it.
+    // A value does not: the field takes whatever this header carries, and an
+    // example of one header's value is wrong on every other header.
     placeholders: {
       headerName: "authorization",
-      value: "Bearer …",
     },
     // A pasted `name: value` line lands split across the two fields rather than
     // failing the name's token grammar on the colon.
@@ -686,8 +818,10 @@ export const copy = {
   advisories: {
     managedHeader,
     host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
+    // Fires on request and response rules alike, so it names where the value is
+    // written rather than a send: a response rule sends the site nothing.
     credential:
-      "This header carries a credential. Everything this rule reaches will be sent it, so keep the scope as narrow as the job needs.",
+      "This header carries a credential. This rule writes it on everything its scope reaches, so keep the scope as narrow as the job needs.",
     securityResponse:
       "Sites send this header to protect the pages they serve. Changing it turns that protection off wherever this rule reaches, for as long as it's on.",
   },

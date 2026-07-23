@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
 import { BRAND_NAME } from "./src/brand";
-import { ALL_SITES_ORIGIN } from "./src/core/grants";
+import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "./src/core/grants";
 import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
 
 // E2E traffic checks need a host grant that Chromium cannot grant through its
@@ -43,17 +43,19 @@ export default defineConfig({
     // Chrome 120 split dynamic and session rules into separate limits. Earlier
     // versions share a 5,000-rule cap that cannot hold both product maxima.
     minimum_chrome_version: String(MINIMUM_CHROME_VERSION),
-    permissions: [
-      "declarativeNetRequestWithHostAccess",
-      "storage",
-      "activeTab",
-    ],
+    // The same list the About page draws its disclosure rows from, so the
+    // product cannot declare a permission it does not explain.
+    permissions: [...MANIFEST_PERMISSIONS],
     ...(e2eHostAccess ? { host_permissions: [ALL_SITES_ORIGIN] } : {}),
     optional_host_permissions: [ALL_SITES_ORIGIN],
     // HeaderShim reads and writes headers through declarativeNetRequest and
-    // never talks to a network endpoint itself. connect-src 'none' is the
-    // browser-enforced form of that: it blocks fetch, XHR, WebSocket,
-    // EventSource, and sendBeacon from every extension page and the worker.
+    // opens no connection of its own. connect-src 'none' is the
+    // browser-enforced half of that: it blocks fetch, XHR, WebSocket,
+    // EventSource, and sendBeacon from every extension page and the worker, and
+    // says nothing about images, media, fonts, frames, forms, or navigations.
+    // The other half is the built files, which carry no call written to any of
+    // them; scripts/check-no-network.mjs holds that half against the artifact,
+    // and states there what a call-shape scan does and does not cover.
     // The rest matches Chrome's default extension_pages policy.
     content_security_policy: {
       extension_pages:

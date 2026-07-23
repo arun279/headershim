@@ -48,7 +48,8 @@ export function ValueField(props: ValueFieldProps) {
             class="field mono value-input"
             rows={2}
             wrap="soft"
-            placeholder={copy.editor.placeholders.value}
+            spellcheck={false}
+            autocomplete="off"
             value={props.value}
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}

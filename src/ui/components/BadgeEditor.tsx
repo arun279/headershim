@@ -1,4 +1,4 @@
-import { useId, useState } from "preact/hooks";
+import { useEffect, useId, useState } from "preact/hooks";
 import {
   BADGE_COLORS,
   type BadgeColor,
@@ -23,6 +23,11 @@ interface BadgeEditorProps {
 export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
   const [text, setText] = useState(badgeText);
   const groupName = useId();
+
+  // A rename re-derives the badge, so the field and the preview beside it have
+  // to follow the profile rather than the keystroke that seeded them; otherwise
+  // the next blur commits the old badge back over the derived one.
+  useEffect(() => setText(badgeText), [badgeText]);
 
   const commitText = () => {
     if (text !== badgeText) {

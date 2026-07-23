@@ -21,7 +21,7 @@
 
 .fleet-group {
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
   background: var(--panel);
   overflow: hidden;
 }
@@ -43,7 +43,7 @@
   font-family: var(--font-ui);
 }
 .fleet-group-note {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink3);
 }
 .fleet-count {
@@ -147,42 +147,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fleet-open .verb {
-  color: var(--ink2);
+/* Everything the two row grammars share is in tokens.css; this page is denser,
+   so it reads its wire bytes one step down. */
+.fleet-row .say :is(.k, .v) {
   font-size: 12px;
-}
-.fleet-open .k {
-  font-family: var(--font-data);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.fleet-open .to {
-  color: var(--ink3);
-  font-family: var(--font-data);
-  font-size: 12px;
-}
-/* The value takes what the header leaves, and is measured against that: sized by
-   its own content it would measure itself, and settle a character short. */
-.fleet-open .v {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-data);
-  font-size: 12.5px;
-  color: var(--ink2);
-}
-.fleet-row.off .fleet-open .k,
-.fleet-row.off .fleet-open .v,
-.fleet-row.overridden .fleet-open .v {
-  color: var(--ink3);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-.fleet-row.overridden .fleet-open .k,
-.fleet-row.paused .fleet-open .k,
-.fleet-row.paused .fleet-open .v,
-.fleet-row.paused .fleet-open .verb {
-  color: var(--ink3);
 }
 
 /* Second line: a reason where one is owed, else the scope in the by-header lens. */
@@ -232,25 +200,23 @@
   gap: 9px;
   flex: none;
 }
-.fleet-row .grant {
-  flex: none;
-  font-weight: 650;
-  font-size: 11.5px;
-  color: var(--on-amber);
-  background: var(--amber);
-  border-radius: var(--r-chip);
-  padding: 6px 12px;
-}
-
 /* The empty state is the page's content, not a caption stranded above a void:
    it fills the card the rule groups would have filled. */
+/* The author's own note on the rule, under the row's reason line. */
+.fleet-open .fleet-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink3);
+}
+
 .rules-card-empty {
   display: grid;
   place-items: center;
   min-height: 320px;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 .editor-loading {

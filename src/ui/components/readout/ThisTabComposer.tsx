@@ -1,11 +1,5 @@
 import { useRef, useState } from "preact/hooks";
-import {
-  DIRECTIONS,
-  type Direction,
-  HEADER_OPERATIONS,
-  type HeaderOp,
-  type TabOverride,
-} from "../../../core/model";
+import type { Direction, HeaderOp, TabOverride } from "../../../core/model";
 import type { Result } from "../../../core/result";
 import { useFocusTrap } from "../../a11y/focus";
 import { copy } from "../../copy";
@@ -20,10 +14,10 @@ import type {
 } from "../../state/session-mutations";
 import { AdvisorySlot } from "../AdvisorySlot";
 import { Button } from "../Button";
+import { HeaderFields } from "../HeaderFields";
 import { parseHeaderLine } from "../headerLine";
-import { Segmented } from "../Segmented";
 import { useEscapeDismiss } from "../usePopoverDismiss";
-import { OpGlyph, TabGlyph } from "./glyphs";
+import { TabGlyph } from "./glyphs";
 
 /**
  * A this-tab change lives or dies with the host grant it rides on, so the
@@ -53,8 +47,11 @@ export function ThisTabComposer({
 }: ThisTabComposerProps) {
   const composerRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLInputElement>(null);
-  const [direction, setDirection] = useState<Direction>("request");
-  const [operation, setOperation] = useState<HeaderOp>("set");
+  const [pick, setPick] = useState<{
+    direction: Direction;
+    operation: HeaderOp;
+  }>({ direction: "request", operation: "set" });
+  const { direction, operation } = pick;
   const [header, setHeader] = useState("");
   const [value, setValue] = useState("");
   const [pastedLineSplit, setPastedLineSplit] = useState(false);
@@ -101,32 +98,23 @@ export function ThisTabComposer({
         <TabGlyph />
         {copy.readout.thisTabTag}
       </div>
+      {/* The same two picks the rule editor takes, through the same labelled
+          control: a compact author is a smaller surface, not a second grammar. */}
       <div class="compose-segments">
-        <Segmented
-          semantics="pressed"
-          label={copy.editor.labels.direction}
-          value={direction}
-          options={DIRECTIONS.map((option) => ({
-            value: option,
-            label: copy.readout.direction[option],
-          }))}
-          onChange={setDirection}
+        <HeaderFields
+          idBase="compose"
+          draft={pick}
+          errors={{}}
+          update={setPick}
         />
-        <Segmented
-          semantics="pressed"
-          label={copy.editor.labels.operation}
-          value={operation}
-          options={HEADER_OPERATIONS.map((option) => ({
-            value: option,
-            label: (
-              <>
-                <OpGlyph operation={option} />
-                {copy.editor.operation[option]}
-              </>
-            ),
-          }))}
-          onChange={setOperation}
-        />
+      </div>
+      {/* The inputs carry their names for assistive technology already; these
+          put the same two words on screen over the fields they name. */}
+      <div class="cfields-labels" aria-hidden="true">
+        <span class="silk cfl-name">{copy.editor.labels.headerName}</span>
+        {operation !== "remove" && (
+          <span class="silk cfl-val">{copy.editor.labels.value}</span>
+        )}
       </div>
       <div class="cfields">
         <input
@@ -161,7 +149,6 @@ export function ThisTabComposer({
             <input
               class="cin val mono"
               value={value}
-              placeholder={copy.editor.placeholders.value}
               aria-label={copy.editor.labels.value}
               spellcheck={false}
               autocomplete="off"

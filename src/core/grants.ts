@@ -3,6 +3,20 @@ import { expandResourceTypes, originPatternForDomain } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
 
+/**
+ * The permissions the manifest declares, in the order it declares them. The
+ * manifest is built from this list and the About page keys its disclosure rows
+ * off it, so the two cannot drift: adding an entry here without a reason to
+ * show beside it does not compile.
+ */
+export const MANIFEST_PERMISSIONS = [
+  "declarativeNetRequestWithHostAccess",
+  "storage",
+  "activeTab",
+] as const;
+
+export type ManifestPermission = (typeof MANIFEST_PERMISSIONS)[number];
+
 export function isAllSitesOrigin(origin: string): boolean {
   return origin === ALL_SITES_ORIGIN || origin === "<all_urls>";
 }

@@ -28,11 +28,12 @@
     "check:dup": "jscpd",
     "check:size": "pnpm build && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
+    "check:no-network": "pnpm build && node scripts/check-no-network.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && playwright test",
     "e2e:packed:pack": "pnpm build && node e2e/packed/pack.mjs",
     "e2e:packed:selfcheck": "node e2e/packed/selfcheck.mjs",
@@ -71,9 +72,22 @@
       "limit": "15 kB"
     },
     {
-      "name": "Popup",
-      "path": ".output/chrome-mv3/chunks/popup-*.js",
-      "limit": "23 kB"
+      "name": "Popup initial load",
+      "path": [
+        ".output/chrome-mv3/popup.html",
+        ".output/chrome-mv3/theme-bootstrap.js",
+        ".output/chrome-mv3/chunks/popup-*.js",
+        ".output/chrome-mv3/chunks/brand-*.js",
+        ".output/chrome-mv3/chunks/Segmented-*.js",
+        ".output/chrome-mv3/chunks/RuleEditor-*.js",
+        ".output/chrome-mv3/chunks/headershim-*.js",
+        ".output/chrome-mv3/chunks/readout-*.js",
+        ".output/chrome-mv3/assets/Segmented-*.css",
+        ".output/chrome-mv3/assets/RuleEditor-*.css",
+        ".output/chrome-mv3/assets/readout-*.css",
+        ".output/chrome-mv3/assets/popup-*.css"
+      ],
+      "limit": "48 kB"
     },
     {
       "name": "Options initial load",

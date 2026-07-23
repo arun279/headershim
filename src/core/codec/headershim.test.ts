@@ -370,12 +370,12 @@ describe("headershim import", () => {
         warnings: [
           {
             kind: "credential",
-            ruleName: "development",
+            ruleName: "authorization",
             header: "authorization",
           },
           {
             kind: "security-response",
-            ruleName: "unframe the docs",
+            ruleName: "content-security-policy",
             header: "content-security-policy",
           },
         ],

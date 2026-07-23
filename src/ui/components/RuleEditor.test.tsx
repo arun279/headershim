@@ -214,7 +214,9 @@ describe("RuleEditor commit model", () => {
     expect(ctx.nameInput().placeholder).toBe(
       copy.editor.placeholders.headerName,
     );
-    expect(ctx.valueInput().placeholder).toBe(copy.editor.placeholders.value);
+    // The value field carries no example: what a value looks like is decided by
+    // the header named above it, so one header's example is wrong on the rest.
+    expect(ctx.valueInput().placeholder).toBe("");
   });
 
   it("lands focus in the header field the moment it opens", () => {
@@ -1013,6 +1015,31 @@ describe("RuleEditor grant moment", () => {
     await fillAndCommit(ctx, "authorization");
     expect(ctx.onClose).toHaveBeenCalledOnce();
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+  });
+
+  // The button is the disclosure of reach that comes before Chrome's own dialog.
+  // Naming the first of several sites while asking Chrome for all of them
+  // understates exactly the thing the button exists to state.
+  it("counts the sites when the commit asks Chrome for more than one", async () => {
+    const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
+    typeInto(ctx.chipInput(), "example.com");
+    fire(() => press(ctx.chipInput(), "Enter"));
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow(copy.actions.allowSites(2)),
+    );
+    expect(ctx.saveButton().textContent).toContain("2 sites");
+
+    ctx.onRequestGrant.mockResolvedValueOnce(false);
+    await fillAndCommit(ctx, "authorization");
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+      "*://*.example.com/*",
+    ]);
+    // The decline names the same reach the button did.
+    expect(ctx.onGrantDeclined).toHaveBeenCalledExactlyOnceWith(
+      copy.actions.allowSites(2),
+    );
   });
 
   it("requests only the missing initiator when the target is already granted", async () => {

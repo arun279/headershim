@@ -73,6 +73,12 @@
   --font-ui: -apple-system, "Segoe UI", system-ui, sans-serif;
   --font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
+  /* Six type sizes, and no seventh: 21 page title, 15 the one headline a surface
+     is read for, 13 body and every wire byte, 12 controls and secondary text, 11
+     notes and reasons, 10 the tags, which is the floor. Half-steps between them
+     read as accidents rather than levels, and nothing set smaller than 10 earns
+     its place on a screen where the smallest thing is a credential. */
+
   /* spacing / radii / lines */
   --sp-1: 2px;
   --sp-2: 4px;
@@ -272,6 +278,58 @@ button {
     opacity: 0;
     transform: translateY(-4px);
   }
+}
+
+/* The severity sentence, in the one grammar both row surfaces read it in: the
+   popup's change line and the options rule row. Only the type sizes differ, and
+   each surface sets its own.
+
+   The header and the value both give way from their own content widths, so a
+   tight row shortens both; sized from zero the value loses every pixel first and
+   the arrow is left pointing at nothing. At rest, overridden, or held, the whole
+   sentence dims together: a strike through half of it says deleted, and none of
+   those three states deletes anything. */
+.say .verb {
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink2);
+}
+.say .k {
+  min-width: 0;
+  font-family: var(--font-data);
+  font-weight: 600;
+  color: var(--ink);
+}
+.say .to {
+  flex: none;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--ink3);
+}
+.say .v {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-data);
+  color: var(--ink2);
+}
+:is(.change-line, .fleet-row):is(.off, .overridden, .paused)
+  .say
+  :is(.verb, .k, .v) {
+  color: var(--ink3);
+}
+
+/* The amber pill that resolves a needs-access exception: on a popup line, in the
+   token hero, on a rule row, and on the Site access page. One action offered at
+   one weight, wherever it is offered. */
+.grant {
+  flex: none;
+  font: 650 11px var(--font-ui);
+  color: var(--on-amber);
+  background: var(--amber);
+  border-radius: var(--r-chip);
+  padding: 6px 12px;
+  white-space: nowrap;
 }
 
 .sr-only {

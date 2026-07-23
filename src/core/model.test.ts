@@ -6,6 +6,8 @@ import {
   cloneRule,
   createProfile,
   createRule,
+  deriveBadgeText,
+  isDerivedBadgeText,
   isProfileNameAvailable,
   normalizeBadgeText,
   type Profile,
@@ -154,6 +156,24 @@ describe("profile invariants", () => {
     expect(created.badgeText).toBe("👩🏽‍💻A");
     expect(created.rules).toEqual([]);
     expect(created.id).not.toBe("");
+  });
+
+  it("walks the name for a badge no other profile is already wearing", () => {
+    expect(deriveBadgeText("Netlify", [])).toBe("NE");
+    expect(deriveBadgeText("Nexus", ["NE"])).toBe("NX");
+    expect(deriveBadgeText("Nexus", ["NE", "NX", "NU"])).toBe("NS");
+    // Nothing left to offer: the best candidate stands rather than inventing a
+    // badge the name cannot account for.
+    expect(deriveBadgeText("No", ["NO"])).toBe("NO");
+    expect(deriveBadgeText("", [])).toBe("");
+    expect(deriveBadgeText("staging  east", [])).toBe("ST");
+  });
+
+  it("separates a badge the name produced from one the user typed", () => {
+    expect(isDerivedBadgeText("Default", "DE")).toBe(true);
+    expect(isDerivedBadgeText("Default", "DT")).toBe(true);
+    expect(isDerivedBadgeText("Default", "QA")).toBe(false);
+    expect(isDerivedBadgeText("", "DE")).toBe(false);
   });
 });
 

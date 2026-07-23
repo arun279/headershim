@@ -305,7 +305,7 @@ describe("projectFleet status ladder", () => {
       grants: ALL,
       status: LIVE,
     });
-    expect(byKey(fleet, "p1:s").display).toBe("Bearer …redacted");
+    expect(byKey(fleet, "p1:s").display).toBe("Bearer [hidden]");
     expect(byKey(fleet, "p1:d").display).toBeUndefined();
   });
 });

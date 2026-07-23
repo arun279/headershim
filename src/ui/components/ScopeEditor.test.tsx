@@ -113,11 +113,17 @@ describe("ScopeEditor domain chips", () => {
     expect(ctx.chips()).toEqual(["api.example.com", "cdn.example.com"]);
   });
 
-  it("shows the Enter hint beside the chip input", () => {
+  // The placeholder already offers the add on screen, so the key is named only
+  // for a reader who cannot see it: described, not printed.
+  it("names the Enter key in the chip input's description, not beside it", () => {
     const ctx = mount();
-    const hint = ctx.root.querySelector(".chip-field-hint") as HTMLElement;
-    expect(hint.textContent).toBe(copy.editor.addChipHint);
-    expect(ctx.chipInput().getAttribute("aria-describedby")).toContain(hint.id);
+    const described = ctx.chipInput().getAttribute("aria-describedby") ?? "";
+    const hint = described
+      .split(" ")
+      .map((id) => ctx.root.querySelector(`#${id}`))
+      .find((node) => node?.textContent === copy.editor.addChipHint);
+    expect(hint?.className).toBe("sr-only");
+    expect(ctx.root.querySelector(".chip-field-hint")).toBeNull();
   });
 
   it("commits pending text when the field blurs", () => {

@@ -1,5 +1,19 @@
-import type { HeaderOp } from "../../../core/model";
+import type { Direction, HeaderOp } from "../../../core/model";
 import type { TapeRow } from "../../state/fleet";
+
+/**
+ * Which way a change points, in the two characters the popup's direction
+ * headings already use. The list surfaces spend their one glyph slot on this
+ * rather than on the operation: two rules can be identical but for direction,
+ * while the operation is spelled out in the row's own sentence.
+ */
+export function DirectionGlyph({ direction }: { direction: Direction }) {
+  return (
+    <span class="mono" aria-hidden="true">
+      {direction === "request" ? "→" : "←"}
+    </span>
+  );
+}
 
 /**
  * The readout's shape vocabulary. The operation glyph says what a change does

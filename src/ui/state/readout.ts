@@ -78,12 +78,21 @@ export interface TabChange {
   readonly refused?: RefusedReason;
   /** Origins to grant, when this line needs access. */
   readonly missing?: readonly string[];
+  /**
+   * How far this rule reaches past the tab the popup is open on: the number of
+   * other domains it names, or "broad" for a scope that names none. Absent when
+   * the rule reaches this host and nowhere else, which is when the line's switch
+   * has no consequence off this tab.
+   */
+  readonly widerReach?: number | "broad";
 }
 
 export interface TabReadout {
   readonly host: string | undefined;
   /** Every change that reaches this tab, including token and override lines. */
   readonly total: number;
+  /** What total would have counted if header changes were not paused. */
+  readonly held: number;
   readonly request: readonly TabChange[];
   readonly response: readonly TabChange[];
   /** The live credential hero: the authorization rule pulled out of Request. */
@@ -206,6 +215,7 @@ export function computeReadout({
 type ReadoutSummary = Pick<
   TabReadout,
   | "total"
+  | "held"
   | "needsAccess"
   | "refused"
   | "managed"
@@ -219,6 +229,7 @@ function summarize(changes: readonly TabChange[]): ReadoutSummary {
     total: changes.filter(
       (change) => change.status === "live" || change.status === "unconfirmed",
     ).length,
+    held: changes.filter((change) => change.status === "paused").length,
     needsAccess: changes.filter((change) => change.status === "needs-access")
       .length,
     refused: changes.filter((change) => change.status === "refused").length,
@@ -279,6 +290,7 @@ function ruleChange(
   const secret = isSecretHeader(rule.header);
   const display =
     rule.operation === "remove" ? undefined : ruleValueSummary(rule);
+  const wider = widerReach(rule);
   return {
     key: `${profile.id}:${rule.id}`,
     source: "rule",
@@ -297,6 +309,7 @@ function ruleChange(
       : { overriddenBy: context.overriddenBy }),
     ...(status === "needs-access" ? { missing } : {}),
     ...(status === "refused" && refused !== undefined ? { refused } : {}),
+    ...(wider === undefined ? {} : { widerReach: wider }),
   };
 }
 
@@ -465,6 +478,13 @@ export function ruleLabel(rule: Rule): string {
   return comment === undefined || comment.length === 0
     ? `${rule.header} rule`
     : comment;
+}
+
+/** What this rule reaches beyond the one host the popup is open on. */
+function widerReach(rule: Rule): number | "broad" | undefined {
+  if (rule.scope.type !== "domains") return "broad";
+  const others = rule.scope.domains.length - 1;
+  return others > 0 ? others : undefined;
 }
 
 function ruleReach(rule: Rule, host: string): Reach {

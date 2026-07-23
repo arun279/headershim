@@ -1,0 +1,12 @@
+/* Footnote register: quiet enough to read past once you know it, present enough
+   to find. It is placed outside whatever scroll region it sits under, so it
+   holds its place instead of scrolling away with the content. */
+.datanote {
+  flex: none;
+  padding: 8px 16px 9px;
+  border-top: var(--hairline) solid var(--hair);
+  background: var(--panel);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink3);
+}

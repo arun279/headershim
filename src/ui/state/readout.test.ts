@@ -138,7 +138,7 @@ describe("computeReadout", () => {
     });
     expect(readout.token?.header).toBe("authorization");
     expect(readout.token?.value).toBe("Bearer secret");
-    expect(readout.token?.display).toBe("Bearer …redacted");
+    expect(readout.token?.display).toBe("Bearer [hidden]");
     // Counted, but not repeated in the request list.
     expect(readout.total).toBe(1);
     expect(readout.request).toHaveLength(0);

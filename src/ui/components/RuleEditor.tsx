@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import {
   useEffect,
   useId,
@@ -37,6 +38,7 @@ import { parseHeaderLine } from "./headerLine";
 import { CloseGlyph } from "./readout/glyphs";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
+import { Truncate } from "./Truncate";
 import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
@@ -91,6 +93,8 @@ interface RuleEditorProps {
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
   modal?: boolean | undefined;
+  /** A standing disclosure the host keeps below the editor, within the dialog. */
+  note?: ComponentChildren;
   /** A parent-owned close request, such as choosing another options profile. */
   closeRequest?: number | undefined;
   /** The requested close was cancelled in the dirty-draft confirmation. */
@@ -119,9 +123,19 @@ interface FieldErrors {
 }
 
 interface CommitGrant {
-  host: string;
   origins: string[];
   sites: string[];
+}
+
+/**
+ * What a commit is about to ask Chrome for, in the words the button and the
+ * decline both use. One site is named; several are counted, because naming the
+ * first of them understates the reach the click is disclosing.
+ */
+function grantTarget(sites: readonly string[]): string {
+  return sites.length === 1
+    ? (sites[0] as string)
+    : copy.actions.allowSites(sites.length);
 }
 
 /** Full-popup rule editor with explicit save and guarded discard. */
@@ -188,7 +202,7 @@ export function RuleEditor(props: RuleEditorProps) {
         if (granted === true) {
           props.onGranted?.(grant.sites);
         } else {
-          props.onGrantDeclined?.(grant.host);
+          props.onGrantDeclined?.(grantTarget(grant.sites));
         }
       }
       props.onClose();
@@ -281,14 +295,15 @@ export function RuleEditor(props: RuleEditorProps) {
         ? copy.actions.createRule
         : copy.actions.saveChanges
       : mode === "new"
-        ? copy.actions.createRuleAndAllow(commitGrant.host)
-        : copy.actions.saveChangesAndAllow(commitGrant.host);
+        ? copy.actions.createRuleAndAllow(grantTarget(commitGrant.sites))
+        : copy.actions.saveChangesAndAllow(grantTarget(commitGrant.sites));
 
   return (
     <Sheet
       label={title}
       class="editor-sheet"
       modal={props.modal ?? true}
+      note={props.note}
       initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
       header={
@@ -312,17 +327,25 @@ export function RuleEditor(props: RuleEditorProps) {
                 <strong class="discard-title">
                   {copy.editor.discardConfirm.title}
                 </strong>
+                {/* Losing the draft is the outcome that cannot be taken back,
+                    so keeping it is the drawn button and discarding is the bare
+                    word beside it. The drawn one also takes the focus, so it is
+                    what Enter answers with. */}
                 <button
                   type="button"
                   class="editor-cancel"
+                  onClick={props.onClose}
+                >
+                  {copy.editor.discardConfirm.discard}
+                </button>
+                <button
+                  type="button"
+                  class="btn quiet"
                   ref={keepEditingRef}
                   onClick={keepEditing}
                 >
                   {copy.editor.discardConfirm.keepEditing}
                 </button>
-                <Button kind="quiet" onClick={props.onClose}>
-                  {copy.editor.discardConfirm.discard}
-                </Button>
               </>
             ) : (
               <>
@@ -483,9 +506,21 @@ function CommentDisclosure({
         title={summary === "" ? undefined : summary}
         onClick={() => setOpen((current) => !current)}
       >
-        <span>
+        {/* The summary stands in for a comment that is not on screen. Once the
+            panel is open the field below prints it in full, so the summary would
+            be the same words twice, 30px apart. Free text of any length, so it
+            goes through the truncation primitive and ends on a marker rather
+            than mid-word; the separator travels with it so it cannot be left
+            hanging on a line of its own. */}
+        <span class="disclosure-label">
           {copy.editor.labels.comment}
-          {summary === "" ? "" : ` · ${summary}`}
+          {!open && summary !== "" && (
+            <Truncate
+              mode="end"
+              value={` · ${summary}`}
+              class="disclosure-note"
+            />
+          )}
         </span>
         <span
           class={open ? "disclosure-chevron open" : "disclosure-chevron"}
@@ -545,7 +580,6 @@ function ProfileField({
           </option>
         ))}
       </select>
-      <p class="editor-micro">{copy.editor.profileHelper}</p>
     </div>
   );
 }
@@ -711,7 +745,6 @@ function planCommitGrant(
   // no host is inferred from the expression behind the user's back.
   if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
-      host: copy.scopeSummary.allSites,
       origins: [ALL_SITES_ORIGIN],
       sites: [copy.scopeSummary.allSites],
     };
@@ -743,9 +776,7 @@ function planCommitGrant(
   if (missing.length === 0) {
     return undefined;
   }
-  const firstTarget = targets.find((target) => missing.includes(target));
   return {
-    host: firstTarget ?? (missing[0] as string),
     origins: missing.map(originPatternForDomain),
     sites: missing,
   };

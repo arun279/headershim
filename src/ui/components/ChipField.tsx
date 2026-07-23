@@ -70,6 +70,8 @@ export function ChipField(props: ChipFieldProps) {
             props.onEnter === undefined ? "" : " editor-commit-field"
           }`}
           type="text"
+          spellcheck={false}
+          autocomplete="off"
           aria-label={props.inputLabel}
           aria-describedby={describedBy}
           aria-invalid={props.invalid === true ? true : undefined}
@@ -106,7 +108,10 @@ export function ChipField(props: ChipFieldProps) {
           }}
           onBlur={() => commit(pending)}
         />
-        <span class="chip-field-hint" id={hintId}>
+        {/* The placeholder already offers the add; this only names the key, for
+            a reader who cannot see the placeholder. Printed, it repeats the
+            placeholder from the far edge of a field with no room to hold it. */}
+        <span class="sr-only" id={hintId}>
           {copy.editor.addChipHint}
         </span>
       </div>
