@@ -32,7 +32,7 @@
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:self-contained && pnpm check:em-dash",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && playwright test",
     "e2e:packed:pack": "pnpm build && node e2e/packed/pack.mjs",
     "e2e:packed:selfcheck": "node e2e/packed/selfcheck.mjs",
