@@ -159,16 +159,19 @@ describe("computeReadout", () => {
   it.each([
     ["request", "connection"],
     ["response", "content-length"],
-  ] as const)("marks a %s network-managed header managed and uncounted", (direction, header) => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({ rules: [rule({ direction, header })] }),
-    });
-    const line = [...readout.request, ...readout.response][0];
-    expect(line?.status).toBe("managed");
-    expect(readout.managed).toBe(1);
-    expect(readout.total).toBe(0);
-  });
+  ] as const)(
+    "marks a %s network-managed header managed and uncounted",
+    (direction, header) => {
+      const readout = computeReadout({
+        ...base,
+        activeProfile: profile({ rules: [rule({ direction, header })] }),
+      });
+      const line = [...readout.request, ...readout.response][0];
+      expect(line?.status).toBe("managed");
+      expect(readout.managed).toBe(1);
+      expect(readout.total).toBe(0);
+    },
+  );
 
   it("lets compiler refusal outrank network-managed classification", () => {
     const readout = computeReadout({

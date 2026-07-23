@@ -149,13 +149,16 @@ describe("saveRule", () => {
     ],
     [draft({ scope: { type: "domains", domains: [" "] } }), "scope-empty"],
     [draft({ scope: { type: "regex", regex: "", hosts: [] } }), "scope-empty"],
-  ] as const)("blocks the save and changes nothing: %#", async (input, kind) => {
-    const doc = await seed([profile("p1")]);
-    const saved = await mutations.saveRule("p1", undefined, input);
+  ] as const)(
+    "blocks the save and changes nothing: %#",
+    async (input, kind) => {
+      const doc = await seed([profile("p1")]);
+      const saved = await mutations.saveRule("p1", undefined, input);
 
-    expect(errorKind(saved)).toBe(kind);
-    expect(await read()).toEqual(doc);
-  });
+      expect(errorKind(saved)).toBe(kind);
+      expect(await read()).toEqual(doc);
+    },
+  );
 
   it("allows append on an allowlisted request header", async () => {
     await seed([profile("p1")]);
@@ -324,15 +327,18 @@ describe("enable-path grammar re-validation", () => {
       { scope: { type: "pattern", pattern: "||*", hosts: [] } },
       "pattern-invalid",
     ],
-  ])("setRuleEnabled refuses %s and leaves the doc untouched", async (_label, overrides, kind) => {
-    const invalid = rule({ enabled: false, ...overrides });
-    const doc = await seed([profile("p1", { rules: [invalid] })]);
+  ])(
+    "setRuleEnabled refuses %s and leaves the doc untouched",
+    async (_label, overrides, kind) => {
+      const invalid = rule({ enabled: false, ...overrides });
+      const doc = await seed([profile("p1", { rules: [invalid] })]);
 
-    expect(
-      errorKind(await mutations.setRuleEnabled("p1", invalid.id, true)),
-    ).toBe(kind);
-    expect(await read()).toEqual(doc);
-  });
+      expect(
+        errorKind(await mutations.setRuleEnabled("p1", invalid.id, true)),
+      ).toBe(kind);
+      expect(await read()).toEqual(doc);
+    },
+  );
 
   it("activateProfile refuses a profile carrying a bad enabled rule", async () => {
     const invalid = rule({ header: ":authority" });
@@ -471,20 +477,21 @@ describe("profile operations", () => {
     expect((await read()).activeProfileId).toBe(doc.activeProfileId);
   });
 
-  it.each([
-    "p1",
-    "P1",
-    "  p1  ",
-    "",
-    "x".repeat(49),
-  ])("rejects an unavailable or invalid name: %j", async (name) => {
-    await seed([profile("p1")]);
-    expect(
-      errorKind(
-        await mutations.createProfile({ name, color: "blue", enabled: false }),
-      ),
-    ).toBe("profile-name-unavailable");
-  });
+  it.each(["p1", "P1", "  p1  ", "", "x".repeat(49)])(
+    "rejects an unavailable or invalid name: %j",
+    async (name) => {
+      await seed([profile("p1")]);
+      expect(
+        errorKind(
+          await mutations.createProfile({
+            name,
+            color: "blue",
+            enabled: false,
+          }),
+        ),
+      ).toBe("profile-name-unavailable");
+    },
+  );
 
   it("renames with case-insensitive uniqueness, allowing a self-rename", async () => {
     await seed([profile("p1"), profile("p2")]);

@@ -33,17 +33,17 @@ function rule(
 }
 
 describe("origin patterns", () => {
-  it.each([
-    "127.0.0.1",
-    "[::1]",
-  ])("round-trips an exact IP host: %s", (domain) => {
-    const origin = originPatternForDomain(domain);
+  it.each(["127.0.0.1", "[::1]"])(
+    "round-trips an exact IP host: %s",
+    (domain) => {
+      const origin = originPatternForDomain(domain);
 
-    expect(domainFromOriginPattern(origin)).toBe(domain);
-    expect(originGranted(domain, { origins: [origin], allSites: false })).toBe(
-      true,
-    );
-  });
+      expect(domainFromOriginPattern(origin)).toBe(domain);
+      expect(
+        originGranted(domain, { origins: [origin], allSites: false }),
+      ).toBe(true);
+    },
+  );
 
   it("does not treat an exact-host grant as a parent-domain grant", () => {
     expect(
@@ -107,11 +107,14 @@ describe("requiredOrigins", () => {
   it.each<Scope>([
     { type: "pattern", pattern: "||example.com^", hosts: [] },
     { type: "regex", regex: "^https://x/", hosts: [] },
-  ])("requires broad access for a %s rule that names no host (Chrome applies nothing without a grant)", (scope) => {
-    expect(requiredOrigins(rule(scope, ["xhr"], ["app.example.com"]))).toEqual([
-      ALL_SITES_ORIGIN,
-    ]);
-  });
+  ])(
+    "requires broad access for a %s rule that names no host (Chrome applies nothing without a grant)",
+    (scope) => {
+      expect(
+        requiredOrigins(rule(scope, ["xhr"], ["app.example.com"])),
+      ).toEqual([ALL_SITES_ORIGIN]);
+    },
+  );
 
   it("deduplicates target and initiator origin patterns", () => {
     expect(
@@ -135,9 +138,14 @@ describe("missingGrants", () => {
   it.each<Scope>([
     { type: "pattern", pattern: "||example.com^", hosts: [] },
     { type: "regex", regex: "^https://x/", hosts: [] },
-  ])("reports broad access for an ungranted $type rule with no named sites", (scope) => {
-    expect(missingGrants(rule(scope, "all"), none)).toEqual([ALL_SITES_ORIGIN]);
-  });
+  ])(
+    "reports broad access for an ungranted $type rule with no named sites",
+    (scope) => {
+      expect(missingGrants(rule(scope, "all"), none)).toEqual([
+        ALL_SITES_ORIGIN,
+      ]);
+    },
+  );
 
   it("reports an ungranted domain target", () => {
     expect(

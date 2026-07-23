@@ -548,26 +548,29 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
   it.each([
     ["syntaxError", copy.errors.regexInvalid],
     ["memoryLimitExceeded", copy.errors.regexOversize],
-  ])("renders the regex copy for %s under the scope field", async (reason, message) => {
-    const ctx = mount(
-      {},
-      { error: { kind: "regex-invalid", regex: "(a|b", reason } },
-    );
-    const regexRadio = ctx.root.querySelector(
-      '.segmented input[value="regex"]',
-    ) as HTMLInputElement;
-    fire(() => regexRadio.click());
-    const regexInput = ctx.root.querySelector(
-      '[aria-label="Regex"]',
-    ) as HTMLInputElement;
-    typeInto(regexInput, "(a|b");
-    await fillAndCommit(ctx);
-    expect(ctx.errors()).toContain(message);
-    expect(
-      (ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement)
-        .value,
-    ).toBe("(a|b");
-  });
+  ])(
+    "renders the regex copy for %s under the scope field",
+    async (reason, message) => {
+      const ctx = mount(
+        {},
+        { error: { kind: "regex-invalid", regex: "(a|b", reason } },
+      );
+      const regexRadio = ctx.root.querySelector(
+        '.segmented input[value="regex"]',
+      ) as HTMLInputElement;
+      fire(() => regexRadio.click());
+      const regexInput = ctx.root.querySelector(
+        '[aria-label="Regex"]',
+      ) as HTMLInputElement;
+      typeInto(regexInput, "(a|b");
+      await fillAndCommit(ctx);
+      expect(ctx.errors()).toContain(message);
+      expect(
+        (ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement)
+          .value,
+      ).toBe("(a|b");
+    },
+  );
 
   it.each([
     [
@@ -582,13 +585,16 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       { kind: "doc-byte-limit-exceeded", bytes: 1, limit: 4194304 },
       copy.errors.storageBudget,
     ],
-  ] as const)("renders cap and budget errors at editor level", async (error, message) => {
-    const ctx = mount({}, { error: error as MutationError });
-    await fillAndCommit(ctx);
-    expect(ctx.onClose).not.toHaveBeenCalled();
-    expect(ctx.errors()).toContain(message);
-    expect(ctx.nameInput().value).toBe("x-custom");
-  });
+  ] as const)(
+    "renders cap and budget errors at editor level",
+    async (error, message) => {
+      const ctx = mount({}, { error: error as MutationError });
+      await fillAndCommit(ctx);
+      expect(ctx.onClose).not.toHaveBeenCalled();
+      expect(ctx.errors()).toContain(message);
+      expect(ctx.nameInput().value).toBe("x-custom");
+    },
+  );
 });
 
 describe("RuleEditor delete", () => {

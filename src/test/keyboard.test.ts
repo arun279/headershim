@@ -51,25 +51,24 @@ describe("popupKeyHandler", () => {
     input.remove();
   });
 
-  it.each([
-    "input",
-    "textarea",
-    "select",
-  ] as const)("single letters and digits are inert while focus is in a %s", (tag) => {
-    const dispatched = commands();
-    const handler = popupKeyHandler(dispatched);
-    const field = document.createElement(tag);
-    document.body.appendChild(field);
-    for (const init of [{ key: "n" }, { key: "t" }, { key: "p" }]) {
-      const event = keydown(init, field);
-      handler(event);
-      expect(event.defaultPrevented).toBe(false);
-    }
-    expect(dispatched.addChange).not.toHaveBeenCalled();
-    expect(dispatched.justThisTab).not.toHaveBeenCalled();
-    expect(dispatched.togglePause).not.toHaveBeenCalled();
-    field.remove();
-  });
+  it.each(["input", "textarea", "select"] as const)(
+    "single letters and digits are inert while focus is in a %s",
+    (tag) => {
+      const dispatched = commands();
+      const handler = popupKeyHandler(dispatched);
+      const field = document.createElement(tag);
+      document.body.appendChild(field);
+      for (const init of [{ key: "n" }, { key: "t" }, { key: "p" }]) {
+        const event = keydown(init, field);
+        handler(event);
+        expect(event.defaultPrevented).toBe(false);
+      }
+      expect(dispatched.addChange).not.toHaveBeenCalled();
+      expect(dispatched.justThisTab).not.toHaveBeenCalled();
+      expect(dispatched.togglePause).not.toHaveBeenCalled();
+      field.remove();
+    },
+  );
 
   it("is inert in contenteditable regions", () => {
     const dispatched = commands();
