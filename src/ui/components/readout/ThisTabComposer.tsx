@@ -12,6 +12,7 @@ import type {
   OverrideDraft,
   SessionMutationError,
 } from "../../state/session-mutations";
+import { AdvisorySlot } from "../AdvisorySlot";
 import { Button } from "../Button";
 import { parseHeaderLine } from "../headerLine";
 import { Segmented } from "../Segmented";
@@ -167,6 +168,11 @@ export function ThisTabComposer({
           </span>
         )}
       </div>
+      <AdvisorySlot
+        header={header}
+        direction={direction}
+        operation={operation}
+      />
       {pastedLineSplit && (
         <p class="c-note" role="status">
           {copy.editor.pastedLineSplit}
