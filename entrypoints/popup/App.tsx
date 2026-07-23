@@ -3,8 +3,9 @@ import { browser } from "wxt/browser";
 import { availableProfileName } from "../../src/core/codec/headershim";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
-  BADGE_COLORS,
   type Direction,
+  defaultProfileColor,
+  activeProfile as getActiveProfile,
   type TabOverride,
 } from "../../src/core/model";
 import { err, type Result } from "../../src/core/result";
@@ -157,10 +158,7 @@ function Ready({
   docRef.current = doc;
 
   const paused = status.kind === "paused";
-  const activeProfile = useMemo(
-    () => doc.profiles.find((profile) => profile.id === doc.activeProfileId),
-    [doc],
-  );
+  const activeProfile = useMemo(() => getActiveProfile(doc), [doc]);
   const readout = useMemo(
     () =>
       computeReadout({
@@ -201,9 +199,7 @@ function Ready({
         doc.profiles,
         [],
       ),
-      color:
-        BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
-        BADGE_COLORS[0],
+      color: defaultProfileColor(doc.profiles.length),
       enabled: true,
     });
     if (!outcome.ok) {

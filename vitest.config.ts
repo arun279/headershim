@@ -24,8 +24,10 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "**/*.test.{ts,tsx}",
+        "**/*.fake.ts",
         "src/platform/test-setup.ts",
         "src/test/**",
+        "src/ui/test/**",
       ],
       thresholds: {
         "src/core/**": {

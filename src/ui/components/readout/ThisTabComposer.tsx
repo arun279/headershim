@@ -1,5 +1,11 @@
 import { useRef, useState } from "preact/hooks";
-import type { Direction, HeaderOp, TabOverride } from "../../../core/model";
+import {
+  DIRECTIONS,
+  type Direction,
+  HEADER_OPERATIONS,
+  type HeaderOp,
+  type TabOverride,
+} from "../../../core/model";
 import type { Result } from "../../../core/result";
 import { useFocusTrap } from "../../a11y/focus";
 import { copy } from "../../copy";
@@ -34,9 +40,6 @@ interface ThisTabComposerProps {
   onClose: () => void;
   onCommitted: () => void;
 }
-
-const DIRECTIONS: readonly Direction[] = ["request", "response"];
-const OPERATIONS: readonly HeaderOp[] = ["set", "append", "remove"];
 
 /**
  * The ephemeral author. A this-tab change is temporary by construction, so it
@@ -113,7 +116,7 @@ export function ThisTabComposer({
           semantics="pressed"
           label={copy.editor.labels.operation}
           value={operation}
-          options={OPERATIONS.map((option) => ({
+          options={HEADER_OPERATIONS.map((option) => ({
             value: option,
             label: (
               <>

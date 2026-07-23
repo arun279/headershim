@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
 import { BRAND_NAME } from "./src/brand";
+import { ALL_SITES_ORIGIN } from "./src/core/grants";
 import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
 
 // E2E traffic checks need a host grant that Chromium cannot grant through its
@@ -47,8 +48,8 @@ export default defineConfig({
       "storage",
       "activeTab",
     ],
-    ...(e2eHostAccess ? { host_permissions: ["*://*/*"] } : {}),
-    optional_host_permissions: ["*://*/*"],
+    ...(e2eHostAccess ? { host_permissions: [ALL_SITES_ORIGIN] } : {}),
+    optional_host_permissions: [ALL_SITES_ORIGIN],
     // HeaderShim reads and writes headers through declarativeNetRequest and
     // never talks to a network endpoint itself. connect-src 'none' is the
     // browser-enforced form of that: it blocks fetch, XHR, WebSocket,
@@ -58,7 +59,7 @@ export default defineConfig({
       extension_pages:
         "script-src 'self'; object-src 'self'; connect-src 'none';",
     },
-    // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
+    // The default tooltip; the badge state machine swaps in its paused title
     // while paused and clears back to this on exit.
     action: { default_title: BRAND_NAME },
     commands: {

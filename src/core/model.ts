@@ -1,19 +1,24 @@
 import { checkEnabledRuleLimits } from "./limits";
 
-export type Direction = "request" | "response";
-export type HeaderOp = "set" | "append" | "remove";
+export const DIRECTIONS = ["request", "response"] as const;
+export type Direction = (typeof DIRECTIONS)[number];
 
-export type ResourceGroup =
-  | "pages"
-  | "subframes"
-  | "xhr"
-  | "scripts"
-  | "stylesheets"
-  | "images"
-  | "fonts"
-  | "media"
-  | "websockets"
-  | "other";
+export const HEADER_OPERATIONS = ["set", "append", "remove"] as const;
+export type HeaderOp = (typeof HEADER_OPERATIONS)[number];
+
+export const RESOURCE_GROUPS = [
+  "pages",
+  "subframes",
+  "xhr",
+  "scripts",
+  "stylesheets",
+  "images",
+  "fonts",
+  "media",
+  "websockets",
+  "other",
+] as const;
+export type ResourceGroup = (typeof RESOURCE_GROUPS)[number];
 
 export type Scope =
   | { type: "domains"; domains: string[] }
@@ -141,6 +146,14 @@ export function createProfile(draft: ProfileDraft): Profile {
   };
 }
 
+export function activeProfile(doc: StateDoc): Profile | undefined {
+  return doc.profiles.find((profile) => profile.id === doc.activeProfileId);
+}
+
+export function defaultProfileColor(profileCount: number): BadgeColor {
+  return BADGE_COLORS[profileCount % BADGE_COLORS.length] ?? BADGE_COLORS[0];
+}
+
 export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   const profile = doc.profiles.find((candidate) => candidate.id === profileId);
   if (
@@ -153,9 +166,8 @@ export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
 }
 
 export function activateNextProfile(doc: StateDoc): StateDoc {
-  const activeIndex = doc.profiles.findIndex(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const active = activeProfile(doc);
+  const activeIndex = active === undefined ? -1 : doc.profiles.indexOf(active);
   for (let step = 1; step <= doc.profiles.length; step += 1) {
     const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
     if (next === undefined) {

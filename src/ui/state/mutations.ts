@@ -12,6 +12,7 @@ import {
   type LimitError,
 } from "../../core/limits";
 import {
+  activeProfile,
   type BadgeColor,
   createProfile as buildProfile,
   cloneRule,
@@ -661,11 +662,7 @@ function normalizeHosts(hosts: readonly string[]): string[] {
 }
 
 function enabledRules(doc: StateDoc): Rule[] {
-  return (
-    doc.profiles
-      .find((profile) => profile.id === doc.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled) ?? []
-  );
+  return activeProfile(doc)?.rules.filter((rule) => rule.enabled) ?? [];
 }
 
 function regexCount(rules: readonly Rule[]): number {

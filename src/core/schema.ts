@@ -1,3 +1,4 @@
+import { normalizeHeaderName } from "./headers";
 import {
   createProfile,
   isStoredProfileNameValid,
@@ -200,7 +201,7 @@ function isRule(value: unknown): value is Rule {
     isOneOf(operation, HEADER_OPERATIONS) &&
     typeof header === "string" &&
     header.length > 0 &&
-    header === header.trim().toLowerCase() &&
+    header === normalizeHeaderName(header) &&
     hasValidHeaderValue(value) &&
     isScope(scope) &&
     isResourceTypes(resourceTypes) &&

@@ -14,13 +14,14 @@ import { dropUncompilable, settlesPerRequest } from "../../core/compile";
 import { findOverriddenRules } from "../../core/conflicts";
 import { type GrantSnapshot, missingGrants } from "../../core/grants";
 import { normalizeHeaderName } from "../../core/headers";
-import type {
-  BadgeColor,
-  Direction,
-  HeaderOp,
-  Profile,
-  Rule,
-  StateDoc,
+import {
+  activeProfile,
+  type BadgeColor,
+  type Direction,
+  type HeaderOp,
+  type Profile,
+  type Rule,
+  type StateDoc,
 } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
 import { isSecretHeader, ruleValueSummary } from "../secret";
@@ -30,6 +31,7 @@ import {
   lineStatus,
   type RefusedReason,
   refusedReason,
+  ruleLabel,
 } from "./readout";
 
 interface FleetProvenance {
@@ -95,13 +97,14 @@ export function projectFleet({
   // does: enabled rules of the active profile, in order, so an earlier one
   // shadows a later one.
   const compilable = dropUncompilable(doc, isRegexSupported);
+  const liveProfile = activeProfile(compilable);
   const live: { profile: Profile; rule: Rule }[] = [];
-  for (const profile of compilable.profiles) {
-    if (profile.id !== compilable.activeProfileId) continue;
-    for (const rule of profile.rules) {
-      if (rule.enabled) live.push({ profile, rule });
+  if (liveProfile !== undefined) {
+    for (const rule of liveProfile.rules) {
+      if (rule.enabled) live.push({ profile: liveProfile, rule });
     }
   }
+  const activeProfileId = activeProfile(doc)?.id;
   const rulesById = new Map<string, Rule>();
   for (const { rule } of live) rulesById.set(rule.id, rule);
 
@@ -123,7 +126,7 @@ export function projectFleet({
         grants,
         paused: status.kind === "paused",
         outOfSync: status.kind === "out-of-sync",
-        active: profile.id === doc.activeProfileId,
+        active: profile.id === activeProfileId,
         overriddenBy: overriddenBy.get(rule.id),
         isRegexSupported,
       }),
@@ -188,13 +191,6 @@ function fleetRule(
     siteCount: siteCount(rule),
     crossSite: rule.scope.type !== "domains",
   };
-}
-
-function ruleLabel(rule: Rule): string {
-  const comment = rule.comment?.trim();
-  return comment === undefined || comment.length === 0
-    ? `${rule.header} rule`
-    : comment;
 }
 
 function fleetScope(rule: Rule): FleetScope {

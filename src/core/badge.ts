@@ -1,4 +1,5 @@
-import type { BadgeColor, StateDoc } from "./model";
+import { BRAND_NAME } from "../brand";
+import { activeProfile, type BadgeColor, type StateDoc } from "./model";
 import type { SystemStatus } from "./status";
 
 interface BadgeColors {
@@ -36,11 +37,10 @@ export const BADGE_PALETTE = {
 } as const satisfies Record<BadgeColor, string>;
 
 const WHITE = "#FFFFFF";
-const PAUSED_FILL = "#6E7B88";
 const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
 // The paused-state toolbar tooltip; the only state that names itself.
-const PAUSED_TITLE = "HeaderShim: paused";
+const PAUSED_TITLE = `${BRAND_NAME}: paused`;
 
 export function planBadge(input: BadgeInput): BadgePlan {
   return {
@@ -51,7 +51,7 @@ export function planBadge(input: BadgeInput): BadgePlan {
 
 function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
   if (status.kind === "paused") {
-    return globalBadge("II", PAUSED_FILL);
+    return globalBadge("II", NEUTRAL_FILL);
   }
   // A missing grant and a failed reconcile are both can't-run states: rules the
   // user believes are live are not. The amber badge outranks count rendering,
@@ -61,9 +61,7 @@ function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
     return globalBadge("!", CANT_RUN_FILL);
   }
 
-  const active = doc.profiles.find(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const active = activeProfile(doc);
   const backgroundColor =
     active === undefined ? NEUTRAL_FILL : BADGE_PALETTE[active.color];
 

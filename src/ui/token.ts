@@ -34,7 +34,7 @@ export function maskToken(value: string): MaskedToken {
   };
 }
 
-export interface JwtClaims {
+interface JwtClaims {
   readonly expMs: number;
   readonly iatMs?: number;
 }

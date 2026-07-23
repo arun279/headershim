@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { availableProfileName } from "../../../src/core/codec/headershim";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
-  BADGE_COLORS,
+  activeProfile,
+  defaultProfileColor,
   type Profile,
   type StateDoc,
 } from "../../../src/core/model";
@@ -32,10 +33,8 @@ export function ProfilesPage({
   mutations: Mutations;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const [openId, setOpenId] = useState(
-    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.id ??
-      doc.profiles[0]?.id,
-  );
+  const active = activeProfile(doc);
+  const [openId, setOpenId] = useState(active?.id ?? doc.profiles[0]?.id);
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
@@ -66,17 +65,13 @@ export function ProfilesPage({
   };
 
   const enabledRuleCount =
-    doc.profiles
-      .find((profile) => profile.id === doc.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled).length ?? 0;
+    active?.rules.filter((rule) => rule.enabled).length ?? 0;
 
   const create = () => {
     void mutations
       .createProfile({
         name: availableProfileName(text.newName, doc.profiles, []),
-        color:
-          BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
-          BADGE_COLORS[0],
+        color: defaultProfileColor(doc.profiles.length),
         enabled: false,
       })
       .then((outcome) => {

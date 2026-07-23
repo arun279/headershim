@@ -3,7 +3,7 @@ import {
   domainFromOriginPattern,
   type GrantSnapshot,
 } from "../../../src/core/grants";
-import type { StateDoc } from "../../../src/core/model";
+import { activeProfile, type StateDoc } from "../../../src/core/model";
 import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
@@ -155,9 +155,7 @@ export function RulesPage({
   };
 
   const newRule = () => {
-    const target =
-      doc.profiles.find((profile) => profile.id === doc.activeProfileId) ??
-      doc.profiles[0];
+    const target = activeProfile(doc) ?? doc.profiles[0];
     if (target !== undefined) {
       setEditing({ profileId: target.id, ruleId: undefined });
     }
@@ -230,9 +228,7 @@ export function RulesPage({
     );
   }
 
-  const noProfilesOn = !doc.profiles.some(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const noProfilesOn = activeProfile(doc) === undefined;
   const empty = fleet.length === 0;
 
   return (

@@ -6,6 +6,13 @@
  */
 
 import { BRAND_NAME } from "../brand";
+import {
+  MAX_DOC_BYTES,
+  MAX_ENABLED_RULES,
+  MAX_REGEX_RULES,
+  MAX_SESSION_OVERRIDES,
+} from "../core/limits";
+import type { BadgeColor, ResourceGroup } from "../core/model";
 
 /**
  * A sentence is a segment list so the wire-facing tokens inside it (hostnames,
@@ -112,11 +119,11 @@ export const copy = {
     pausedBanner:
       "Everything paused. Switching back on restores this exact state.",
     empty: (host: string): Sentence => [
-      "HeaderShim isn't changing anything on ",
+      `${BRAND_NAME} isn't changing anything on `,
       data(host),
       ".",
     ],
-    noHost: "Open the popup on a website to see what HeaderShim does there.",
+    noHost: `Open the popup on a website to see what ${BRAND_NAME} does there.`,
     thisTabTag: "This tab only",
     thisTabClears: "clears when you close the tab",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
@@ -294,7 +301,7 @@ export const copy = {
         magenta: "Magenta",
         crimson: "Crimson",
         slate: "Slate",
-      },
+      } satisfies Record<BadgeColor, string>,
     },
     rules: {
       loadingEditor: "Loading rule editor…",
@@ -302,10 +309,9 @@ export const copy = {
     importExport: {
       title: "Import & export",
       importHeading: "Import",
-      instruction:
-        "HeaderShim JSON or ModHeader export, detected automatically.",
+      instruction: `${BRAND_NAME} JSON or ModHeader export, detected automatically.`,
       choose: "Choose file…",
-      fileInputLabel: "Import a HeaderShim or ModHeader export",
+      fileInputLabel: `Import a ${BRAND_NAME} or ModHeader export`,
       exportHeading: "Export",
       exportEverything: "Export everything",
       exportOne: "Export one profile",
@@ -359,12 +365,10 @@ export const copy = {
         ],
         dynamicToken:
           "Contains a request-time token Chrome extensions can no longer compute.",
-        droppedExcludeUrl:
-          "Dropped. HeaderShim has no per-rule URL exclusion in this version.",
-        droppedInitiatorDomain:
-          "Dropped. HeaderShim has no initiator scoping in this version.",
+        droppedExcludeUrl: `Dropped. ${BRAND_NAME} has no per-rule URL exclusion in this version.`,
+        droppedInitiatorDomain: `Dropped. ${BRAND_NAME} has no initiator scoping in this version.`,
         droppedTab: "Dropped. Use This-tab overrides for per-tab needs.",
-        droppedUrlReplacement: "Dropped. HeaderShim changes headers only.",
+        droppedUrlReplacement: `Dropped. ${BRAND_NAME} changes headers only.`,
       },
     },
     siteAccess: {
@@ -388,8 +392,7 @@ export const copy = {
         "Requests started by other pages also need those pages granted.",
       allSites: {
         heading: "Allow on all sites",
-        consequence:
-          "This gives HeaderShim access to every website instead of asking one site at a time.",
+        consequence: `This gives ${BRAND_NAME} access to every website instead of asking one site at a time.`,
         disclosure: "Review all-sites access",
         // Chrome shows this exact warning before it can grant broad access.
         warning:
@@ -414,13 +417,12 @@ export const copy = {
     about: {
       title: "About",
       build: (version: string, commit: string): Sentence => [
-        "HeaderShim v",
+        `${BRAND_NAME} v`,
         data(version),
         " · commit ",
         data(commit),
       ],
-      description:
-        "HeaderShim modifies HTTP request and response headers using scoped rules, profiles, and tab-specific overrides.",
+      description: `${BRAND_NAME} modifies HTTP request and response headers using scoped rules, profiles, and tab-specific overrides.`,
       license:
         "Open source under the MIT license. Provided as is, without warranty.",
       links: {
@@ -528,7 +530,7 @@ export const copy = {
       media: "Media",
       websockets: "WebSockets",
       other: "Other",
-    },
+    } satisfies Record<ResourceGroup, string>,
     only: (group: string) => `${group} only`,
     count: (n: number) => `${n} types`,
   },
@@ -647,24 +649,18 @@ export const copy = {
       `Not added. A this-tab change needs access to ${host}, and you declined. Add it again when you're ready to allow it.`,
     appendDisallowed: (name: string) =>
       `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
-    ruleCap:
-      "Chrome caps extensions at 5,000 header rules, and enabling this would pass HeaderShim's safe limit of 4,500. Disable or delete rules you're not using, or turn off a profile.",
+    ruleCap: `Chrome caps extensions at 5,000 header rules, and enabling this would pass ${BRAND_NAME}'s safe limit of ${MAX_ENABLED_RULES.toLocaleString("en-US")}. Disable or delete rules you're not using, or turn off a profile.`,
     ruleCounter: (enabled: number) =>
-      `${enabled.toLocaleString("en-US")} of 4,500 enabled rules.`,
-    regexRuleCap:
-      "Chrome separately caps regex-scoped rules at 1,000, and enabling this would pass that limit. Disable or delete regex rules you're not using, or switch some scopes to URL patterns.",
-    storageBudget:
-      "Chrome gives an extension limited local storage, and this change would pass HeaderShim's safe budget of 4 MB. Shorten long header values, or delete rules you're not using.",
-    sessionCap:
-      "Chrome caps temporary tab rules, and this would pass HeaderShim's limit of 1,000. Remove a temporary override you're done with, or save this one as a rule instead.",
+      `${enabled.toLocaleString("en-US")} of ${MAX_ENABLED_RULES.toLocaleString("en-US")} enabled rules.`,
+    regexRuleCap: `Chrome separately caps regex-scoped rules at ${MAX_REGEX_RULES.toLocaleString("en-US")}, and enabling this would pass that limit. Disable or delete regex rules you're not using, or switch some scopes to URL patterns.`,
+    storageBudget: `Chrome gives an extension limited local storage, and this change would pass ${BRAND_NAME}'s safe budget of ${MAX_DOC_BYTES / (1024 * 1024)} MB. Shorten long header values, or delete rules you're not using.`,
+    sessionCap: `Chrome caps temporary tab rules, and this would pass ${BRAND_NAME}'s limit of ${MAX_SESSION_OVERRIDES.toLocaleString("en-US")}. Remove a temporary override you're done with, or save this one as a rule instead.`,
     importParse:
       "This file isn't valid JSON, so nothing was imported and nothing was changed. If it came from ModHeader, export it again with Profile → Export → JSON.",
     importNewer: (fileVersion: number, supportedVersion: number) =>
-      `This file was exported by a newer HeaderShim (format ${fileVersion}; this version reads up to ${supportedVersion}). Update HeaderShim, then import again. Nothing was changed.`,
-    importUnrecognized:
-      "This file is valid JSON but isn't a HeaderShim or ModHeader export, so nothing was imported and nothing was changed. HeaderShim reads its own exports and ModHeader profile exports only.",
-    importTooLarge:
-      "This file is far larger than any export HeaderShim can hold, so it wasn't read and nothing was changed. Check you picked the right file.",
+      `This file was exported by a newer ${BRAND_NAME} (format ${fileVersion}; this version reads up to ${supportedVersion}). Update ${BRAND_NAME}, then import again. Nothing was changed.`,
+    importUnrecognized: `This file is valid JSON but isn't a ${BRAND_NAME} or ModHeader export, so nothing was imported and nothing was changed. ${BRAND_NAME} reads its own exports and ModHeader profile exports only.`,
+    importTooLarge: `This file is far larger than any export ${BRAND_NAME} can hold, so it wasn't read and nothing was changed. Check you picked the right file.`,
     importUnreadable:
       "This file couldn't be read, so nothing was imported and nothing was changed. If it moved or changed since you picked it, pick it again.",
     headerNotModifiable:
@@ -684,7 +680,7 @@ export const copy = {
       resourceTypes: "Pick at least one resource type.",
     },
     newerStore: (foundVersion: number, supportedVersion: number) =>
-      `Your rules were saved by a newer HeaderShim (format ${foundVersion}; this version reads up to ${supportedVersion}). Update HeaderShim to pick them back up. Nothing has been changed.`,
+      `Your rules were saved by a newer ${BRAND_NAME} (format ${foundVersion}; this version reads up to ${supportedVersion}). Update ${BRAND_NAME} to pick them back up. Nothing has been changed.`,
   },
 
   advisories: {

@@ -1,4 +1,4 @@
-import type { Rule, StateDoc } from "./model";
+import { activeProfile, type Rule, type StateDoc } from "./model";
 import { expandResourceTypes, originPatternForDomain } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
@@ -80,9 +80,7 @@ export function docMissingGrants(
   doc: StateDoc,
   granted: GrantSnapshot,
 ): RuleGrantGap[] {
-  const profile = doc.profiles.find(
-    (candidate) => candidate.id === doc.activeProfileId,
-  );
+  const profile = activeProfile(doc);
   return (
     profile?.rules.flatMap((rule) => {
       const missing = rule.enabled ? missingGrants(rule, granted) : [];
@@ -149,15 +147,13 @@ export function siteAccessView(
       .sort(byDomain),
     initiatorNote:
       !granted.allSites &&
-      doc.profiles
-        .find((profile) => profile.id === doc.activeProfileId)
-        ?.rules.some(
-          (rule) =>
-            rule.enabled &&
-            rule.initiators.length === 0 &&
-            rule.scope.type !== "all" &&
-            subresourceScopedRule(rule),
-        ) === true,
+      activeProfile(doc)?.rules.some(
+        (rule) =>
+          rule.enabled &&
+          rule.initiators.length === 0 &&
+          rule.scope.type !== "all" &&
+          subresourceScopedRule(rule),
+      ) === true,
   };
 }
 
