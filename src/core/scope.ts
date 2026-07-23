@@ -61,16 +61,26 @@ export function scopeCondition(scope: Scope): ScopeCondition {
     case "domains":
       return { requestDomains: [...scope.domains] };
     case "pattern":
-      return { urlFilter: scope.pattern };
+      return {
+        ...(scope.hosts.length === 0
+          ? {}
+          : { requestDomains: [...scope.hosts] }),
+        urlFilter: scope.pattern,
+      };
     case "regex":
-      return { regexFilter: scope.regex };
+      return {
+        ...(scope.hosts.length === 0
+          ? {}
+          : { requestDomains: [...scope.hosts] }),
+        regexFilter: scope.regex,
+      };
     case "all":
       return {};
   }
 }
 
 export function originPatternForDomain(domain: string): string {
-  return `*://*.${domain}/*`;
+  return isIpLiteral(domain) ? `*://${domain}/*` : `*://*.${domain}/*`;
 }
 
 // Chrome refuses a non-ASCII urlFilter or requestDomains entry outright, naming
@@ -78,6 +88,10 @@ export function originPatternForDomain(domain: string): string {
 // non-ASCII (astral chars surface as surrogates, also >= U+0080), so this flags
 // exactly the > 0x7f case.
 const NON_ASCII = /[\u0080-\uffff]/;
+
+export function isRegexFilterSupported(regex: string): boolean {
+  return !NON_ASCII.test(regex);
+}
 
 export type UrlFilterError = "non-ascii" | "domain-anchor-wildcard";
 
@@ -111,4 +125,18 @@ export function validateUrlFilter(
 // where the list is.
 export function isDomainSupported(domain: string): boolean {
   return !NON_ASCII.test(domain);
+}
+
+function isIpLiteral(domain: string): boolean {
+  if (domain.startsWith("[") && domain.endsWith("]")) {
+    return true;
+  }
+  const segments = domain.split(".");
+  return (
+    segments.length === 4 &&
+    segments.every(
+      (segment) =>
+        /^\d{1,3}$/.test(segment) && Number.parseInt(segment, 10) <= 255,
+    )
+  );
 }

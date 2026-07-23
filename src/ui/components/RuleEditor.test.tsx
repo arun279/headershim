@@ -713,7 +713,7 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
 
-  it("includes and records a different tab origin when the rule reaches subresources", async () => {
+  it("requests a different tab origin without changing the authored initiators", async () => {
     const differs = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
@@ -726,7 +726,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(differs.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
 
@@ -743,6 +743,16 @@ describe("RuleEditor grant moment", () => {
       undefined,
       expect.objectContaining({ initiators: [] }),
       undefined,
+    );
+
+    const broad = mount({
+      grants: GRANTED_ALL,
+      prefillDomain: "api.example.com",
+      tabDomain: "app.example.com",
+    });
+    await fillAndCommit(broad, "authorization");
+    expect(broad.onSave.mock.calls[0]?.[1].initiators).toEqual(
+      differs.onSave.mock.calls[0]?.[1].initiators,
     );
   });
 
@@ -1018,7 +1028,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(ctx.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
     expect(ctx.onClose).toHaveBeenCalledOnce();

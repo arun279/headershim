@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   ALL_SITES_ORIGIN,
   docMissingGrants,
+  domainFromOriginPattern,
   type GrantSnapshot,
   isAllSitesOrigin,
   missingGrants,
+  originGranted,
   requiredOrigins,
   siteAccessView,
 } from "./grants";
@@ -29,6 +31,29 @@ function rule(
     enabled: true,
   };
 }
+
+describe("origin patterns", () => {
+  it.each([
+    "127.0.0.1",
+    "[::1]",
+  ])("round-trips an exact IP host: %s", (domain) => {
+    const origin = originPatternForDomain(domain);
+
+    expect(domainFromOriginPattern(origin)).toBe(domain);
+    expect(originGranted(domain, { origins: [origin], allSites: false })).toBe(
+      true,
+    );
+  });
+
+  it("does not treat an exact-host grant as a parent-domain grant", () => {
+    expect(
+      originGranted("api.example.com", {
+        origins: ["*://example.com/*"],
+        allSites: false,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("requiredOrigins", () => {
   it("does not contribute initiators for a Pages-only rule", () => {

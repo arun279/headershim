@@ -205,15 +205,32 @@ function originPatternContains(granted: string, required: string): boolean {
     return true;
   }
 
-  const grantedDomain = domainFromOriginPattern(granted);
-  const requiredDomain = domainFromOriginPattern(required);
-  if (grantedDomain === undefined) {
+  const grantedPattern = parseOriginPattern(granted);
+  const requiredPattern = parseOriginPattern(required);
+  if (
+    grantedPattern === undefined ||
+    requiredPattern === undefined ||
+    !grantedPattern[1]
+  ) {
     return false;
   }
-  return requiredDomain?.endsWith(`.${grantedDomain}`) ?? false;
+  return (
+    requiredPattern[0] === grantedPattern[0] ||
+    requiredPattern[0].endsWith(`.${grantedPattern[0]}`)
+  );
 }
 
 export function domainFromOriginPattern(pattern: string): string | undefined {
-  const match = /^\*:\/\/\*\.([^/]+)\/\*$/.exec(pattern);
-  return match?.[1];
+  return parseOriginPattern(pattern)?.[0];
+}
+
+function parseOriginPattern(
+  pattern: string,
+): readonly [domain: string, includesSubdomains: boolean] | undefined {
+  const match = /^\*:\/\/(\*\.)?([^/]+)\/\*$/.exec(pattern);
+  const domain = match?.[2];
+  if (domain === undefined || domain === "*") {
+    return undefined;
+  }
+  return [domain, match?.[1] !== undefined];
 }

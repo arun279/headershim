@@ -96,14 +96,23 @@ describe("scope conditions", () => {
         pattern: "||example.com^",
         hosts: ["example.com"],
       }),
-    ).toEqual({ urlFilter: "||example.com^" });
+    ).toEqual({
+      requestDomains: ["example.com"],
+      urlFilter: "||example.com^",
+    });
     expect(
       scopeCondition({
         type: "regex",
         regex: "^https://example\\.com/",
         hosts: ["example.com"],
       }),
-    ).toEqual({ regexFilter: "^https://example\\.com/" });
+    ).toEqual({
+      requestDomains: ["example.com"],
+      regexFilter: "^https://example\\.com/",
+    });
+    expect(
+      scopeCondition({ type: "pattern", pattern: "/api", hosts: [] }),
+    ).toEqual({ urlFilter: "/api" });
     expect(scopeCondition({ type: "all" })).toEqual({});
     expect(
       scopeCondition({ type: "domains", domains }).requestDomains,
@@ -116,6 +125,11 @@ describe("origin patterns", () => {
     expect(originPatternForDomain("api.example.com")).toBe(
       "*://*.api.example.com/*",
     );
+  });
+
+  it("uses exact-host patterns for IP literals", () => {
+    expect(originPatternForDomain("127.0.0.1")).toBe("*://127.0.0.1/*");
+    expect(originPatternForDomain("[::1]")).toBe("*://[::1]/*");
   });
 });
 

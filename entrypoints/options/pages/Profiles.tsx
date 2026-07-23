@@ -106,9 +106,8 @@ export function ProfilesPage({
         flash(outcome.error);
         return;
       }
-      const { profile: deleted, index } = outcome.value;
       showUndoable(copy.toast.profileDeleted(profile.name), () =>
-        mutations.restoreProfile(deleted, index),
+        mutations.restoreProfile(outcome.value),
       );
       titleRef.current?.focus();
     });

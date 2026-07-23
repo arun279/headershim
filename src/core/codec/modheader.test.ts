@@ -397,6 +397,8 @@ describe("ModHeader import", () => {
     expect(warningsOfKind(plan, "dynamic-token")).toContainEqual({
       kind: "dynamic-token",
       ruleName: "literal token header",
+      profileIndex: 0,
+      ruleIndex: 2,
       tokens: ["uuid", "url_hostname", "timestamp"],
       conversionOffer: {
         kind: "convert-to-frozen-value",

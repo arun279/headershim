@@ -4,6 +4,7 @@ import { err, ok, type Result } from "./result";
 export const MAX_ENABLED_RULES = 4_500;
 export const MAX_REGEX_RULES = 1_000;
 export const MAX_SESSION_OVERRIDES = 1_000;
+export const MINIMUM_CHROME_VERSION = 120;
 export const MAX_DOC_BYTES = 4 * 1024 * 1024;
 export const RULE_COUNT_WARNING_THRESHOLD = 4_000;
 

@@ -112,9 +112,6 @@ export function RulesPage({
         if (!outcome.ok) flash(outcome.error);
       });
 
-  // Saving into another profile is two settled steps, not one: the rule is
-  // written where it already lives, so a rejected header is reported before
-  // anything moves, and only a clean save relocates it.
   const save = async (
     ruleId: string | undefined,
     draft: Parameters<Mutations["saveRule"]>[2],
@@ -125,16 +122,7 @@ export function RulesPage({
     if (ruleId === undefined) {
       return mutations.saveRule(target, undefined, draft);
     }
-    const saved = await mutations.saveRule(fromProfileId, ruleId, draft);
-    if (!saved.ok || target === fromProfileId) {
-      return saved;
-    }
-    const moved = await mutations.moveRuleToProfile(
-      fromProfileId,
-      ruleId,
-      target,
-    );
-    return moved.ok ? saved : moved;
+    return mutations.saveRuleToProfile(fromProfileId, ruleId, draft, target);
   };
 
   // No confirmation: the toast carries the whole rule back, and asking first

@@ -29,6 +29,18 @@ async function seed(
   return doc;
 }
 
+async function deleteAndRestoreProfile(profileId: string): Promise<StateDoc> {
+  const deleted = await mutations.deleteProfile(profileId);
+  if (!deleted.ok) {
+    throw new Error("fixture profile must be deletable");
+  }
+  const restored = await mutations.restoreProfile(deleted.value);
+  if (!restored.ok) {
+    throw new Error("fixture profile must be restorable");
+  }
+  return read();
+}
+
 function draft(overrides: Partial<RuleDraft> = {}): RuleDraft {
   return {
     direction: "request",
@@ -406,6 +418,24 @@ describe("delete, restore, and move", () => {
       errorKind(await mutations.moveRuleToProfile("p2", moving.id, "p1")),
     ).toBe("enabled-rule-limit-exceeded");
   });
+
+  it("leaves an edit untouched when its move is rejected", async () => {
+    const moving = rule({ header: "x-before" });
+    const doc = await seed([
+      profile("p1", { rules: rules(4_500) }),
+      profile("p2", { rules: [moving] }),
+    ]);
+
+    const outcome = await mutations.saveRuleToProfile(
+      "p2",
+      moving.id,
+      draft({ header: "x-after" }),
+      "p1",
+    );
+
+    expect(errorKind(outcome)).toBe("enabled-rule-limit-exceeded");
+    expect(await read()).toEqual(doc);
+  });
 });
 
 describe("profile operations", () => {
@@ -517,20 +547,14 @@ describe("profile operations", () => {
     expect((await read()).activeProfileId).toBeUndefined();
   });
 
-  it("keeps activation cleared when restoring the deleted active profile", async () => {
+  it("restores activation with a deleted active profile", async () => {
     await seed([profile("p1"), profile("p2")], {
       activeProfileId: "p1",
     });
 
-    const deleted = await mutations.deleteProfile("p1");
-    if (!deleted.ok) {
-      throw new Error("fixture profile must be deletable");
-    }
-    await mutations.restoreProfile(deleted.value.profile, deleted.value.index);
-
-    const stored = await read();
+    const stored = await deleteAndRestoreProfile("p1");
     expect(stored.profiles.map((candidate) => candidate.id)).toContain("p1");
-    expect(stored.activeProfileId).toBeUndefined();
+    expect(stored.activeProfileId).toBe("p1");
   });
 
   it("recreates an inactive Default when the last profile is deleted", async () => {
@@ -548,6 +572,14 @@ describe("profile operations", () => {
     expect(stored.profiles[0]).not.toHaveProperty("enabled");
   });
 
+  it("removes the placeholder when restoring the last active profile", async () => {
+    await seed([profile("p1")], { activeProfileId: "p1" });
+
+    const stored = await deleteAndRestoreProfile("p1");
+    expect(stored.profiles.map((candidate) => candidate.id)).toEqual(["p1"]);
+    expect(stored.activeProfileId).toBe("p1");
+  });
+
   it("restores a deleted profile at its index, suffixing a retaken name", async () => {
     const doomed = profile("p2");
     await seed([profile("p1"), doomed, profile("p3")]);
@@ -558,7 +590,15 @@ describe("profile operations", () => {
       color: "blue",
       enabled: false,
     });
-    expect((await mutations.restoreProfile(doomed, 1)).ok).toBe(true);
+    expect(
+      (
+        await mutations.restoreProfile({
+          profile: doomed,
+          index: 1,
+          wasActive: false,
+        })
+      ).ok,
+    ).toBe(true);
 
     const stored = await read();
     const names = stored.profiles.map((p) => p.name);

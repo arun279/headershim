@@ -279,6 +279,7 @@ describe("dynamic rule compilation", () => {
           ],
         },
         condition: {
+          requestDomains: ["example.com"],
           urlFilter: "||example.com^",
           initiatorDomains: ["app.example.com"],
           resourceTypes: ["script"],
@@ -294,6 +295,7 @@ describe("dynamic rule compilation", () => {
           ],
         },
         condition: {
+          requestDomains: ["api.example.com"],
           regexFilter: "^https://api\\.example\\.com/",
           resourceTypes: ["xmlhttprequest"],
         },
@@ -409,6 +411,35 @@ describe("dropping uncompilable rules", () => {
     ]);
 
     expect(compiledIds(doc, supportAll)).toEqual([1, 2]);
+  });
+
+  it("strips non-ASCII regexes, scope hosts, and initiators", () => {
+    const nonAsciiRegex = storedRule(2, {
+      scope: { type: "regex", regex: "café", hosts: [] },
+    });
+    const nonAsciiHost = storedRule(3, {
+      scope: {
+        type: "pattern",
+        pattern: "/api",
+        hosts: ["café.example"],
+      },
+    });
+    const nonAsciiInitiator = storedRule(4, {
+      initiators: ["café.example"],
+    });
+    const doc = state([
+      profile("ascii", [
+        storedRule(1),
+        nonAsciiRegex,
+        nonAsciiHost,
+        nonAsciiInitiator,
+      ]),
+    ]);
+
+    expect(uncompilableReason(nonAsciiRegex, supportAll)).toBe("regex");
+    expect(uncompilableReason(nonAsciiHost, supportAll)).toBe("domains");
+    expect(uncompilableReason(nonAsciiInitiator, supportAll)).toBe("domains");
+    expect(compiledIds(doc, supportAll)).toEqual([1]);
   });
 
   it("distinguishes and drops a disallowed request append", () => {

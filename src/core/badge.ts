@@ -51,14 +51,14 @@ export function planBadge(input: BadgeInput): BadgePlan {
 
 function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
   if (status.kind === "paused") {
-    return globalBadge(PAUSED_FILL);
+    return globalBadge("II", PAUSED_FILL);
   }
   // A missing grant and a failed reconcile are both can't-run states: rules the
   // user believes are live are not. The amber badge outranks count rendering,
   // so no count bleeds through. The annunciator reads the same status selector,
   // so the surfaces cannot disagree.
   if (status.kind === "out-of-sync" || status.kind === "needs-access") {
-    return globalBadge(CANT_RUN_FILL);
+    return globalBadge("!", CANT_RUN_FILL);
   }
 
   const active = doc.profiles.find(
@@ -74,8 +74,11 @@ function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
   };
 }
 
-function globalBadge(backgroundColor: string): Omit<BadgePlan, "title"> {
+function globalBadge(
+  text: string,
+  backgroundColor: string,
+): Omit<BadgePlan, "title"> {
   return {
-    state: { kind: "manual", text: "", backgroundColor, textColor: WHITE },
+    state: { kind: "manual", text, backgroundColor, textColor: WHITE },
   };
 }

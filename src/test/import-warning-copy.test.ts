@@ -43,6 +43,8 @@ const cases: {
     warning: {
       kind: "dynamic-token",
       ruleName: "token rule",
+      profileIndex: 0,
+      ruleIndex: 0,
       tokens: ["uuid"],
     },
     name: "token rule",

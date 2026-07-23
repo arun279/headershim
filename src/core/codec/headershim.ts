@@ -321,7 +321,7 @@ export function sensitiveRuleWarnings(
 }
 
 /** The name a plan's rule is itemized under: its comment, else its header. */
-export function draftRuleName(rule: RuleDraft): string {
+function draftRuleName(rule: RuleDraft): string {
   return rule.comment?.trim() || rule.header;
 }
 

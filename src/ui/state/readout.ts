@@ -468,6 +468,12 @@ function ruleLabel(rule: Rule): string {
 
 function ruleReach(rule: Rule, host: string): Reach {
   const scoped = scopeReach(rule.scope, host);
+  if (
+    scoped === "no" &&
+    rule.initiators.some((initiator) => hostUnder(host, initiator))
+  ) {
+    return "unknown";
+  }
   return scoped === "yes" && settlesPerRequest(rule) ? "unknown" : scoped;
 }
 

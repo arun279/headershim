@@ -58,6 +58,13 @@ export interface MutationDeps {
   readonly validateRegex: RegexValidator;
 }
 
+export interface DeletedProfile {
+  readonly profile: Profile;
+  readonly index: number;
+  readonly wasActive: boolean;
+  readonly placeholderProfileId?: string;
+}
+
 /** The write API surface shared by the popup and options entrypoints. */
 export type Mutations = ReturnType<typeof createMutations>;
 
@@ -145,49 +152,93 @@ export function createMutations({ validateRegex }: MutationDeps) {
     return checkStateDocByteLimit(next);
   }
 
+  async function saveRuleStep(
+    doc: StateDoc,
+    profileId: string,
+    ruleId: string | undefined,
+    draft: RuleDraft,
+  ): Promise<Step<Rule>> {
+    const profile = findProfile(doc, profileId);
+    if (profile === undefined) {
+      return notFound();
+    }
+    const sanitized = await sanitizeDraft(draft, validateRegex);
+    if (!sanitized.ok) {
+      return sanitized;
+    }
+
+    if (ruleId === undefined) {
+      const [rule, next] = createRule(doc, sanitized.value);
+      return ok([withRules(next, profileId, (list) => [...list, rule]), rule]);
+    }
+
+    const existing = profile.rules.find((rule) => rule.id === ruleId);
+    if (existing === undefined) {
+      return notFound();
+    }
+    const rule: Rule = {
+      id: existing.id,
+      num: existing.num,
+      ...sanitized.value,
+    };
+    return ok([
+      withRules(doc, profileId, (list) =>
+        list.map((candidate) => (candidate.id === ruleId ? rule : candidate)),
+      ),
+      rule,
+    ]);
+  }
+
+  function moveRuleStep(
+    doc: StateDoc,
+    fromProfileId: string,
+    ruleId: string,
+    toProfileId: string,
+  ): Step<void> {
+    const rule = findRule(doc, fromProfileId, ruleId);
+    if (rule === undefined || findProfile(doc, toProfileId) === undefined) {
+      return notFound();
+    }
+    if (fromProfileId === toProfileId) {
+      return ok([doc, undefined]);
+    }
+    const removed = withRules(doc, fromProfileId, (list) =>
+      list.filter((candidate) => candidate.id !== ruleId),
+    );
+    return ok([
+      withRules(removed, toProfileId, (list) => [...list, rule]),
+      undefined,
+    ]);
+  }
+
   return {
     saveRule(
       profileId: string,
       ruleId: string | undefined,
       draft: RuleDraft,
     ): MutationResult<Rule> {
+      return commit((doc) => saveRuleStep(doc, profileId, ruleId, draft));
+    },
+
+    saveRuleToProfile(
+      fromProfileId: string,
+      ruleId: string,
+      draft: RuleDraft,
+      toProfileId: string,
+    ): MutationResult<Rule> {
       return commit(async (doc) => {
-        const profile = findProfile(doc, profileId);
-        if (profile === undefined) {
-          return notFound();
+        const saved = await saveRuleStep(doc, fromProfileId, ruleId, draft);
+        if (!saved.ok) {
+          return saved;
         }
-        const sanitized = await sanitizeDraft(draft, validateRegex);
-        if (!sanitized.ok) {
-          return sanitized;
-        }
-
-        if (ruleId === undefined) {
-          const [rule, next] = createRule(doc, sanitized.value);
-          return ok([
-            withRules(next, profileId, (list) => [...list, rule]),
-            rule,
-          ]);
-        }
-
-        const existing = profile.rules.find((rule) => rule.id === ruleId);
-        if (existing === undefined) {
-          return notFound();
-        }
-        // Edits keep the rule's identity: the stable num is what match
-        // attribution and undo bookkeeping hang on to.
-        const rule: Rule = {
-          id: existing.id,
-          num: existing.num,
-          ...sanitized.value,
-        };
-        return ok([
-          withRules(doc, profileId, (list) =>
-            list.map((candidate) =>
-              candidate.id === ruleId ? rule : candidate,
-            ),
-          ),
-          rule,
-        ]);
+        const [savedDoc, rule] = saved.value;
+        const moved = moveRuleStep(
+          savedDoc,
+          fromProfileId,
+          ruleId,
+          toProfileId,
+        );
+        return moved.ok ? ok([moved.value[0], rule]) : moved;
       });
     },
 
@@ -260,22 +311,9 @@ export function createMutations({ validateRegex }: MutationDeps) {
       ruleId: string,
       toProfileId: string,
     ): MutationResult<void> {
-      return commit((doc) => {
-        const rule = findRule(doc, fromProfileId, ruleId);
-        if (rule === undefined || findProfile(doc, toProfileId) === undefined) {
-          return notFound();
-        }
-        if (fromProfileId === toProfileId) {
-          return ok([doc, undefined]);
-        }
-        const removed = withRules(doc, fromProfileId, (list) =>
-          list.filter((candidate) => candidate.id !== ruleId),
-        );
-        return ok([
-          withRules(removed, toProfileId, (list) => [...list, rule]),
-          undefined,
-        ]);
-      });
+      return commit((doc) =>
+        moveRuleStep(doc, fromProfileId, ruleId, toProfileId),
+      );
     },
 
     createProfile(input: {
@@ -352,9 +390,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    deleteProfile(
-      profileId: string,
-    ): MutationResult<{ profile: Profile; index: number }> {
+    deleteProfile(profileId: string): MutationResult<DeletedProfile> {
       return commit((doc) => {
         const index = doc.profiles.findIndex(
           (profile) => profile.id === profileId,
@@ -368,37 +404,57 @@ export function createMutations({ validateRegex }: MutationDeps) {
         );
         // The product never has zero profiles: deleting the last one
         // immediately recreates an empty Default.
-        const profiles =
+        const placeholder =
           remaining.length > 0
-            ? remaining
-            : [
-                buildProfile({
-                  name: "Default",
-                  badgeText: "DE",
-                  color: "indigo",
-                }),
-              ];
+            ? undefined
+            : buildProfile({
+                name: "Default",
+                badgeText: "DE",
+                color: "indigo",
+              });
+        const profiles = placeholder === undefined ? remaining : [placeholder];
+        const wasActive = doc.activeProfileId === profileId;
         const next: StateDoc = {
           ...doc,
           profiles,
-          activeProfileId:
-            doc.activeProfileId === profileId ? undefined : doc.activeProfileId,
+          activeProfileId: wasActive ? undefined : doc.activeProfileId,
         };
-        return ok([next, { profile: removed, index }]);
+        return ok([
+          next,
+          {
+            profile: removed,
+            index,
+            wasActive,
+            ...(placeholder === undefined
+              ? {}
+              : { placeholderProfileId: placeholder.id }),
+          },
+        ]);
       });
     },
 
-    restoreProfile(profile: Profile, index: number): MutationResult<void> {
+    restoreProfile(deleted: DeletedProfile): MutationResult<void> {
       return commit((doc) => {
+        const { profile, index, placeholderProfileId, wasActive } = deleted;
         if (doc.profiles.some((candidate) => candidate.id === profile.id)) {
           return ok([doc, undefined]);
         }
+        const profiles =
+          placeholderProfileId === undefined
+            ? doc.profiles
+            : doc.profiles.filter(
+                (candidate) => candidate.id !== placeholderProfileId,
+              );
         const restored: Profile = {
           ...profile,
-          name: availableProfileName(profile.name, doc.profiles, []),
+          name: availableProfileName(profile.name, profiles, []),
         };
         return ok([
-          { ...doc, profiles: insertAt(doc.profiles, restored, index) },
+          {
+            ...doc,
+            profiles: insertAt(profiles, restored, index),
+            ...(wasActive ? { activeProfileId: restored.id } : {}),
+          },
           undefined,
         ]);
       });
