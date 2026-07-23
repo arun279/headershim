@@ -1,6 +1,16 @@
 {
   "name": "headershim",
-  "version": "0.0.1",
+  "version": "0.1.0",
+  "description": "Modify HTTP request and response headers with scoped rules and switchable profiles.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arun279/headershim.git"
+  },
+  "homepage": "https://github.com/arun279/headershim#readme",
+  "bugs": {
+    "url": "https://github.com/arun279/headershim/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {
