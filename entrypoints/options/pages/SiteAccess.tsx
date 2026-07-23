@@ -143,6 +143,7 @@ export function SiteAccessPage({
               count={text.usedBy}
               action={text.grant}
               actionLabel={text.grantLabel}
+              pill
               onAction={grant}
             />
           )}
@@ -210,6 +211,7 @@ function SiteGroup({
   count,
   action,
   actionLabel,
+  pill,
   onAction,
 }: {
   heading: string;
@@ -218,6 +220,8 @@ function SiteGroup({
   count: (n: number) => string;
   action: string;
   actionLabel: (domain: string) => string;
+  /** Granting is the same act the rule rows offer, so it carries the same pill. */
+  pill?: boolean;
   onAction: (entry: SiteAccessEntry) => void;
 }) {
   return (
@@ -236,13 +240,24 @@ function SiteGroup({
               class="mono sa-domain"
             />
             <span class="sa-count">{count(entry.ruleCount)}</span>
-            <Button
-              kind="quiet"
-              label={actionLabel(entry.domain)}
-              onClick={() => onAction(entry)}
-            >
-              {action}
-            </Button>
+            {pill === true ? (
+              <button
+                type="button"
+                class="grant"
+                aria-label={actionLabel(entry.domain)}
+                onClick={() => onAction(entry)}
+              >
+                {action}
+              </button>
+            ) : (
+              <Button
+                kind="quiet"
+                label={actionLabel(entry.domain)}
+                onClick={() => onAction(entry)}
+              >
+                {action}
+              </Button>
+            )}
           </li>
         ))}
       </ul>

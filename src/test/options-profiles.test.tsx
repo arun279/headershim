@@ -199,6 +199,31 @@ describe("profile lifecycle", () => {
     expect(cardNames(root)).toEqual(["Staging auth"]);
   });
 
+  // A rename re-derives the badge of a profile still wearing its name's initials.
+  // The badge field seeded itself once and never looked again, so the row head
+  // and the badge 40px below it read two different things, and the next blur
+  // committed the stale one back over the derived badge.
+  it("follows a rename in the badge preview and the field", async () => {
+    await seed([profile("p1", { name: "Default", badgeText: "DE" })]);
+    const root = await mount();
+
+    cardAction(root, 0, copy.options.profiles.rename);
+    const nameInput = within(root, ".profile-name-input") as HTMLInputElement;
+    typeInto(nameInput, "Staging auth");
+    press(nameInput, "Enter");
+    await settle();
+
+    expect((await read()).profiles[0]?.badgeText).toBe("ST");
+    const badgeInput = within(root, ".badge-text-input") as HTMLInputElement;
+    expect(badgeInput.value).toBe("ST");
+    expect(within(root, ".badge-preview").textContent).toBe("ST");
+
+    // A blur now commits what the field shows, not the badge it was seeded with.
+    fire(() => badgeInput.dispatchEvent(new Event("blur", { bubbles: true })));
+    await settle();
+    expect((await read()).profiles[0]?.badgeText).toBe("ST");
+  });
+
   it("rejects a duplicate name with the taken-name copy", async () => {
     await seed([
       profile("p1", { name: "Default" }),

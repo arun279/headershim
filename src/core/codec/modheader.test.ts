@@ -104,7 +104,7 @@ describe("ModHeader import", () => {
     expect(warningsOfKind(plan, "request-append-degraded")).toEqual([
       {
         kind: "request-append-degraded",
-        ruleName: "debug switch",
+        ruleName: "x-debug",
         header: "x-debug",
       },
     ]);
@@ -156,7 +156,7 @@ describe("ModHeader import", () => {
       enabled: true,
     });
     expect(warningsOfKind(plan, "cookie-semantics-degraded")).toEqual([
-      { kind: "cookie-semantics-degraded", ruleName: "preview cookie" },
+      { kind: "cookie-semantics-degraded", ruleName: "cookie" },
     ]);
   });
 
@@ -171,7 +171,7 @@ describe("ModHeader import", () => {
       enabled: false,
     });
     expect(warningsOfKind(plan, "set-cookie-semantics-degraded")).toEqual([
-      { kind: "set-cookie-semantics-degraded", ruleName: "theme cookie" },
+      { kind: "set-cookie-semantics-degraded", ruleName: "set-cookie" },
     ]);
   });
 
@@ -186,7 +186,10 @@ describe("ModHeader import", () => {
       enabled: true,
     });
     expect(warningsOfKind(plan, "csp-semantics-degraded")).toEqual([
-      { kind: "csp-semantics-degraded", ruleName: "api policy" },
+      {
+        kind: "csp-semantics-degraded",
+        ruleName: "content-security-policy",
+      },
     ]);
   });
 
@@ -196,16 +199,16 @@ describe("ModHeader import", () => {
     expect(warningsOfKind(plan, "credential")).toEqual([
       {
         kind: "credential",
-        ruleName: "literal token header",
+        ruleName: "authorization",
         header: "authorization",
       },
-      { kind: "credential", ruleName: "preview cookie", header: "cookie" },
-      { kind: "credential", ruleName: "theme cookie", header: "set-cookie" },
+      { kind: "credential", ruleName: "cookie", header: "cookie" },
+      { kind: "credential", ruleName: "set-cookie", header: "set-cookie" },
     ]);
     expect(warningsOfKind(plan, "security-response")).toEqual([
       {
         kind: "security-response",
-        ruleName: "api policy",
+        ruleName: "content-security-policy",
         header: "content-security-policy",
       },
     ]);
@@ -396,7 +399,7 @@ describe("ModHeader import", () => {
     );
     expect(warningsOfKind(plan, "dynamic-token")).toContainEqual({
       kind: "dynamic-token",
-      ruleName: "literal token header",
+      ruleName: "authorization",
       profileIndex: 0,
       ruleIndex: 2,
       tokens: ["uuid", "url_hostname", "timestamp"],

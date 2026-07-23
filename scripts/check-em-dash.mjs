@@ -9,10 +9,19 @@ import path from "node:path";
 // every character in it ships as prose.
 
 const root = path.resolve(import.meta.dirname, "..");
+const SELF_PATH = "scripts/check-em-dash.mjs";
 
 // Whole-file scans: the single copy source is prose end to end, comments
-// included.
-const PROSE_FILES = new Set(["src/ui/copy.ts"]);
+// included, and the privacy policy is a product surface the About page links,
+// so every line of it is read by users too. The build scripts are prose end to
+// end as well, read by anyone who opens the repository, so they hold the same
+// rule; this file is the one exception, since it has to contain the characters
+// it bans.
+const PROSE_FILES = new Set(["src/ui/copy.ts", "PRIVACY.md"]);
+
+function isScript(file) {
+  return file.startsWith("scripts/") && file !== SELF_PATH;
+}
 
 // TSX carrying inline copy: scanned with comments removed so only the strings a
 // user reads are checked.
@@ -43,7 +52,7 @@ function copyFiles() {
   }).split("\n");
   const kept = [];
   for (const file of tracked) {
-    const isCopy = PROSE_FILES.has(file) || isCopyTsx(file);
+    const isCopy = PROSE_FILES.has(file) || isScript(file) || isCopyTsx(file);
     if (isCopy && existsSync(path.join(root, file))) {
       kept.push(file);
     }
@@ -54,7 +63,8 @@ function copyFiles() {
 const violations = [];
 for (const file of copyFiles()) {
   const raw = readFileSync(path.join(root, file), "utf8");
-  const scanned = PROSE_FILES.has(file) ? raw : stripComments(raw);
+  const whole = PROSE_FILES.has(file) || isScript(file);
+  const scanned = whole ? raw : stripComments(raw);
   scanned.split("\n").forEach((line, index) => {
     if (DASHES.test(line)) {
       violations.push(`${file}:${index + 1}: ${line.trim()}`);

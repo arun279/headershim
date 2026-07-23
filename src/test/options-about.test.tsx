@@ -3,6 +3,7 @@ import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
+import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "../core/grants";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
@@ -135,14 +136,45 @@ describe("options about", () => {
   it("contains none of the removed manifesto sections", () => {
     expect(text).not.toHaveProperty("trustHeading");
     expect(text).not.toHaveProperty("summary");
-    expect(text).not.toHaveProperty("permissions");
     expect(text).not.toHaveProperty("storage");
     expect(text).not.toHaveProperty("neverList");
     expect(text).not.toHaveProperty("security");
     expect(text).not.toHaveProperty("verifyBuild");
   });
 
-  it("links the repository, license, issues, and releases", async () => {
+  // Whether a permission is explained at all is closed by types and by the
+  // build, not here: the rows are mapped from MANIFEST_PERMISSIONS, which is
+  // also what wxt.config.ts feeds the manifest, PERMISSION_REASONS is keyed by
+  // that union so an unexplained permission does not compile, and
+  // manifest-policy.mjs pins the built manifest against its own list. What only
+  // rendering can show is that the page puts them on screen, in that order, in
+  // the shape the disclosure is read in: headed by what the permission does
+  // rather than by the manifest id it maps to, leading with what it is for and
+  // breaking its specifics out under that, and outside the identity card.
+  it("renders one row per permission, its specifics broken out under it", async () => {
+    const root = await mount();
+    const rows = [...root.querySelectorAll(".perm-card .perm-row")];
+
+    for (const row of rows) {
+      // The heading a reader scans is the plain-word one; the manifest id it
+      // maps to sits beside it, not standing in for it.
+      expect(row.querySelector(".perm-title")?.textContent).toBeTruthy();
+      expect(row.querySelector(".perm-head > :first-child")).toBe(
+        row.querySelector(".perm-title"),
+      );
+      expect(row.querySelector(".perm-reason")?.textContent).toBeTruthy();
+      expect(
+        row.querySelectorAll(".perm-details > .perm-detail").length,
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      rows.map((row) => row.querySelector(".perm-id")?.textContent),
+    ).toEqual([...MANIFEST_PERMISSIONS, ALL_SITES_ORIGIN]);
+    // The identity card stays the identity card; the list is its own.
+    expect(root.querySelector(".about-card .perm-row")).toBeNull();
+  });
+
+  it("links the repository, privacy policy, license, issues, and releases", async () => {
     const root = await mount();
     const links = [
       ...root.querySelectorAll<HTMLAnchorElement>(".about-links a.about-link"),
@@ -150,12 +182,14 @@ describe("options about", () => {
 
     expect(links.map((link) => link.href)).toEqual([
       text.links.repositoryUrl,
+      text.links.privacyUrl,
       text.links.licenseUrl,
       text.links.issuesUrl,
       text.links.releasesUrl,
     ]);
     expect(links.map((link) => link.textContent?.replace(" ↗", ""))).toEqual([
       text.links.repository,
+      text.links.privacy,
       text.links.license,
       text.links.issues,
       text.links.releases,

@@ -8,6 +8,7 @@ interface SheetProps {
   header: ComponentChildren;
   children: ComponentChildren;
   pinned?: ComponentChildren;
+  note?: ComponentChildren;
   class?: string;
   modal?: boolean;
   initialFocus?: RefObject<HTMLElement | null>;
@@ -17,13 +18,16 @@ interface SheetProps {
 /**
  * A popup mode with one capped scroll region. Pinned controls remain ordinary
  * trailing content until the region reaches its height cap, then stay within
- * reach at the bottom of that region.
+ * reach at the bottom of that region. A note sits below both and inside the
+ * dialog: aria-modal tells assistive technology to ignore everything outside
+ * this element, so a standing disclosure has to be within it to be read here.
  */
 export function Sheet({
   label,
   header,
   children,
   pinned,
+  note,
   class: className,
   modal = true,
   initialFocus,
@@ -47,6 +51,7 @@ export function Sheet({
         <div class="sheet-body">{children}</div>
         {pinned !== undefined && <div class="sheet-pinned">{pinned}</div>}
       </div>
+      {note}
     </section>
   );
 }

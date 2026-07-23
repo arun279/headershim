@@ -12,12 +12,13 @@ import { MAX_DOC_BYTES } from "../../../src/core/limits";
 import type { RuleDraft, StateDoc } from "../../../src/core/model";
 import { err, type Result } from "../../../src/core/result";
 import { isRegexSupported } from "../../../src/platform/dnr";
-import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { ImportSummary } from "../../../src/ui/components/ImportSummary";
+import { Toast } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
+import { useToast } from "../useToast";
 import "./ImportExport.css";
 
 type Plan = ImportPlan<ImportPlanWarning>;
@@ -42,7 +43,7 @@ export function ImportExportPage({
   doc: StateDoc;
   mutations: Mutations;
 }) {
-  const announce = useAnnounce();
+  const { toast, show, dismiss } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<Plan | undefined>(undefined);
   const [importError, setImportError] = useState<string | undefined>(undefined);
@@ -92,8 +93,11 @@ export function ImportExportPage({
     const count = plan.profiles.length;
     void mutations.applyImport(plan).then((outcome) => {
       if (outcome.ok) {
+        // The summary that named the import is gone the moment it applies, so
+        // the write says so where every other write on these pages does. That
+        // the profiles landed turned off is the part the reader has to act on.
         clear();
-        announce(text.imported(count));
+        show(text.imported(count));
       } else {
         setApplyError(blockedCommitCopy(outcome.error));
       }
@@ -156,6 +160,9 @@ export function ImportExportPage({
 
       <div class="ie-block">
         <h2 class="silk ie-block-label">{text.exportHeading}</h2>
+        {/* Above the buttons: what the file holds is what decides whether to
+            press one, so reading order puts it before the press. */}
+        <p class="ie-hint">{text.secretsReminder}</p>
         <div class="ie-export-row">
           <Button
             kind="quiet"
@@ -183,8 +190,13 @@ export function ImportExportPage({
             {text.exportOne}
           </Button>
         </div>
-        <p class="ie-hint">{text.secretsReminder}</p>
       </div>
+
+      {toast !== undefined && (
+        <Toast nonce={toast.nonce} onDismiss={dismiss}>
+          {toast.message}
+        </Toast>
+      )}
     </section>
   );
 }

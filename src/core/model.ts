@@ -217,6 +217,53 @@ export function normalizeBadgeText(text: string): string {
     .join("");
 }
 
+/**
+ * The badges a name can produce, best first: its first two significant
+ * characters, then the first paired with each later one. Uppercased to match the
+ * seeded Default profile's initials style.
+ */
+function badgeCandidates(name: string): string[] {
+  const characters = Array.from(
+    graphemeSegmenter.segment(name.replace(/\s+/g, "")),
+    ({ segment }) => segment.toUpperCase(),
+  );
+  const first = characters[0];
+  if (first === undefined) {
+    return [];
+  }
+  return [
+    characters.slice(0, 2).join(""),
+    ...characters.slice(2).map((character) => first + character),
+  ];
+}
+
+/**
+ * The badge a profile takes from its name. The badge is the only mark that tells
+ * one profile's rules from another's in the rule lists and on the toolbar, so a
+ * candidate another profile already carries is passed over for the next one the
+ * name offers.
+ */
+export function deriveBadgeText(
+  name: string,
+  taken: readonly string[],
+): string {
+  const candidates = badgeCandidates(name);
+  return (
+    candidates.find((candidate) => !taken.includes(candidate)) ??
+    candidates[0] ??
+    ""
+  );
+}
+
+/**
+ * Whether a badge is one its name could have produced, which is what separates a
+ * badge still following the name from one the user typed. A rename re-derives
+ * the first and leaves the second alone.
+ */
+export function isDerivedBadgeText(name: string, badgeText: string): boolean {
+  return badgeCandidates(name).includes(badgeText);
+}
+
 function copyScope(scope: Scope): Scope {
   switch (scope.type) {
     case "domains":

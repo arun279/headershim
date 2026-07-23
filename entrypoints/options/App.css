@@ -46,7 +46,7 @@
   width: 24px;
   height: 24px;
   flex: none;
-  border-radius: 7px;
+  border-radius: var(--r-chip);
   background: var(--live-soft);
   color: var(--live);
 }
@@ -62,7 +62,7 @@
   color: var(--ink);
 }
 .wb-version {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink3);
 }
 
@@ -125,7 +125,10 @@
   justify-content: space-between;
   gap: var(--sp-5);
 }
+/* fit-content so the focus ring a nav click lands here draws around the word
+   rather than across the full content width. */
 .wb-title {
+  width: fit-content;
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -134,14 +137,15 @@
 /* The shared page card: Site access, Import & export, and About all sit on it. */
 .sa-card,
 .ie-block,
-.about-card {
+.about-card,
+.perm-card {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding: 18px 20px;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 /* Modal card + confirm actions the pages reuse. */
@@ -170,9 +174,26 @@
     border-right: none;
     border-bottom: var(--hairline) solid var(--hair);
   }
+  /* One wrapped band of destinations. Two columns of unequal length leave a
+     void beside the shorter one, and the group headings are a second axis a
+     band has no room to carry; the nav's own label still names the region. */
   .wb-nav-groups {
     flex-flow: row wrap;
-    gap: 10px 20px;
+    gap: 2px 6px;
+  }
+  .wb-nav-group {
+    flex-flow: row wrap;
+    gap: 2px 6px;
+  }
+  .wb-nav-grouplabel {
+    display: none;
+  }
+  /* The heading and the page's controls each take the width rather than
+     splitting it, so a two-word title stops breaking across two lines. */
+  .wb-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
   }
   .wb-page {
     padding: 20px 18px 48px;

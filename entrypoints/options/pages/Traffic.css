@@ -6,7 +6,7 @@
 
 .tape {
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
   background: var(--panel);
   overflow: hidden;
 }
@@ -70,13 +70,15 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
 }
 .tape-row .tape-header {
   flex: 1;
 }
+/* Direction in the glyph slot, operation in the word beside it: two rules that
+   differ only by direction have to read as two rules. */
 .tape-op {
   width: 14px;
   height: 14px;
@@ -85,9 +87,10 @@
   align-items: center;
   color: var(--ink3);
 }
-.tape-op svg {
-  width: 14px;
-  height: 14px;
+.tape-verb {
+  flex: none;
+  font-weight: 500;
+  color: var(--ink2);
 }
 .tape-status {
   justify-self: end;
@@ -100,6 +103,13 @@
 }
 .tape-row.needs-access .tape-status {
   color: var(--amber);
+}
+/* Where the gap can be closed, the cell is the shared Grant pill, so it takes
+   the pill's own ink instead of the amber the words beside it are set in. */
+.tape-row.needs-access .tape-status.grant {
+  color: var(--on-amber);
+  font-size: 11px;
+  font-weight: 650;
 }
 .tape-row.managed .tape-status {
   color: var(--amber);

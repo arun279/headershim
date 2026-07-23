@@ -128,9 +128,16 @@ describe("popup This-tab overrides", () => {
     await settle();
 
     const [directionGroup] = root.querySelectorAll<HTMLElement>(
-      ".compose fieldset.segmented",
+      ".compose .segmented",
     );
-    fire(() => directionGroup?.querySelectorAll("button")[1]?.click());
+    fire(() => {
+      const response =
+        directionGroup?.querySelectorAll<HTMLInputElement>("input")[1];
+      if (response !== undefined) {
+        response.checked = true;
+        response.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
     typeInto(
       root.querySelector(".cin.name") as HTMLInputElement,
       "content-security-policy",
@@ -140,44 +147,60 @@ describe("popup This-tab overrides", () => {
     );
   });
 
-  it("keeps both composer choices as labelled pressed-button groups", async () => {
+  // The compact author takes the same two picks as the rule editor, through the
+  // same control, under the same two words printed on screen. A second grammar
+  // for the same choice is a second thing to learn.
+  it("takes its two choices in the rule editor's own labelled control", async () => {
     const root = await mount(createV1Seed());
     press(root.querySelector(".popup") as HTMLElement, "t");
     await settle();
 
+    expect(
+      [
+        ...root.querySelectorAll<HTMLElement>(
+          ".compose .editor-primary-field legend",
+        ),
+      ].map((legend) => legend.textContent),
+    ).toEqual([copy.editor.labels.direction, copy.editor.labels.operation]);
+    // On screen too, not only for assistive technology.
+    expect(
+      [
+        ...root.querySelectorAll<HTMLElement>(".compose .cfields-labels span"),
+      ].map((label) => label.textContent),
+    ).toEqual([copy.editor.labels.headerName, copy.editor.labels.value]);
+
     const groups = [
-      ...root.querySelectorAll<HTMLElement>(".compose fieldset.segmented"),
+      ...root.querySelectorAll<HTMLElement>(".compose .segmented"),
     ];
-    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual([
-      copy.editor.labels.direction,
-      copy.editor.labels.operation,
-    ]);
     expect(
       groups.map((group) =>
-        [...group.querySelectorAll("button")].map((button) => [
-          button.textContent,
-          button.getAttribute("aria-pressed"),
+        [...group.querySelectorAll<HTMLInputElement>("input")].map((input) => [
+          input.parentElement?.textContent,
+          input.checked,
         ]),
       ),
     ).toEqual([
       [
-        [copy.readout.direction.request, "true"],
-        [copy.readout.direction.response, "false"],
+        [copy.editor.direction.request, true],
+        [copy.editor.direction.response, false],
       ],
       [
-        [copy.editor.operation.set, "true"],
-        [copy.editor.operation.append, "false"],
-        [copy.editor.operation.remove, "false"],
+        [copy.editor.operation.set, true],
+        [copy.editor.operation.append, false],
+        [copy.editor.operation.remove, false],
       ],
     ]);
 
-    fire(() => groups[1]?.querySelectorAll("button")[2]?.click());
-    expect(
-      [...(groups[1]?.querySelectorAll("button") ?? [])].map((button) =>
-        button.getAttribute("aria-pressed"),
-      ),
-    ).toEqual(["false", "false", "true"]);
+    fire(() => {
+      const remove = groups[1]?.querySelectorAll<HTMLInputElement>("input")[2];
+      if (remove !== undefined) {
+        remove.checked = true;
+        remove.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    // Remove takes no value, so the value field and its label both go.
     expect(root.querySelector(".cin.val")).toBeNull();
+    expect(root.querySelector(".compose .cfl-val")).toBeNull();
   });
 
   it("writes nothing when the host grant is declined", async () => {

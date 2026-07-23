@@ -3,7 +3,7 @@
   flex-direction: column;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 .settings-row {
@@ -34,7 +34,7 @@
 .settings-link {
   color: var(--live-ink);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .settings-shortcuts .settings-link {
   min-width: 0;

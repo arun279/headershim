@@ -66,8 +66,12 @@
   background: transparent;
   border: 2px solid var(--ink3);
 }
+.lamp.held {
+  background: transparent;
+  border: 2px solid var(--faint);
+}
 .status {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.4;
   color: var(--ink);
   letter-spacing: -0.012em;
@@ -115,10 +119,10 @@
 .prof:hover {
   background: var(--raise);
 }
+/* One truncation for a profile name everywhere it is shown: the primitive splits
+   the string on a word boundary, so the trigger, the menu row, and the Profiles
+   page cut the same name at the same place. */
 .prof .lbl {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-weight: 600;
   color: var(--ink);
 }
@@ -209,7 +213,7 @@
 }
 .preview .d .mono {
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 .popt.new {
@@ -320,7 +324,7 @@
 /* Each variable-length part clips itself through the truncation primitive; the
    row only has to stay on one line and refuse to grow past its column. */
 .say {
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--ink);
   overflow: hidden;
@@ -329,51 +333,10 @@
   align-items: center;
   gap: 5px;
 }
-.say .verb {
-  flex: none;
-  color: var(--ink2);
-  font-weight: 400;
-  font-size: 12.5px;
-}
-.say .k {
-  min-width: 0;
-  font-family: var(--font-data);
+/* Everything the two row grammars share is in tokens.css; the popup sets only
+   the sizes it reads its own wire bytes at. */
+.change-line .say :is(.k, .v) {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.say .to {
-  flex: none;
-  color: var(--ink3);
-  font-family: var(--font-data);
-  font-size: 12px;
-}
-/* The value takes what the header leaves, and is measured against that. */
-.say .v {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-data);
-  font-size: 13px;
-  color: var(--ink2);
-}
-.change-line.off .say .k,
-.change-line.off .say .v {
-  color: var(--ink3);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-.change-line.overridden .say .k {
-  color: var(--ink3);
-}
-.change-line.overridden .say .v {
-  color: var(--ink3);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-.change-line.paused .say .k,
-.change-line.paused .say .v,
-.change-line.paused .say .verb {
-  color: var(--ink3);
 }
 .v-edit {
   display: inline-flex;
@@ -397,7 +360,7 @@
   color: var(--ink);
   background: var(--paper);
   border: 1.5px solid var(--live-fill);
-  border-radius: 7px;
+  border-radius: var(--r-chip);
   padding: 4px 8px;
   outline: none;
   box-shadow: 0 0 0 3px var(--live-soft);
@@ -452,17 +415,15 @@
   background: var(--stop-soft);
 }
 
-/* Grant / Swap primary pills, shared by the line and the token hero. */
-.grant {
-  font: 650 11px var(--font-ui);
-  color: var(--on-amber);
-  background: var(--amber);
-  border-radius: 7px;
+/* The shared grant pill, at popup density; the recipe itself is in tokens.css. */
+.change-line .grant,
+.token .grant {
+  font-size: 11px;
+  border-radius: var(--r-chip);
   padding: 5px 11px;
-  white-space: nowrap;
 }
 .swap {
-  font: 650 12.5px var(--font-ui);
+  font: 650 12px var(--font-ui);
   color: var(--on-live);
   background: var(--live-fill);
   border-radius: var(--r-ctl);
@@ -523,28 +484,39 @@
   font-weight: 600;
   color: var(--ink);
 }
+/* The masked value has to shrink inside the column it is given, or the tail runs
+   under the button beside it. The dots are a fixed decorative run and carry no
+   information, so they are the part that gives way; the scheme word and the last
+   four characters, which are the whole of what this line tells you, do not. */
 .tk-val {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--ink);
   margin-top: 6px;
   letter-spacing: -0.01em;
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 .tk-val .pre {
+  flex: none;
   color: var(--ink2);
   font-weight: 500;
 }
 .tk-val .dots {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--ink3);
   letter-spacing: 0.14em;
   margin: 0 4px;
 }
 .tk-val .last {
+  flex: none;
   color: var(--ink);
   font-weight: 700;
 }
-.tk-swaptarget {
+.tk-swaptarget,
+.tk-held {
   margin-top: 6px;
   font-size: 12px;
   color: var(--ink3);
@@ -579,11 +551,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink2);
 }
 .fresh-lab .tag {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -603,7 +575,7 @@
 .fresh-lab .rt {
   margin-left: auto;
   color: var(--ink3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 .age {
   display: flex;
@@ -681,7 +653,7 @@
 .thistab {
   margin: 11px 13px 4px;
   border: 1.5px dashed color-mix(in srgb, var(--live) 46%, var(--line));
-  border-radius: 11px;
+  border-radius: var(--r-card);
   background: var(--live-soft);
   overflow: hidden;
 }
@@ -692,7 +664,7 @@
   padding: 8px 12px 2px;
 }
 .thistab .tag {
-  font-size: 8.5px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -729,17 +701,27 @@
   height: 12px;
 }
 .compose-segments {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
   padding: 6px 13px 10px;
   border-bottom: var(--hairline) solid var(--hair);
+}
+/* The two words the fields below are named by, over the fields they name and on
+   the same widths, so the compact author says what it takes. */
+.cfields-labels {
+  display: flex;
+  align-items: center;
+  padding: 8px 13px 0;
+  color: var(--ink3);
+}
+/* The name field's own width plus the separator column beside it, so the second
+   word starts where the field it names starts. */
+.cfl-name {
+  flex: none;
+  width: 155px;
 }
 .cfields {
   display: flex;
   align-items: center;
-  padding: 3px 13px;
+  padding: 0 13px 3px;
 }
 .cin {
   font-size: 13px;
@@ -777,12 +759,12 @@
 }
 .c-error {
   padding: 4px 13px 0;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--stop);
 }
 .c-note {
   padding: 4px 13px 0;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink3);
 }
 .cfoot {

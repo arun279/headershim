@@ -172,6 +172,30 @@ describe("all rules", () => {
     expect(rendered.title).toBe(value);
   });
 
+  // A redaction marker is fixed text this product wrote, not the user's bytes.
+  // Cut, "Bearer [hidden]" becomes "Bear…den]", which reads as a fragment of a
+  // real value rather than as a value being withheld, so it is shown whole and
+  // the header beside it gives up the room.
+  it("shows a redaction marker whole, however narrow the row", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "authorization",
+            value: `Bearer ${"z".repeat(600)}`,
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    const rendered = within(root, ".fleet-open .v");
+    expect(rendered.textContent).toBe(`Bearer ${copy.rules.redacted}`);
+    expect(rendered.textContent).not.toContain("…");
+    expect(rendered.className).toContain("truncate-whole");
+  });
+
   it("renders generated metadata in place of an absent literal value", async () => {
     await seed([
       profile("p1", {

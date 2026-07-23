@@ -38,22 +38,31 @@ export function ReadoutHead({
     readout.managed > 0 ||
     readout.outOfSync > 0;
   const doubt = readout.unconfirmed > 0;
-  const showGlance = readout.host !== undefined && hasRows && !paused;
+  // Pause is the state the count is most worth having, so the line stays and
+  // says what it is counting instead of disappearing.
+  const showGlance = readout.host !== undefined && hasRows;
 
   return (
     <header class="head">
       <div class="head-top">
-        <span class="site">
-          <GlobeGlyph />
-          {/* Middle mode: the registrable domain sits in the tail, and it is
-              the whole point of the row. */}
-          <Truncate
-            mode="middle"
-            value={readout.host ?? copy.app.name}
-            maxChars={TRUNCATION_LIMITS.domain}
-            class="host mono"
-          />
-        </span>
+        {/* The slot holds the site this tab is on, set in the face reserved for
+            literal wire bytes. A tab with no site has nothing to put there, and
+            the product's own name set in that face would read as one. */}
+        {readout.host === undefined ? (
+          <span class="site" />
+        ) : (
+          <span class="site">
+            <GlobeGlyph />
+            {/* Middle mode: the registrable domain sits in the tail, and it is
+                the whole point of the row. */}
+            <Truncate
+              mode="middle"
+              value={readout.host}
+              maxChars={TRUNCATION_LIMITS.domain}
+              class="host mono"
+            />
+          </span>
+        )}
         <ProfilePicker
           profiles={profiles}
           activeProfile={activeProfile}
@@ -67,13 +76,27 @@ export function ReadoutHead({
       {showGlance && (
         <div class="glance-wrap">
           <div class="glance">
-            {(readout.total > 0 || attention || doubt) && (
+            {(readout.total > 0 || readout.held > 0 || attention || doubt) && (
               <span
-                class={`lamp ${attention ? "warn" : doubt ? "doubt" : "live"}`}
+                class={`lamp ${
+                  attention
+                    ? "warn"
+                    : doubt
+                      ? "doubt"
+                      : paused
+                        ? "held"
+                        : "live"
+                }`}
                 aria-hidden="true"
               />
             )}
-            <p class="status">{sentence(copy.readout.status(readout.total))}</p>
+            <p class="status">
+              {sentence(
+                paused
+                  ? copy.readout.heldStatus(readout.held)
+                  : copy.readout.status(readout.total),
+              )}
+            </p>
           </div>
           {(readout.needsAccess > 0 ||
             readout.refused > 0 ||

@@ -4,6 +4,7 @@ import {
   createProfile,
   createRule,
   type Direction,
+  deriveBadgeText,
   type HeaderOp,
   isProfileNameAvailable,
   normalizeBadgeText,
@@ -205,9 +206,16 @@ export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
   let nextDoc = doc;
 
   for (const importedProfile of plan.profiles) {
+    // The badge is the only mark that tells one profile's rules from another's
+    // in the rule lists, so an imported one that a profile already wears is
+    // re-derived from the name the import landed under, the same way a created
+    // profile takes one.
+    const taken = nextDoc.profiles.map((profile) => profile.badgeText);
     const profile = createProfile({
       name: importedProfile.name,
-      badgeText: importedProfile.badgeText,
+      badgeText: taken.includes(importedProfile.badgeText)
+        ? deriveBadgeText(importedProfile.name, taken)
+        : importedProfile.badgeText,
       color: importedProfile.color,
     });
     const rules = [];
@@ -320,9 +328,13 @@ export function sensitiveRuleWarnings(
   );
 }
 
-/** The name a plan's rule is itemized under: its comment, else its header. */
+/**
+ * The name a plan's rule is itemized under. The header is what the warning is
+ * about and is one short token; a comment is free text of any length and drops
+ * three lines of prose into a label slot.
+ */
 function draftRuleName(rule: RuleDraft): string {
-  return rule.comment?.trim() || rule.header;
+  return rule.header;
 }
 
 function importRuleDraft(rule: ExportedRule): RuleDraft {

@@ -286,6 +286,22 @@ describe("popup readout", () => {
     expect(root.querySelector(".fresh-lab")?.textContent).not.toContain(
       copy.token.warnNote,
     );
+    // No share of a life is left, so no bar is drawn to report one: an empty
+    // track still reads as a track.
+    expect(root.querySelector(".fresh-track")).toBeNull();
+  });
+
+  // Pause reaches every line in words. The hero is the one change carrying a
+  // live credential, and a dimmed card beside a working Replace button says
+  // nothing on its own about whether the header is going out.
+  it("says the hero credential is held while header changes are paused", async () => {
+    const { root } = await mount(
+      { ...tokenDoc(), settings: { ...tokenDoc().settings, paused: true } },
+      true,
+    );
+    expect(root.querySelector(".token .tk-held")?.textContent).toBe(
+      copy.token.held,
+    );
   });
 
   it("swaps a token through a masked field, onto the rule carrying it", async () => {
@@ -543,15 +559,32 @@ describe("popup readout", () => {
     expect(root.querySelector(".empty .add")).not.toBeNull();
   });
 
-  it("offers no change to add when there is no site to change", async () => {
+  // A tab with no site to read says why the screen is empty, and offers the one
+  // thing still worth opening from here rather than asking for what the reader
+  // has already done.
+  it("says why there is nothing to change and offers the rule list", async () => {
     const { activeTabDomain } = await import("../platform/tabs");
     vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
     const { root } = await mount(createV1Seed(), true);
     expect(root.querySelector(".empty")?.textContent).toContain(
-      "Open the popup on a website",
+      "this tab is not on one",
     );
-    expect(root.querySelectorAll(".add")).toHaveLength(0);
+    expect(root.querySelector(".empty .add")?.textContent).toContain(
+      "See all rules",
+    );
     expect(root.querySelector(".tab-btn")).toBeNull();
+  });
+
+  // The head's site slot is set in the face reserved for literal wire bytes. A
+  // tab with no site has nothing to put there, and the product's own name drawn
+  // in that face reads as the site this tab is on.
+  it("puts no name in the site slot when the tab is on no site", async () => {
+    const { activeTabDomain } = await import("../platform/tabs");
+    vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
+    const { root } = await mount(createV1Seed(), true);
+    expect(root.querySelector(".site")?.textContent).toBe("");
+    expect(root.querySelector(".site .host")).toBeNull();
+    expect(root.querySelector(".site svg")).toBeNull();
   });
 
   it("reads the master switch on while running, the way every switch here does", async () => {
@@ -596,6 +629,14 @@ describe("popup readout", () => {
     // on top of that: every control in it still writes.
     expect(root.querySelector(".change-line.paused")).not.toBeNull();
     expect(root.querySelector(".popup-body")?.className).toBe("popup-body");
+    // Colour is not the state. The count stays and says what it is counting, and
+    // a held line says what it would do rather than claiming to be doing it.
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "1 change held on this tab",
+    );
+    expect(root.querySelector(".change-line.paused .verb")?.textContent).toBe(
+      "Would set",
+    );
     await act(async () => pause.click());
     await settle();
     expect((await read()).settings.paused).toBe(false);
@@ -852,6 +893,31 @@ describe("popup authoring entry points", () => {
     fire(() => (root.querySelector(".foot .add") as HTMLButtonElement).click());
     await settle();
     expect(root.querySelector(".rule-editor")).not.toBeNull();
+  });
+
+  // The note is the product's own disclosure of where a typed value goes, so it
+  // has to survive the surface swap into the editor, which is the surface where
+  // the value is being typed. There it has to be inside the sheet: the sheet is
+  // aria-modal, and a note outside it is on screen but out of the accessibility
+  // tree. It also stays out of the scrolling body, and stays last within its
+  // surface: a toast is an in-flow block, so anything after it pushes the
+  // confirmation away from the control that raised it.
+  it("keeps the data note last on the readout and inside the editor's dialog", async () => {
+    const { root, body } = await mount(seededDoc([rule()]), true);
+    const popup = () => root.querySelector(".popup") as HTMLElement;
+    expect(root.querySelector(".popup > .datanote")).toBe(
+      popup().lastElementChild,
+    );
+    expect(body().querySelector(".datanote")).toBeNull();
+
+    press(popup(), "n");
+    await settle();
+    const dialog = root.querySelector(
+      '.editor-sheet[role="dialog"][aria-modal="true"]',
+    ) as HTMLElement;
+    expect(dialog).not.toBeNull();
+    expect(dialog.lastElementChild?.className).toBe("datanote");
+    expect(dialog.querySelector(".sheet-region .datanote")).toBeNull();
   });
 
   it("t opens the this-tab composer", async () => {

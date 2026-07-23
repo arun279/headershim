@@ -3,6 +3,7 @@ import type { Profile } from "../../../core/model";
 import { copy } from "../../copy";
 import { previewSwitch } from "../../state/readout";
 import { sentence } from "../sentence";
+import { ProfileName } from "../Truncate";
 import { usePopoverDismiss } from "../usePopoverDismiss";
 import { CheckGlyph, ChevronGlyph, PlusGlyph } from "./glyphs";
 import { ProfileBadge } from "./ProfileBadge";
@@ -116,7 +117,7 @@ export function ProfilePicker({
               color={activeProfile.color}
               size={16}
             />
-            <span class="lbl">{activeProfile.name}</span>
+            <ProfileName value={activeProfile.name} class="lbl" />
           </>
         ) : (
           <span class="lbl">{copy.profiles.offTag}</span>
@@ -204,7 +205,7 @@ export function ProfilePicker({
                     color={profile.color}
                     size={19}
                   />
-                  <span class="nm">{profile.name}</span>
+                  <ProfileName value={profile.name} class="nm" />
                   {on && (
                     <span class="chk" aria-hidden="true">
                       <CheckGlyph />
