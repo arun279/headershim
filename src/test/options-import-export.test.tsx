@@ -53,13 +53,19 @@ async function pickFile(root: HTMLElement, file: File): Promise<void> {
   });
   fire(() => input.dispatchEvent(new Event("change", { bubbles: true })));
   // Decoding is async (the ModHeader codec loads on demand), so wait for the
-  // plan summary or a failure message to land rather than a fixed tick count.
-  for (let round = 0; round < 12; round += 1) {
+  // rendered plan summary or a failure message to land.
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
     await settle();
-    if (summary(root) !== null || root.querySelector(".ie-error") !== null) {
+    const renderedSummary = summary(root);
+    if (
+      (renderedSummary !== null && renderedSummary.children.length > 0) ||
+      root.querySelector(".ie-error") !== null
+    ) {
       return;
     }
   }
+  throw new Error("import summary never rendered");
 }
 
 function summary(root: HTMLElement): HTMLElement | null {
