@@ -1,5 +1,9 @@
 import { activeProfile, type Rule, type StateDoc } from "./model";
-import { expandResourceTypes, originPatternForDomain } from "./scope";
+import {
+  expandResourceTypes,
+  hostUnder,
+  originPatternForDomain,
+} from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
 
@@ -84,27 +88,6 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
   );
 }
 
-export interface RuleGrantGap {
-  readonly profileId: string;
-  readonly ruleId: string;
-  readonly missing: readonly string[];
-}
-
-export function docMissingGrants(
-  doc: StateDoc,
-  granted: GrantSnapshot,
-): RuleGrantGap[] {
-  const profile = activeProfile(doc);
-  return (
-    profile?.rules.flatMap((rule) => {
-      const missing = rule.enabled ? missingGrants(rule, granted) : [];
-      return missing.length === 0
-        ? []
-        : [{ profileId: profile.id, ruleId: rule.id, missing }];
-    }) ?? []
-  );
-}
-
 export interface SiteAccessEntry {
   readonly origin: string;
   readonly domain: string;
@@ -131,8 +114,9 @@ export function siteAccessView(
   granted: GrantSnapshot,
 ): SiteAccessView {
   const needed = new Map<string, number>();
-  for (const gap of docMissingGrants(doc, granted)) {
-    for (const origin of gap.missing) {
+  for (const rule of activeProfile(doc).rules) {
+    if (!rule.enabled) continue;
+    for (const origin of missingGrants(rule, granted)) {
       if (!isAllSitesOrigin(origin)) {
         needed.set(origin, (needed.get(origin) ?? 0) + 1);
       }
@@ -161,13 +145,13 @@ export function siteAccessView(
       .sort(byDomain),
     initiatorNote:
       !granted.allSites &&
-      activeProfile(doc)?.rules.some(
+      activeProfile(doc).rules.some(
         (rule) =>
           rule.enabled &&
           rule.initiators.length === 0 &&
           rule.scope.type !== "all" &&
           subresourceScopedRule(rule),
-      ) === true,
+      ),
   };
 }
 
@@ -224,20 +208,22 @@ function originPatternContains(granted: string, required: string): boolean {
   ) {
     return false;
   }
-  return (
-    requiredPattern[0] === grantedPattern[0] ||
-    requiredPattern[0].endsWith(`.${grantedPattern[0]}`)
-  );
+  return hostUnder(requiredPattern[0], grantedPattern[0]);
 }
 
 export function domainFromOriginPattern(pattern: string): string | undefined {
   return parseOriginPattern(pattern)?.[0];
 }
 
+// The scheme is any of *, http, https: a rule's origins are always scheme-wild
+// (`*://…`), but a grant the user narrowed through chrome://extensions is stored
+// as the intersection of their pick and the manifest's `*://*/*`, which keeps
+// their concrete scheme. Reading only `*://` would call such a grant missing and
+// drop a rule the browser would run.
 function parseOriginPattern(
   pattern: string,
 ): readonly [domain: string, includesSubdomains: boolean] | undefined {
-  const match = /^\*:\/\/(\*\.)?([^/]+)\/\*$/.exec(pattern);
+  const match = /^(?:\*|https?):\/\/(\*\.)?([^/]+)\/\*$/.exec(pattern);
   const domain = match?.[2];
   if (domain === undefined || domain === "*") {
     return undefined;

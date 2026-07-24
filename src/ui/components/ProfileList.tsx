@@ -5,17 +5,18 @@ import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
-import { Toggle } from "./Toggle";
 import { ProfileName } from "./Truncate";
 import "./ProfileList.css";
 
 interface ProfileListProps {
   profiles: readonly Profile[];
-  activeProfileId: string | undefined;
+  activeProfileId: string;
+  /** The active profile is selected but not running, so its dot is not live. */
+  paused: boolean;
   /** The expanded card, whose badge and rules are open for editing. */
   openProfileId: string | undefined;
   onOpen: (profileId: string) => void;
-  onToggle: (profileId: string, enabled: boolean) => void;
+  onActivate: (profileId: string) => void;
   onReorder: (profileId: string, toIndex: number) => void;
   onRename: (profileId: string, name: string) => void;
   onClone: (profileId: string) => void;
@@ -73,7 +74,7 @@ export function ProfileList(props: ProfileListProps) {
   };
 
   return (
-    <ul class="profile-list">
+    <ul class={props.paused ? "profile-list paused" : "profile-list"}>
       {profiles.map((profile) => (
         <ProfileCard
           key={profile.id}
@@ -90,7 +91,7 @@ export function ProfileList(props: ProfileListProps) {
             }
           }}
           onOpen={() => props.onOpen(profile.id)}
-          onToggle={(enabled) => props.onToggle(profile.id, enabled)}
+          onActivate={() => props.onActivate(profile.id)}
           onRename={(name) => props.onRename(profile.id, name)}
           onClone={() => props.onClone(profile.id)}
           onDelete={() => props.onDelete(profile.id)}
@@ -119,7 +120,7 @@ interface ProfileCardProps {
   posinset: number;
   handleRef: (node: HTMLButtonElement | null) => void;
   onOpen: () => void;
-  onToggle: (enabled: boolean) => void;
+  onActivate: () => void;
   onRename: (name: string) => void;
   onClone: () => void;
   onDelete: () => void;
@@ -232,11 +233,17 @@ function ProfileCard(props: ProfileCardProps) {
         <span class="profile-rulecount">
           {copy.options.profiles.ruleCount(profile.rules.length)}
         </span>
-        <Toggle
-          checked={props.active}
-          label={copy.options.profiles.toggleLabel(profile.name, props.active)}
-          onChange={props.onToggle}
-        />
+        <label class="profile-activate">
+          <input
+            class="sr-only"
+            type="radio"
+            name="active-profile"
+            checked={props.active}
+            aria-label={copy.options.profiles.activeLabel(profile.name)}
+            onChange={props.onActivate}
+          />
+          <span class="radio-dot" aria-hidden="true" />
+        </label>
       </div>
       {props.open && !renaming && (
         <div class="profile-detail">

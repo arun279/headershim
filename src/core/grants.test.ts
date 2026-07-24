@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_SITES_ORIGIN,
-  docMissingGrants,
   domainFromOriginPattern,
   type GrantSnapshot,
   isAllSitesOrigin,
@@ -202,12 +201,14 @@ describe("missingGrants", () => {
         allSites: false,
       }),
     ).toEqual([]);
+    // A grant the user narrowed through chrome://extensions carries a concrete
+    // scheme; the rule still runs on it, so it satisfies the requirement too.
     expect(
       missingGrants(subject, {
         origins: ["https://*.example.com/*"],
         allSites: false,
       }),
-    ).toEqual([originPatternForDomain("api.example.com")]);
+    ).toEqual([]);
   });
 
   it("treats all-sites access as satisfying targets and initiators", () => {
@@ -277,53 +278,6 @@ describe("missingGrants", () => {
   });
 });
 
-describe("docMissingGrants", () => {
-  const none: GrantSnapshot = { origins: [], allSites: false };
-
-  it("reports gaps only for enabled rules inside the active profile", () => {
-    const ungranted = rule(
-      { type: "domains", domains: ["api.example.com"] },
-      "all",
-    );
-    const disabledRule = {
-      ...rule({ type: "domains", domains: ["off.example.com"] }, "all"),
-      id: "rule-2",
-      enabled: false,
-    };
-    const doc: StateDoc = {
-      v: 1,
-      profiles: [
-        {
-          id: "profile-on",
-          name: "On",
-          badgeText: "ON",
-          color: "blue",
-          rules: [ungranted, disabledRule],
-        },
-        {
-          id: "profile-off",
-          name: "Off",
-          badgeText: "OF",
-          color: "teal",
-          rules: [{ ...ungranted, id: "rule-3" }],
-        },
-      ],
-      activeProfileId: "profile-on",
-      nextRuleNum: 4,
-      settings: { paused: false, theme: "system" },
-    };
-
-    expect(docMissingGrants(doc, none)).toEqual([
-      {
-        profileId: "profile-on",
-        ruleId: "rule-1",
-        missing: [originPatternForDomain("api.example.com")],
-      },
-    ]);
-    expect(docMissingGrants(doc, { origins: [], allSites: true })).toEqual([]);
-  });
-});
-
 describe("siteAccessView", () => {
   const none: GrantSnapshot = { origins: [], allSites: false };
 
@@ -331,7 +285,7 @@ describe("siteAccessView", () => {
     return {
       v: 1,
       profiles,
-      activeProfileId: profiles[0]?.id,
+      activeProfileId: profiles[0]?.id ?? "",
       nextRuleNum: 100,
       settings: { paused: false, theme: "system" },
     };
@@ -377,6 +331,33 @@ describe("siteAccessView", () => {
     ]);
   });
 
+  it("needs origins for enabled rules in the active profile only", () => {
+    const subject = doc([
+      profile("p1", [
+        rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+        {
+          ...rule({ type: "domains", domains: ["off.example.com"] }, "all"),
+          id: "rule-2",
+          enabled: false,
+        },
+      ]),
+      profile("p2", [
+        {
+          ...rule({ type: "domains", domains: ["other.example.com"] }, "all"),
+          id: "rule-3",
+        },
+      ]),
+    ]);
+
+    expect(siteAccessView(subject, none).needed).toEqual([
+      {
+        origin: originPatternForDomain("api.example.com"),
+        domain: "api.example.com",
+        ruleCount: 1,
+      },
+    ]);
+  });
+
   it("routes broad needs to the all-sites card, never a needed row", () => {
     const subject = doc([profile("p1", [rule({ type: "all" }, "all")])]);
 
@@ -405,13 +386,16 @@ describe("siteAccessView", () => {
     const granted = originPatternForDomain("old.example.com");
 
     expect(
-      siteAccessView(doc([]), { origins: [granted], allSites: false }).granted,
+      siteAccessView(doc([profile("p1", [])]), {
+        origins: [granted],
+        allSites: false,
+      }).granted,
     ).toEqual([{ origin: granted, domain: "old.example.com", ruleCount: 0 }]);
   });
 
   it("excludes the broad origin from the granted list", () => {
     expect(
-      siteAccessView(doc([]), {
+      siteAccessView(doc([profile("p1", [])]), {
         origins: [ALL_SITES_ORIGIN, "<all_urls>"],
         allSites: true,
       }).granted,

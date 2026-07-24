@@ -559,6 +559,23 @@ describe("popup readout", () => {
     expect(root.querySelector(".empty .add")).not.toBeNull();
   });
 
+  // While paused the banner above states the cause once, so the empty state
+  // drops the site-shaped sentence rather than restate a global condition as a
+  // fact about this site. The one action stays.
+  it("drops the site line while paused and lets the banner carry the cause", async () => {
+    const seed = createV1Seed();
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      true,
+    );
+    expect(root.querySelector(".pausebar")).not.toBeNull();
+    expect(root.querySelector(".empty .l1")).toBeNull();
+    expect(root.textContent).not.toContain("isn't changing anything on");
+    expect(root.querySelector(".empty .add")?.textContent).toContain(
+      copy.readout.addChange,
+    );
+  });
+
   // A tab with no site to read says why the screen is empty, and offers the one
   // thing still worth opening from here rather than asking for what the reader
   // has already done.
@@ -757,7 +774,7 @@ describe("popup profile switch", () => {
 
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.activeProfileId).toBe(stored.profiles[1]?.id);
+    expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
     expect(stored.profiles[1]?.name).toBe("QA headers");
     expect(root.querySelector(".pop")).not.toBeNull();
     expect(document.activeElement).toBe(
@@ -841,8 +858,9 @@ describe("popup profile switch", () => {
     const current = root.querySelector('[aria-current="true"]');
     expect((await read()).profiles).toHaveLength(2);
     expect(root.querySelector(".profile-name-input")).toBeNull();
+    // Creating never switches: the active profile is still the seeded one.
     expect(current?.querySelector(".nm")?.textContent).toBe(
-      copy.options.profiles.newName,
+      stored.profiles[0]?.name,
     );
     expect(document.activeElement).toBe(current);
   });
@@ -893,6 +911,20 @@ describe("popup authoring entry points", () => {
     fire(() => (root.querySelector(".foot .add") as HTMLButtonElement).click());
     await settle();
     expect(root.querySelector(".rule-editor")).not.toBeNull();
+  });
+
+  // Opening the form must not drop the pause context: a rule authored here is
+  // inert until the extension resumes, so the banner rides into the editor too.
+  it("keeps the pause banner while the rule editor is open", async () => {
+    const seed = seededDoc([rule()]);
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      true,
+    );
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+    expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(root.querySelector(".pausebar")).not.toBeNull();
   });
 
   // The note is the product's own disclosure of where a typed value goes, so it

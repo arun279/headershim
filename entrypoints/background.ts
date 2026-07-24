@@ -2,9 +2,9 @@ import { planBadge } from "../src/core/badge";
 import {
   compileDynamic,
   compileSession,
-  dropUncompilable,
+  dropInapplicable,
 } from "../src/core/compile";
-import { docMissingGrants } from "../src/core/grants";
+import { originGranted } from "../src/core/grants";
 import {
   activateNextProfile,
   type StateDoc,
@@ -12,7 +12,6 @@ import {
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
 import { createV1Seed, migrate } from "../src/core/schema";
-import { computeStatus } from "../src/core/status";
 import { applyBadge } from "../src/platform/badge";
 import {
   getDynamicRules,
@@ -53,14 +52,18 @@ export default defineBackground(() => {
   browser.runtime.onStartup.addListener(() => reconcile());
   subscribeState(() => void reconcile());
   subscribeSession(() => void reconcile());
-  // Grants are not a compile input: Chrome enforces host access at match
-  // time, so a grant change only moves badge and needs-access surfaces.
-  // Fire-and-forget cleanup listeners swallow their own rejections (a rejected
-  // write must not escape unhandled, matching runUntilSettled's fail-closed
-  // discipline) while still returning the promise so callers can await settling.
-  onGrantsChanged(() => refreshBadge().catch(noop));
+  // Grants are a compile input, so a grant change is a reconcile: it installs
+  // the rules a grant was waiting on and pulls the dynamic ones a revoke took
+  // back. Reconcile runs first and unconditionally so those leave the batch at
+  // once; pruning the This-tab rows a revoked host still holds runs alongside,
+  // and its own session write reconciles them. Both swallow their rejections, as
+  // the fire-and-forget cleanup listeners do, so no rejected write escapes.
+  onGrantsChanged(() => {
+    void reconcile();
+    void endUngrantedOverrides().catch(noop);
+  });
   browser.tabs.onRemoved.addListener((tabId) =>
-    endOverrides(tabId).catch(noop),
+    pruneOverrides((_row, id) => id !== tabId).catch(noop),
   );
   browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) =>
     enforceOverrideLifetime(tabId, tab.url).catch(noop),
@@ -105,8 +108,17 @@ export default defineBackground(() => {
     if (doc === undefined) {
       return true;
     }
-    const session = await readSession();
-    const desiredDynamic = compileDynamic(await compilableDoc(doc));
+    // Resolve every enabled regex against the browser's RE2 (async) and read
+    // the live grants, so the pure core drop can strip the rules that must not
+    // reach the batch before compilation sees them.
+    const [session, granted, isRegexSupported] = await Promise.all([
+      readSession(),
+      grantSnapshot(),
+      resolveRegexSupport(doc),
+    ]);
+    const desiredDynamic = compileDynamic(
+      dropInapplicable(doc, isRegexSupported, granted),
+    );
     const desiredSession = compileSession(
       Object.values(session.tabs).flat(),
       doc.settings.paused,
@@ -131,14 +143,6 @@ export default defineBackground(() => {
       return false;
     }
     return true;
-  }
-
-  // Resolve every enabled regex against the browser's RE2 (async) so the pure
-  // core drop can strip rules Chrome would reject before they reach the atomic
-  // batch. Distinct regexes only; the common case (none, or all already valid)
-  // stays cheap.
-  async function compilableDoc(doc: StateDoc): Promise<StateDoc> {
-    return dropUncompilable(doc, await resolveRegexSupport(doc));
   }
 
   async function flagReconcileError(value: boolean): Promise<void> {
@@ -192,48 +196,43 @@ export default defineBackground(() => {
 
   async function refreshBadge(): Promise<void> {
     const outcome = migrate(await readRaw());
-    if (!outcome.ok) {
-      return;
+    if (outcome.ok) {
+      const { state, title } = planBadge(outcome.value);
+      await applyBadge(state, title);
     }
-    const [granted, reconcileError] = await Promise.all([
-      grantSnapshot(),
-      getReconcileError(),
-    ]);
-    const { state, title } = planBadge({
-      doc: outcome.value,
-      status: computeStatus({
-        doc: outcome.value,
-        grantGaps: docMissingGrants(outcome.value, granted),
-        reconcileError,
-      }),
-    });
-    await applyBadge(state, title);
   }
 
-  async function endOverrides(
-    tabId: number,
-    keep: (row: TabOverride) => boolean = () => false,
+  // The one session-row pruner: keep the rows the predicate accepts, across
+  // every tab, in a single locked write. Tab close, cross-origin navigation and
+  // a revoked grant are the same operation with different predicates, so a
+  // revoke is one write however many tabs held the host.
+  async function pruneOverrides(
+    keep: (row: TabOverride, tabId: number) => boolean,
   ): Promise<void> {
-    const session = await readSession();
-    if ((session.tabs[tabId] ?? []).length === 0) {
-      return;
-    }
     await locked(async () => {
       const current = await readSession();
-      const rows = current.tabs[tabId] ?? [];
-      const kept = rows.filter(keep);
-      if (kept.length === rows.length) {
-        return;
+      const entries = Object.entries(current.tabs)
+        .map(([id, rows]): [string, TabOverride[]] => [
+          id,
+          rows.filter((row) => keep(row, Number(id))),
+        ])
+        .filter(([, rows]) => rows.length > 0);
+      const tabs = Object.fromEntries(entries);
+      if (
+        Object.values(tabs).flat().length !==
+        Object.values(current.tabs).flat().length
+      ) {
+        await writeSession({ ...current, tabs });
       }
-      const tabs = Object.fromEntries(
-        Object.entries(current.tabs)
-          .map(([id, tabRows]): [string, TabOverride[]] =>
-            Number(id) === tabId ? [id, kept] : [id, tabRows],
-          )
-          .filter(([, tabRows]) => tabRows.length > 0),
-      );
-      await writeSession({ ...current, tabs });
     });
+  }
+
+  // A this-tab row lives exactly as long as its grant: a revoke takes it out
+  // with the dynamic rules that shared the host, so activeTab has nothing left
+  // to widen on that tab.
+  async function endUngrantedOverrides(): Promise<void> {
+    const granted = await grantSnapshot();
+    await pruneOverrides((row) => originGranted(row.originHost, granted));
   }
 
   function enforceOverrideLifetime(
@@ -245,7 +244,7 @@ export default defineBackground(() => {
     // must be gone before the user can re-click the icon after an A→B→A trip).
     // domainFromUrl parses defensively — an uncommitted tab hands back "".
     const host = domainFromUrl(url);
-    return endOverrides(tabId, (row) => row.originHost === host);
+    return pruneOverrides((row, id) => id !== tabId || row.originHost === host);
   }
 
   function handleCommand(command: string): Promise<void> | undefined {

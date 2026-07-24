@@ -79,6 +79,28 @@ export function scopeCondition(scope: Scope): ScopeCondition {
   }
 }
 
+/**
+ * Whether the compiled condition can reach this host, before Chrome's matcher
+ * gets its say. Only requestDomains rules a host out from here: a urlFilter or
+ * regexFilter narrows further, which only Chrome can settle per request. Reading
+ * the same list the compiler hands Chrome is what keeps a surface from deriving
+ * reach a second way from the authored scope.
+ */
+export function conditionReaches(
+  condition: ScopeCondition,
+  host: string,
+): boolean {
+  return (
+    condition.requestDomains === undefined ||
+    condition.requestDomains.some((domain) => hostUnder(host, domain))
+  );
+}
+
+/** Whether a host is the domain itself or one of its subdomains. */
+export function hostUnder(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 export function originPatternForDomain(domain: string): string {
   return isIpLiteral(domain) ? `*://${domain}/*` : `*://*.${domain}/*`;
 }
@@ -125,6 +147,44 @@ export function validateUrlFilter(
 // where the list is.
 export function isDomainSupported(domain: string): boolean {
   return !NON_ASCII.test(domain);
+}
+
+// A host label: letters, digits, underscores and hyphens, never leading or
+// trailing with a hyphen and never empty. An underscore is not an RFC 1123 DNS
+// character, but GURL keeps it in a host and Chrome matches a request to it
+// verbatim, so `my_service.corp` and `_dmarc.example.com` are live hosts, not
+// the dead shapes this flags.
+const HOSTNAME_LABEL = /^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?$/i;
+// A bracketed IPv6 literal: hex, colons and the dots an IPv4-mapped tail carries,
+// with at least one colon so an IPv4 or a lone label is not mistaken for one.
+// This is shape, not full RFC 4291 grammar; pathological colon runs still pass.
+const IPV6_LITERAL = /^\[[0-9a-f:.]*:[0-9a-f:.]*\]$/i;
+
+// Author-time host shape, and deliberately not the compiler gate above.
+// isDomainSupported has to stay exactly as narrow as Chrome so it never drops a
+// rule Chrome would run; this is feedback while a rule is being written, so it
+// can name the shapes Chrome stores verbatim and then never matches: wildcards,
+// ports, paths, schemes, stray dots, and dotted-decimal that is not a canonical
+// IPv4. A host is an IPv6 literal, a canonical IPv4, or dot-separated host labels.
+export function isHostnameShaped(host: string): boolean {
+  if (IPV6_LITERAL.test(host)) {
+    return true;
+  }
+  const labels = host.split(".");
+  return labels.every((label) => /^\d+$/.test(label))
+    ? isCanonicalIpv4(labels)
+    : labels.every((label) => HOSTNAME_LABEL.test(label));
+}
+
+// Four octets Chrome would not rewrite: 0 to 255, and written the one way the
+// canonical host is (so a leading zero or an out-of-range octet is not a host).
+function isCanonicalIpv4(octets: string[]): boolean {
+  return (
+    octets.length === 4 &&
+    octets.every(
+      (octet) => Number(octet) <= 255 && String(Number(octet)) === octet,
+    )
+  );
 }
 
 function isIpLiteral(domain: string): boolean {

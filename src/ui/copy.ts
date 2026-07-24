@@ -67,8 +67,8 @@ const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
     reason: `${BRAND_NAME} applies your header rules through Chrome's rules engine, which runs a rule only where Chrome's own host access covers the request. The engine does not hand ${BRAND_NAME} request or response content.`,
     details: [
       "A request rule sends the value you typed to every site it matches and you have granted, so where that value goes is limited by the rule's scope and by the sites you have granted. A response rule changes what this browser sees.",
-      "While header changes are running, each rule you turn on in the active profile that Chrome accepts is handed to the rules engine as a dynamic rule, with the header value in the clear; a rule in a profile that is not active is not. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage.",
-      "Turning the rule off, deleting it, switching to another profile, or pausing every header change takes it back out of the dynamic ruleset.",
+      "While header changes are running, each rule you turn on in the active profile that Chrome accepts, and whose sites you have granted, is handed to the rules engine as a dynamic rule, with the header value in the clear. A rule in a profile that is not active is not, and neither is one still waiting on a site grant. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage.",
+      "Turning the rule off, deleting it, switching to another profile, revoking a site the rule needs, or pausing every header change takes it back out of the dynamic ruleset.",
       "A this-tab change goes to the session ruleset instead, which Chrome clears when the browser shuts down.",
     ],
   },
@@ -268,23 +268,6 @@ export const copy = {
     cancel: "Cancel",
   },
 
-  profiles: {
-    navLabel: "Profiles",
-    allProfiles: "all profiles",
-    onTag: "on",
-    offTag: "off",
-    create: "Create profile",
-    turnOn: "Turn on",
-    turnOff: "Turn off",
-    toggleLabel: (name: string, on: boolean) =>
-      `Turn ${on ? "off" : "on"} profile: ${name}`,
-    manage: "Manage profiles",
-    actions: (name: string) => `Profile actions: ${name}`,
-    saveError: "Could not save the profile. Try again.",
-    chipState: (focused: boolean, on: boolean) =>
-      `${focused ? ", focused" : ""}${on ? ", on" : ", off"}`,
-  },
-
   // The full-tab options surface: frame, profile management, and bulk actions.
   options: {
     nav: {
@@ -295,7 +278,7 @@ export const copy = {
       profiles: "Profiles",
       importExport: "Import & export",
       siteAccess: "Site access",
-      traffic: "Configured changes",
+      traffic: "Active changes",
       settings: "Settings",
       about: "About",
     },
@@ -328,28 +311,22 @@ export const copy = {
         `one shared rule · switch affects all ${siteCount} sites`,
       scope: {
         all: "all sites",
-        pattern: "URL pattern",
-        regex: "regex",
-        domains: (first: string, more: number): Sentence => [
-          data(first),
-          ...(more > 0 ? [" +", data(more)] : []),
-        ],
       },
       // Direction is what two otherwise identical rows differ by, so the name
       // that reaches assistive technology carries it too.
       editRule: (direction: string, header: string) =>
         `Edit rule: ${direction} ${header}`,
-      profileOff: "its profile is off",
+      notActiveProfile: (name: string) => `in ${name}, not the active profile`,
       empty: "No rules yet.",
-      emptyProfileOff:
-        "Every profile is off. Turn one on to see its rules run.",
     },
 
-    // Every change the compiled ruleset carries, and where each one stands. It
-    // reads that ruleset, never the wire, so no line here may speak of a
-    // request: none has been observed, and one may never be made.
+    // Every switched-on change in the active profile, and where each one stands.
+    // It reads the stored rules, never the wire, so no line here may speak of a
+    // request: none has been observed, and one may never be made. Off rules are
+    // not active and never appear, which is why the page is named for what it
+    // shows and not for the whole configured set, which All rules already holds.
     traffic: {
-      title: "Configured changes",
+      title: "Active changes",
       status: {
         live: "live",
         unconfirmed: "confirmable only by Chrome",
@@ -360,10 +337,11 @@ export const copy = {
         paused: "paused",
       },
       crossSiteHost: "cross-site",
-      // The page lists what the ruleset holds, which includes rules a grant
-      // away from running, so an empty page means no rule is on, not that
-      // nothing is running.
-      empty: "No changes configured yet. Turn a rule on to see it here.",
+      // Empty means the active profile has nothing switched on: either its rules
+      // are all off or it holds none. Both read the same here, and neither is a
+      // cue to turn on a rule that may not exist, so the line only states the
+      // fact.
+      empty: "No changes are switched on.",
     },
     profiles: {
       title: "Profiles",
@@ -378,8 +356,7 @@ export const copy = {
       rename: "Rename",
       clone: "Clone",
       delete: "Delete",
-      toggleLabel: (name: string, on: boolean) =>
-        `Profile ${on ? "on" : "off"}: ${name}`,
+      activeLabel: (name: string) => `Active profile: ${name}`,
       reorderHandle: (name: string) =>
         `Reorder ${name}; press the arrow keys to move it`,
       reordered: (name: string, position: number) =>
@@ -593,11 +570,11 @@ export const copy = {
   toast: {
     ruleCreated: "Rule created",
     changesSaved: "Changes saved",
-    ruleLive: "Access granted",
-    activeOn: (host: string) => `Active on ${host}`,
-    activeOnSites: (siteCount: number) => `Active on ${siteCount} sites`,
-    // The grant-to-reload prompt when the annunciator grant names no single
-    // site: confirms access landed and pairs with a Reload-tab action.
+    // Confirms a grant landed, and says only that: a grant means the host is
+    // permitted, while whether a rule runs there turns on pause, the active
+    // profile, and Chrome taking the rule. The popup pairs it with a Reload-tab
+    // action, since a granted tab keeps its pre-grant response; the options
+    // surfaces raise it on its own.
     accessGranted: "Access granted",
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
@@ -616,7 +593,6 @@ export const copy = {
     // a value that was cut, so a value being held back cannot borrow it.
     redacted: "[hidden]",
     generated: (kind: string) => `${kind} · generated`,
-    profileOffDetail: "This profile is off · its rules aren't running.",
     needsAccess: (host: string, moreSites: number): Sentence => [
       "Needs access · ",
       data(host),
@@ -624,8 +600,6 @@ export const copy = {
     ],
     editValueHint: "Enter saves · Esc cancels",
     pasteNewValue: "Paste new value",
-    temporarySwitchLabel: (header: string, on: boolean) =>
-      `Temporary override ${on ? "on" : "off"}: ${header}`,
     invalidRegex: "Invalid regex. Edit the scope to enable",
     // Announced after the ⋯ menu copies a (possibly truncated) value in full.
     valueCopied: "Value copied",
@@ -722,13 +696,14 @@ export const copy = {
     grantHostsLabel: "Grant on hosts",
     grantHostInputLabel: "Add host",
     grantHostsAllSites: "Leave empty and this rule needs access to all sites.",
-    grantHostsBounded: "This rule is granted only on the hosts listed here.",
+    grantHostsBounded:
+      "This rule matches only the hosts listed here, and needs access to just them.",
     patternHint: [
       data("||example.com/"),
       " matches the site, subdomains, and every path · ",
       data("||example.com/api/"),
       " narrows it to /api/ paths",
-    ] as Sentence,
+    ] satisfies Sentence,
     regexHint: "Uses Chrome's RE2 syntax.",
     allTypes: "All types",
     insert: "Insert",
@@ -804,6 +779,8 @@ export const copy = {
       "Set and append need a value. Type one, or switch the operation to Remove.",
     valueLineBreak:
       "Header values can't contain line breaks. Remove them to save.",
+    domainInvalid:
+      "This isn't a hostname Chrome can match. Enter one like example.com, with no scheme, port, path, or wildcard.",
     scopeEmpty: {
       domains: "Name at least one domain this rule applies to.",
       pattern: "Type a URL pattern this rule applies to.",

@@ -20,7 +20,7 @@ function Probe() {
   return (
     <output data-phase={app.phase}>
       {app.phase === "ready"
-        ? `${app.status.kind}:${app.overrides.length}`
+        ? `${app.status}:${app.overrides.length}`
         : app.phase === "newer-store"
           ? String(app.foundVersion)
           : ""}
@@ -129,19 +129,6 @@ describe("useAppState", () => {
     expect(view.text()).toBe("out-of-sync:0");
 
     await setReconcileError(false);
-    await settle();
-    expect(view.text()).toBe("live:0");
-  });
-
-  it("computes needs-access from the live grant snapshot", async () => {
-    await write(doc({ rules: [rule()] }));
-    const view = probe(render(<Probe />));
-    await settle();
-    expect(view.text()).toBe("needs-access:0");
-
-    await fakeBrowser.permissions.request({
-      origins: ["*://*.example.com/*"],
-    });
     await settle();
     expect(view.text()).toBe("live:0");
   });

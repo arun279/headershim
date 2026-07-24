@@ -1,9 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import {
-  docMissingGrants,
-  type GrantSnapshot,
-  type RuleGrantGap,
-} from "../../core/grants";
+import type { GrantSnapshot } from "../../core/grants";
 import type { StateDoc, TabOverride } from "../../core/model";
 import { migrate } from "../../core/schema";
 import { computeStatus, type SystemStatus } from "../../core/status";
@@ -30,7 +26,6 @@ export type AppState =
       readonly doc: StateDoc;
       readonly status: SystemStatus;
       readonly grants: GrantSnapshot;
-      readonly grantGaps: readonly RuleGrantGap[];
       readonly isRegexSupported: (regex: string) => boolean;
       /** The active tab's id; undefined on chrome:// and store pages. */
       readonly tabId: number | undefined;
@@ -49,8 +44,8 @@ type DocSource =
  * Projects the popup's world from its two buses: the state document over
  * `storage.onChanged` and the live grant snapshot over `permissions.onChanged`
  * (plus the session store for This-tab rows and the reconcile health flag).
- * A grant revoked while the popup is open flips the needs-access surfaces at
- * the same moment it flips the badge — both read `computeStatus`.
+ * A grant revoked while the popup is open re-renders the per-rule needs-access
+ * surfaces at once, because every line reads the live grant snapshot.
  */
 export function useAppState(): AppState {
   const [docSource, setDocSource] = useState<DocSource | undefined>(undefined);
@@ -129,13 +124,11 @@ export function useAppState(): AppState {
     return { phase: "newer-store", foundVersion: docSource.newerVersion };
   }
 
-  const grantGaps = docMissingGrants(docSource.doc, grants);
   return {
     phase: "ready",
     doc: docSource.doc,
-    status: computeStatus({ doc: docSource.doc, grantGaps, reconcileError }),
+    status: computeStatus({ doc: docSource.doc, reconcileError }),
     grants,
-    grantGaps,
     isRegexSupported: docSource.isRegexSupported,
     tabId,
     overrides: tabId === undefined ? [] : (session.tabs[tabId] ?? []),

@@ -21,18 +21,6 @@ body {
   padding-bottom: 6px;
 }
 
-.pausebar {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 16px;
-  background: var(--amber-soft);
-  border-bottom: var(--hairline) solid var(--hair);
-  font-size: 11px;
-  color: var(--amber);
-  font-weight: 650;
-}
-
 /* ---------------- footer ---------------- */
 .foot {
   display: flex;

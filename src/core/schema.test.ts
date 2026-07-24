@@ -80,7 +80,7 @@ function validDoc(): StateDoc {
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: 5,
     settings: { paused: false, theme: "system" },
   };
@@ -158,19 +158,23 @@ describe("migrate", () => {
     expect(migrate(dark).ok).toBe(true);
   });
 
-  it("accepts no active profile", () => {
-    expect(migrate({ ...validDoc(), activeProfileId: undefined }).ok).toBe(
-      true,
-    );
+  it("repairs a missing active profile id to the first profile", () => {
+    const doc = { ...validDoc(), activeProfileId: undefined };
+    const result = migrate(doc);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { ...doc, activeProfileId: firstProfile().id },
+    });
   });
 
-  it("repairs a dangling active profile id to no active profile", () => {
+  it("repairs a dangling active profile id to the first profile", () => {
     const doc = { ...validDoc(), activeProfileId: "missing" };
     const result = migrate(doc);
 
     expect(result).toEqual({
       ok: true,
-      value: { ...doc, activeProfileId: undefined },
+      value: { ...doc, activeProfileId: firstProfile().id },
     });
     if (result.ok) {
       expect(result.value).not.toBe(doc);
@@ -202,7 +206,6 @@ describe("migrate", () => {
       { ...validDoc(), profiles: [] },
       { ...validDoc(), profiles: "Default" },
       { ...validDoc(), profiles: [null] },
-      { ...validDoc(), activeProfileId: 1 },
       { ...validDoc(), nextRuleNum: "5" },
       { ...validDoc(), nextRuleNum: 0 },
       { ...validDoc(), nextRuleNum: 1.5 },

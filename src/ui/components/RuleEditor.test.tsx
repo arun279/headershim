@@ -147,11 +147,35 @@ async function saveDraft(ctx: ReturnType<typeof mount>) {
   await settle();
 }
 
+function pickScope(ctx: ReturnType<typeof mount>, type: "pattern" | "regex") {
+  fire(() =>
+    (
+      ctx.root.querySelector(
+        `.segmented input[value="${type}"]`,
+      ) as HTMLInputElement
+    ).click(),
+  );
+}
+
+async function addGrantHost(ctx: ReturnType<typeof mount>, host: string) {
+  const input = ctx.root.querySelector(".grant-chip-input") as HTMLInputElement;
+  typeInto(input, host);
+  press(input, "Enter");
+  await settle();
+}
+
+async function saveAndExpectRefused(
+  ctx: ReturnType<typeof mount>,
+  error: string,
+) {
+  await saveDraft(ctx);
+  expect(ctx.onSave).not.toHaveBeenCalled();
+  expect(ctx.errors()).toContain(error);
+}
+
 function expectAllSitesGranted(ctx: ReturnType<typeof mount>) {
   expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
-  expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
-    copy.scopeSummary.allSites,
-  ]);
+  expect(ctx.onGranted).toHaveBeenCalledOnce();
   expect(ctx.onClose).toHaveBeenCalledOnce();
 }
 
@@ -474,6 +498,94 @@ describe("RuleEditor commit model", () => {
     );
   });
 
+  it("refuses a domain that is not a hostname and marks the chip", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    typeInto(ctx.chipInput(), "*.example.com");
+    press(ctx.chipInput(), "Enter");
+    await settle();
+
+    // The wildcard lands in the stop hue the moment it commits; the real domain
+    // beside it stays plain.
+    const invalidChips = ctx.root.querySelectorAll(".domain-chip.invalid");
+    expect(invalidChips).toHaveLength(1);
+    expect(invalidChips[0]?.textContent).toContain("*.example.com");
+
+    // Chrome stores such an entry and matches no request, so the save is refused
+    // rather than authoring a rule that reads live and changes nothing, and the
+    // refusal lands focus on the scope input, not on the chip that cannot hold it.
+    await saveAndExpectRefused(ctx, copy.errors.domainInvalid);
+    expect(document.activeElement).toBe(ctx.chipInput());
+  });
+
+  it("saves an underscore host, which Chrome stores and matches verbatim", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    typeInto(ctx.chipInput(), "my_service.corp");
+    press(ctx.chipInput(), "Enter");
+    await settle();
+
+    // The host is live, not a dead shape, so no chip is marked and the save runs.
+    expect(ctx.root.querySelector(".domain-chip.invalid")).toBeNull();
+
+    fire(() => ctx.saveButton().click());
+    await settle();
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      expect.objectContaining({
+        scope: {
+          type: "domains",
+          domains: ["api.example.com", "my_service.corp"],
+        },
+      }),
+      undefined,
+    );
+  });
+
+  it("refuses a wildcard grant host the same way, since it feeds requestDomains", async () => {
+    const ctx = mount({ grants: NARROW });
+    pickScope(ctx, "regex");
+    typeInto(
+      ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement,
+      ".*google.*",
+    );
+    await addGrantHost(ctx, "*.google.com");
+    expect(
+      ctx.root.querySelector(".grant-chip.invalid")?.textContent,
+    ).toContain("*.google.com");
+
+    typeInto(ctx.nameInput(), "authorization");
+    typeInto(ctx.valueInput(), "Bearer one");
+    await saveAndExpectRefused(ctx, copy.errors.domainInvalid);
+    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+    // The bad host, not the valid regex beside it, is what the refusal marks and
+    // takes focus.
+    expect(
+      ctx.root
+        .querySelector('[aria-label="Regex"]')
+        ?.getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(document.activeElement).toBe(
+      ctx.root.querySelector(".grant-chip-input"),
+    );
+  });
+
+  it("marks the pattern, not the host, when the empty pattern is the shown refusal", async () => {
+    const ctx = mount({ grants: NARROW });
+    pickScope(ctx, "pattern");
+    // Pattern left empty, and a malformed grant host present too: the empty
+    // pattern is the refusal shown, so it, not the host, takes the mark and focus.
+    await addGrantHost(ctx, "*.google.com");
+    typeInto(ctx.nameInput(), "authorization");
+    typeInto(ctx.valueInput(), "Bearer one");
+    await saveAndExpectRefused(ctx, copy.errors.scopeEmpty.pattern);
+    expect(document.activeElement).toBe(
+      ctx.root.querySelector('[aria-label="URL pattern"]'),
+    );
+  });
+
   it("keeps Comment Enter inert and commits its value from the save action", async () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
@@ -716,7 +828,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(ctx.onSave).toHaveBeenCalledOnce();
     expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("create");
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["api.example.com"]);
+    expect(ctx.onGranted).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
     expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
@@ -982,7 +1094,7 @@ describe("RuleEditor grant moment", () => {
       }),
       undefined,
     );
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["google.com"]);
+    expect(ctx.onGranted).toHaveBeenCalledOnce();
   });
 
   it("carries the grant hosts of an existing pattern rule into an editable field", () => {

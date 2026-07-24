@@ -118,7 +118,7 @@ function profileSet(): StateDoc {
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: 5,
     settings: { paused: true, theme: "dark" },
   };

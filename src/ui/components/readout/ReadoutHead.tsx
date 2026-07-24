@@ -10,7 +10,7 @@ interface ReadoutHeadProps {
   readout: TabReadout;
   hasRows: boolean;
   profiles: readonly Profile[];
-  activeProfile: Profile | undefined;
+  activeProfile: Profile;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
   onNewProfile: () => Promise<string | undefined>;

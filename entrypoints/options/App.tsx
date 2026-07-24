@@ -5,6 +5,7 @@ import { CURRENT } from "../../src/core/schema";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { EmptyState } from "../../src/ui/components/EmptyState";
+import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { copy } from "../../src/ui/copy";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
@@ -96,6 +97,7 @@ export function App() {
           <SectionNav current={section} />
         </div>
         <main class="wb-main">
+          {app.phase === "ready" && app.status === "paused" && <PauseBanner />}
           {app.phase === "initializing" ? (
             <div aria-busy="true" />
           ) : app.phase === "newer-store" ? (
@@ -113,7 +115,11 @@ export function App() {
               mutations={mutations}
             />
           ) : section === "profiles" ? (
-            <ProfilesPage doc={app.doc} mutations={mutations} />
+            <ProfilesPage
+              doc={app.doc}
+              status={app.status}
+              mutations={mutations}
+            />
           ) : section === "site-access" ? (
             <SiteAccessPage doc={app.doc} grants={app.grants} />
           ) : section === "traffic" ? (

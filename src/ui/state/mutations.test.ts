@@ -342,11 +342,12 @@ describe("enable-path grammar re-validation", () => {
 
   it("activateProfile refuses a profile carrying a bad enabled rule", async () => {
     const invalid = rule({ header: ":authority" });
-    const doc = await seed([profile("p1", { rules: [invalid] })], {
-      activeProfileId: undefined,
-    });
+    const doc = await seed(
+      [profile("p1"), profile("p2", { rules: [invalid] })],
+      { activeProfileId: "p1" },
+    );
 
-    expect(errorKind(await mutations.activateProfile("p1"))).toBe(
+    expect(errorKind(await mutations.activateProfile("p2"))).toBe(
       "name-not-modifiable",
     );
     expect(await read()).toEqual(doc);
@@ -445,12 +446,11 @@ describe("delete, restore, and move", () => {
 });
 
 describe("profile operations", () => {
-  it("creates a profile, derives badge initials, and activates it atomically", async () => {
+  it("creates a profile, derives badge initials, and leaves activation alone", async () => {
     await seed([profile("p1")]);
     const created = await mutations.createProfile({
       name: "Staging auth",
       color: "teal",
-      enabled: true,
     });
 
     expect(created.ok && created.value).toMatchObject({
@@ -459,22 +459,10 @@ describe("profile operations", () => {
     });
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.activeProfileId).toBe(created.ok ? created.value.id : "");
+    expect(stored.activeProfileId).toBe("p1");
     expect(
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);
-  });
-
-  it("does not change activation when the new profile arrives inactive", async () => {
-    const doc = await seed([profile("p1")]);
-    const created = await mutations.createProfile({
-      name: "QA roles",
-      badgeText: "QA",
-      color: "plum",
-      enabled: false,
-    });
-    expect(created.ok).toBe(true);
-    expect((await read()).activeProfileId).toBe(doc.activeProfileId);
   });
 
   it.each(["p1", "P1", "  p1  ", "", "x".repeat(49)])(
@@ -486,7 +474,6 @@ describe("profile operations", () => {
           await mutations.createProfile({
             name,
             color: "blue",
-            enabled: false,
           }),
         ),
       ).toBe("profile-name-unavailable");
@@ -531,7 +518,6 @@ describe("profile operations", () => {
     const created = await mutations.createProfile({
       name: "Nexus",
       color: "teal",
-      enabled: false,
     });
     expect(created.ok && created.value.badgeText).toBe("NX");
 
@@ -579,14 +565,14 @@ describe("profile operations", () => {
     ).toBe(true);
   });
 
-  it("clears activation when deleting the active profile", async () => {
+  it("hands activation to the successor when deleting the active profile", async () => {
     await seed([profile("p1"), profile("p2"), profile("p3")], {
       activeProfileId: "p1",
     });
 
     const deleted = await mutations.deleteProfile("p1");
     expect(deleted.ok && deleted.value.index).toBe(0);
-    expect((await read()).activeProfileId).toBeUndefined();
+    expect((await read()).activeProfileId).toBe("p2");
   });
 
   it("restores activation with a deleted active profile", async () => {
@@ -599,7 +585,7 @@ describe("profile operations", () => {
     expect(stored.activeProfileId).toBe("p1");
   });
 
-  it("recreates an inactive Default when the last profile is deleted", async () => {
+  it("recreates and activates a Default when the last profile is deleted", async () => {
     await seed([profile("p1")]);
     expect((await mutations.deleteProfile("p1")).ok).toBe(true);
 
@@ -610,7 +596,7 @@ describe("profile operations", () => {
       badgeText: "DE",
       rules: [],
     });
-    expect(stored.activeProfileId).toBeUndefined();
+    expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
     expect(stored.profiles[0]).not.toHaveProperty("enabled");
   });
 
@@ -630,7 +616,6 @@ describe("profile operations", () => {
     await mutations.createProfile({
       name: "p2",
       color: "blue",
-      enabled: false,
     });
     expect(
       (
@@ -681,17 +666,6 @@ describe("activation semantics", () => {
     expect((await mutations.activateProfile("p2")).ok).toBe(true);
     const stored = await read();
     expect(stored.activeProfileId).toBe("p2");
-    expect(
-      stored.profiles.every((candidate) => !("enabled" in candidate)),
-    ).toBe(true);
-  });
-
-  it("deactivates every profile by clearing the foreign key", async () => {
-    await seed([profile("p1"), profile("p2")]);
-
-    expect((await mutations.activateProfile(undefined)).ok).toBe(true);
-    const stored = await read();
-    expect(stored.activeProfileId).toBeUndefined();
     expect(
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);

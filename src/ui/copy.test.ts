@@ -86,9 +86,6 @@ describe("copy", () => {
   });
 
   it("builds host-bound toasts, grants, and errors", () => {
-    expect(copy.toast.activeOn("api.example.com")).toBe(
-      "Active on api.example.com",
-    );
     expect(copy.toast.profileDeleted("QA roles")).toBe(
       "Profile 'QA roles' deleted",
     );
@@ -152,7 +149,7 @@ describe("copy", () => {
       "'Staging' is taken. Use a different name.",
     );
     // One canonical label per state across the popup and the options
-    // Configured-changes surface: no per-surface drift.
+    // Active-changes surface: no per-surface drift.
     expect(copy.options.traffic.status.unconfirmed).toBe(
       "confirmable only by Chrome",
     );

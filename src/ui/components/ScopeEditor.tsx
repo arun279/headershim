@@ -48,6 +48,10 @@ const SEGMENTS = [
 export function ScopeEditor(props: ScopeEditorProps) {
   const id = useId();
   const { scope } = props;
+  // A bad grant host and a bad pattern share one scope-error slot, so the shown
+  // error decides which field the refusal marks and lands focus on: the grant
+  // host when it is the mis-shaped one, the pattern otherwise.
+  const hostError = props.error === copy.errors.domainInvalid;
   const crossPageSubresources =
     props.resourceTypes !== "all" &&
     !props.resourceTypes.includes("pages") &&
@@ -89,7 +93,8 @@ export function ScopeEditor(props: ScopeEditorProps) {
               id={id}
               label={copy.editor.scopeType.pattern}
               hint={sentence(copy.editor.patternHint)}
-              invalid={props.error !== undefined}
+              invalid={props.error !== undefined && !hostError}
+              hostInvalid={hostError}
               value={scope.pattern}
               hosts={scope.hosts}
               onValue={(pattern) => props.onScope({ ...scope, pattern })}
@@ -101,7 +106,8 @@ export function ScopeEditor(props: ScopeEditorProps) {
               id={id}
               label={copy.editor.scopeType.regex}
               hint={copy.editor.regexHint}
-              invalid={props.error !== undefined}
+              invalid={props.error !== undefined && !hostError}
+              hostInvalid={hostError}
               value={scope.regex}
               hosts={scope.hosts}
               onValue={(regex) => props.onScope({ ...scope, regex })}
@@ -138,6 +144,7 @@ function UrlScopeField({
   label,
   hint,
   invalid,
+  hostInvalid,
   value,
   hosts,
   onValue,
@@ -147,6 +154,7 @@ function UrlScopeField({
   label: string;
   hint: ComponentChildren;
   invalid: boolean;
+  hostInvalid: boolean;
   value: string;
   hosts: string[];
   onValue: (value: string) => void;
@@ -163,7 +171,12 @@ function UrlScopeField({
         onInput={(event) => onValue(event.currentTarget.value)}
       />
       <p class="editor-micro">{hint}</p>
-      <GrantHosts id={`${id}-hosts`} hosts={hosts} onChange={onHosts} />
+      <GrantHosts
+        id={`${id}-hosts`}
+        hosts={hosts}
+        invalid={hostInvalid}
+        onChange={onHosts}
+      />
     </>
   );
 }
@@ -176,10 +189,12 @@ function UrlScopeField({
 function GrantHosts({
   id,
   hosts,
+  invalid,
   onChange,
 }: {
   id: string;
   hosts: string[];
+  invalid: boolean;
   onChange: (hosts: string[]) => void;
 }) {
   return (
@@ -191,6 +206,7 @@ function GrantHosts({
         placeholder={copy.editor.addDomain}
         values={hosts}
         variant="grant"
+        invalid={invalid}
         removeLabel={copy.editor.removeDomain}
         onChange={onChange}
       />

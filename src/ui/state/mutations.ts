@@ -323,27 +323,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
       name: string;
       badgeText?: string;
       color: BadgeColor;
-      enabled: boolean;
     }): MutationResult<Profile> {
       return commit((doc) => {
         const available = availableName(doc, input.name);
         if (!available.ok) return available;
         const name = available.value;
-        const profile: Profile = {
-          ...buildProfile({
-            name,
-            badgeText: input.badgeText ?? deriveBadgeText(name, badges(doc)),
-            color: input.color,
-          }),
-        };
-        return ok([
-          {
-            ...doc,
-            profiles: [...doc.profiles, profile],
-            ...(input.enabled ? { activeProfileId: profile.id } : {}),
-          },
-          profile,
-        ]);
+        // A new profile is added, never activated: switching is the switcher's
+        // job, so creating one never changes what is running.
+        const profile = buildProfile({
+          name,
+          badgeText: input.badgeText ?? deriveBadgeText(name, badges(doc)),
+          color: input.color,
+        });
+        return ok([{ ...doc, profiles: [...doc.profiles, profile] }, profile]);
       });
     },
 
@@ -430,10 +422,14 @@ export function createMutations({ validateRegex }: MutationDeps) {
               });
         const profiles = placeholder === undefined ? remaining : [placeholder];
         const wasActive = doc.activeProfileId === profileId;
+        // Deleting the active profile hands activation to the profile that takes
+        // its slot (the previous one when it was last), so one is always active.
+        const heir = profiles[Math.min(index, profiles.length - 1)];
         const next: StateDoc = {
           ...doc,
           profiles,
-          activeProfileId: wasActive ? undefined : doc.activeProfileId,
+          activeProfileId:
+            wasActive && heir !== undefined ? heir.id : doc.activeProfileId,
         };
         return ok([
           next,
@@ -496,11 +492,8 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    activateProfile(profileId: string | undefined): MutationResult<void> {
+    activateProfile(profileId: string): MutationResult<void> {
       return commit((doc) => {
-        if (profileId === undefined) {
-          return ok([{ ...doc, activeProfileId: undefined }, undefined]);
-        }
         const profile = findProfile(doc, profileId);
         if (profile === undefined) {
           return notFound();
@@ -677,7 +670,7 @@ function normalizeHosts(hosts: readonly string[]): string[] {
 }
 
 function enabledRules(doc: StateDoc): Rule[] {
-  return activeProfile(doc)?.rules.filter((rule) => rule.enabled) ?? [];
+  return activeProfile(doc).rules.filter((rule) => rule.enabled);
 }
 
 function regexCount(rules: readonly Rule[]): number {

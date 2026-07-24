@@ -10,7 +10,7 @@ import { ProfileBadge } from "./ProfileBadge";
 
 interface ProfilePickerProps {
   profiles: readonly Profile[];
-  activeProfile: Profile | undefined;
+  activeProfile: Profile;
   host: string | undefined;
   onSwitch: (profileId: string) => void;
   onNewProfile: () => Promise<string | undefined>;
@@ -49,8 +49,7 @@ export function ProfilePicker({
   };
 
   const focusCurrentProfile = () => {
-    const id = activeProfile?.id ?? profiles[0]?.id;
-    if (id !== undefined) profileButtons.current.get(id)?.focus();
+    profileButtons.current.get(activeProfile.id)?.focus();
   };
 
   const stopEditing = (restoreFocus: boolean) => {
@@ -110,18 +109,12 @@ export function ProfilePicker({
         aria-label={copy.readout.switcher.chipLabel}
         onClick={() => setPickerOpen(!openRef.current)}
       >
-        {activeProfile !== undefined ? (
-          <>
-            <ProfileBadge
-              text={activeProfile.badgeText}
-              color={activeProfile.color}
-              size={16}
-            />
-            <ProfileName value={activeProfile.name} class="lbl" />
-          </>
-        ) : (
-          <span class="lbl">{copy.profiles.offTag}</span>
-        )}
+        <ProfileBadge
+          text={activeProfile.badgeText}
+          color={activeProfile.color}
+          size={16}
+        />
+        <ProfileName value={activeProfile.name} class="lbl" />
         <ChevronGlyph />
       </button>
 
@@ -139,7 +132,7 @@ export function ProfilePicker({
           </div>
           <div class="pop-list">
             {profiles.map((profile) => {
-              const on = profile.id === activeProfile?.id;
+              const on = profile.id === activeProfile.id;
               if (profile.id === editingId) {
                 return (
                   <div
@@ -240,7 +233,7 @@ function SwitchPreviewPanel({
   to,
   host,
 }: {
-  from: Profile | undefined;
+  from: Profile;
   to: Profile;
   host: string | undefined;
 }) {

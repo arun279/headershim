@@ -2,9 +2,9 @@ import type { Profile, Rule, StateDoc } from "../../core/model";
 import type { SystemStatus } from "../../core/status";
 
 /** The system states the popup and Workbench projections branch on. */
-export const LIVE: SystemStatus = { kind: "live" };
-export const PAUSED: SystemStatus = { kind: "paused" };
-export const OUT_OF_SYNC: SystemStatus = { kind: "out-of-sync" };
+export const LIVE: SystemStatus = "live";
+export const PAUSED: SystemStatus = "paused";
+export const OUT_OF_SYNC: SystemStatus = "out-of-sync";
 
 let seq = 0;
 
@@ -52,7 +52,7 @@ export function stateDoc(
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: seq + 1,
     settings: { paused: false, theme: "system" },
     ...overrides,

@@ -40,9 +40,6 @@ declare const chrome: {
       tabId: number;
       minTimeStamp?: number;
     }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;
-    setExtensionActionOptions(options: {
-      displayActionCountAsBadgeText: boolean;
-    }): Promise<void>;
   };
   action: {
     getBadgeText(details: { tabId?: number }): Promise<string>;

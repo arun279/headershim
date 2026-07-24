@@ -72,7 +72,7 @@ export function SiteAccessPage({
   const grant = (entry: SiteAccessEntry) =>
     void requestPermissions([entry.origin]).then((granted) => {
       if (granted) {
-        announce(copy.toast.activeOn(entry.domain));
+        announce(copy.toast.accessGranted);
         anchorFocus();
       }
     });

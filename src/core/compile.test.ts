@@ -4,17 +4,18 @@ import {
   compileSession,
   type DnrRule,
   DYNAMIC_PRIORITY_TOP,
-  dropUncompilable,
+  dropInapplicable,
   SESSION_PRIORITY_TOP,
   uncompilableReason,
 } from "./compile";
+import type { GrantSnapshot } from "./grants";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "./limits";
 import type { HeaderOp, Profile, Rule, StateDoc, TabOverride } from "./model";
-import { DNR_RESOURCE_TYPES } from "./scope";
+import { DNR_RESOURCE_TYPES, originPatternForDomain } from "./scope";
 
 type RuleChanges = Omit<Partial<Rule>, "value"> & {
   value?: string | undefined;
@@ -51,7 +52,7 @@ function profile(id: string, rules: Rule[]): Profile {
 function state(
   profiles: Profile[],
   paused = false,
-  activeProfileId = profiles[0]?.id,
+  activeProfileId = profiles[0]?.id ?? "",
 ): StateDoc {
   return {
     v: 1,
@@ -361,10 +362,102 @@ describe("dynamic rule compilation", () => {
   });
 });
 
-describe("dropping uncompilable rules", () => {
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
+const granting = (...domains: string[]): GrantSnapshot => ({
+  origins: domains.map(originPatternForDomain),
+  allSites: false,
+});
+
+describe("dropping inapplicable rules", () => {
   const supportAll = () => true;
-  const compiledIds = (doc: StateDoc, supported: (regex: string) => boolean) =>
-    compileDynamic(dropUncompilable(doc, supported)).map((rule) => rule.id);
+  const compiledIds = (
+    doc: StateDoc,
+    supported: (regex: string) => boolean,
+    granted: GrantSnapshot = ALL_SITES,
+  ) =>
+    compileDynamic(dropInapplicable(doc, supported, granted)).map(
+      (rule) => rule.id,
+    );
+
+  // Chrome applies whatever is installed to any host it has access to, and
+  // invoking the action hands it activeTab access to that tab. A rule the user
+  // has not granted is therefore only safe while it is absent from the ruleset.
+  it("compiles an ungranted rule to nothing, and compiles it once granted", () => {
+    const doc = state([
+      profile("scoped", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com"] },
+        }),
+        storedRule(2, {
+          scope: { type: "domains", domains: ["other.example"] },
+        }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll, granting())).toEqual([]);
+    expect(compiledIds(doc, supportAll, granting("example.com"))).toEqual([1]);
+    expect(
+      compiledIds(doc, supportAll, granting("example.com", "other.example")),
+    ).toEqual([1, 2]);
+    expect(compiledIds(doc, supportAll, ALL_SITES)).toEqual([1, 2]);
+    // Revoking is the same statement read the other way: the grant goes, the
+    // rule leaves the ruleset with it.
+    expect(compiledIds(doc, supportAll, granting("other.example"))).toEqual([
+      2,
+    ]);
+  });
+
+  it("holds a rule out until every origin it needs is granted", () => {
+    // A subresource rule needs its initiator granted too, so a half grant is
+    // still no grant.
+    const doc = state([
+      profile("initiator", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["api.example"] },
+          resourceTypes: ["xhr"],
+          initiators: ["app.example"],
+        }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll, granting("api.example"))).toEqual([]);
+    expect(
+      compiledIds(doc, supportAll, granting("api.example", "app.example")),
+    ).toEqual([1]);
+  });
+
+  it("holds a broad-scope rule out until all-sites is granted", () => {
+    const doc = state([
+      profile("broad", [storedRule(1, { scope: { type: "all" } })]),
+    ]);
+
+    expect(compiledIds(doc, supportAll, granting("example.com"))).toEqual([]);
+    expect(compiledIds(doc, supportAll, ALL_SITES)).toEqual([1]);
+  });
+
+  it("narrows a partly granted domains rule to the granted domains", () => {
+    // Revoking one site of a multi-site rule must not silence it on the sites
+    // still granted: the rule stays, scoped to what the user allowed.
+    const doc = state([
+      profile("multi", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["a.example", "b.example"] },
+        }),
+      ]),
+    ]);
+    const onA = compileDynamic(
+      dropInapplicable(doc, supportAll, granting("a.example")),
+    );
+    expect(onA[0]?.condition.requestDomains).toEqual(["a.example"]);
+    const onBoth = compileDynamic(
+      dropInapplicable(doc, supportAll, granting("a.example", "b.example")),
+    );
+    expect(onBoth[0]?.condition.requestDomains).toEqual([
+      "a.example",
+      "b.example",
+    ]);
+    expect(compiledIds(doc, supportAll, granting())).toEqual([]);
+  });
 
   it("strips only the enabled rules Chrome would reject, so the batch survives", () => {
     const doc = state([
@@ -463,7 +556,7 @@ describe("dropping uncompilable rules", () => {
       profile("off", [storedRule(3, { header: ":authority" })]),
     ]);
 
-    const dropped = dropUncompilable(doc, supportAll);
+    const dropped = dropInapplicable(doc, supportAll, ALL_SITES);
     expect(dropped.profiles[0]?.rules).toEqual([storedRule(1), bad]);
     expect(dropped.profiles[1]).toEqual(doc.profiles[1]);
     expect(compiledIds(doc, supportAll)).toEqual([1]);

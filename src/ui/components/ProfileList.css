@@ -68,6 +68,43 @@
   color: var(--ink3);
 }
 
+/* Which profile is active: one radio per row, exactly one filled. */
+.profile-activate {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  cursor: pointer;
+}
+
+.radio-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+}
+
+.profile-activate:hover .radio-dot {
+  border-color: var(--ink3);
+}
+
+.profile-activate:has(input:checked) .radio-dot {
+  border-color: var(--live);
+  border-width: 5px;
+}
+
+/* Paused: the active profile is still the selected one, but nothing it holds is
+   running, so its dot wears the same held hue as every switched-on control. */
+.profile-list.paused .profile-activate:has(input:checked) .radio-dot {
+  border-color: var(--amber);
+}
+
+.profile-activate:has(input:focus-visible) .radio-dot {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .profile-detail {
   display: flex;
   flex-direction: column;

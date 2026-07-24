@@ -5,7 +5,6 @@ import {
   getDynamicRules,
   getSessionRules,
   isRegexSupported,
-  setExtensionActionOptions,
   updateDynamicRules,
   updateSessionRules,
 } from "./dnr";
@@ -39,9 +38,6 @@ describe("DNR adapter", () => {
         isSupported: false,
         reason: "syntaxError",
       }));
-    const setOptions = vi
-      .spyOn(api, "setExtensionActionOptions")
-      .mockResolvedValue();
 
     expect(await getDynamicRules()).toEqual([rule]);
     expect(await getSessionRules()).toEqual([rule]);
@@ -63,16 +59,12 @@ describe("DNR adapter", () => {
       ok: false,
       error: "syntaxError",
     });
-    await setExtensionActionOptions({ displayActionCountAsBadgeText: true });
-    expect(setOptions).toHaveBeenCalledWith({
-      displayActionCountAsBadgeText: true,
-    });
     expect(regex).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("FakeDnr", () => {
-  it("keeps dynamic and session rules in memory and records options", async () => {
+  it("keeps dynamic and session rules in memory", async () => {
     const fake = new FakeDnr();
 
     await fake.updateDynamicRules({ addRules: [rule] });
@@ -88,12 +80,5 @@ describe("FakeDnr", () => {
       ok: true,
       value: undefined,
     });
-
-    await fake.setExtensionActionOptions({
-      displayActionCountAsBadgeText: false,
-    });
-    expect(fake.extensionActionOptions).toEqual([
-      { displayActionCountAsBadgeText: false },
-    ]);
   });
 });

@@ -178,13 +178,21 @@ export function isSecretHeader(header: string): boolean {
   );
 }
 
+/**
+ * Whether Chrome will append to this request header, given an already
+ * normalized name. Exposed on its own because the compiler wants this answer
+ * and nothing else: reaching it through classifyHeaderName pulls the advisory
+ * tables into the background bundle, which never reads one.
+ */
+export function allowsRequestAppend(normalizedHeader: string): boolean {
+  return REQUEST_APPEND_HEADER_SET.has(normalizedHeader);
+}
+
 export function classifyHeaderName(header: string): HeaderClassification {
   const normalized = normalizeHeaderName(header);
 
   return {
-    requestAppend: REQUEST_APPEND_HEADER_SET.has(normalized)
-      ? "allowed"
-      : "disallowed",
+    requestAppend: allowsRequestAppend(normalized) ? "allowed" : "disallowed",
     advisories: NETWORK_MANAGED_HEADERS.has(normalized)
       ? [
           {
@@ -235,27 +243,43 @@ export function headerSensitivity(
   return advisories;
 }
 
+/**
+ * What is wrong with a header name, or nothing. The one authority the commit
+ * gate and the name field both read, so what the field flags as you type and
+ * what the save refuses can never be two different verdicts on the same name.
+ * Expects an already normalized name.
+ */
+export function validateHeaderName(
+  header: string,
+): HeaderValidationError | undefined {
+  if (header.length === 0) {
+    return {
+      kind: "name-required",
+      copyId: HEADER_ERROR_COPY_IDS["name-required"],
+    };
+  }
+  if (header.startsWith(":")) {
+    return {
+      kind: "name-not-modifiable",
+      copyId: HEADER_ERROR_COPY_IDS["name-not-modifiable"],
+    };
+  }
+  if (!HTTP_TOKEN.test(header)) {
+    return {
+      kind: "name-invalid",
+      copyId: HEADER_ERROR_COPY_IDS["name-invalid"],
+    };
+  }
+  return undefined;
+}
+
 export function validateHeader(
   input: HeaderInput,
 ): Result<ValidatedHeader, HeaderValidationError> {
   const header = normalizeHeaderName(input.header);
-  if (header.length === 0) {
-    return err({
-      kind: "name-required",
-      copyId: HEADER_ERROR_COPY_IDS["name-required"],
-    });
-  }
-  if (header.startsWith(":")) {
-    return err({
-      kind: "name-not-modifiable",
-      copyId: HEADER_ERROR_COPY_IDS["name-not-modifiable"],
-    });
-  }
-  if (!HTTP_TOKEN.test(header)) {
-    return err({
-      kind: "name-invalid",
-      copyId: HEADER_ERROR_COPY_IDS["name-invalid"],
-    });
+  const nameError = validateHeaderName(header);
+  if (nameError !== undefined) {
+    return err(nameError);
   }
   if (input.operation !== "remove" && input.value === undefined) {
     return err({

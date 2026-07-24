@@ -1,4 +1,9 @@
-import { classifyHeaderName, HTTP_TOKEN, normalizeHeaderName } from "./headers";
+import { type GrantSnapshot, missingGrants, originGranted } from "./grants";
+import {
+  allowsRequestAppend,
+  HTTP_TOKEN,
+  normalizeHeaderName,
+} from "./headers";
 import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
@@ -45,20 +50,37 @@ export interface DnrRule {
   condition: DnrRuleCondition;
 }
 
-// An untrusted writer can seed the enabled set with a rule Chrome rejects: a
-// ModHeader/headershim import preserves each rule's enabled flag and scope
-// verbatim (no header/urlFilter/regex grammar check), and the next-profile
-// command activates a stored profile without passing the commit guard. compileDynamic
-// would emit that rule and updateDynamicRules would reject the whole atomic batch,
-// freezing the live ruleset at its last-good revision until the user finds the one
-// bad rule. Dropping every uncompilable rule from the compiled input before it
-// reaches Chrome makes that impossible — one bad rule can never take the batch
-// down, and every other rule keeps applying. The stored doc is untouched; only
-// the compiler's view of it is filtered. Regex validity needs the browser's RE2
-// (async), so the caller resolves it into `isRegexSupported`.
-export function dropUncompilable(
+/**
+ * The compiler's view of the stored doc: only the rules that will actually be
+ * applied. Two things keep a rule out, and both have to be settled here.
+ *
+ * A rule Chrome rejects takes the whole atomic batch down with it, and an
+ * untrusted writer can seed one: an import preserves each rule's enabled flag
+ * and scope verbatim, and the next-profile command activates a stored profile
+ * without passing the commit guard. Dropping it first means one bad rule cannot
+ * freeze the live ruleset.
+ *
+ * A rule whose origins are not granted has to be absent too, because host
+ * access is not fixed: invoking the action, by click or by the extension's
+ * keyboard command, hands over activeTab, which is a real host grant for that
+ * tab, and declarativeNetRequestWithHostAccess applies any installed rule that
+ * matches it. Leaving an ungranted rule installed puts it one gesture away from
+ * sending the header the user refused. Keeping it out is what makes "needs
+ * access" a state the product enforces rather than a label it prints.
+ *
+ * A domains rule runs on each of its domains independently, so a partial grant
+ * narrows it to the granted domains rather than dropping it whole: revoking one
+ * site cannot silence the rule on the sites still granted. Every other scope
+ * names no per-host list to narrow, so it stays all-or-nothing.
+ *
+ * The stored doc is untouched; only the compiler's view of it is filtered.
+ * Regex validity needs the browser's RE2 (async), so the caller resolves it
+ * into `isRegexSupported`.
+ */
+export function dropInapplicable(
   state: StateDoc,
   isRegexSupported: (regex: string) => boolean,
+  granted: GrantSnapshot,
 ): StateDoc {
   return {
     ...state,
@@ -66,14 +88,38 @@ export function dropUncompilable(
       profile.id === state.activeProfileId
         ? {
             ...profile,
-            rules: profile.rules.filter(
-              (rule) =>
-                !rule.enabled ||
-                uncompilableReason(rule, isRegexSupported) === undefined,
-            ),
+            rules: profile.rules.flatMap((rule) => {
+              if (!rule.enabled) {
+                return [rule];
+              }
+              const narrowed = narrowToGranted(rule, granted);
+              return uncompilableReason(narrowed, isRegexSupported) ===
+                undefined && missingGrants(narrowed, granted).length === 0
+                ? [narrowed]
+                : [];
+            }),
           }
         : profile,
     ),
+  };
+}
+
+// Drop a domains rule's ungranted domains, leaving the granted ones to compile.
+// An emptied list falls to uncompilableReason (Chrome refuses an empty one), so
+// a rule with no granted domain still leaves the ruleset. Only domains scope
+// carries such a list; the rest have nothing to narrow.
+function narrowToGranted(rule: Rule, granted: GrantSnapshot): Rule {
+  if (rule.scope.type !== "domains") {
+    return rule;
+  }
+  return {
+    ...rule,
+    scope: {
+      ...rule.scope,
+      domains: rule.scope.domains.filter((domain) =>
+        originGranted(domain, granted),
+      ),
+    },
   };
 }
 
@@ -107,7 +153,7 @@ export function uncompilableReason(
   if (
     rule.operation === "append" &&
     rule.direction === "request" &&
-    classifyHeaderName(header).requestAppend !== "allowed"
+    !allowsRequestAppend(header)
   ) {
     return "append";
   }

@@ -8,6 +8,7 @@ import {
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
+import type { SystemStatus } from "../../../src/core/status";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
@@ -27,14 +28,17 @@ const text = copy.options.profiles;
  */
 export function ProfilesPage({
   doc,
+  status,
   mutations,
 }: {
   doc: StateDoc;
+  status: SystemStatus;
   mutations: Mutations;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const active = activeProfile(doc);
-  const [openId, setOpenId] = useState(active?.id ?? doc.profiles[0]?.id);
+  const [openId, setOpenId] = useState<string | undefined>(
+    activeProfile(doc).id,
+  );
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
@@ -49,9 +53,7 @@ export function ProfilesPage({
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (doc.activeProfileId !== undefined) {
-      setOpenId(doc.activeProfileId);
-    }
+    setOpenId(doc.activeProfileId);
   }, [doc.activeProfileId]);
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
@@ -64,15 +66,15 @@ export function ProfilesPage({
     });
   };
 
-  const enabledRuleCount =
-    active?.rules.filter((rule) => rule.enabled).length ?? 0;
+  const enabledRuleCount = activeProfile(doc).rules.filter(
+    (rule) => rule.enabled,
+  ).length;
 
   const create = () => {
     void mutations
       .createProfile({
         name: availableProfileName(text.newName, doc.profiles, []),
         color: defaultProfileColor(doc.profiles.length),
-        enabled: false,
       })
       .then((outcome) => {
         if (outcome.ok) {
@@ -131,11 +133,10 @@ export function ProfilesPage({
         <ProfileList
           profiles={doc.profiles}
           activeProfileId={doc.activeProfileId}
+          paused={status === "paused"}
           openProfileId={openId}
           onOpen={setOpenId}
-          onToggle={(id, enabled) =>
-            run(mutations.activateProfile(enabled ? id : undefined))
-          }
+          onActivate={(id) => run(mutations.activateProfile(id))}
           onReorder={(id, toIndex) =>
             run(mutations.reorderProfile(id, toIndex))
           }

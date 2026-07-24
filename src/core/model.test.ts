@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   activateNextProfile,
   activateProfile,
+  activeProfile,
   allocateRuleNum,
   cloneRule,
   createProfile,
@@ -20,7 +21,7 @@ function emptyDoc(nextRuleNum = 1): StateDoc {
   return {
     v: 1,
     profiles: [],
-    activeProfileId: undefined,
+    activeProfileId: "",
     nextRuleNum,
     settings: { paused: false, theme: "system" },
   };
@@ -36,7 +37,7 @@ function profile(id: string, name: string): Profile {
   };
 }
 
-function docWith(profiles: Profile[], activeProfileId?: string): StateDoc {
+function docWith(profiles: Profile[], activeProfileId = ""): StateDoc {
   return { ...emptyDoc(), profiles, activeProfileId };
 }
 
@@ -174,6 +175,23 @@ describe("profile invariants", () => {
     expect(isDerivedBadgeText("Default", "DT")).toBe(true);
     expect(isDerivedBadgeText("Default", "QA")).toBe(false);
     expect(isDerivedBadgeText("", "DE")).toBe(false);
+  });
+});
+
+describe("activeProfile", () => {
+  it("returns the profile the active id names", () => {
+    const doc = docWith(
+      [profile("one", "Default"), profile("two", "QA")],
+      "two",
+    );
+
+    expect(activeProfile(doc).id).toBe("two");
+  });
+
+  it("throws when the active id names no profile", () => {
+    expect(() =>
+      activeProfile(docWith([profile("one", "Default")], "gone")),
+    ).toThrow(RangeError);
   });
 });
 

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GrantSnapshot } from "../../core/grants";
 import type { Profile, Rule, StateDoc, TabOverride } from "../../core/model";
-import type { SystemStatus } from "../../core/status";
 import { copy } from "../copy";
 import { LIVE, OUT_OF_SYNC, PAUSED } from "../test/fixtures";
 import {
@@ -44,11 +43,11 @@ function profile(overrides: Partial<Profile> = {}): Profile {
   };
 }
 
-function state(activeProfile: Profile | undefined): StateDoc {
+function state(activeProfile: Profile): StateDoc {
   return {
     v: 1,
-    profiles: activeProfile === undefined ? [] : [activeProfile],
-    activeProfileId: activeProfile?.id,
+    profiles: [activeProfile],
+    activeProfileId: activeProfile.id,
     nextRuleNum: 100,
     settings: { paused: false, theme: "system" },
   };
@@ -56,7 +55,7 @@ function state(activeProfile: Profile | undefined): StateDoc {
 
 function computeReadout(
   input: Omit<ReadoutInput, "doc" | "isRegexSupported"> & {
-    activeProfile: Profile | undefined;
+    activeProfile: Profile;
     isRegexSupported?: (regex: string) => boolean;
   },
 ) {
@@ -94,7 +93,7 @@ const base = {
   host: "api.example.com" as string | undefined,
   grants: GRANTED,
   overrides: [] as TabOverride[],
-  status: LIVE as SystemStatus,
+  status: LIVE,
 };
 
 describe("computeReadout", () => {
@@ -102,7 +101,7 @@ describe("computeReadout", () => {
     const readout = computeReadout({
       ...base,
       host: undefined,
-      activeProfile: undefined,
+      activeProfile: profile(),
     });
     expect(readout.total).toBe(0);
     expect(readout.request).toHaveLength(0);
@@ -195,7 +194,7 @@ describe("computeReadout", () => {
   it("marks a network-managed this-tab override managed and uncounted", () => {
     const readout = computeReadout({
       ...base,
-      activeProfile: undefined,
+      activeProfile: profile(),
       overrides: [override({ header: "connection" })],
     });
     expect(readout.overrides[0]?.status).toBe("managed");
@@ -247,6 +246,30 @@ describe("computeReadout", () => {
       readout.request.find((change) => change.ruleId === compiled.id)?.status,
     ).toBe("live");
     expect(readout.overridden).toBe(0);
+  });
+
+  it("resolves collisions over the narrowed rules the compiler installs", () => {
+    // A domains rule granted on only one of its sites is installed there, at full
+    // priority, narrowed to that site: on this host it shadows a lower rule for
+    // the same header exactly as it does on the wire. Its own row still reads
+    // needs-access for the site it is missing.
+    const partly = rule({
+      scope: { type: "domains", domains: ["api.example.com", "other.test"] },
+    });
+    const lower = rule({ value: "prod" });
+    const readout = computeReadout({
+      ...base,
+      grants: { origins: ["*://*.api.example.com/*"], allSites: false },
+      activeProfile: profile({ rules: [partly, lower] }),
+    });
+
+    expect(
+      readout.request.find((change) => change.ruleId === partly.id)?.status,
+    ).toBe("needs-access");
+    expect(
+      readout.request.find((change) => change.ruleId === lower.id)?.status,
+    ).toBe("overridden");
+    expect(readout.overridden).toBe(1);
   });
 
   it("never promotes an overridden authorization rule into the token hero", () => {
@@ -314,6 +337,47 @@ describe("computeReadout", () => {
     expect(readout.total).toBe(0);
     // The hero is the loudest live claim in the popup; it may not be made.
     expect(readout.token).toBeUndefined();
+  });
+
+  it("drops a pattern rule whose host list excludes this tab", () => {
+    // Grant-on-hosts compiles to requestDomains, a filter Chrome cannot match
+    // outside those hosts, so a tab that is not under them sees no change even
+    // when the pattern itself is unanchored and all sites are granted.
+    const readout = computeReadout({
+      ...base,
+      grants: GRANTED,
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: { type: "pattern", pattern: "*", hosts: ["other.test"] },
+          }),
+        ],
+      }),
+    });
+    expect(readout.request).toEqual([]);
+    expect(readout.total).toBe(0);
+    expect(readout.unconfirmed).toBe(0);
+  });
+
+  it("reports a pattern rule's reach from its host list, not as broad", () => {
+    // Grant-on-hosts narrows the match to those hosts, so the line states the
+    // bounded reach the compiled condition carries rather than "every site".
+    const readout = computeReadout({
+      ...base,
+      grants: GRANTED,
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: {
+              type: "pattern",
+              pattern: "*",
+              hosts: ["api.example.com", "other.test"],
+            },
+          }),
+        ],
+      }),
+    });
+    expect(readout.request[0]?.widerReach).toBe(1);
   });
 
   it("declines to claim a pattern rule matches this tab", () => {
@@ -439,7 +503,7 @@ describe("computeReadout", () => {
   it("lifts a this-tab authorization swap into the token, out of the strip", () => {
     const readout = computeReadout({
       ...base,
-      activeProfile: undefined,
+      activeProfile: profile(),
       overrides: [
         override({ num: 7, header: "authorization", value: "Bearer swapped" }),
         override({ num: 8, header: "x-flag", value: "1" }),
@@ -452,7 +516,7 @@ describe("computeReadout", () => {
   it("excludes an override-only reconcile failure from the headline", () => {
     const readout = computeReadout({
       ...base,
-      activeProfile: undefined,
+      activeProfile: profile(),
       overrides: [override()],
       status: OUT_OF_SYNC,
     });
@@ -504,7 +568,7 @@ describe("previewSwitch", () => {
   });
 
   it("is empty without a host", () => {
-    expect(previewSwitch(undefined, profile(), undefined)).toEqual({
+    expect(previewSwitch(profile(), profile(), undefined)).toEqual({
       drops: [],
       adds: [],
     });

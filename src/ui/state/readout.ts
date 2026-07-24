@@ -9,7 +9,7 @@
  */
 
 import {
-  dropUncompilable,
+  dropInapplicable,
   settlesPerRequest,
   type UncompilableReason,
   uncompilableReason,
@@ -24,10 +24,10 @@ import {
   type HeaderOp,
   type Profile,
   type Rule,
-  type Scope,
   type StateDoc,
   type TabOverride,
 } from "../../core/model";
+import { conditionReaches, hostUnder, scopeCondition } from "../../core/scope";
 import type { SystemStatus } from "../../core/status";
 import {
   headerValueSummary,
@@ -127,8 +127,8 @@ export function computeReadout({
   isRegexSupported,
   status,
 }: ReadoutInput): TabReadout {
-  const paused = status.kind === "paused";
-  const outOfSync = status.kind === "out-of-sync";
+  const paused = status === "paused";
+  const outOfSync = status === "out-of-sync";
   const overrideLines = overrides.map((override) =>
     overrideChange(override, paused, outOfSync),
   );
@@ -144,42 +144,49 @@ export function computeReadout({
     };
   }
 
-  // Every rule in the active profile that could reach this host, in precedence
-  // order, so an earlier rule shadows a later one exactly as compilation does.
-  // A rule Chrome settles per request is carried with its doubt, never dropped
-  // from the list and never counted as a match.
-  const applying: { profile: Profile; rule: Rule; reach: Reach }[] = [];
-  if (profile !== undefined) {
-    for (const rule of profile.rules) {
-      const reach = ruleReach(rule, host);
-      if (reach !== "no") {
-        applying.push({ profile, rule, reach });
-      }
+  // Every rule that could reach this host, with its grant gap computed once for
+  // the line's needs-access state. A rule Chrome settles per request is carried
+  // with its doubt, never dropped from the list and never counted as a match.
+  const applying: {
+    profile: Profile;
+    rule: Rule;
+    reach: Reach;
+    missing: readonly string[];
+  }[] = [];
+  for (const rule of profile.rules) {
+    const reach = ruleReach(rule, host);
+    if (reach === "no") {
+      continue;
     }
+    applying.push({
+      profile,
+      rule,
+      reach,
+      missing: rule.enabled ? missingGrants(rule, grants) : [],
+    });
   }
 
-  const compilableProfile = activeProfile(
-    dropUncompilable(doc, isRegexSupported),
-  );
-  const compilableRules = compilableProfile?.rules ?? [];
+  // Collisions resolve over the exact rules Chrome installs: dropInapplicable is
+  // the compiler's own input, so a rule it drops, or narrows to its granted
+  // domains, shadows and is shadowed here precisely as it does on the wire.
+  const installed = activeProfile(
+    dropInapplicable(doc, isRegexSupported, grants),
+  ).rules;
+  const rulesById = new Map(installed.map((rule) => [rule.id, rule]));
   const overriddenBy = new Map<string, string>();
-  const rulesById = new Map<string, Rule>();
-  for (const rule of compilableRules) rulesById.set(rule.id, rule);
-  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(
-    compilableRules,
-  )) {
+  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(installed)) {
     const winner = rulesById.get(shadowedByRuleId);
     if (winner !== undefined) {
       overriddenBy.set(ruleId, ruleLabel(winner));
     }
   }
 
-  const changes = applying.map(({ profile, rule, reach }) =>
+  const changes = applying.map(({ profile, rule, reach, missing }) =>
     ruleChange(profile, rule, {
-      grants,
       paused,
       outOfSync,
       reach,
+      missing,
       overriddenBy: overriddenBy.get(rule.id),
       isRegexSupported,
     }),
@@ -267,16 +274,15 @@ function ruleChange(
   profile: Profile,
   rule: Rule,
   context: {
-    grants: GrantSnapshot;
     paused: boolean;
     outOfSync: boolean;
     reach: Reach;
+    missing: readonly string[];
     overriddenBy: string | undefined;
     isRegexSupported: (regex: string) => boolean;
   },
 ): TabChange {
   const refused = refusedReason(rule, context.isRegexSupported);
-  const missing = rule.enabled ? missingGrants(rule, context.grants) : [];
   const status = lineStatus({
     running: rule.enabled,
     paused: context.paused,
@@ -284,7 +290,7 @@ function ruleChange(
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
     managed: isNetworkManagedHeader(rule.header),
-    needsAccess: missing.length > 0,
+    needsAccess: context.missing.length > 0,
     perRequest: context.reach === "unknown",
   });
   const secret = isSecretHeader(rule.header);
@@ -307,7 +313,7 @@ function ruleChange(
     ...(context.overriddenBy === undefined
       ? {}
       : { overriddenBy: context.overriddenBy }),
-    ...(status === "needs-access" ? { missing } : {}),
+    ...(status === "needs-access" ? { missing: context.missing } : {}),
     ...(status === "refused" && refused !== undefined ? { refused } : {}),
     ...(wider === undefined ? {} : { widerReach: wider }),
   };
@@ -423,7 +429,7 @@ export interface SwitchPreview {
  * diff. The diff is against the one profile active now.
  */
 export function previewSwitch(
-  from: Profile | undefined,
+  from: Profile,
   to: Profile,
   host: string | undefined,
 ): SwitchPreview {
@@ -434,11 +440,9 @@ export function previewSwitch(
   // every header the switch could move, and only Chrome can rule one out.
   const mayReach = (rule: Rule) => ruleReach(rule, host) !== "no";
   const current = new Set<string>();
-  if (from !== undefined) {
-    for (const rule of from.rules) {
-      if (rule.enabled && mayReach(rule)) {
-        current.add(normalizeHeaderName(rule.header));
-      }
+  for (const rule of from.rules) {
+    if (rule.enabled && mayReach(rule)) {
+      current.add(normalizeHeaderName(rule.header));
     }
   }
   const targetKeys = new Set<string>();
@@ -457,17 +461,15 @@ export function previewSwitch(
     }
   }
   const drops: string[] = [];
-  if (from !== undefined) {
-    for (const rule of from.rules) {
-      const key = normalizeHeaderName(rule.header);
-      if (
-        rule.enabled &&
-        mayReach(rule) &&
-        !targetKeys.has(key) &&
-        !drops.includes(rule.header)
-      ) {
-        drops.push(rule.header);
-      }
+  for (const rule of from.rules) {
+    const key = normalizeHeaderName(rule.header);
+    if (
+      rule.enabled &&
+      mayReach(rule) &&
+      !targetKeys.has(key) &&
+      !drops.includes(rule.header)
+    ) {
+      drops.push(rule.header);
     }
   }
   return { drops, adds };
@@ -482,34 +484,17 @@ export function ruleLabel(rule: Rule): string {
 
 /** What this rule reaches beyond the one host the popup is open on. */
 function widerReach(rule: Rule): number | "broad" | undefined {
-  if (rule.scope.type !== "domains") return "broad";
-  const others = rule.scope.domains.length - 1;
+  const { requestDomains } = scopeCondition(rule.scope);
+  if (requestDomains === undefined) return "broad";
+  const others = requestDomains.length - 1;
   return others > 0 ? others : undefined;
 }
 
 function ruleReach(rule: Rule, host: string): Reach {
-  const scoped = scopeReach(rule.scope, host);
-  if (
-    scoped === "no" &&
-    rule.initiators.some((initiator) => hostUnder(host, initiator))
-  ) {
-    return "unknown";
+  if (!conditionReaches(scopeCondition(rule.scope), host)) {
+    return rule.initiators.some((initiator) => hostUnder(host, initiator))
+      ? "unknown"
+      : "no";
   }
-  return scoped === "yes" && settlesPerRequest(rule) ? "unknown" : scoped;
-}
-
-/**
- * What the scope alone rules out, before Chrome's matcher gets a say. Only a
- * named-domain list answers "no" from here; every other scope can reach this
- * tab, and settlesPerRequest decides whether that is knowable.
- */
-function scopeReach(scope: Scope, host: string): "yes" | "no" {
-  if (scope.type !== "domains") {
-    return "yes";
-  }
-  return scope.domains.some((domain) => hostUnder(host, domain)) ? "yes" : "no";
-}
-
-function hostUnder(host: string, domain: string): boolean {
-  return host === domain || host.endsWith(`.${domain}`);
+  return settlesPerRequest(rule) ? "unknown" : "yes";
 }

@@ -6,9 +6,10 @@ import {
   useState,
 } from "preact/hooks";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
-import { normalizeHeaderName } from "../../core/headers";
+import { normalizeHeaderName, validateHeaderName } from "../../core/headers";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
+import { headerErrorMessage } from "../state/header-errors";
 import { closePopover, openPositionedPopover } from "./popover";
 import { sentence } from "./sentence";
 import "./HeaderNameInput.css";
@@ -94,12 +95,18 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   const listId = `${id}-list`;
   const errorId = `${id}-error`;
   const caseId = `${id}-case`;
+  // The same verdict the commit runs, one keystroke early: an illegal name puts
+  // its error where the case line would sit, so the field never reassures about
+  // a name the save will refuse. A commit that got further raises props.error.
+  const nameError =
+    props.value.trim() === "" ? undefined : validateHeaderName(normalized);
+  const message =
+    nameError === undefined ? props.error : headerErrorMessage(nameError);
   const showCase =
-    props.value.trim() !== "" && props.value.trim() !== normalized;
-  const describedBy = [
-    ...(showCase ? [caseId] : []),
-    ...(props.error === undefined ? [] : [errorId]),
-  ].join(" ");
+    message === undefined &&
+    props.value.trim() !== "" &&
+    props.value.trim() !== normalized;
+  const describedBy = message !== undefined ? errorId : showCase ? caseId : "";
 
   return (
     <div class="editor-field">
@@ -125,7 +132,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
           aria-activedescendant={
             open && active !== undefined ? `${id}-opt-${active}` : undefined
           }
-          aria-invalid={props.error !== undefined ? true : undefined}
+          aria-invalid={message !== undefined ? true : undefined}
           aria-describedby={describedBy === "" ? undefined : describedBy}
           value={props.value}
           onInput={(event) => {
@@ -219,15 +226,16 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             ))}
           </div>
         )}
-        {showCase && (
-          <p class="editor-micro" id={caseId}>
-            {sentence(copy.editor.savedAs(normalized))}
-          </p>
-        )}
-        {props.error !== undefined && (
+        {message !== undefined ? (
           <p class="editor-error" role="alert" id={errorId}>
-            {props.error}
+            {message}
           </p>
+        ) : (
+          showCase && (
+            <p class="editor-micro" id={caseId}>
+              {sentence(copy.editor.savedAs(normalized))}
+            </p>
+          )
         )}
       </div>
     </div>

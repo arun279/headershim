@@ -9,18 +9,12 @@ export interface UpdateRulesOptions {
   removeRuleIds?: number[];
 }
 
-export interface ExtensionActionOptions {
-  displayActionCountAsBadgeText?: boolean;
-  tabUpdate?: { increment: number; tabId: number };
-}
-
 export interface DnrAdapter {
   getDynamicRules(): Promise<DnrRule[]>;
   updateDynamicRules(options: UpdateRulesOptions): Promise<void>;
   getSessionRules(): Promise<DnrRule[]>;
   updateSessionRules(options: UpdateRulesOptions): Promise<void>;
   isRegexSupported: RegexValidator;
-  setExtensionActionOptions(options: ExtensionActionOptions): Promise<void>;
 }
 
 // The real DNR surface, bound to the same contract FakeDnr implements: the
@@ -51,9 +45,6 @@ const dnr = {
       ? ok(undefined)
       : err(result.reason ?? "unsupported");
   },
-  setExtensionActionOptions(options: ExtensionActionOptions): Promise<void> {
-    return browser.declarativeNetRequest.setExtensionActionOptions(options);
-  },
 } satisfies DnrAdapter;
 
 export const {
@@ -62,7 +53,6 @@ export const {
   getSessionRules,
   updateSessionRules,
   isRegexSupported,
-  setExtensionActionOptions,
 } = dnr;
 
 export async function resolveRegexSupport(

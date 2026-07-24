@@ -18,6 +18,7 @@ import { LiveRegionProvider, useAnnounce } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
 import { DataNote } from "../../src/ui/components/DataNote";
 import { EmptyState } from "../../src/ui/components/EmptyState";
+import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { ChangeLine } from "../../src/ui/components/readout/ChangeLine";
 import {
@@ -87,10 +88,7 @@ export function App() {
   );
 }
 
-type ReadyProps = Omit<
-  Extract<AppState, { phase: "ready" }>,
-  "phase" | "grantGaps"
->;
+type ReadyProps = Omit<Extract<AppState, { phase: "ready" }>, "phase">;
 
 /** A toast, and the one thing it can offer to do about what it just said. */
 interface PopupToast {
@@ -158,7 +156,7 @@ function Ready({
   const docRef = useRef(doc);
   docRef.current = doc;
 
-  const paused = status.kind === "paused";
+  const paused = status === "paused";
   const activeProfile = useMemo(() => getActiveProfile(doc), [doc]);
   const readout = useMemo(
     () =>
@@ -201,7 +199,6 @@ function Ready({
         [],
       ),
       color: defaultProfileColor(doc.profiles.length),
-      enabled: true,
     });
     if (!outcome.ok) {
       reportBlockedCommit(outcome.error);
@@ -334,7 +331,7 @@ function Ready({
 
   const openAddChange = () => {
     setComposing(false);
-    setAddingTo((activeProfile ?? doc.profiles[0])?.id);
+    setAddingTo(activeProfile.id);
   };
   const openComposer = () => {
     if (tabDomain === undefined) return;
@@ -388,6 +385,7 @@ function Ready({
   if (addingProfile !== undefined) {
     return (
       <main class="popup" tabIndex={-1}>
+        {paused && <PauseBanner />}
         <RuleEditor
           key="new-rule"
           profileName={addingProfile.name}
@@ -400,7 +398,7 @@ function Ready({
           onRequestGrant={requestPermissions}
           onGrantDeclined={(host) => showToast(copy.errors.grantDeclined(host))}
           onCommitted={() => showToast(copy.toast.ruleCreated)}
-          onGranted={() => showToast(copy.toast.ruleLive)}
+          onGranted={() => showToast(copy.toast.accessGranted)}
           onClose={() => setAddingTo(undefined)}
           note={<DataNote />}
         />
@@ -432,12 +430,7 @@ function Ready({
         onNewProfile={newProfile}
         onRenameProfile={renameProfile}
       />
-      {paused && (
-        <div class="pausebar" role="status">
-          <PauseGlyph />
-          {copy.readout.pausedBanner}
-        </div>
-      )}
+      {paused && <PauseBanner />}
       {/* Pause is drawn where it is true: the count says how many are held and
           each held line says what it would do, so the state is in the words and
           not only in the hue. Desaturating the region on top of that would grey
@@ -481,7 +474,13 @@ function Ready({
           onGrant={grantChange}
           onEditValue={editChangeValue}
         />
-        {nothing && <ReadoutEmpty host={readout.host} onAdd={openAddChange} />}
+        {nothing && (
+          <ReadoutEmpty
+            host={readout.host}
+            paused={paused}
+            onAdd={openAddChange}
+          />
+        )}
       </div>
       <footer class="foot">
         {/* The empty state carries the one Add; the footer's copy of it would
@@ -592,22 +591,21 @@ function ThisTabStrip({
 
 // One honest sentence and one action: add a change where there is a site to
 // change, and otherwise the list of rules, which is the only thing left to look
-// at from a tab with no site to read.
+// at from a tab with no site to read. While paused the banner above states the
+// cause, so the site-shaped line drops rather than restate it under it.
 function ReadoutEmpty({
   host,
+  paused,
   onAdd,
 }: {
   host: string | undefined;
+  paused: boolean;
   onAdd: () => void;
 }) {
-  return (
-    <div class="empty">
-      <p class="l1">
-        {host === undefined
-          ? copy.readout.noHost
-          : sentence(copy.readout.empty(host))}
-      </p>
-      {host === undefined ? (
+  if (host === undefined) {
+    return (
+      <div class="empty">
+        <p class="l1">{copy.readout.noHost}</p>
         <button
           type="button"
           class="add"
@@ -616,27 +614,16 @@ function ReadoutEmpty({
           <GearGlyph />
           {copy.readout.seeAllRules}
         </button>
-      ) : (
-        <button type="button" class="add" onClick={onAdd}>
-          <PlusGlyph />
-          {copy.readout.addChange}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function PauseGlyph() {
+      </div>
+    );
+  }
   return (
-    <svg
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <rect x="4" y="3" width="3" height="10" rx="1" />
-      <rect x="9" y="3" width="3" height="10" rx="1" />
-    </svg>
+    <div class="empty">
+      {!paused && <p class="l1">{sentence(copy.readout.empty(host))}</p>}
+      <button type="button" class="add" onClick={onAdd}>
+        <PlusGlyph />
+        {copy.readout.addChange}
+      </button>
+    </div>
   );
 }

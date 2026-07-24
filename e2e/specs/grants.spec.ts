@@ -1,8 +1,8 @@
-import { planReconcile } from "../../src/core/reconcile";
 import { copy } from "../../src/ui/copy";
 import {
   expect,
   fetchEcho,
+  getBadgeText,
   getDynamicRules,
   seedState,
   seedStateAndWait,
@@ -14,7 +14,7 @@ const HEADER = "x-headershim-grant-edge";
 const VALUE = "active-after-grant";
 
 function dualGrantDoc() {
-  return stateWithRules([
+  const doc = stateWithRules([
     {
       direction: "request",
       operation: "set",
@@ -26,17 +26,33 @@ function dualGrantDoc() {
       enabled: true,
     },
   ]);
+  // A distinct badge lets the poll below see the seed land: the fresh profile
+  // seeds as "DE", so a flip to "GR" is unambiguous proof the background read
+  // this doc.
+  return {
+    ...doc,
+    profiles: doc.profiles.map((profile) => ({
+      ...profile,
+      name: "Grants",
+      badgeText: "GR",
+    })),
+  };
 }
 
-test("a target-and-initiator rule is a silent no-op while access is missing", async ({
+test("an enabled rule with no grant is compiled out of the ruleset entirely", async ({
   context,
   echoServers,
   serviceWorker,
 }) => {
-  const doc = dualGrantDoc();
-  const desired = await seedStateAndWait(serviceWorker, doc);
-  const installedBeforeRequests = await getDynamicRules(serviceWorker);
-  expect(planReconcile(desired, installedBeforeRequests)).toBeNull();
+  await seedState(serviceWorker, dualGrantDoc());
+  // The seeded profile's badge is the proof that the background woke, read this
+  // seed and repainted the toolbar; only after it lands does an empty ruleset
+  // mean the rule was dropped rather than not yet processed.
+  await expect.poll(() => getBadgeText(serviceWorker)).toBe("GR");
+  // Absent, not merely inert. An installed rule would be one action invocation
+  // away from applying: activeTab is a host grant, and
+  // declarativeNetRequestWithHostAccess honours it for whatever is installed.
+  expect(await getDynamicRules(serviceWorker)).toEqual([]);
 
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/grant-source`);
@@ -46,7 +62,7 @@ test("a target-and-initiator rule is a silent no-op while access is missing", as
   );
   expect(beforeGrant.status).toBe(200);
   expect(beforeGrant.requestHeaders).not.toHaveProperty(HEADER);
-  expect(await getDynamicRules(serviceWorker)).toEqual(installedBeforeRequests);
+  expect(await getDynamicRules(serviceWorker)).toEqual([]);
 });
 
 test("response-header rules apply to HTTP-cached responses", {
@@ -114,11 +130,8 @@ test("response-header rules apply to HTTP-cached responses", {
 // projection and its missing origins; src/test/grant-flow.integration.test.tsx
 // drives the grant/decline/revoke transitions and asserts the surfaces relight
 // (through permissions.request/remove, since jsdom cannot answer Chrome's native
-// prompt). The system-level needs-access signal is covered end to end by
-// badge.spec.ts ("paints the needs-access Chrome badge amber").
-// So the e2e case is removed rather than reconciled: pointing it at a build
-// where the rule is always granted would make the needs-access assertion
-// impossible, and no build lets the popup read an ungranted host.
+// prompt). Needs-access is per-site by nature, so it lives on those rows and not
+// on the global toolbar badge.
 
 // Site-access UI half: the Site access page is a projection of the
 // browser's live permissions plus the rules' required origins. The shipped

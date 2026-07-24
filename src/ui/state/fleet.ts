@@ -10,7 +10,7 @@
  * there.
  */
 
-import { dropUncompilable, settlesPerRequest } from "../../core/compile";
+import { dropInapplicable, settlesPerRequest } from "../../core/compile";
 import { findOverriddenRules } from "../../core/conflicts";
 import { type GrantSnapshot, missingGrants } from "../../core/grants";
 import { normalizeHeaderName } from "../../core/headers";
@@ -23,6 +23,7 @@ import {
   type Rule,
   type StateDoc,
 } from "../../core/model";
+import { scopeCondition } from "../../core/scope";
 import type { SystemStatus } from "../../core/status";
 import { isSecretHeader, ruleValueSummary } from "../secret";
 import {
@@ -48,8 +49,16 @@ interface Overrider {
 type FleetScope =
   | { readonly kind: "domains"; readonly domains: readonly string[] }
   | { readonly kind: "all" }
-  | { readonly kind: "pattern"; readonly hosts: readonly string[] }
-  | { readonly kind: "regex"; readonly hosts: readonly string[] };
+  | {
+      readonly kind: "pattern";
+      readonly pattern: string;
+      readonly hosts: readonly string[];
+    }
+  | {
+      readonly kind: "regex";
+      readonly regex: string;
+      readonly hosts: readonly string[];
+    };
 
 export interface FleetRule {
   /** Stable key for rendering, focus, and tests. */
@@ -95,30 +104,18 @@ export function projectFleet({
   isRegexSupported,
   status,
 }: FleetInput): FleetRule[] {
-  // Collisions are resolved across the live set exactly as the compiled ruleset
-  // does: enabled rules of the active profile, in order, so an earlier one
-  // shadows a later one.
-  const compilable = dropUncompilable(doc, isRegexSupported);
-  const liveProfile = activeProfile(compilable);
-  const live: { profile: Profile; rule: Rule }[] = [];
-  if (liveProfile !== undefined) {
-    for (const rule of liveProfile.rules) {
-      if (rule.enabled) live.push({ profile: liveProfile, rule });
-    }
-  }
-  const activeProfileId = activeProfile(doc)?.id;
-  const rulesById = new Map<string, Rule>();
-  for (const { rule } of live) rulesById.set(rule.id, rule);
-
+  const active = activeProfile(doc);
+  // Collisions resolve over the exact rules Chrome installs: dropInapplicable is
+  // the compiler's own input, so a row's overridden state matches the wire.
+  const installed = activeProfile(
+    dropInapplicable(doc, isRegexSupported, grants),
+  ).rules;
+  const rulesById = new Map(installed.map((rule) => [rule.id, rule]));
   const overriddenBy = new Map<string, Overrider>();
-  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(
-    live.map(({ rule }) => rule),
-  )) {
+  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(installed)) {
     const winner = rulesById.get(shadowedByRuleId);
     if (winner !== undefined) {
-      overriddenBy.set(ruleId, {
-        label: ruleLabel(winner),
-      });
+      overriddenBy.set(ruleId, { label: ruleLabel(winner) });
     }
   }
 
@@ -126,9 +123,9 @@ export function projectFleet({
     profile.rules.map((rule) =>
       fleetRule(profile, rule, {
         grants,
-        paused: status.kind === "paused",
-        outOfSync: status.kind === "out-of-sync",
-        active: profile.id === activeProfileId,
+        paused: status === "paused",
+        outOfSync: status === "out-of-sync",
+        active: profile.id === active.id,
         overriddenBy: overriddenBy.get(rule.id),
         isRegexSupported,
       }),
@@ -205,22 +202,22 @@ function fleetScope(rule: Rule): FleetScope {
     case "all":
       return { kind: "all" };
     case "pattern":
-      return { kind: "pattern", hosts: [...rule.scope.hosts] };
+      return {
+        kind: "pattern",
+        pattern: rule.scope.pattern,
+        hosts: [...rule.scope.hosts],
+      };
     case "regex":
-      return { kind: "regex", hosts: [...rule.scope.hosts] };
+      return {
+        kind: "regex",
+        regex: rule.scope.regex,
+        hosts: [...rule.scope.hosts],
+      };
   }
 }
 
 function siteCount(rule: Rule): number {
-  switch (rule.scope.type) {
-    case "domains":
-      return rule.scope.domains.length;
-    case "pattern":
-    case "regex":
-      return rule.scope.hosts.length;
-    case "all":
-      return 0;
-  }
+  return scopeCondition(rule.scope).requestDomains?.length ?? 0;
 }
 
 export interface SiteGroup {
@@ -282,7 +279,11 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
       const sites = new Set<string>();
       let broad = false;
       let allSites = false;
+      // The blast radius counts only the rules Chrome is actually running, so a
+      // rule that is off, waiting on a grant, or refused never inflates a count
+      // the caption states in the present tense.
       for (const rule of rules) {
+        if (!isReaching(rule)) continue;
         if (rule.scope.kind === "domains") {
           for (const domain of rule.scope.domains) sites.add(domain);
         } else {
@@ -360,6 +361,11 @@ export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
     (a, b) =>
       TAPE_ORDER[a.status] - TAPE_ORDER[b.status] || a.key.localeCompare(b.key),
   );
+}
+
+/** A rule Chrome is running now: installed, granted, and not shadowed. */
+function isReaching(rule: FleetRule): boolean {
+  return rule.status === "live" || rule.status === "unconfirmed";
 }
 
 function hostsOf(rule: FleetRule): readonly string[] {

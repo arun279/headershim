@@ -153,7 +153,8 @@
   font-size: 12px;
 }
 
-/* Second line: a reason where one is owed, else the scope in the by-header lens. */
+/* The state line: why a rule is not running, toned to its severity. It sits
+   under the scope line, never in place of it. */
 .fleet-open .why {
   display: flex;
   align-items: center;
@@ -187,11 +188,20 @@
   background: transparent;
   border: 1.5px solid var(--faint);
 }
+/* The identity line (the domains, pattern, or regex a rule matches) and the
+   shared-site prose beside it. */
 .fleet-scope {
   display: block;
   margin-top: 2px;
   font-size: 11px;
   color: var(--ink3);
+}
+/* Only the mono expression clips: it is one machine string, whitespace and all,
+   with the full text on its title. The prose keeps wrapping so its count shows. */
+.fleet-scope.mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 .fleet-row .line-control {

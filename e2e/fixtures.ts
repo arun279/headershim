@@ -162,11 +162,8 @@ export async function seedSessionAndWait(
   return desired;
 }
 
-export function getBadgeText(worker: Worker, tabId?: number): Promise<string> {
-  return worker.evaluate(
-    (id) => chrome.action.getBadgeText(id === null ? {} : { tabId: id }),
-    tabId ?? null,
-  );
+export function getBadgeText(worker: Worker): Promise<string> {
+  return worker.evaluate(() => chrome.action.getBadgeText({}));
 }
 
 export function getBadgeColor(
@@ -206,6 +203,8 @@ export async function seedStateAndWait(
   worker: Worker,
   doc: StateDoc,
 ): Promise<DnrRule[]> {
+  // Every caller runs on the static host-access build, which holds all-sites, so
+  // no rule is grant-dropped and the plain compile is what the background lands.
   const desired = compileDynamic(doc);
   await seedState(worker, doc);
   await expect

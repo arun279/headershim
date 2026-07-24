@@ -69,18 +69,30 @@ export function migrate(doc: unknown): Result<StateDoc, MigrationError> {
   }
   /* v8 ignore stop */
 
-  if (!isStateDoc(migrated)) {
+  const repaired = repairActiveProfile(migrated);
+  if (!isStateDoc(repaired)) {
     return err({ kind: "corrupt" });
   }
+  return ok(repaired);
+}
 
-  const { activeProfileId } = migrated;
-  if (
-    activeProfileId !== undefined &&
-    !migrated.profiles.some((profile) => profile.id === activeProfileId)
-  ) {
-    return ok({ ...migrated, activeProfileId: undefined });
+// There is always exactly one active profile. An activeProfileId that names no
+// stored profile (a value written by an earlier build that allowed none active,
+// or a deleted profile) is repaired to the first profile before validation.
+function repairActiveProfile(doc: unknown): unknown {
+  if (!isRecord(doc)) {
+    return doc;
   }
-  return ok(migrated);
+  const { profiles, activeProfileId } = doc;
+  if (!Array.isArray(profiles)) {
+    return doc;
+  }
+  const ids = profiles.filter(isRecord).map(({ id }) => id);
+  if (ids.includes(activeProfileId)) {
+    return doc;
+  }
+  const [first] = ids;
+  return typeof first === "string" ? { ...doc, activeProfileId: first } : doc;
 }
 
 export function createV1Seed(): StateDoc {
@@ -129,7 +141,7 @@ function isStateDoc(value: unknown): value is StateDoc {
     !Array.isArray(profiles) ||
     profiles.length === 0 ||
     !profiles.every(isProfile) ||
-    (activeProfileId !== undefined && typeof activeProfileId !== "string") ||
+    typeof activeProfileId !== "string" ||
     typeof nextRuleNum !== "number" ||
     !Number.isSafeInteger(nextRuleNum) ||
     nextRuleNum < 1 ||

@@ -46,7 +46,7 @@ function projectFleet(
     isRegexSupported?: (regex: string) => boolean;
   },
 ): FleetRule[] {
-  const activeProfileId = input.activeProfileId ?? input.profiles[0]?.id;
+  const activeProfileId = input.activeProfileId ?? input.profiles[0]?.id ?? "";
   const doc: StateDoc = {
     v: 1,
     profiles: [...input.profiles],
@@ -212,10 +212,13 @@ describe("projectFleet status ladder", () => {
     expect(byKey(fleet, "p1:off").status).toBe("off");
   });
 
-  it("reads every rule in an off profile as off", () => {
+  it("reads every rule in an inactive profile as off", () => {
     const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r" })] })],
-      activeProfileId: "missing",
+      profiles: [
+        profile({ id: "active", name: "Active" }),
+        profile({ rules: [rule({ id: "r" })] }),
+      ],
+      activeProfileId: "active",
       grants: ALL,
       status: LIVE,
     });
@@ -286,6 +289,34 @@ describe("projectFleet status ladder", () => {
       "x-env",
       "x-env",
     ]);
+  });
+
+  it("resolves collisions over the narrowed rules the compiler installs", () => {
+    // A domains rule granted on only one of its sites is installed there,
+    // narrowed, at full priority, so it shadows a lower same-header rule exactly
+    // as it does on the wire; its own row still reads needs-access.
+    const fleet = projectFleet({
+      profiles: [
+        profile({
+          rules: [
+            rule({
+              id: "partly",
+              header: "x-env",
+              scope: { type: "domains", domains: ["svc.test", "other.test"] },
+            }),
+            rule({ id: "lower", header: "x-env" }),
+          ],
+        }),
+      ],
+      grants: { origins: ["*://*.svc.test/*"], allSites: false },
+      status: LIVE,
+    });
+
+    expect(byKey(fleet, "p1:partly").status).toBe("needs-access");
+    expect(byKey(fleet, "p1:lower").status).toBe("overridden");
+    expect(byKey(fleet, "p1:lower").overriddenBy).toEqual({
+      label: "x-env rule",
+    });
   });
 
   it("redacts secret values and drops the value for a remove", () => {
@@ -397,6 +428,44 @@ describe("groupByHeader", () => {
       status: LIVE,
     });
     expect(groupByHeader(fleet)[0]?.broad).toBe(true);
+  });
+
+  it("counts the blast radius from the running rules only", () => {
+    // The caption reads present-tense, so a rule that is off, or one waiting on
+    // a grant, must not add to the sites it says the header reaches.
+    const fleet = projectFleet({
+      profiles: [
+        profile({
+          rules: [
+            rule({
+              id: "live",
+              header: "x-env",
+              scope: { type: "domains", domains: ["a.com"] },
+            }),
+            rule({
+              id: "off",
+              header: "x-env",
+              enabled: false,
+              scope: { type: "domains", domains: ["b.com"] },
+            }),
+            rule({
+              id: "broad-off",
+              header: "x-env",
+              enabled: false,
+              scope: { type: "all" },
+            }),
+          ],
+        }),
+      ],
+      grants: ALL,
+      status: LIVE,
+    });
+    const env = groupByHeader(fleet).find(
+      (group) => group.headerKey === "x-env",
+    );
+    expect(env?.siteCount).toBe(1);
+    expect(env?.broad).toBe(false);
+    expect(env?.allSites).toBe(false);
   });
 });
 

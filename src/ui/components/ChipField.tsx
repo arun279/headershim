@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { isHostnameShaped } from "../../core/scope";
 import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
@@ -44,27 +45,35 @@ export function ChipField(props: ChipFieldProps) {
         </span>
       )}
       <div class={`chip-field ${props.variant}-chips`}>
-        {props.values.map((value) => (
-          <span class={`chip-field-chip ${props.variant}-chip`} key={value}>
-            <Truncate
-              mode="end"
-              value={value}
-              maxChars={TRUNCATION_LIMITS.domain}
-              class="mono"
-            />
-            <button
-              type="button"
-              class={`chip-field-x ${props.variant}-chip-x`}
-              aria-label={props.removeLabel(value)}
-              onClick={(event) => {
-                focusOnRemoval(event.currentTarget);
-                remove(value);
-              }}
+        {props.values.map((value) => {
+          const invalid = !isHostnameShaped(value);
+          return (
+            <span
+              class={`chip-field-chip ${props.variant}-chip${
+                invalid ? " invalid" : ""
+              }`}
+              key={value}
             >
-              ✕
-            </button>
-          </span>
-        ))}
+              <Truncate
+                mode="end"
+                value={value}
+                maxChars={TRUNCATION_LIMITS.domain}
+                class="mono"
+              />
+              <button
+                type="button"
+                class={`chip-field-x ${props.variant}-chip-x`}
+                aria-label={props.removeLabel(value)}
+                onClick={(event) => {
+                  focusOnRemoval(event.currentTarget);
+                  remove(value);
+                }}
+              >
+                ✕
+              </button>
+            </span>
+          );
+        })}
         <input
           class={`chip-field-input ${props.variant}-chip-input mono${
             props.onEnter === undefined ? "" : " editor-commit-field"

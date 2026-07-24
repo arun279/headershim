@@ -2,7 +2,6 @@
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { browser } from "wxt/browser";
 import background from "../../entrypoints/background";
 import { App } from "../../entrypoints/popup/App";
 import {
@@ -24,10 +23,6 @@ vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: () => Promise.resolve("api.acme.dev"),
 }));
-
-// The amber can't-run background the badge state machine paints for needs-access
-// and the indigo of the seeded Default profile in its live state.
-const AMBER = "#B07B00";
 
 function installDnr() {
   const fake = new FakeDnr();
@@ -148,8 +143,7 @@ const SCOPES: { name: string; scope: Scope; granted: string }[] = [
 ];
 
 describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
-  it("declines loud, grant clears every surface with zero DNR writes, revoke re-lights", async () => {
-    const setBadge = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+  it("holds the rule out of the ruleset until the grant, and pulls it back on revoke", async () => {
     background.main();
     await writeState(seed(scope));
     await settle();
@@ -157,35 +151,27 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
     const root = render(<App />);
     await settle();
 
-    // Ground truth first: the rule really did reach Chrome's ruleset. Every
-    // claim below is about a rule the engine holds, not one the compiler
-    // quietly dropped from the batch while a surface kept describing it.
+    // Ground truth first: needs-access is a state the product enforces, not a
+    // label printed over a rule the engine is holding. Nothing is installed, so
+    // the activeTab access that invoking the extension confers on this tab has
+    // nothing to widen.
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect(state(root)).toBe("needs-access");
+
+    // The grant is what compiles the rule in, in one write, and the line lights.
+    await grant(ORIGIN);
     expect(await dnr.fake.getDynamicRules()).toMatchObject([
       { action: { requestHeaders: [{ header: "x-env", value: "staging" }] } },
     ]);
-
-    // A rule the user believes is running but can't: loud on the spine and badge.
-    expect(state(root)).toBe("needs-access");
-    expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
-
-    dnr.updateDynamicRules.mockClear();
-    dnr.updateSessionRules.mockClear();
-    setBadge.mockClear();
-
-    // The grant clears the loud state without recompiling a single rule.
-    await grant(ORIGIN);
-    expect(state(root)).toBe(granted);
-    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
-    expect(setBadge).toHaveBeenCalled();
-    expect(setBadge).not.toHaveBeenCalledWith({ color: AMBER });
+    expect(state(root)).toBe(granted);
 
-    // A grant revoked from Chrome's own UI re-lights the loud state live — the
-    // spine returns to amber and so does the badge.
-    setBadge.mockClear();
+    // A grant revoked from Chrome's own UI takes the rule back out of the live
+    // ruleset, and the spine returns to needs-access with it.
     await revoke(ORIGIN);
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
     expect(state(root)).toBe("needs-access");
-    expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
   });
 });
 
@@ -197,7 +183,12 @@ describe("grant flow — persisting target hosts bounds compiled reach", () => {
       pattern: "||api.acme.dev^",
       hosts: [],
     });
+    // State is seeded before the grant, as it always is in the product (install
+    // and startup reconcile it), so the grant reconciles the stored doc rather
+    // than racing an empty store where a reconcile would seed a fresh default.
     await writeState(doc);
+    await settle();
+    await fakeBrowser.permissions.request({ origins: [ORIGIN] });
     await settle();
     dnr.updateDynamicRules.mockClear();
     dnr.updateSessionRules.mockClear();

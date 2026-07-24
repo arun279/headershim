@@ -2,6 +2,7 @@
 import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
+import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { Profile } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
 import { setReconcileError } from "../platform/session-store";
@@ -21,7 +22,7 @@ function oneRule(): Profile[] {
 }
 
 async function seed(profiles: Profile[]): Promise<void> {
-  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id }));
+  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id ?? "" }));
 }
 
 async function mount(hash = "#rules") {
@@ -141,18 +142,62 @@ describe("all rules", () => {
     expect(toggle.className).not.toBe("sw");
   });
 
-  it("keeps the running tone off a configured-on rule in an off profile", async () => {
+  it("keeps the scope beside the profile note for a rule in an inactive profile", async () => {
     const active = profile("p1", { name: "Active" });
     const inactive = profile("p2", {
       name: "Inactive",
-      rules: [rule({ header: "x-held" })],
+      rules: [
+        rule({
+          header: "x-held",
+          scope: { type: "domains", domains: ["held.example.com"] },
+        }),
+      ],
     });
     await seed([active, inactive]);
     const root = await mount();
 
+    // The off-profile row states both what it matches and why it is at rest;
+    // the reason must not take the scope's line.
     const row = within(root, ".fleet-row.off");
-    expect(row.textContent).toContain(text.profileOff);
+    expect(row.querySelector(".fleet-scope")?.textContent).toBe(
+      "held.example.com",
+    );
+    expect(row.textContent).toContain(text.notActiveProfile("Inactive"));
     expect(row.querySelector('[role="switch"]')?.className).toBe("sw sw-inert");
+  });
+
+  it("shows each cross-site rule's own pattern and regex, not a scope-kind word", async () => {
+    fakeBrowser.declarativeNetRequest.isRegexSupported = vi.fn(async () => ({
+      isSupported: true,
+    }));
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-env",
+            scope: {
+              type: "pattern",
+              pattern: "*://api.stripe.com/*",
+              hosts: ["api.stripe.com"],
+            },
+          }),
+          rule({
+            header: "x-env",
+            scope: { type: "regex", regex: "^https://gh\\.test/", hosts: [] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    // The pattern and the regex are the only thing telling one cross-site rule
+    // from the other, so each row carries its own expression.
+    const scopes = [...root.querySelectorAll(".fleet-scope")].map(
+      (node) => node.textContent,
+    );
+    expect(scopes).toContain("*://api.stripe.com/*");
+    expect(scopes).toContain("^https://gh\\.test/");
   });
 
   it("truncates a long value to the ceiling every surface shares", async () => {
@@ -261,7 +306,8 @@ describe("all rules", () => {
     );
   });
 
-  it("states all-sites reach unconditionally", async () => {
+  it("states all-sites reach unconditionally when the rule is running", async () => {
+    await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
     await seed([
       profile("p1", {
         name: "Staging",
@@ -393,7 +439,7 @@ describe("rule delete", () => {
   });
 });
 
-describe("configured changes", () => {
+describe("active changes", () => {
   it("lists live and refused stamps and never carries a value", async () => {
     await fakeBrowser.permissions.request({
       origins: [originPatternForDomain("api.example.com")],
@@ -451,5 +497,25 @@ describe("configured changes", () => {
     expect(within(root, ".tape-status").textContent).toBe(
       copy.readout.refusedReason.append,
     );
+  });
+
+  // The page is the active profile's switched-on changes, so an enabled rule in
+  // another profile leaves it empty; the empty line states that fact and never
+  // tells the reader to turn on a rule the active profile does not hold.
+  it("stays empty when only another profile has a switched-on rule", async () => {
+    await seed([
+      profile("p1", { name: "Active", rules: [] }),
+      profile("p2", {
+        name: "Other",
+        rules: [rule({ header: "x-flag" })],
+      }),
+    ]);
+    const root = await mount("#traffic");
+
+    expect(root.querySelector(".tape-list")).toBeNull();
+    expect(within(root, ".tape-empty").textContent).toContain(
+      copy.options.traffic.empty,
+    );
+    expect(root.textContent).not.toContain("Turn a rule on");
   });
 });

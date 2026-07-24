@@ -30,8 +30,14 @@ import {
 
 let dnr: ReturnType<typeof installDnr>;
 
-beforeEach(() => {
+// Every rule below is scoped to example.com, and grants are a compile input, so
+// the reconcile mechanics under test start from a granted host. The gate itself
+// is the subject of its own case, which revokes first.
+const RULE_ORIGIN = "*://*.example.com/*";
+
+beforeEach(async () => {
   dnr = installDnr();
+  await fakeBrowser.permissions.request({ origins: [RULE_ORIGIN] });
 });
 
 function start() {
@@ -177,32 +183,44 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
   });
 
-  it("recomputes the badge on a grant change with zero DNR writes", async () => {
+  // Invoking the action hands the extension activeTab, which is host access for
+  // that tab, and the engine applies whatever is installed to a host it has
+  // access to. So an ungranted rule is only harmless while it is absent, and the
+  // grant is what puts it in.
+  it("installs a rule only once its host is granted, and takes it back out on revoke", async () => {
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     start();
-    const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
-    const setOptions = vi.spyOn(
-      browser.declarativeNetRequest,
-      "setExtensionActionOptions",
-    );
-    await writeState(withRule(createV1Seed(), "x-one"));
-    await settle();
-    expect(setBackground).toHaveBeenCalledWith({ color: "#B07B00" });
-    dnr.updateDynamicRules.mockClear();
-    dnr.updateSessionRules.mockClear();
-    setBackground.mockClear();
-    setOptions.mockClear();
-
-    await fakeBrowser.permissions.request({
-      origins: ["*://*.example.com/*"],
-    });
+    const doc = withRule(createV1Seed(), "x-one");
+    await writeState(doc);
     await settle();
 
-    expect(setBackground).toHaveBeenCalledWith({ color: "#4F5BC4" });
-    expect(setOptions).toHaveBeenCalledWith({
-      displayActionCountAsBadgeText: true,
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+
+    await fakeBrowser.permissions.request({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+  });
+
+  it("ends a tab's session rows when its host's grant is revoked", async () => {
+    start();
+    await writeSession({
+      nextNum: 2,
+      tabs: { 5: [override(5, "app.example.com")] },
     });
-    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
-    expect(dnr.updateSessionRules).not.toHaveBeenCalled();
+    await settle();
+    expect(await dnr.fake.getSessionRules()).toHaveLength(1);
+
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect((await readSessionState()).tabs).toEqual({});
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
   });
 
   it("serializes overlapping triggers onto the newest stored revision", async () => {
@@ -242,12 +260,11 @@ describe("background lifecycle", () => {
     start();
     const docA = withRule(createV1Seed(), "x-a");
     const docB = withRule(docA, "x-b");
-    vi.spyOn(
-      browser.declarativeNetRequest,
-      "setExtensionActionOptions",
-    ).mockImplementationOnce(async () => {
-      await writeState(docB);
-    });
+    vi.spyOn(browser.action, "setBadgeText").mockImplementationOnce(
+      async () => {
+        await writeState(docB);
+      },
+    );
 
     await writeState(docA);
     await settle();
@@ -287,38 +304,6 @@ describe("background lifecycle", () => {
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
     expect(await getReconcileError()).toBe(false);
-  });
-
-  it("paints the amber can't-run badge from the health flag alone, then restores color on convergence", async () => {
-    start();
-    await fakeBrowser.permissions.request({ origins: ["*://*.example.com/*"] });
-    const doc = withRule(createV1Seed(), "x-one");
-    dnr.updateDynamicRules.mockRejectedValue(new Error("rejected"));
-    const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
-    const setOptions = vi.spyOn(
-      browser.declarativeNetRequest,
-      "setExtensionActionOptions",
-    );
-
-    await writeState(doc);
-    await settle();
-
-    // Access is granted, so only the failed reconcile can turn the badge amber.
-    expect(await getReconcileError()).toBe(true);
-    expect(setBackground).toHaveBeenLastCalledWith({ color: "#B07B00" });
-    expect(setOptions).toHaveBeenLastCalledWith({
-      displayActionCountAsBadgeText: false,
-    });
-    expect(await browser.action.getBadgeText({})).toBe("!");
-
-    dnr.updateDynamicRules.mockImplementation((options) =>
-      dnr.fake.updateDynamicRules(options),
-    );
-    await fakeBrowser.runtime.onStartup.trigger();
-    await settle();
-
-    expect(await getReconcileError()).toBe(false);
-    expect(setBackground).toHaveBeenLastCalledWith({ color: "#4F5BC4" });
   });
 
   it("registers every listener before any init promise resolves", () => {
@@ -445,20 +430,18 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(stored));
   });
 
-  it("repairs a dangling active profile id without quarantining the document", async () => {
+  it("repairs a dangling active profile id to the first profile without quarantining", async () => {
     start();
     const doc = withRule(createV1Seed(), "x-live");
     const stored = { ...doc, activeProfileId: "missing" };
+    const repaired = { ...stored, activeProfileId: doc.activeProfileId };
 
     await writeState(stored);
     await settle();
 
-    expect(await storedValue("state")).toEqual({
-      ...stored,
-      activeProfileId: undefined,
-    });
+    expect(await storedValue("state")).toEqual(repaired);
     expect(await quarantinedValue()).toBeUndefined();
-    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(repaired));
   });
 
   it("refuses to write when the store is newer than this build", async () => {
@@ -578,23 +561,17 @@ describe("background lifecycle", () => {
     await settle();
     const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
     const setTitle = vi.spyOn(browser.action, "setTitle");
-    const setOptions = vi.spyOn(
-      browser.declarativeNetRequest,
-      "setExtensionActionOptions",
-    );
 
     await fakeBrowser.runtime.onStartup.trigger();
     await settle();
 
-    expect(setOptions).toHaveBeenCalledWith({
-      displayActionCountAsBadgeText: false,
-    });
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
     expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
     expect(await browser.action.getBadgeText({})).toBe("II");
   });
 
-  it("restores the needs-access badge on startup", async () => {
+  it("paints the active profile badge on startup regardless of grant state", async () => {
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     start();
     await writeState(withRule(createV1Seed(), "x-live"));
     await settle();
@@ -603,8 +580,10 @@ describe("background lifecycle", () => {
     await fakeBrowser.runtime.onStartup.trigger();
     await settle();
 
-    expect(setBackground).toHaveBeenCalledWith({ color: "#B07B00" });
-    expect(await browser.action.getBadgeText({})).toBe("!");
+    // The seed's Default profile paints its own badge even though the rule's
+    // host is ungranted; the toolbar never carries a needs-access glyph.
+    expect(setBackground).toHaveBeenCalledWith({ color: "#4F5BC4" });
+    expect(await browser.action.getBadgeText({})).toBe("DE");
   });
 
   it("switches to the next profile with one active id on command", async () => {

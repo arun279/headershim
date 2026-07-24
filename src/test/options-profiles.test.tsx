@@ -9,7 +9,7 @@ import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 async function seed(
   profiles: Profile[],
-  activeProfileId = profiles[0]?.id,
+  activeProfileId = profiles[0]?.id ?? "",
 ): Promise<void> {
   await write(stateDoc(profiles, { activeProfileId }));
 }
@@ -81,7 +81,7 @@ async function mountTwoProfiles(): Promise<HTMLElement> {
 async function activateSecondProfile(root: HTMLElement): Promise<void> {
   const beta = cards(root)[1];
   if (beta === undefined) throw new Error("missing second profile");
-  fire(() => within(beta, '[role="switch"]').click());
+  fire(() => within(beta, ".profile-activate input").click());
   await settle();
 }
 
@@ -337,17 +337,46 @@ describe("profile activation", () => {
     expect(betaAfter?.querySelector(".profile-detail")).not.toBeNull();
   });
 
-  it("keeps the profile detail open when its active switch is turned off", async () => {
+  it("selecting the active profile again is a no-op that keeps it active", async () => {
     const root = await mountTwoProfiles();
     const alpha = cards(root)[0];
     if (alpha === undefined) throw new Error("missing first profile");
 
-    fire(() => within(alpha, '[role="switch"]').click());
+    fire(() => within(alpha, ".profile-activate input").click());
     await settle();
 
-    expect((await read()).activeProfileId).toBeUndefined();
+    expect((await read()).activeProfileId).toBe("p1");
     expect(alpha.classList.contains("open")).toBe(true);
     expect(alpha.querySelector(".profile-detail")).not.toBeNull();
+  });
+});
+
+async function seedPaused(profiles: Profile[]): Promise<void> {
+  await write(
+    stateDoc(profiles, { settings: { paused: true, theme: "system" } }),
+  );
+}
+
+describe("paused", () => {
+  it("states the pause once in the shell so the Profiles section inherits it", async () => {
+    await seedPaused([profile("p1", { name: "Default" })]);
+    const root = await mount("#profiles");
+    expect(root.querySelector(".pausebar")?.textContent).toContain(
+      "Everything paused",
+    );
+  });
+
+  it("wears the held hue on the active profile's dot, not the live one", async () => {
+    await seedPaused([profile("p1", { name: "Default" })]);
+    const root = await mount("#profiles");
+    expect(root.querySelector(".profile-list.paused")).not.toBeNull();
+  });
+
+  it("keeps the dot live while running", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount("#profiles");
+    expect(root.querySelector(".profile-list")).not.toBeNull();
+    expect(root.querySelector(".profile-list.paused")).toBeNull();
   });
 });
 

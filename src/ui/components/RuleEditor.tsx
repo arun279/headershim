@@ -22,7 +22,7 @@ import type {
   Scope,
 } from "../../core/model";
 import type { Result } from "../../core/result";
-import { originPatternForDomain } from "../../core/scope";
+import { isHostnameShaped, originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import {
   headerErrorToFieldError,
@@ -84,8 +84,8 @@ interface RuleEditorProps {
   onDelete?: (() => void) | undefined;
   /** Fires the permission prompt after a successful save. */
   onRequestGrant: (origins: string[]) => Promise<boolean>;
-  /** A grant landed: the sites named by the result message. */
-  onGranted?: (sites: readonly string[]) => void;
+  /** A grant landed. */
+  onGranted?: () => void;
   /** The rule was saved, but the permission prompt was declined. */
   onGrantDeclined?: (host: string) => void;
   onCommitted?: (kind: "create" | "edit") => void;
@@ -122,9 +122,12 @@ interface FieldErrors {
   editor?: string;
 }
 
+/** A commit only asks for a grant when it has at least one site to ask about. */
+export type GrantSites = readonly [string, ...string[]];
+
 interface CommitGrant {
   origins: string[];
-  sites: string[];
+  sites: GrantSites;
 }
 
 /**
@@ -132,10 +135,8 @@ interface CommitGrant {
  * decline both use. One site is named; several are counted, because naming the
  * first of them understates the reach the click is disclosing.
  */
-function grantTarget(sites: readonly string[]): string {
-  return sites.length === 1
-    ? (sites[0] as string)
-    : copy.actions.allowSites(sites.length);
+function grantTarget(sites: GrantSites): string {
+  return sites.length === 1 ? sites[0] : copy.actions.allowSites(sites.length);
 }
 
 /** Full-popup rule editor with explicit save and guarded discard. */
@@ -165,9 +166,9 @@ export function RuleEditor(props: RuleEditorProps) {
       return;
     }
     const current = draftRef.current;
-    const empties = emptyErrors(current);
-    if (empties !== undefined) {
-      setErrors(empties);
+    const gaps = preCommitErrors(current);
+    if (gaps !== undefined) {
+      setErrors(gaps);
       return;
     }
     const ruleDraft = toRuleDraft(current, props.rule);
@@ -200,7 +201,7 @@ export function RuleEditor(props: RuleEditorProps) {
       props.onCommitted?.(props.rule === undefined ? "create" : "edit");
       if (grant !== undefined) {
         if (granted === true) {
-          props.onGranted?.(grant.sites);
+          props.onGranted?.();
         } else {
           props.onGrantDeclined?.(grantTarget(grant.sites));
         }
@@ -633,23 +634,47 @@ function initialDraft(
   };
 }
 
-/** Required-field gaps get their message before the store is even asked. */
-function emptyErrors(draft: Draft): FieldErrors | undefined {
+/** Field gaps and mis-shapes get their message before the store is even asked. */
+function preCommitErrors(draft: Draft): FieldErrors | undefined {
   const errors: FieldErrors = { ...headerValueEmptyErrors(draft) };
-  if (draft.scope.type === "domains" && draft.scope.domains.length === 0) {
-    errors.scope = copy.errors.scopeEmpty.domains;
-  } else if (
-    draft.scope.type === "pattern" &&
-    draft.scope.pattern.trim() === ""
-  ) {
-    errors.scope = copy.errors.scopeEmpty.pattern;
-  } else if (draft.scope.type === "regex" && draft.scope.regex.trim() === "") {
-    errors.scope = copy.errors.scopeEmpty.regex;
+  const scope = scopeError(draft.scope);
+  if (scope !== undefined) {
+    errors.scope = scope;
   }
   if (draft.resourceTypes !== "all" && draft.resourceTypes.length === 0) {
     errors.types = copy.errors.scopeEmpty.resourceTypes;
   }
   return Object.keys(errors).length === 0 ? undefined : errors;
+}
+
+/**
+ * Why the scope cannot commit, or nothing. The host list feeds Chrome's
+ * requestDomains whether it is the Domains field or a pattern/regex rule's grant
+ * hosts, so one entry Chrome stores but never matches leaves the rule live and
+ * dead either way: the same shape check guards both.
+ */
+function scopeError(scope: ScopeDraft): string | undefined {
+  const hosts = scope.type === "domains" ? scope.domains : scope.hosts;
+  switch (scope.type) {
+    case "domains":
+      if (scope.domains.length === 0) {
+        return copy.errors.scopeEmpty.domains;
+      }
+      break;
+    case "pattern":
+      if (scope.pattern.trim() === "") {
+        return copy.errors.scopeEmpty.pattern;
+      }
+      break;
+    case "regex":
+      if (scope.regex.trim() === "") {
+        return copy.errors.scopeEmpty.regex;
+      }
+      break;
+    case "all":
+      return undefined;
+  }
+  return hosts.every(isHostnameShaped) ? undefined : copy.errors.domainInvalid;
 }
 
 function mapError(
@@ -772,10 +797,11 @@ function planCommitGrant(
     ...targets,
     ...(reachesSubresources ? initiators : []),
   ]);
-  const missing = sites.filter((site) => !originGranted(site, grants));
-  if (missing.length === 0) {
+  const [first, ...rest] = sites.filter((site) => !originGranted(site, grants));
+  if (first === undefined) {
     return undefined;
   }
+  const missing: GrantSites = [first, ...rest];
   return {
     origins: missing.map(originPatternForDomain),
     sites: missing,

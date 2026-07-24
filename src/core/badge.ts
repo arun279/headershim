@@ -1,15 +1,11 @@
 import { BRAND_NAME } from "../brand";
 import { activeProfile, type BadgeColor, type StateDoc } from "./model";
-import type { SystemStatus } from "./status";
 
-interface BadgeColors {
+export interface BadgeState {
+  readonly text: string;
   readonly backgroundColor: string;
   readonly textColor: string;
 }
-
-export type BadgeState =
-  | (BadgeColors & { readonly kind: "count" })
-  | (BadgeColors & { readonly kind: "manual"; readonly text: string });
 
 export interface BadgePlan {
   readonly state: BadgeState;
@@ -18,11 +14,6 @@ export interface BadgePlan {
   // here beside the badge glyphs, not in copy.ts, so the service worker never
   // has to import the whole copy module (it blows the background size budget).
   readonly title: string;
-}
-
-export interface BadgeInput {
-  readonly doc: StateDoc;
-  readonly status: SystemStatus;
 }
 
 export const BADGE_PALETTE = {
@@ -37,46 +28,25 @@ export const BADGE_PALETTE = {
 } as const satisfies Record<BadgeColor, string>;
 
 const WHITE = "#FFFFFF";
-const CANT_RUN_FILL = "#B07B00";
 const NEUTRAL_FILL = "#6E7B88";
 // The paused-state toolbar tooltip; the only state that names itself.
 const PAUSED_TITLE = `${BRAND_NAME}: paused`;
 
-export function planBadge(input: BadgeInput): BadgePlan {
-  return {
-    ...planFace(input),
-    title: input.status.kind === "paused" ? PAUSED_TITLE : "",
-  };
-}
-
-function planFace({ doc, status }: BadgeInput): Omit<BadgePlan, "title"> {
-  if (status.kind === "paused") {
-    return globalBadge("II", NEUTRAL_FILL);
+// The badge carries one fact on every tab: which profile is active, drawn as its
+// badge text in its palette colour. Pause is the single override. Per-site health
+// (a missing grant) and transient reconcile failures are surfaced per rule in the
+// popup and options, where they can name the site the global badge cannot.
+export function planBadge(doc: StateDoc): BadgePlan {
+  if (doc.settings.paused) {
+    return { state: paint("II", NEUTRAL_FILL), title: PAUSED_TITLE };
   }
-  // A missing grant and a failed reconcile are both can't-run states: rules the
-  // user believes are live are not. The amber badge outranks count rendering,
-  // so no count bleeds through. The annunciator reads the same status selector,
-  // so the surfaces cannot disagree.
-  if (status.kind === "out-of-sync" || status.kind === "needs-access") {
-    return globalBadge("!", CANT_RUN_FILL);
-  }
-
   const active = activeProfile(doc);
-  const backgroundColor =
-    active === undefined ? NEUTRAL_FILL : BADGE_PALETTE[active.color];
-
-  // Count is Chrome-managed per tab: the active profile paints its matches
-  // everywhere, and with none active only This-tab overrides increment it.
   return {
-    state: { kind: "count", backgroundColor, textColor: WHITE },
+    state: paint(active.badgeText, BADGE_PALETTE[active.color]),
+    title: "",
   };
 }
 
-function globalBadge(
-  text: string,
-  backgroundColor: string,
-): Omit<BadgePlan, "title"> {
-  return {
-    state: { kind: "manual", text, backgroundColor, textColor: WHITE },
-  };
+function paint(text: string, backgroundColor: string): BadgeState {
+  return { text, backgroundColor, textColor: WHITE };
 }

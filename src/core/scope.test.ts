@@ -4,6 +4,7 @@ import {
   DNR_RESOURCE_TYPES,
   expandResourceTypes,
   isDomainSupported,
+  isHostnameShaped,
   originPatternForDomain,
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
@@ -188,5 +189,46 @@ describe("requestDomains grammar", () => {
   it("draws the boundary at U+0080, exactly where Chrome draws it", () => {
     expect(isDomainSupported("a\u007f.com")).toBe(true);
     expect(isDomainSupported("a\u0080.com")).toBe(false);
+  });
+});
+
+describe("isHostnameShaped, the author-time host check", () => {
+  // Wider than the compiler gate on purpose: it names the shapes Chrome stores
+  // and never matches, so a rule can never read live while changing nothing.
+  it.each([
+    ["example.com", "the ordinary case"],
+    ["a.b.example.com", "sub-domains"],
+    ["3.api.example.com", "an all-digit label inside a name"],
+    ["xn--bcher-kva.de", "an internationalized domain, as punycode"],
+    ["localhost", "a single label"],
+    ["192.168.0.1", "a canonical IPv4"],
+    ["[2001:db8::1]", "a bracketed IPv6 literal"],
+    ["[::ffff:192.0.2.128]", "an IPv4-mapped IPv6 literal"],
+    ["my_service.corp", "an underscore GURL keeps and Chrome matches verbatim"],
+    ["_dmarc.example.com", "a leading-underscore service label"],
+    ["under_score", "a single underscored label"],
+  ])("accepts %s (%s)", (host) => {
+    expect(isHostnameShaped(host)).toBe(true);
+  });
+
+  it.each([
+    ["*.example.com", "a wildcard, which requestDomains never expands"],
+    ["example.com:8080", "a port"],
+    ["http://example.com", "a scheme"],
+    ["example.com/api", "a path"],
+    [".example.com", "a leading dot"],
+    ["example.com.", "a trailing dot"],
+    ["example..com", "an empty label"],
+    ["exa mple.com", "a space"],
+    ["not a domain!!", "free text"],
+    ["999.1.1.1", "an out-of-range IPv4 octet Chrome would not match"],
+    ["01.2.3.4", "a non-canonical IPv4 octet"],
+    ["1.2.3", "a three-octet IPv4"],
+    ["[not-an-ip]", "brackets holding no IPv6"],
+    ["[192.0.2.1]", "a bracketed IPv4, which has no colon"],
+    ["[]", "empty brackets"],
+    ["", "the empty string"],
+  ])("rejects %s (%s)", (host) => {
+    expect(isHostnameShaped(host)).toBe(false);
   });
 });

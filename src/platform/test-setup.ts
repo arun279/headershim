@@ -56,10 +56,6 @@ Object.assign(fakeBrowser.permissions, {
   },
 });
 
-Object.assign(fakeBrowser.declarativeNetRequest, {
-  setExtensionActionOptions: async () => undefined,
-});
-
 beforeEach(() => {
   fakeBrowser.reset();
   grantedOrigins.clear();

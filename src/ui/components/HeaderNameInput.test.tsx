@@ -113,4 +113,24 @@ describe("HeaderNameInput combobox contract", () => {
     typeInto(ctx.input(), "x-feature-override");
     expect(ctx.root.querySelector(".editor-micro")).toBeNull();
   });
+
+  it("replaces the case line with the refusal when the name is illegal", () => {
+    const ctx = mount();
+    // "saved as x bad header" once reassured about a name the save then refused;
+    // the field now shows that refusal in the case line's place, not both.
+    typeInto(ctx.input(), "X Bad Header");
+    expect(ctx.root.querySelector(".editor-micro")).toBeNull();
+    expect(ctx.root.querySelector(".editor-error")?.textContent).toBe(
+      copy.errors.headerNameInvalid,
+    );
+    expect(ctx.input().getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("names an HTTP/2 pseudo-header as unmodifiable, not merely illegal", () => {
+    const ctx = mount();
+    typeInto(ctx.input(), ":authority");
+    expect(ctx.root.querySelector(".editor-error")?.textContent).toBe(
+      copy.errors.headerNotModifiable,
+    );
+  });
 });

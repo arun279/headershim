@@ -9,11 +9,13 @@ import {
 import { idPath } from "./pack.mjs";
 
 // Renders the force-install policy and drops it in Chrome's machine-managed
-// directory. force_installed pulls the CRX from the local update server, and
-// runtime_allowed_hosts grants host access without the runtime prompt — the
-// deterministic stand-in for the per-site grant the unpacked harness cannot
-// script. Installing touches system state under /etc, so it is Linux-only by
-// construction and refuses to run anywhere else.
+// directory. force_installed pulls the CRX from the local update server.
+// runtime_allowed_hosts is not a grant: Chromium documents it as an exception to
+// runtime_blocked_hosts, it confers no host access on its own, and it does not
+// show up in permissions.getAll. These specs therefore still lack the per-site
+// grant they need, which is one more reason they are skipped. Installing touches
+// system state under /etc, so it is Linux-only by construction and refuses to
+// run anywhere else.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.join(here, "policy", "managed-policy.json");

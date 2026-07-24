@@ -1,8 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import {
-  domainFromOriginPattern,
-  type GrantSnapshot,
-} from "../../../src/core/grants";
+import type { GrantSnapshot } from "../../../src/core/grants";
 import { activeProfile, type StateDoc } from "../../../src/core/model";
 import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
@@ -142,24 +139,13 @@ export function RulesPage({
     });
 
   const grant = (rule: FleetRule) => {
-    const origins = rule.missing ?? [];
-    void requestPermissions([...origins]).then((allowed) => {
-      if (allowed) {
-        const [first] = origins;
-        announce(
-          first === undefined
-            ? copy.toast.accessGranted
-            : copy.toast.activeOn(domainFromOriginPattern(first) ?? first),
-        );
-      }
+    void requestPermissions([...(rule.missing ?? [])]).then((allowed) => {
+      if (allowed) announce(copy.toast.accessGranted);
     });
   };
 
   const newRule = () => {
-    const target = activeProfile(doc) ?? doc.profiles[0];
-    if (target !== undefined) {
-      setEditing({ profileId: target.id, ruleId: undefined });
-    }
+    setEditing({ profileId: activeProfile(doc).id, ruleId: undefined });
   };
 
   // One node for both branches: the delete toast has to survive the editor
@@ -208,13 +194,7 @@ export function RulesPage({
             onGrantDeclined={(host) =>
               showToast(copy.errors.grantDeclined(host))
             }
-            onGranted={(count) =>
-              showToast(
-                count.length === 1
-                  ? copy.toast.activeOn(count[0] as string)
-                  : copy.toast.activeOnSites(count.length),
-              )
-            }
+            onGranted={() => showToast(copy.toast.accessGranted)}
             onCommitted={(kind) =>
               showToast(
                 kind === "create"
@@ -230,7 +210,6 @@ export function RulesPage({
     );
   }
 
-  const noProfilesOn = activeProfile(doc) === undefined;
   const empty = fleet.length === 0;
 
   return (
@@ -264,14 +243,12 @@ export function RulesPage({
       {empty ? (
         <div class="rules-card rules-card-empty">
           <EmptyState
-            message={noProfilesOn ? text.emptyProfileOff : text.empty}
+            message={text.empty}
             actions={
-              noProfilesOn ? undefined : (
-                <Button kind="primary" onClick={newRule}>
-                  <PlusGlyph />
-                  {text.newRule}
-                </Button>
-              )
+              <Button kind="primary" onClick={newRule}>
+                <PlusGlyph />
+                {text.newRule}
+              </Button>
             }
           />
         </div>
@@ -470,6 +447,42 @@ function FleetRow({
   );
 }
 
+type ReasonTone = "rest" | "stop" | "amber";
+
+// Why a rule is not running as authored, or nothing when it is. This is the
+// state cell, independent of the scope cell that says what the rule matches.
+function fleetReason(
+  rule: FleetRule,
+): { readonly tone: ReasonTone; readonly label: string } | undefined {
+  switch (rule.status) {
+    case "overridden":
+      return rule.overriddenBy === undefined
+        ? undefined
+        : {
+            tone: "rest",
+            label: copy.readout.overriddenBy(rule.overriddenBy.label),
+          };
+    case "refused":
+      return rule.refused === undefined
+        ? undefined
+        : { tone: "stop", label: copy.readout.refusedReason[rule.refused] };
+    case "managed":
+      return { tone: "amber", label: copy.readout.managedReason };
+    case "out-of-sync":
+      return { tone: "amber", label: copy.readout.outOfSyncReason };
+    case "unconfirmed":
+      return { tone: "rest", label: copy.readout.unconfirmedReason };
+    // A rule in a profile that is not the active one reads as at-rest; the row
+    // names the profile it lives in so its own colour glyph is not the only clue.
+    case "off":
+      return rule.profileEnabled
+        ? undefined
+        : { tone: "rest", label: text.notActiveProfile(rule.provenance.name) };
+    default:
+      return undefined;
+  }
+}
+
 function FleetWhy({
   rule,
   showScope,
@@ -479,63 +492,29 @@ function FleetWhy({
   showScope: boolean;
   sharedSites: number | undefined;
 }) {
-  if (rule.status === "overridden" && rule.overriddenBy !== undefined) {
-    return (
-      <span class="why rest">
-        <span class="dot" aria-hidden="true" />
-        {copy.readout.overriddenBy(rule.overriddenBy.label)}
-      </span>
-    );
-  }
-  if (rule.status === "refused" && rule.refused !== undefined) {
-    return (
-      <span class="why stop">
-        <span class="dot" aria-hidden="true" />
-        {copy.readout.refusedReason[rule.refused]}
-      </span>
-    );
-  }
-  if (rule.status === "managed") {
-    return (
-      <span class="why amber">
-        <span class="dot" aria-hidden="true" />
-        {copy.readout.managedReason}
-      </span>
-    );
-  }
-  if (rule.status === "out-of-sync") {
-    return (
-      <span class="why amber">
-        <span class="dot" aria-hidden="true" />
-        {copy.readout.outOfSyncReason}
-      </span>
-    );
-  }
-  if (rule.status === "unconfirmed") {
-    return (
-      <span class="why rest">
-        <span class="dot" aria-hidden="true" />
-        {copy.readout.unconfirmedReason}
-      </span>
-    );
-  }
-  // An enabled rule whose profile is off reads as at-rest; its own switch stays
-  // on, so the reason it is not running is owed.
-  if (rule.status === "off" && !rule.profileEnabled) {
-    return (
-      <span class="why rest">
-        <span class="dot" aria-hidden="true" />
-        {text.profileOff}
-      </span>
-    );
-  }
-  if (showScope) {
-    return <span class="fleet-scope mono">{scopeLabel(rule)}</span>;
-  }
-  if (sharedSites !== undefined) {
-    return <span class="fleet-scope">{text.sharedRule(sharedSites)}</span>;
-  }
-  return null;
+  // Two independent lines: what the rule matches, and why it is not running.
+  // They never share a slot, so a cross-site rule keeps the pattern that tells
+  // it from its neighbour even while a status reason sits beneath it.
+  const scope = showScope ? scopeLabel(rule) : undefined;
+  const reason = fleetReason(rule);
+  return (
+    <>
+      {scope !== undefined && (
+        <span class="fleet-scope mono" title={scope}>
+          {scope}
+        </span>
+      )}
+      {sharedSites !== undefined && (
+        <span class="fleet-scope">{text.sharedRule(sharedSites)}</span>
+      )}
+      {reason !== undefined && (
+        <span class={`why ${reason.tone}`}>
+          <span class="dot" aria-hidden="true" />
+          {reason.label}
+        </span>
+      )}
+    </>
+  );
 }
 
 function scopeLabel(rule: FleetRule): string {
@@ -551,8 +530,8 @@ function scopeLabel(rule: FleetRule): string {
     case "all":
       return text.scope.all;
     case "pattern":
-      return text.scope.pattern;
+      return rule.scope.pattern;
     case "regex":
-      return text.scope.regex;
+      return rule.scope.regex;
   }
 }

@@ -1,15 +1,10 @@
 import type { DnrRule } from "../core/compile";
 import { ok } from "../core/result";
-import type {
-  DnrAdapter,
-  ExtensionActionOptions,
-  UpdateRulesOptions,
-} from "./dnr";
+import type { DnrAdapter, UpdateRulesOptions } from "./dnr";
 
 export class FakeDnr implements DnrAdapter {
   dynamicRules: DnrRule[] = [];
   sessionRules: DnrRule[] = [];
-  extensionActionOptions: ExtensionActionOptions[] = [];
 
   async getDynamicRules() {
     return [...this.dynamicRules];
@@ -25,9 +20,6 @@ export class FakeDnr implements DnrAdapter {
   }
   async isRegexSupported(_regex: string) {
     return ok(undefined);
-  }
-  async setExtensionActionOptions(options: ExtensionActionOptions) {
-    this.extensionActionOptions.push(options);
   }
 }
 

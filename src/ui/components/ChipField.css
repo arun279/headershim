@@ -29,6 +29,20 @@
   font-size: 12px;
 }
 
+/* A chip that is not shaped like a hostname is stored verbatim and matches no
+   request, so it wears the same stop hue the refused-save copy does, and its
+   value carries a wavy underline so the verdict survives where the hue cannot
+   be seen. */
+.chip-field-chip.invalid {
+  color: var(--stop);
+  background: var(--stop-soft);
+  border-color: var(--stop);
+}
+
+.chip-field-chip.invalid .mono {
+  text-decoration: underline wavy;
+}
+
 .domain-chip {
   padding-left: var(--sp-3);
   border: var(--hairline) solid var(--line);

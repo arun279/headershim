@@ -72,7 +72,7 @@ export interface Settings {
 export interface StateDoc {
   v: 1;
   profiles: Profile[];
-  activeProfileId: string | undefined;
+  activeProfileId: string;
   nextRuleNum: number;
   settings: Settings;
 }
@@ -146,8 +146,14 @@ export function createProfile(draft: ProfileDraft): Profile {
   };
 }
 
-export function activeProfile(doc: StateDoc): Profile | undefined {
-  return doc.profiles.find((profile) => profile.id === doc.activeProfileId);
+export function activeProfile(doc: StateDoc): Profile {
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  if (active === undefined) {
+    throw new RangeError("activeProfileId names no profile");
+  }
+  return active;
 }
 
 export function defaultProfileColor(profileCount: number): BadgeColor {
@@ -166,8 +172,7 @@ export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
 }
 
 export function activateNextProfile(doc: StateDoc): StateDoc {
-  const active = activeProfile(doc);
-  const activeIndex = active === undefined ? -1 : doc.profiles.indexOf(active);
+  const activeIndex = doc.profiles.indexOf(activeProfile(doc));
   for (let step = 1; step <= doc.profiles.length; step += 1) {
     const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
     if (next === undefined) {

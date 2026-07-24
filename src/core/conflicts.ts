@@ -1,6 +1,6 @@
 import { normalizeHeaderName } from "./headers";
 import type { Rule, Scope } from "./model";
-import { expandResourceTypes } from "./scope";
+import { expandResourceTypes, hostUnder } from "./scope";
 
 export interface OverriddenRule {
   readonly ruleId: string;
@@ -60,9 +60,7 @@ function initiatorsContain(
   return (
     later.length > 0 &&
     later.every((laterDomain) =>
-      earlier.some((earlierDomain) =>
-        domainContains(earlierDomain, laterDomain),
-      ),
+      earlier.some((earlierDomain) => hostUnder(laterDomain, earlierDomain)),
     )
   );
 }
@@ -81,7 +79,7 @@ function scopeContains(earlier: Scope, later: Scope): boolean {
   if (earlier.type === "domains" && later.type === "domains") {
     return later.domains.every((laterDomain) =>
       earlier.domains.some((earlierDomain) =>
-        domainContains(earlierDomain, laterDomain),
+        hostUnder(laterDomain, earlierDomain),
       ),
     );
   }
@@ -95,8 +93,4 @@ function scopeContains(earlier: Scope, later: Scope): boolean {
     return earlier.regex === later.regex;
   }
   return false;
-}
-
-function domainContains(parent: string, candidate: string): boolean {
-  return candidate === parent || candidate.endsWith(`.${parent}`);
 }
