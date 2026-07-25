@@ -153,9 +153,8 @@ export const copy = {
     attentionLabel: "Needs attention",
     direction: { request: "Request", response: "Response" },
     verb: { set: "Set", append: "Append", remove: "Remove" },
-    // While everything is paused an enabled line states what it would do, even
-    // when a missing grant owns its status. Pause changes the sentence, not
-    // only the colour it is set in.
+    // A change that pause or missing access prevents states what it would do,
+    // not what it does. The shared verb selector applies this on every surface.
     heldVerb: {
       set: "Would set",
       append: "Would append",
@@ -233,7 +232,7 @@ export const copy = {
     thisTabClears: "clears when you close the tab",
     needsAccessReason: (temporary: boolean) =>
       temporary
-        ? "Not running. This change stays until you close the tab."
+        ? "Not running. Grant access to run it on this tab."
         : "Not running.",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
     overrideToggle: (header: string, on: boolean) =>

@@ -7,6 +7,7 @@ import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { DataNote } from "../../../src/ui/components/DataNote";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
+import { changeVerb } from "../../../src/ui/components/readout/changeVerb";
 import {
   DirectionGlyph,
   PlusGlyph,
@@ -397,13 +398,7 @@ function FleetRow({
             color={rule.provenance.color}
             size={15}
           />
-          <span class="verb">
-            {
-              (rule.status === "needs-access"
-                ? copy.readout.heldVerb
-                : copy.readout.verb)[rule.operation]
-            }
-          </span>{" "}
+          <span class="verb">{changeVerb(rule.status, rule.operation)}</span>{" "}
           <Truncate mode="end" value={rule.header} class="k" />
           {rule.display !== undefined && (
             <>

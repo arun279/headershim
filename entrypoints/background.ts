@@ -39,7 +39,10 @@ import {
 } from "../src/platform/store";
 import { domainFromUrl } from "../src/platform/tabs";
 
-const MAX_RECONCILE_ATTEMPTS = 2;
+// Three attempts survive two consecutive transient DNR update failures. That
+// in-pass retry budget is required to pull back a revoked origin's installed
+// rule instead of leaving it live until an unrelated event retriggers reconcile.
+const MAX_RECONCILE_ATTEMPTS = 3;
 
 export default defineBackground(() => {
   // Wake-local coordination for the single-flight scheduler, not durable

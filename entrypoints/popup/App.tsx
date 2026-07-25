@@ -535,12 +535,12 @@ function DirectionGroup({
         <span class="rule" aria-hidden="true" />
       </div>
       {changes.map((change) => (
-        <BoundChangeLine
+        <ChangeLine
           key={change.key}
           change={change}
-          onToggle={onToggle}
-          onGrant={onGrant}
-          onEditValue={onEditValue}
+          onToggle={(next) => onToggle(change, next)}
+          onGrant={() => onGrant(change)}
+          onEditValue={(value) => onEditValue(change, value)}
         />
       ))}
     </section>
@@ -567,40 +567,16 @@ function ThisTabStrip({
         <span class="clears">{copy.readout.thisTabClears}</span>
       </div>
       {overrides.map((change) => (
-        <BoundChangeLine
+        <ChangeLine
           key={change.key}
           change={change}
-          onToggle={onToggle}
-          onGrant={onGrant}
-          onEditValue={onEditValue}
-          onRemove={onRemove}
+          onRemove={() => onRemove(change)}
+          onEditValue={(value) => onEditValue(change, value)}
+          onGrant={() => onGrant(change)}
+          onToggle={(next) => onToggle(change, next)}
         />
       ))}
     </section>
-  );
-}
-
-function BoundChangeLine({
-  change,
-  onToggle,
-  onGrant,
-  onRemove,
-  onEditValue,
-}: {
-  change: TabChange;
-  onToggle: (change: TabChange, next: boolean) => void;
-  onGrant: (change: TabChange) => void;
-  onRemove?: (change: TabChange) => void;
-  onEditValue: (change: TabChange, value: string) => Promise<boolean>;
-}) {
-  return (
-    <ChangeLine
-      change={change}
-      onToggle={(next) => onToggle(change, next)}
-      onGrant={() => onGrant(change)}
-      onEditValue={(value) => onEditValue(change, value)}
-      {...(onRemove === undefined ? {} : { onRemove: () => onRemove(change) })}
-    />
   );
 }
 

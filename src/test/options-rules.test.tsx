@@ -493,6 +493,28 @@ describe("active changes", () => {
     expect(root.textContent).not.toContain("super-secret");
   });
 
+  it("uses a conditional verb when an active change needs access", async () => {
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "x-blocked",
+            scope: { type: "domains", domains: ["api.example.com"] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+    const row = within(root, ".tape-row.needs-access");
+
+    expect(row.querySelector(".tape-verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
+    );
+    expect(row.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.siteAccess.grant,
+    );
+  });
+
   // The page is the active profile's switched-on changes, so an enabled rule in
   // another profile leaves it empty; the empty line states that fact and never
   // tells the reader to turn on a rule the active profile does not hold.

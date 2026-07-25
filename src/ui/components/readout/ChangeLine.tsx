@@ -5,6 +5,7 @@ import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
 import { HeaderValue, Truncate } from "../Truncate";
 import { toneForStatus } from "../toggleTone";
+import { changeVerb } from "./changeVerb";
 import { OpGlyph } from "./glyphs";
 
 interface ChangeLineProps {
@@ -32,12 +33,7 @@ export function ChangeLine({
 }: ChangeLineProps) {
   const [editing, setEditing] = useState(false);
   const canEdit = change.operation !== "remove" && change.value !== undefined;
-  // Pause changes the sentence, not only the colour it is set in: a held line
-  // says what it would do rather than claiming to be doing it. Access may own
-  // the visible status while pause still holds the line.
-  const verb = change.held
-    ? copy.readout.heldVerb[change.operation]
-    : copy.readout.verb[change.operation];
+  const verb = changeVerb(change.status, change.operation);
   const reach =
     change.widerReach === undefined
       ? undefined

@@ -249,7 +249,6 @@ describe("computeReadout", () => {
     });
 
     expect(readout.overrides[0]?.status).toBe("needs-access");
-    expect(readout.overrides[0]?.held).toBe(true);
     expect(readout.needsAccess).toBe(1);
     expect(readout.held).toBe(0);
   });

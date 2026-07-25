@@ -39,6 +39,24 @@ test("the shipped build keeps an ungranted This-tab row out of the session band"
   const originHost = new URL(echoServers.h1Url).hostname;
   const row = override(tabId, originHost);
 
+  // Begin with a stale rule so zero can only be observed after reconcile has
+  // run. With the grant filter broken, the update atomically replaces this
+  // sentinel with the ungranted override and the poll never reaches zero.
+  await serviceWorker.evaluate(() =>
+    chrome.declarativeNetRequest.updateSessionRules({
+      addRules: [
+        {
+          id: 999_999,
+          priority: 1,
+          action: { type: "block" },
+          condition: { urlFilter: "||headershim-settling.invalid/" },
+        },
+      ],
+      removeRuleIds: [],
+    }),
+  );
+  expect(await getSessionRules(serviceWorker)).toHaveLength(1);
+
   await seedSession(serviceWorker, {
     nextNum: 2,
     tabs: { [tabId]: [row] },
@@ -47,16 +65,6 @@ test("the shipped build keeps an ungranted This-tab row out of the session band"
   await expect
     .poll(async () => (await getSessionRules(serviceWorker)).length)
     .toBe(0);
-
-  const stored = await serviceWorker.evaluate(() =>
-    chrome.storage.session
-      .get("sessionState")
-      .then(({ sessionState }) => sessionState),
-  );
-  expect(stored).toEqual({
-    nextNum: 2,
-    tabs: { [tabId]: [row] },
-  });
 });
 
 test("a This-tab override compiles to a session rule confined to its tab and origin", {

@@ -88,8 +88,6 @@ export interface TabChange extends LineCore {
   /** Stable key for rendering, focus, and tests. */
   readonly key: string;
   readonly source: "rule" | "override";
-  /** Pause is holding this enabled line, even when access owns its status. */
-  readonly held: boolean;
   readonly profileId?: string;
   readonly ruleId?: string;
   readonly overrideNum?: number;
@@ -245,12 +243,14 @@ function summarize(changes: readonly TabChange[]): ReadoutSummary {
 
 /**
  * Where the credential card can state its own line's state and stay honest: it
- * reads live plainly, marks a needs-access line, and draws a paused one
- * at rest. Being the hero is a placement, not a claim to be running, so pausing
- * moves the card to its resting reading rather than restructuring the popup
- * around the same rules. The states it has no reading for stay in the list,
- * where the line carries the full reason; and a line that lost its header to
- * another rule is never the hero, because the winner is what the tab sends.
+ * reads live plainly, marks a needs-access line, and draws a paused one at rest.
+ * Only saved rules enter this policy; temporary overrides stay in their strip
+ * at every status so their lifetime controls remain reachable. Being the hero
+ * is a placement, not a claim to be running, so pausing moves the card to its
+ * resting reading rather than restructuring the popup around the same rules.
+ * The states it has no reading for stay in the list, where the line carries the
+ * full reason; and a line that lost its header to another rule is never the
+ * hero, because the winner is what the tab sends.
  */
 const HERO_STATUS: readonly LineStatus[] = ["live", "needs-access", "paused"];
 
@@ -333,7 +333,6 @@ function ruleChange(
   return {
     key: `${profile.id}:${rule.id}`,
     source: "rule",
-    held: context.paused && rule.enabled,
     profileId: profile.id,
     ruleId: rule.id,
     ...lineCore({
@@ -380,7 +379,6 @@ function overrideChange(
   return {
     key: `override:${override.num}`,
     source: "override",
-    held: paused && override.enabled,
     overrideNum: override.num,
     ...lineCore({
       direction: override.direction,

@@ -318,6 +318,9 @@ describe("popup This-tab overrides", () => {
     expect(line.querySelector(".why.amber")?.textContent).toBe(
       copy.readout.needsAccessReason(true),
     );
+    expect(line.querySelector(".verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
+    );
 
     await act(async () =>
       line.querySelector<HTMLButtonElement>("button.grant")?.click(),
@@ -371,6 +374,46 @@ describe("popup This-tab overrides", () => {
       "1 needs access",
     );
   });
+
+  it.each([
+    ["live", false],
+    ["paused", true],
+  ] as const)(
+    "keeps Remove and the toggle on a %s authorization override",
+    async (status, paused) => {
+      const seed = createV1Seed();
+      const root = await mount(
+        {
+          ...seed,
+          settings: { ...seed.settings, paused },
+        },
+        {
+          nextNum: 2,
+          tabs: {
+            5: [
+              override({
+                header: "authorization",
+                value: "Bearer secret-1234",
+              }),
+            ],
+          },
+        },
+      );
+
+      expect(root.querySelector(".token")).toBeNull();
+      const line = root.querySelector(
+        `.thistab .change-line.${status}`,
+      ) as HTMLElement;
+      expect(
+        line.querySelector(
+          '[aria-label="Remove this-tab change: authorization"]',
+        ),
+      ).not.toBeNull();
+      expect(
+        line.querySelector('[aria-label="This-tab change on: authorization"]'),
+      ).not.toBeNull();
+    },
+  );
 
   it("removes an override from its row", async () => {
     const root = await mount(createV1Seed(), {

@@ -4,6 +4,7 @@ import { originPatternForDomain } from "../../../src/core/scope";
 import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
+import { changeVerb } from "../../../src/ui/components/readout/changeVerb";
 import {
   DirectionGlyph,
   StatusGlyph,
@@ -90,7 +91,7 @@ function TapeLine({ row }: { row: TapeRow }) {
         <span class="tape-op" aria-hidden="true">
           <DirectionGlyph direction={row.direction} />
         </span>
-        <span class="tape-verb">{copy.readout.verb[row.operation]}</span>
+        <span class="tape-verb">{changeVerb(row.status, row.operation)}</span>
         <Truncate
           mode="middle"
           value={row.header}

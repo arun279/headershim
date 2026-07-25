@@ -343,7 +343,7 @@ describe("background lifecycle", () => {
     await writeState(doc);
     await settle();
 
-    expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(2);
+    expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(3);
     expect(await getReconcileError()).toBe(true);
 
     dnr.updateDynamicRules.mockImplementation((options) =>
@@ -358,7 +358,7 @@ describe("background lifecycle", () => {
     expect(await getReconcileError()).toBe(false);
   });
 
-  it("removes a revoked session rule after a rejected removal", async () => {
+  it("removes a revoked session rule after two rejected removals", async () => {
     start();
     await seedRows(override(5, "app.example.com"));
     await settle();
@@ -368,11 +368,14 @@ describe("background lifecycle", () => {
     dnr.updateSessionRules.mockRejectedValueOnce(
       new Error("first removal rejected"),
     );
+    dnr.updateSessionRules.mockRejectedValueOnce(
+      new Error("second removal rejected"),
+    );
 
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     await settle();
 
-    expect(dnr.updateSessionRules).toHaveBeenCalledTimes(2);
+    expect(dnr.updateSessionRules).toHaveBeenCalledTimes(3);
     expect(await dnr.fake.getSessionRules()).toEqual([]);
     expect(await getReconcileError()).toBe(false);
   });

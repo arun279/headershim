@@ -74,6 +74,9 @@ describe("copy", () => {
     expect(copy.readout.overriddenBy("Staging auth")).toBe(
       "overridden by Staging auth",
     );
+    expect(copy.readout.needsAccessReason(true)).toBe(
+      "Not running. Grant access to run it on this tab.",
+    );
   });
 
   it("keeps the token honest: a countdown only when it can read one", () => {

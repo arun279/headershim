@@ -32,6 +32,10 @@ declare const chrome: {
       addRules?: unknown[];
       removeRuleIds?: number[];
     }): Promise<void>;
+    updateSessionRules(options: {
+      addRules?: unknown[];
+      removeRuleIds?: number[];
+    }): Promise<void>;
   };
   action: {
     getBadgeText(details: { tabId?: number }): Promise<string>;
