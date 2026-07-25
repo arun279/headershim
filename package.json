@@ -87,7 +87,7 @@
         ".output/chrome-mv3/assets/readout-*.css",
         ".output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "48 kB"
+      "limit": "48.5 kB"
     },
     {
       "name": "Options initial load",

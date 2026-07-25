@@ -13,11 +13,10 @@ export function toneForStatus(
     case "paused":
       return "paused";
     case "refused":
-      return "blocked";
-    case "managed":
     case "needs-access":
+    case "managed":
     case "out-of-sync":
-      return "inert";
+      return "blocked";
     case "off":
     case "overridden":
       return "inert";

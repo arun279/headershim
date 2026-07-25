@@ -85,9 +85,25 @@ describe("copy", () => {
     expect(copy.token.opaque).toBe("opaque token · no expiry to read");
   });
 
+  it("names every site a commit will ask Chrome for, not a count", () => {
+    expect(copy.actions.andSites(["api.example.com"])).toBe("api.example.com");
+    expect(copy.actions.andSites(["api.example.com", "example.com"])).toBe(
+      "api.example.com and example.com",
+    );
+    expect(copy.actions.andSites(["a.test", "b.test", "c.test"])).toBe(
+      "a.test, b.test and c.test",
+    );
+  });
+
   it("builds host-bound toasts, grants, and errors", () => {
     expect(copy.toast.profileDeleted("QA roles")).toBe(
       "Profile 'QA roles' deleted",
+    );
+    expect(copy.toast.lastProfileDeleted("Only")).toBe(
+      "Profile 'Only' deleted; a new empty Default replaces it",
+    );
+    expect(copy.toast.ruleCreatedOverridden("x-env rule")).toBe(
+      "Rule created, but overridden by x-env rule",
     );
     expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
       "Create rule and allow api.example.com",
@@ -111,18 +127,15 @@ describe("copy", () => {
     expect(copy.errors.importNewer(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );
-    // The Regenerate action renders as a button after the note, so the visible
-    // reading stays "Frozen at save: … · Regenerate".
-    expect(copy.generatedValue.frozen("2026-07-12 14:03 UTC")).toBe(
-      "Frozen at save: 2026-07-12 14:03 UTC",
+    // Formats the freeze instant to the minute in UTC; the Regenerate action
+    // renders as a button after it, so the reading is "Frozen at … · Regenerate".
+    expect(copy.valueNote.frozen("2026-07-12T14:03:27.000Z")).toBe(
+      "Frozen at 2026-07-12 14:03 UTC. This exact value is used every time, not regenerated.",
     );
     expect(copy.editor.suggestions(1)).toBe("1 suggestion");
     expect(copy.editor.suggestions(6)).toBe("6 suggestions");
     expect(sentenceText(copy.editor.savedAs("x-feature-override"))).toBe(
       "saved as x-feature-override",
-    );
-    expect(sentenceText(copy.editor.patternHint)).toBe(
-      "||example.com/ matches the site, subdomains, and every path · ||example.com/api/ narrows it to /api/ paths",
     );
   });
 

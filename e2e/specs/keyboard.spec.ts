@@ -268,7 +268,7 @@ test("the readout switch flips its rule from the keyboard", {
   await page.reload();
 
   const on = page.getByRole("switch", {
-    name: copy.readout.ruleToggle("x-keyboard-toggle", true),
+    name: copy.rules.switchLabel("x-keyboard-toggle", true),
   });
   await expect(on).toBeChecked();
 
@@ -278,7 +278,7 @@ test("the readout switch flips its rule from the keyboard", {
   await expect.poll(() => firstRuleEnabled(serviceWorker)).toBe(false);
   await expect(
     page.getByRole("switch", {
-      name: copy.readout.ruleToggle("x-keyboard-toggle", false),
+      name: copy.rules.switchLabel("x-keyboard-toggle", false),
     }),
   ).not.toBeChecked();
 });

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
-import { availableProfileName } from "../../src/core/codec/headershim";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
+  availableProfileName,
   type Direction,
-  defaultProfileColor,
   activeProfile as getActiveProfile,
   type TabOverride,
 } from "../../src/core/model";
@@ -14,18 +13,14 @@ import { originPatternForDomain } from "../../src/core/scope";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
 import { activeTabDomain } from "../../src/platform/tabs";
-import { LiveRegionProvider, useAnnounce } from "../../src/ui/a11y/LiveRegion";
+import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
 import { DataNote } from "../../src/ui/components/DataNote";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
 import { ChangeLine } from "../../src/ui/components/readout/ChangeLine";
-import {
-  GearGlyph,
-  PlusGlyph,
-  TabGlyph,
-} from "../../src/ui/components/readout/glyphs";
+import { GearGlyph, PlusGlyph } from "../../src/ui/components/readout/glyphs";
 import { ReadoutHead } from "../../src/ui/components/readout/ReadoutHead";
 import {
   ThisTabComposer,
@@ -33,7 +28,7 @@ import {
 } from "../../src/ui/components/readout/ThisTabComposer";
 import { TokenHero } from "../../src/ui/components/readout/TokenHero";
 import { sentence } from "../../src/ui/components/sentence";
-import { Toast } from "../../src/ui/components/Toast";
+import { ToastHost } from "../../src/ui/components/Toast";
 import { Toggle } from "../../src/ui/components/Toggle";
 import { copy } from "../../src/ui/copy";
 import { blockedCommitCopy } from "../../src/ui/state/commit-copy";
@@ -41,6 +36,7 @@ import {
   createMutations,
   type MutationError,
 } from "../../src/ui/state/mutations";
+import { createdRuleToast } from "../../src/ui/state/overridden";
 import { computeReadout, type TabChange } from "../../src/ui/state/readout";
 import {
   addOverride,
@@ -51,6 +47,7 @@ import {
   updateOverrideValue,
 } from "../../src/ui/state/session-mutations";
 import { type AppState, useAppState } from "../../src/ui/state/useAppState";
+import { useToast } from "../../src/ui/state/useToast";
 import { applyTheme } from "../../src/ui/theme";
 import { popupKeyHandler } from "./keyboard";
 import "../../src/ui/components/readout/readout.css";
@@ -90,15 +87,6 @@ export function App() {
 
 type ReadyProps = Omit<Extract<AppState, { phase: "ready" }>, "phase">;
 
-/** A toast, and the one thing it can offer to do about what it just said. */
-interface PopupToast {
-  message: string;
-  nonce: number;
-  action?: { label: string; run: () => void };
-}
-
-type PopupToastInput = Omit<PopupToast, "nonce">;
-
 function Ready({
   doc,
   status,
@@ -107,30 +95,34 @@ function Ready({
   tabId,
   overrides,
 }: ReadyProps) {
-  const announce = useAnnounce();
-  const [toast, setToast] = useState<PopupToast | undefined>(undefined);
+  const { toast, raise, show, dismiss } = useToast();
   const [addingTo, setAddingTo] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
   const [tabResolved, setTabResolved] = useState(false);
+  const [switchShortcut, setSwitchShortcut] = useState<string | undefined>(
+    undefined,
+  );
   const [now, setNow] = useState(() => Date.now());
 
-  // Every toast also speaks through the persistent polite region: a freshly
-  // mounted role=status node with text already present is not reliably read.
-  const raise = (next: PopupToastInput) => {
-    setToast({ ...next, nonce: announce(next.message) });
-  };
-  const showToast = (message: string) => raise({ message });
   const reloadTab = () => {
     // A fresh gesture, so activeTab covers the reload with no new permission.
     void browser.tabs.reload();
-    setToast(undefined);
+    dismiss();
   };
 
   useEffect(() => {
     void activeTabDomain().then((host) => {
       setTabDomain(host);
       setTabResolved(true);
+    });
+    // The bound accelerator makes the profile shortcut discoverable; read once so
+    // the switcher can print it on the row it would flip to.
+    void browser.commands.getAll().then((commands) => {
+      setSwitchShortcut(
+        commands.find((command) => command.name === "previous-profile")
+          ?.shortcut || undefined,
+      );
     });
   }, []);
   useEffect(() => {
@@ -184,7 +176,7 @@ function Ready({
 
   const reportBlockedCommit = (error: MutationError, fallback?: string) => {
     const message = blockedCommitCopy(error) ?? fallback;
-    if (message !== undefined) showToast(message);
+    if (message !== undefined) show(message);
   };
 
   const switchProfile = (targetId: string) => {
@@ -192,14 +184,9 @@ function Ready({
   };
 
   const newProfile = async () => {
-    const outcome = await mutations.createProfile({
-      name: availableProfileName(
-        copy.options.profiles.newName,
-        doc.profiles,
-        [],
-      ),
-      color: defaultProfileColor(doc.profiles.length),
-    });
+    const outcome = await mutations.createProfile(
+      availableProfileName(copy.options.profiles.newName, doc.profiles),
+    );
     if (!outcome.ok) {
       reportBlockedCommit(outcome.error);
       return undefined;
@@ -229,9 +216,9 @@ function Ready({
     // response, so the toast hands over a Reload-tab action rather than reloading.
     void requestPermissions([...(change.missing ?? [])]).then((granted) => {
       if (granted) {
-        raise({
-          message: copy.toast.accessGranted,
-          action: { label: copy.actions.reloadTab, run: reloadTab },
+        raise(copy.toast.accessGranted, {
+          label: copy.actions.reloadTab,
+          run: reloadTab,
         });
       }
     });
@@ -243,7 +230,7 @@ function Ready({
   ): Promise<boolean> => {
     if (change.source === "override") {
       if (tabId === undefined || change.overrideNum === undefined) {
-        showToast(copy.errors.saveFailed);
+        show(copy.errors.saveFailed);
         return false;
       }
       const outcome = await updateOverrideValue(
@@ -252,11 +239,11 @@ function Ready({
         value,
       );
       if (!outcome.ok) {
-        showToast(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
+        show(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
         return false;
       }
       if (outcome.value === undefined) {
-        showToast(copy.errors.saveFailed);
+        show(copy.errors.saveFailed);
         return false;
       }
       return true;
@@ -265,7 +252,7 @@ function Ready({
       .find((profile) => profile.id === change.profileId)
       ?.rules.find((candidate) => candidate.id === change.ruleId);
     if (rule === undefined || change.profileId === undefined) {
-      showToast(copy.errors.saveFailed);
+      show(copy.errors.saveFailed);
       return false;
     }
     const { id: _id, num: _num, generated: _generated, ...unchanged } = rule;
@@ -274,7 +261,7 @@ function Ready({
       value,
     });
     if (!outcome.ok) {
-      showToast(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
+      show(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
       return false;
     }
     return true;
@@ -289,14 +276,11 @@ function Ready({
   ): Promise<boolean> => {
     const previous = change.value ?? "";
     if (!(await writeChangeValue(change, value))) return false;
-    raise({
-      message: copy.toast.changesSaved,
-      action: {
-        label: copy.actions.undo,
-        run: () => {
-          void writeChangeValue(change, previous);
-          setToast(undefined);
-        },
+    raise(copy.toast.changesSaved, {
+      label: copy.actions.undo,
+      run: () => {
+        void writeChangeValue(change, previous);
+        dismiss();
       },
     });
     return true;
@@ -329,12 +313,20 @@ function Ready({
     return addOverride(tabId, tabDomain, draft);
   };
 
+  // Starting a fresh attempt retires the verdict on the last one, so a spent
+  // confirmation cannot sit under the new form's own errors. A toast still
+  // offering an action is a live offer, not a verdict, so it stands.
+  const retireVerdict = () => {
+    if (toast?.action === undefined) dismiss();
+  };
   const openAddChange = () => {
+    retireVerdict();
     setComposing(false);
     setAddingTo(activeProfile.id);
   };
   const openComposer = () => {
     if (tabDomain === undefined) return;
+    retireVerdict();
     setAddingTo(undefined);
     setComposing(true);
   };
@@ -368,20 +360,6 @@ function Ready({
     }
   }, [addingTo, addingProfile]);
 
-  // Drawn once so no surface can render a toast that has quietly dropped the one
-  // action it was raised to offer.
-  const toastNode = toast !== undefined && (
-    <Toast
-      nonce={toast.nonce}
-      onDismiss={() => setToast(undefined)}
-      persist={toast.action !== undefined}
-      actionLabel={toast.action?.label}
-      onAction={toast.action?.run}
-    >
-      {toast.message}
-    </Toast>
-  );
-
   if (addingProfile !== undefined) {
     return (
       <main class="popup" tabIndex={-1}>
@@ -396,13 +374,25 @@ function Ready({
             mutations.saveRule(addingProfile.id, ruleId, draft)
           }
           onRequestGrant={requestPermissions}
-          onGrantDeclined={(host) => showToast(copy.errors.grantDeclined(host))}
-          onCommitted={() => showToast(copy.toast.ruleCreated)}
-          onGranted={() => showToast(copy.toast.accessGranted)}
+          // The permission prompt closes the popup, so a grant's outcome has no
+          // surface here: it is disclosed on the button before the request, and
+          // the rule's own row carries any needs-access state afterward. This
+          // fires only when no grant was needed, and reads that saved row.
+          onCommitted={({ rule }) =>
+            show(
+              createdRuleToast(
+                doc,
+                addingProfile.id,
+                rule,
+                grants,
+                isRegexSupported,
+              ),
+            )
+          }
           onClose={() => setAddingTo(undefined)}
           note={<DataNote />}
         />
-        {toastNode}
+        <ToastHost toast={toast} onDismiss={dismiss} />
       </main>
     );
   }
@@ -425,6 +415,8 @@ function Ready({
         hasRows={hasRows}
         profiles={doc.profiles}
         activeProfile={activeProfile}
+        previousProfileId={doc.previousProfileId}
+        switchShortcut={switchShortcut}
         paused={paused}
         onSwitchProfile={switchProfile}
         onNewProfile={newProfile}
@@ -440,7 +432,7 @@ function Ready({
           <ThisTabComposer
             onSubmit={submitThisTab}
             onClose={() => setComposing(false)}
-            onCommitted={() => showToast(copy.toast.changesSaved)}
+            onCommitted={() => show(copy.toast.changesSaved)}
           />
         )}
         {token !== undefined && (
@@ -493,7 +485,6 @@ function Ready({
         )}
         {tabDomain !== undefined && (
           <button type="button" class="tab-btn" onClick={openComposer}>
-            <TabGlyph />
             {copy.readout.justThisTab}
           </button>
         )}
@@ -505,16 +496,13 @@ function Ready({
         >
           <GearGlyph />
         </Button>
-        <span class="pause">
-          <Toggle
-            checked={!paused}
-            label={copy.readout.pauseSwitch}
-            onChange={(next) => run(mutations.setPaused(!next))}
-          />
-          {paused ? copy.readout.pausedLabel : copy.readout.onLabel}
-        </span>
+        <Toggle
+          checked={!paused}
+          label={copy.readout.pauseSwitch}
+          onChange={(next) => run(mutations.setPaused(!next))}
+        />
       </footer>
-      {toastNode}
+      <ToastHost toast={toast} onDismiss={dismiss} />
       <DataNote />
     </main>
   );

@@ -115,8 +115,10 @@ describe("all rules", () => {
     await seedOneOfEachSeverity();
     const root = await mount();
 
-    // Both rules are switched on, but only one of them is running: a refused
-    // rule wearing the live hue contradicts the reason printed beside it.
+    // Every rule here is switched on, but only the live one is running. A
+    // stopped-but-on rule must not wear the live hue, and must not fall to the
+    // grey that also paints an off rule: it wears the amber blocked tone so its
+    // switch reads as on-but-stopped, matching the amber spine beside it.
     const live = within(root, '.fleet-row.live [role="switch"]');
     const refused = within(root, '.fleet-row.refused [role="switch"]');
     const managed = within(root, '.fleet-row.managed [role="switch"]');
@@ -127,19 +129,18 @@ describe("all rules", () => {
     expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
-    expect(managed.className).toBe("sw sw-inert");
-    expect(needsAccess.className).toBe("sw sw-inert");
+    expect(managed.className).toBe("sw sw-blocked");
+    expect(needsAccess.className).toBe("sw sw-blocked");
   });
 
-  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+  it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
     await seed(oneRule());
     await setReconcileError(true);
     const root = await mount();
 
     const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.className).toBe("sw sw-inert");
-    expect(toggle.className).not.toBe("sw");
+    expect(toggle.className).toBe("sw sw-blocked");
   });
 
   it("keeps the scope beside the profile note for a rule in an inactive profile", async () => {
@@ -379,10 +380,12 @@ describe("all rules", () => {
     const rows = [...root.querySelectorAll(".fleet-row")];
     expect(rows).toHaveLength(2);
     for (const row of rows) {
+      // The reach a shared switch carries is stated once, in the visible line,
+      // not doubled into the switch's own accessible name.
       expect(row.textContent).toContain(text.sharedRule(2));
       expect(
         row.querySelector('[role="switch"]')?.getAttribute("aria-label"),
-      ).toBe(copy.rules.switchLabel("x-env", true, 2));
+      ).toBe(copy.rules.switchLabel("x-env", true));
     }
   });
 
@@ -475,28 +478,13 @@ describe("active changes", () => {
     expect(
       root.querySelector(".tape-row.managed .tape-status")?.textContent,
     ).toBe(copy.options.traffic.status.managed);
+    // The status cell is one state word, not the refusal sentence the detailed
+    // surfaces spell out, so a long reason cannot dictate the column's width.
+    expect(
+      root.querySelector(".tape-row.refused .tape-status")?.textContent,
+    ).toBe(copy.options.traffic.status.refused);
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
-  });
-
-  it("shows the append refusal reason from the compiler", async () => {
-    await seed([
-      profile("p1", {
-        name: "Staging",
-        rules: [
-          rule({
-            operation: "append",
-            header: "content-type",
-            scope: { type: "all" },
-          }),
-        ],
-      }),
-    ]);
-    const root = await mount("#traffic");
-
-    expect(within(root, ".tape-status").textContent).toBe(
-      copy.readout.refusedReason.append,
-    );
   });
 
   // The page is the active profile's switched-on changes, so an enabled rule in

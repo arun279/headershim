@@ -44,6 +44,28 @@ test("repaints the badge when the active profile changes", async ({
   expect(await getBadgeColor(serviceWorker)).toEqual(BLUE);
 });
 
+test("caps the badge field at two characters as the user types", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  // The Default profile is active, so editing its badge repaints the toolbar.
+  await seedState(serviceWorker, createV1Seed());
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html#profiles`);
+  await page.locator(".profile-open").first().click();
+
+  const field = page.locator(".badge-text-input").first();
+  await field.selectText();
+  await field.pressSequentially("STG");
+
+  // The browser refused the third keystroke, so the field shows exactly the two
+  // characters the badge carries, and typing alone committed them.
+  await expect(field).toHaveValue("ST");
+  await expect.poll(() => getBadgeText(serviceWorker)).toBe("ST");
+});
+
 test("paints the paused Chrome badge grey", async ({ serviceWorker }) => {
   const doc = createV1Seed();
   await seedState(serviceWorker, {

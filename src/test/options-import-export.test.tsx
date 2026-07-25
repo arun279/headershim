@@ -4,10 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/options/App";
 import { MAX_IMPORT_BYTES } from "../../entrypoints/options/pages/ImportExport";
 import modheaderFixture from "../core/codec/__fixtures__/modheader-profile.json";
-import { exportHeadershim } from "../core/codec/headershim";
 import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
-import { copy, sentenceText } from "../ui/copy";
+import { copy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
 
@@ -271,24 +270,33 @@ describe("import failure modes", () => {
 });
 
 describe("import summary and apply", () => {
-  it("shows counts and imports a headershim file with profiles off", async () => {
-    await seed([profile("p1", { name: "Default" })]);
+  // The summary must name the file it read and the profile it will create,
+  // resolved suffix and all, so a duplicate import is visible before it applies
+  // and the reader can see nothing they have is replaced.
+  it("names the file and the profile the import will create, then adds it beside the original", async () => {
+    await seed([profile("p1", { name: "Staging auth" })]);
     const root = await mount();
 
     await pick(root, HEADERSHIM);
 
-    expect(root.querySelector(".import-counts")?.textContent).toBe(
-      sentenceText(text.counts(1, 1)),
+    const panel = summary(root) as HTMLElement;
+    expect(panel.querySelector(".import-source")?.textContent).toBe(
+      "import.json",
+    );
+    expect(panel.querySelector(".import-profile")?.textContent).toContain(
+      "Staging auth 2",
     );
 
-    fire(() => findButton(summary(root) as HTMLElement, text.import).click());
+    fire(() => findButton(panel, text.import).click());
     await settle();
 
     expect(summary(root)).toBeNull();
     const stored = await read();
-    expect(stored.profiles).toHaveLength(2);
-    expect(stored.profiles[1]).toMatchObject({ name: "Staging auth" });
-    expect(stored.profiles[1]).not.toHaveProperty("enabled");
+    expect(stored.profiles.map((one) => one.name)).toEqual([
+      "Staging auth",
+      "Staging auth 2",
+    ]);
+    expect(stored.activeProfileId).toBe("p1");
   });
 
   // The summary that named the import is gone the moment it applies, so a write
@@ -428,14 +436,14 @@ describe("export", () => {
     return JSON.parse(await captured.text());
   }
 
-  it("exports everything as the headershim envelope", async () => {
+  it("exports all profiles as the headershim envelope", async () => {
     await seed([
       profile("p1", { name: "Default", rules: [rule({ header: "x-a" })] }),
       profile("p2", { name: "Staging" }),
     ]);
     const root = await mount();
 
-    const envelope = (await captureExport(root, text.exportEverything)) as {
+    const envelope = (await captureExport(root, text.exportAll)) as {
       app: string;
       schemaVersion: number;
       profiles: unknown[];
@@ -443,6 +451,19 @@ describe("export", () => {
     expect(envelope.app).toBe("headershim");
     expect(envelope.schemaVersion).toBe(1);
     expect(envelope.profiles).toHaveLength(2);
+  });
+
+  // Export writes a file the page cannot see land, so it says on screen that it
+  // happened and names the file, the same way import and delete report.
+  it("confirms an export on screen and names the file", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    fire(() => findButton(root, text.exportAll).click());
+    await settle();
+
+    const toast = root.querySelector<HTMLElement>(".toast-msg");
+    expect(toast?.textContent).toBe(text.exported(text.exportFilename));
   });
 
   it("exports a single selected profile", async () => {
@@ -468,18 +489,17 @@ describe("export", () => {
     expect(envelope.profiles[0]?.name).toBe("Staging");
   });
 
-  it("names the secrets reminder verbatim beside export", async () => {
+  // The export card's one disclosure has to reach the screen and has to say the
+  // grants a file cannot carry back stay with this browser.
+  it("discloses beside export that site access is not in the file", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    expect(
-      [...root.querySelectorAll(".ie-hint")].some(
-        (node) => node.textContent === text.secretsReminder,
+    const disclosed = [...root.querySelectorAll(".ie-hint")].some((node) =>
+      node.textContent?.includes(
+        "Site access stays in this browser, not the file",
       ),
-    ).toBe(true);
-    // Sanity-check the golden serializer is what export ships.
-    expect(
-      exportHeadershim(stateDoc([profile("p1", { name: "Default" })])),
-    ).toContain('"app": "headershim"');
+    );
+    expect(disclosed).toBe(true);
   });
 });

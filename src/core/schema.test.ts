@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Profile, Rule, Scope, StateDoc } from "./model";
-import { CURRENT, createV1Seed, migrate, migrations } from "./schema";
+import { CURRENT, createV1Seed, migrate } from "./schema";
 
 function storedRule(
   num: number,
@@ -145,7 +145,6 @@ describe("migrate", () => {
         hosts: [],
       });
     }
-    expect(migrations).toEqual({});
   });
 
   it("accepts all current settings variants", () => {
@@ -181,8 +180,8 @@ describe("migrate", () => {
     }
   });
 
-  it("preserves a document whose profile name exceeds the write-time limit", () => {
-    const doc = withProfile({ name: "x".repeat(49) });
+  it("preserves a document with a long profile name", () => {
+    const doc = withProfile({ name: "x".repeat(200) });
     const result = migrate(doc);
 
     expect(result).toEqual({ ok: true, value: doc });

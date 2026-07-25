@@ -56,7 +56,7 @@ export interface DnrRule {
  *
  * A rule Chrome rejects takes the whole atomic batch down with it, and an
  * untrusted writer can seed one: an import preserves each rule's enabled flag
- * and scope verbatim, and the next-profile command activates a stored profile
+ * and scope verbatim, and the profile command activates a stored profile
  * without passing the commit guard. Dropping it first means one bad rule cannot
  * freeze the live ruleset.
  *

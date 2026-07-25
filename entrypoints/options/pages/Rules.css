@@ -1,9 +1,8 @@
 /*
  * The rule list reuses the popup's one grammar: a severity spine (teal live,
- * amber a grant away, red refused, faint where only Chrome can settle it,
- * grey-dashed at rest), the op glyph in the spine's color, sans narrating and
- * mono for every wire byte. Denser than the popup, because this is where every
- * rule is read at once.
+ * amber a grant away, red refused, grey-dashed at rest), the op glyph in the
+ * spine's color, sans narrating and mono for every wire byte. Denser than the
+ * popup, because this is where every rule is read at once.
  */
 
 .rules-controls {
@@ -90,9 +89,6 @@
 .fleet-row.refused .spine {
   background: var(--stop);
 }
-.fleet-row.unconfirmed .spine {
-  background: var(--faint);
-}
 .fleet-row.off .spine,
 .fleet-row.overridden .spine,
 .fleet-row.paused .spine {
@@ -118,9 +114,6 @@
 }
 .fleet-row.refused .op {
   color: var(--stop);
-}
-.fleet-row.unconfirmed .op {
-  color: var(--faint);
 }
 .fleet-row.off .op,
 .fleet-row.overridden .op,

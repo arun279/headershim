@@ -16,7 +16,7 @@ interface SharedProps<Value extends string> {
 
 type SegmentedProps<Value extends string> = SharedProps<Value> &
   (
-    | { semantics: "radio"; name: string }
+    | { semantics: "radio"; name: string; invalid?: boolean }
     | { semantics: "pressed"; name?: never }
   );
 
@@ -38,6 +38,11 @@ export function Segmented<Value extends string>(props: SegmentedProps<Value>) {
               name={props.name}
               value={option.value}
               checked={props.value === option.value}
+              aria-invalid={
+                props.invalid === true && props.value === option.value
+                  ? true
+                  : undefined
+              }
               onChange={() => props.onChange(option.value)}
             />
             {option.label}

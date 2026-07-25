@@ -412,13 +412,13 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual([]);
   });
 
-  it("preserves a stored document when a profile name exceeds the UI limit", async () => {
+  it("preserves a stored document with a long profile name", async () => {
     start();
     const doc = withRule(createV1Seed(), "x-live");
     const stored = {
       ...doc,
       profiles: doc.profiles.map((profile, index) =>
-        index === 0 ? { ...profile, name: "x".repeat(49) } : profile,
+        index === 0 ? { ...profile, name: "x".repeat(200) } : profile,
       ),
     };
 
@@ -586,7 +586,7 @@ describe("background lifecycle", () => {
     expect(await browser.action.getBadgeText({})).toBe("DE");
   });
 
-  it("switches to the next profile with one active id on command", async () => {
+  it("flips between the two most recent profiles on command", async () => {
     start();
     const seed = createV1Seed();
     const staging = createProfile({
@@ -594,32 +594,35 @@ describe("background lifecycle", () => {
       badgeText: "ST",
       color: "blue",
     });
-    const qa = createProfile({
-      name: "QA",
-      badgeText: "QA",
-      color: "teal",
+    // Staging is active with the seed profile the one it was reached from, the
+    // pair a switcher click would have established.
+    await writeState({
+      ...seed,
+      profiles: [...seed.profiles, staging],
+      activeProfileId: staging.id,
+      previousProfileId: seed.activeProfileId,
     });
-    await writeState({ ...seed, profiles: [...seed.profiles, staging, qa] });
     await settle();
 
-    await triggerCommand("next-profile");
+    await triggerCommand("previous-profile");
     let doc = await readState();
-    expect(doc.activeProfileId).toBe(staging.id);
+    expect(doc.activeProfileId).toBe(seed.activeProfileId);
+    expect(doc.previousProfileId).toBe(staging.id);
     expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 
-    await triggerCommand("next-profile");
-    await triggerCommand("next-profile");
+    // A second press toggles back rather than walking to a third profile.
+    await triggerCommand("previous-profile");
     doc = await readState();
-    expect(doc.activeProfileId).toBe(seed.activeProfileId);
-    expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
+    expect(doc.activeProfileId).toBe(staging.id);
+    expect(doc.previousProfileId).toBe(seed.activeProfileId);
   });
 
-  // The next-profile command writes state without the commit guard, so an
-  // imported inactive profile can carry an enabled rule Chrome rejects (a bad
-  // urlFilter, a CRLF value) that would sink the whole atomic batch when the
-  // command enables it. The reconcile drops that one rule from the compiled set,
-  // so the profile's other rules still apply and the ruleset never freezes.
-  it("drops an invalid rule enabled by the next-profile command instead of freezing the batch", async () => {
+  // The profile command writes state without the commit guard, so an imported
+  // inactive profile can carry an enabled rule Chrome rejects (a bad urlFilter,
+  // a CRLF value) that would sink the whole atomic batch when the command
+  // enables it. The reconcile drops that one rule from the compiled set, so the
+  // profile's other rules still apply and the ruleset never freezes.
+  it("drops an invalid rule enabled by the profile command instead of freezing the batch", async () => {
     start();
     const seed = createV1Seed();
     const shell = createProfile({
@@ -647,14 +650,16 @@ describe("background lifecycle", () => {
       scope: { type: "pattern", pattern: "||*", hosts: [] },
     };
     const imported = { ...shell, rules: [good, bad] };
+    // The command flips to the imported profile as the pair's other half.
     await writeState({
       ...seed,
       profiles: [...seed.profiles, imported],
+      previousProfileId: imported.id,
       nextRuleNum: 8003,
     });
     await settle();
 
-    await triggerCommand("next-profile");
+    await triggerCommand("previous-profile");
     await settle();
 
     const doc = await readState();

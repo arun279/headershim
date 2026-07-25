@@ -40,6 +40,13 @@
   color: var(--ink);
   letter-spacing: -0.01em;
 }
+/* The no-site marker: plain furniture in the muted tertiary ink, deliberately
+   not the mono wire-byte face the host is set in, so it reads as a label and
+   never as a site name. */
+.no-site {
+  font-size: 13px;
+  color: var(--ink3);
+}
 
 .glance-wrap {
   margin-top: 13px;
@@ -119,10 +126,12 @@
 .prof:hover {
   background: var(--raise);
 }
-/* One truncation for a profile name everywhere it is shown: the primitive splits
-   the string on a word boundary, so the trigger, the menu row, and the Profiles
-   page cut the same name at the same place. */
+/* The label fills the pill so its shared one-line ellipsis has a width to clip
+   against; the trigger, the menu row, and the Profiles page each cut the name to
+   the column they have. */
 .prof .lbl {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   color: var(--ink);
 }
@@ -174,6 +183,8 @@
   border-top: var(--hairline) solid var(--line2);
 }
 .popt .nm {
+  flex: 1;
+  min-width: 0;
   font-weight: 500;
 }
 .popt.sel .nm {
@@ -258,9 +269,6 @@
 .change-line + .change-line {
   border-top: var(--hairline) solid var(--line2);
 }
-.change-line:hover {
-  background: var(--raise);
-}
 .spine {
   position: absolute;
   left: 0;
@@ -277,11 +285,6 @@
 }
 .change-line.refused .spine {
   background: var(--stop);
-}
-/* Neither live nor at rest: solid so it is not read as off, faint so it makes
-   no claim about a match only Chrome can settle. */
-.change-line.unconfirmed .spine {
-  background: var(--faint);
 }
 .change-line.off .spine,
 .change-line.overridden .spine,
@@ -310,9 +313,6 @@
 .change-line.refused .op {
   color: var(--stop);
 }
-.change-line.unconfirmed .op {
-  color: var(--faint);
-}
 .change-line.off .op,
 .change-line.overridden .op,
 .change-line.paused .op {
@@ -338,11 +338,14 @@
 .change-line .say :is(.k, .v) {
   font-size: 13px;
 }
+/* The edit button is a wrapper around the shrinkable value, so it gives way the
+   same way: the same flex and floor the value itself carries, since a button
+   wrapping nowrap text will not shrink on the child's floor alone. */
 .v-edit {
   display: inline-flex;
   align-items: baseline;
-  flex: 1;
-  min-width: 0;
+  flex: 0 8 auto;
+  min-width: 6ch;
   padding: 0;
   background: none;
   border: none;
@@ -634,13 +637,6 @@
   gap: 9px;
   align-items: center;
 }
-.kbd {
-  font-size: 10px;
-  opacity: 0.72;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-  padding: 0 3px;
-}
 .btng {
   font: 600 12px var(--font-ui);
   color: var(--ink2);
@@ -677,9 +673,6 @@
   font-size: 11px;
   color: var(--ink3);
 }
-.thistab .change-line:hover {
-  background: transparent;
-}
 
 /* ---------------- this-tab composer ---------------- */
 .compose {
@@ -712,11 +705,12 @@
   padding: 8px 13px 0;
   color: var(--ink3);
 }
-/* The name field's own width plus the separator column beside it, so the second
-   word starts where the field it names starts. */
-.cfl-name {
-  flex: none;
-  width: 155px;
+/* The two words share the row on the same split as the fields below, so each
+   sits over the field it names whatever the popup width. */
+.cfl-name,
+.cfl-val {
+  flex: 1;
+  min-width: 0;
 }
 .cfields {
   display: flex;
@@ -732,8 +726,9 @@
   padding: 10px 0;
 }
 .cin.name {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
-  width: 122px;
 }
 .cin.val {
   flex: 1;

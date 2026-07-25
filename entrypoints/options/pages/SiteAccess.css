@@ -1,4 +1,5 @@
-/* Base card recipe lives in App.css. */
+/* Base card recipe lives in App.css. It carries no specificity, so this one
+   class lays the all-on card out as a row rather than inheriting its column. */
 .sa-all-on {
   flex-direction: row;
   align-items: center;

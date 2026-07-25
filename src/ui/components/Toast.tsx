@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
+import type { ToastState } from "../state/useToast";
 import "./Toast.css";
 
 interface ToastProps {
@@ -40,12 +41,45 @@ export function Toast({
 
   return (
     <div class="toast">
-      <span class="toast-msg">{children}</span>
+      {/* The polite region already carries the message to assistive tech; the
+          visible span is hidden from the tree so it exists there exactly once,
+          while the toast root stays visible so its Undo button is operable. */}
+      <span class="toast-msg" aria-hidden="true">
+        {children}
+      </span>
       {actionLabel !== undefined && (
         <button type="button" class="toast-action" onClick={onAction}>
           {actionLabel}
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Renders the one live toast, or nothing, straight from a `useToast` channel.
+ * One place decides how the state maps onto the Toast, so no surface can raise a
+ * confirmation that silently drops the action it was raised to offer.
+ */
+export function ToastHost({
+  toast,
+  onDismiss,
+}: {
+  toast: ToastState | undefined;
+  onDismiss: () => void;
+}) {
+  if (toast === undefined) {
+    return null;
+  }
+  return (
+    <Toast
+      nonce={toast.nonce}
+      onDismiss={onDismiss}
+      persist={toast.action !== undefined}
+      actionLabel={toast.action?.label}
+      onAction={toast.action?.run}
+    >
+      {toast.message}
+    </Toast>
   );
 }

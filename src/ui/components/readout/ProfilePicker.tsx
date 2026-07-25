@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Profile } from "../../../core/model";
-import { copy } from "../../copy";
-import { previewSwitch } from "../../state/readout";
+import { copy, type Sentence, sentenceText } from "../../copy";
+import { previewSwitch, type SwitchPreview } from "../../state/readout";
+import { InlineRename } from "../InlineRename";
 import { sentence } from "../sentence";
 import { ProfileName } from "../Truncate";
 import { usePopoverDismiss } from "../usePopoverDismiss";
@@ -11,6 +12,10 @@ import { ProfileBadge } from "./ProfileBadge";
 interface ProfilePickerProps {
   profiles: readonly Profile[];
   activeProfile: Profile;
+  /** The profile the shortcut would flip to, when one has been established. */
+  previousProfileId: string | undefined;
+  /** The resolved profile-shortcut accelerator, absent when it is unbound. */
+  switchShortcut: string | undefined;
   host: string | undefined;
   onSwitch: (profileId: string) => void;
   onNewProfile: () => Promise<string | undefined>;
@@ -19,12 +24,17 @@ interface ProfilePickerProps {
 
 /**
  * The profile switch. Exclusive by default (one on, the rest off) and
- * consequence-first: before you commit, hovering or focusing a profile previews
- * exactly what it would change on this tab, so the switch is never a surprise.
+ * consequence-first: the closed chip's description names what the profile
+ * shortcut would change on this tab, its target row carries the accelerator so
+ * the key is discoverable, and inside the menu hovering or focusing any profile
+ * previews its own switch, so the answer is never locked behind the act of
+ * switching.
  */
 export function ProfilePicker({
   profiles,
   activeProfile,
+  previousProfileId,
+  switchShortcut,
   host,
   onSwitch,
   onNewProfile,
@@ -37,7 +47,6 @@ export function ProfilePicker({
   const popover = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
   const profileButtons = useRef(new Map<string, HTMLButtonElement>());
-  const nameInput = useRef<HTMLInputElement>(null);
 
   const setPickerOpen = (next: boolean) => {
     openRef.current = next;
@@ -52,32 +61,20 @@ export function ProfilePicker({
     profileButtons.current.get(activeProfile.id)?.focus();
   };
 
-  const stopEditing = (restoreFocus: boolean) => {
+  const closeEditing = (restoreFocus: boolean) => {
     setEditingId(undefined);
     if (restoreFocus) {
       queueMicrotask(focusCurrentProfile);
     }
   };
 
-  const commitName = (restoreFocus: boolean) => {
-    const id = editingId;
-    const value = nameInput.current?.value.trim() ?? "";
-    stopEditing(restoreFocus);
-    if (
-      id !== undefined &&
-      value.length > 0 &&
-      value !== profiles.find((profile) => profile.id === id)?.name
-    ) {
-      onRenameProfile(id, value);
-    }
-  };
-
   usePopoverDismiss(open, popover, trigger, (restoreFocus) => {
+    // Escape while renaming cancels the rename and leaves the menu open; every
+    // other dismiss closes the menu, which also ends any rename in progress.
     if (editingId !== undefined && restoreFocus) {
-      stopEditing(true);
+      closeEditing(true);
       return;
     }
-    if (editingId !== undefined) commitName(false);
     setPickerOpen(false);
     if (restoreFocus) trigger.current?.focus();
   });
@@ -86,17 +83,20 @@ export function ProfilePicker({
     if (open) focusCurrentProfile();
   }, [open]);
 
-  useEffect(() => {
-    if (open && editingId !== undefined) {
-      nameInput.current?.focus();
-      nameInput.current?.select();
-    }
-  }, [editingId, open, profiles]);
-
   const preview =
     previewId === undefined
       ? undefined
       : profiles.find((profile) => profile.id === previewId);
+
+  // The chip describes the switch its own shortcut would make: the flip back to
+  // the profile you were last on, the one the profile shortcut activates.
+  const flipTarget = profiles.find(
+    (profile) => profile.id === previousProfileId,
+  );
+  const switchHint =
+    flipTarget === undefined
+      ? undefined
+      : switchHintText(activeProfile, flipTarget, host);
 
   return (
     <div class="picker">
@@ -107,6 +107,7 @@ export function ProfilePicker({
         aria-expanded={open}
         aria-controls="profile-switch-pop"
         aria-label={copy.readout.switcher.chipLabel}
+        title={switchHint}
         onClick={() => setPickerOpen(!openRef.current)}
       >
         <ProfileBadge
@@ -145,24 +146,10 @@ export function ProfilePicker({
                       color={profile.color}
                       size={19}
                     />
-                    <input
-                      class="profile-name-input inset-field"
-                      type="text"
-                      maxLength={48}
-                      aria-label={copy.options.profiles.nameLabel}
-                      defaultValue={profile.name}
-                      ref={nameInput}
-                      onBlur={() => commitName(false)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          commitName(true);
-                        } else if (event.key === "Escape") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          stopEditing(true);
-                        }
-                      }}
+                    <InlineRename
+                      value={profile.name}
+                      onCommit={(name) => onRenameProfile(profile.id, name)}
+                      onClose={closeEditing}
                     />
                     {on && (
                       <span class="chk" aria-hidden="true">
@@ -185,8 +172,8 @@ export function ProfilePicker({
                   }}
                   aria-current={on ? "true" : undefined}
                   class={`popt${on ? " sel" : ""}`}
-                  onMouseEnter={() => setPreviewId(on ? undefined : profile.id)}
-                  onFocus={() => setPreviewId(on ? undefined : profile.id)}
+                  onMouseEnter={() => setPreviewId(profile.id)}
+                  onFocus={() => setPreviewId(profile.id)}
                   onClick={() => {
                     onSwitch(profile.id);
                     setPickerOpen(false);
@@ -199,6 +186,10 @@ export function ProfilePicker({
                     size={19}
                   />
                   <ProfileName value={profile.name} class="nm" />
+                  {profile.id === previousProfileId &&
+                    switchShortcut !== undefined && (
+                      <span class="kbd mono">{switchShortcut}</span>
+                    )}
                   {on && (
                     <span class="chk" aria-hidden="true">
                       <CheckGlyph />
@@ -228,6 +219,52 @@ export function ProfilePicker({
   );
 }
 
+interface SwitchDiff {
+  empty: boolean;
+  lead: string;
+  drop: Sentence | undefined;
+  add: Sentence | undefined;
+}
+
+/** The lead, first drop and first add of a switch, in the copy the panel reads. */
+function switchDiff(to: Profile, preview: SwitchPreview): SwitchDiff {
+  const { drops, adds } = preview;
+  const firstDrop = drops[0];
+  const firstAdd = adds[0];
+  const addLabel =
+    firstAdd === undefined
+      ? undefined
+      : firstAdd.display === undefined
+        ? firstAdd.header
+        : `${firstAdd.header}: ${firstAdd.display}`;
+  return {
+    empty: drops.length === 0 && adds.length === 0,
+    lead: copy.readout.switcher.previewLead(to.name),
+    drop:
+      firstDrop === undefined
+        ? undefined
+        : copy.readout.switcher.drops(firstDrop, drops.length - 1),
+    add:
+      addLabel === undefined
+        ? undefined
+        : copy.readout.switcher.adds(addLabel, adds.length - 1),
+  };
+}
+
+/** The switch consequence as one plain line, for the closed chip's description. */
+function switchHintText(
+  from: Profile,
+  to: Profile,
+  host: string | undefined,
+): string | undefined {
+  const diff = switchDiff(to, previewSwitch(from, to, host));
+  if (diff.empty) return undefined;
+  const parts = [diff.lead];
+  if (diff.drop !== undefined) parts.push(sentenceText(diff.drop));
+  if (diff.add !== undefined) parts.push(sentenceText(diff.add));
+  return parts.join(", ");
+}
+
 function SwitchPreviewPanel({
   from,
   to,
@@ -237,31 +274,23 @@ function SwitchPreviewPanel({
   to: Profile;
   host: string | undefined;
 }) {
-  const { drops, adds } = previewSwitch(from, to, host);
-  if (drops.length === 0 && adds.length === 0) {
+  const diff = switchDiff(to, previewSwitch(from, to, host));
+  if (diff.empty) {
     return null;
   }
-  const firstDrop = drops[0];
-  const firstAdd = adds[0];
-  const addLabel =
-    firstAdd === undefined
-      ? ""
-      : firstAdd.display === undefined
-        ? firstAdd.header
-        : `${firstAdd.header}: ${firstAdd.display}`;
   return (
     <div class="preview">
-      <div class="pl silk">{copy.readout.switcher.previewLead(to.name)}</div>
-      {firstDrop !== undefined && (
+      <div class="pl silk">{diff.lead}</div>
+      {diff.drop !== undefined && (
         <p class="d drops">
           <MinusGlyph />
-          {sentence(copy.readout.switcher.drops(firstDrop, drops.length - 1))}
+          {sentence(diff.drop)}
         </p>
       )}
-      {firstAdd !== undefined && (
+      {diff.add !== undefined && (
         <p class="d adds">
           <PlusGlyph />
-          {sentence(copy.readout.switcher.adds(addLabel, adds.length - 1))}
+          {sentence(diff.add)}
         </p>
       )}
     </div>

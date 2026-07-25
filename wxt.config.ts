@@ -73,9 +73,9 @@ export default defineConfig({
         suggested_key: { default: "Alt+Shift+P" },
         description: "Toggle global pause",
       },
-      "next-profile": {
+      "previous-profile": {
         suggested_key: { default: "Alt+Shift+K" },
-        description: "Switch to next profile",
+        description: "Switch to the previous profile",
       },
     },
     icons: {

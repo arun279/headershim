@@ -264,9 +264,7 @@ describe("projectFleet status ladder", () => {
       grants: ALL,
       status: LIVE,
     });
-    expect(byKey(fleet, "p1:l").overriddenBy).toEqual({
-      label: "environment default",
-    });
+    expect(byKey(fleet, "p1:l").overriddenBy).toBe("environment default");
   });
 
   it("does not let a compiler-dropped rule override a compiled rule", () => {
@@ -314,9 +312,7 @@ describe("projectFleet status ladder", () => {
 
     expect(byKey(fleet, "p1:partly").status).toBe("needs-access");
     expect(byKey(fleet, "p1:lower").status).toBe("overridden");
-    expect(byKey(fleet, "p1:lower").overriddenBy).toEqual({
-      label: "x-env rule",
-    });
+    expect(byKey(fleet, "p1:lower").overriddenBy).toBe("x-env rule");
   });
 
   it("redacts secret values and drops the value for a remove", () => {

@@ -112,7 +112,7 @@ const twoRules = () =>
 async function turnOffOnlyRule(): Promise<HTMLElement> {
   const { root } = await mount(seededDoc([rule()]), true);
   const toggle = root.querySelector<HTMLButtonElement>(
-    '[aria-label="Turn off: x-env"]',
+    '[aria-label="Rule on: x-env"]',
   );
   if (toggle === null) throw new Error("missing rule toggle");
   await act(async () => toggle.click());
@@ -143,7 +143,7 @@ describe("popup readout", () => {
     expect(line.classList.contains("live")).toBe(true);
     expect(line.querySelector(".k")?.textContent).toBe("x-env");
     expect(line.querySelector(".v")?.textContent).toBe("staging");
-    expect(line.querySelector('[aria-label="Turn off: x-env"]')).not.toBeNull();
+    expect(line.querySelector('[aria-label="Rule on: x-env"]')).not.toBeNull();
     // A live line adds no reason.
     expect(line.querySelector(".why")).toBeNull();
   });
@@ -192,19 +192,18 @@ describe("popup readout", () => {
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
     expect(line.querySelector('[role="switch"]')?.className).toBe(
-      "sw sw-inert",
+      "sw sw-blocked",
     );
   });
 
-  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+  it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
     await setReconcileError(true);
     const { root } = await mount(seededDoc([rule()]), true);
     const toggle = root.querySelector(
       '.change-line.out-of-sync [role="switch"]',
     );
     expect(toggle?.getAttribute("aria-checked")).toBe("true");
-    expect(toggle?.className).toBe("sw sw-inert");
-    expect(toggle?.className).not.toBe("sw");
+    expect(toggle?.className).toBe("sw sw-blocked");
   });
 
   it("renders generated metadata in place of an absent literal value", async () => {
@@ -246,6 +245,17 @@ describe("popup readout", () => {
     expect(token).not.toBeNull();
     expect(token.querySelector(".pre")?.textContent).toBe("Bearer");
     expect(token.querySelector(".last")?.textContent).toBe("wxyz");
+    // The visible masked value is hidden from assistive tech, which instead
+    // hears one honest name saying the middle is withheld, so the two cleartext
+    // fragments ("Bearer" + "wxyz") are never read back as a whole credential.
+    expect(
+      (token.querySelector(".tk-val") as HTMLElement).getAttribute(
+        "aria-hidden",
+      ),
+    ).toBe("true");
+    expect(token.querySelector(".sr-only")?.textContent).toBe(
+      "Bearer credential, hidden, ending in wxyz",
+    );
     // The opaque token draws no countdown it would have to invent.
     expect(token.querySelector(".fresh-track")).toBeNull();
     expect(token.textContent).toContain(copy.token.opaque);
@@ -404,7 +414,7 @@ describe("popup readout", () => {
   it("keeps the last disabled rule visible and focused for re-enabling", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const disable = root.querySelector<HTMLButtonElement>(
-      '[aria-label="Turn off: x-env"]',
+      '[aria-label="Rule on: x-env"]',
     );
     if (disable === null) throw new Error("missing rule toggle");
     disable.focus();
@@ -412,7 +422,7 @@ describe("popup readout", () => {
     await settle();
 
     const enable = root.querySelector<HTMLButtonElement>(
-      '[aria-label="Turn on: x-env"]',
+      '[aria-label="Rule off: x-env"]',
     );
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
@@ -592,29 +602,33 @@ describe("popup readout", () => {
     expect(root.querySelector(".tab-btn")).toBeNull();
   });
 
-  // The head's site slot is set in the face reserved for literal wire bytes. A
-  // tab with no site has nothing to put there, and the product's own name drawn
-  // in that face reads as the site this tab is on.
-  it("puts no name in the site slot when the tab is on no site", async () => {
+  // The head's site slot names the site this tab is on, in the face reserved for
+  // literal wire bytes. A tab with no site says so in a muted marker rather than
+  // sitting empty; the marker is plain furniture, never the wire-byte host face,
+  // so it never reads as a site of its own.
+  it("marks the site slot as siteless rather than naming a site", async () => {
     const { activeTabDomain } = await import("../platform/tabs");
     vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
     const { root } = await mount(createV1Seed(), true);
-    expect(root.querySelector(".site")?.textContent).toBe("");
+    expect(root.querySelector(".site .no-site")?.textContent).toBe(
+      copy.readout.noSite,
+    );
     expect(root.querySelector(".site .host")).toBeNull();
-    expect(root.querySelector(".site svg")).toBeNull();
   });
 
-  it("reads the master switch on while running, the way every switch here does", async () => {
+  it("names the master switch by what it controls and reads its state like every switch here", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const master = root.querySelector(
       '.foot [aria-label="All header changes"]',
     ) as HTMLButtonElement;
     const ruleSwitch = root.querySelector(
-      '[aria-label="Turn off: x-env"]',
+      '[aria-label="Rule on: x-env"]',
     ) as HTMLButtonElement;
-    // Running reads checked on both, so the two switches 10px apart cannot
-    // show the same fact with opposite knobs.
-    expect(root.querySelector(".foot .pause")?.textContent).toContain("On");
+    // A bare knob shows no visible word, so its hover name has to carry what it
+    // controls, not the state its position and aria-checked already give.
+    expect(master.getAttribute("title")).toBe("All header changes");
+    // Running reads checked on both, so the two switches cannot show the same
+    // fact with opposite knobs.
     expect(master.getAttribute("aria-checked")).toBe("true");
     expect(ruleSwitch.getAttribute("aria-checked")).toBe("true");
 
@@ -628,7 +642,6 @@ describe("popup readout", () => {
         ) as HTMLElement
       ).getAttribute("aria-checked"),
     ).toBe("false");
-    expect(root.querySelector(".foot .pause")?.textContent).toContain("Paused");
   });
 
   it("pauses to a banner and paused lines, then resumes", async () => {
@@ -674,8 +687,8 @@ describe("popup readout", () => {
 });
 
 describe("popup profile switch", () => {
-  const withSecond = () =>
-    seededDoc(
+  const withSecond = (): StateDoc => ({
+    ...seededDoc(
       [rule()],
       [
         {
@@ -688,7 +701,11 @@ describe("popup profile switch", () => {
           ],
         },
       ],
-    );
+    ),
+    // Prod read-only is the profile last switched away from, so it is the one
+    // the shortcut would flip back to.
+    previousProfileId: "p2",
+  });
 
   // Opens the picker and returns the "Prod read-only" switch target.
   const openPickerTarget = (root: HTMLElement): HTMLButtonElement => {
@@ -757,6 +774,52 @@ describe("popup profile switch", () => {
     // No commit happened from the preview alone.
     const stored = await read();
     expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
+  });
+
+  it("names the shortcut's switch consequence on the closed chip", async () => {
+    const { root } = await mount(withSecond(), true);
+    // The menu is shut: the answer is on the chip, not behind opening it.
+    expect(root.querySelector(".pop")).toBeNull();
+    const hint = (root.querySelector(".prof") as HTMLButtonElement).title;
+    expect(hint).toContain("If you switch to Prod read-only");
+    expect(hint).toContain("x-read-only");
+    expect(hint).toContain("x-env");
+  });
+
+  it("prints the profile shortcut key on the row it would flip to", async () => {
+    const { root } = await mount(withSecond(), true);
+    const target = openPickerTarget(root);
+    expect(target.querySelector(".kbd")?.textContent).toBe("⌥⇧K");
+    // The active profile is not the flip target, so it wears the check, not the
+    // accelerator.
+    const current = root.querySelector(".popt.sel");
+    expect(current?.querySelector(".kbd")).toBeNull();
+    expect(current?.querySelector(".chk")).not.toBeNull();
+  });
+
+  it("commits a new profile name when a click outside dismisses the menu", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    typeInto(input, "QA headers");
+    // A pointerdown outside light-dismisses the menu; the typed name commits on
+    // the way out, the way it does when the Options rename loses focus.
+    fire(() =>
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })),
+    );
+    await settle();
+
+    expect(root.querySelector(".pop")).toBeNull();
+    expect((await read()).profiles[1]?.name).toBe("QA headers");
+  });
+
+  it("names the commit keys beside the rename field", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    const hintId = input.getAttribute("aria-describedby");
+    if (hintId === null) throw new Error("rename field names no commit keys");
+    expect(root.querySelector(`#${hintId}`)?.textContent).toBe(
+      copy.options.profiles.renameHint,
+    );
   });
 
   it("creates, focuses, and names a new profile from the picker", async () => {
@@ -932,8 +995,7 @@ describe("popup authoring entry points", () => {
   // the value is being typed. There it has to be inside the sheet: the sheet is
   // aria-modal, and a note outside it is on screen but out of the accessibility
   // tree. It also stays out of the scrolling body, and stays last within its
-  // surface: a toast is an in-flow block, so anything after it pushes the
-  // confirmation away from the control that raised it.
+  // surface, so it reads as the final word on the readout.
   it("keeps the data note last on the readout and inside the editor's dialog", async () => {
     const { root, body } = await mount(seededDoc([rule()]), true);
     const popup = () => root.querySelector(".popup") as HTMLElement;
@@ -950,6 +1012,32 @@ describe("popup authoring entry points", () => {
     expect(dialog).not.toBeNull();
     expect(dialog.lastElementChild?.className).toBe("datanote");
     expect(dialog.querySelector(".sheet-region .datanote")).toBeNull();
+  });
+
+  // The whole point of the created toast is that a duplicate does not pass off
+  // as running: authoring a second rule the product can already see is inert has
+  // to say so at this surface, not only where the string is derived.
+  it("says a rule authored on top of an equal one lands overridden", async () => {
+    const { root } = await mount(tokenDoc(), true);
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "authorization",
+    );
+    typeInto(
+      root.querySelector(".value-row textarea") as HTMLTextAreaElement,
+      "Bearer duplicate",
+    );
+    fire(() =>
+      (
+        root.querySelector(".editor-actions .primary") as HTMLButtonElement
+      ).click(),
+    );
+    await settle();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.toast.ruleCreatedOverridden("authorization rule"),
+    );
   });
 
   it("t opens the this-tab composer", async () => {

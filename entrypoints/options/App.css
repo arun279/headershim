@@ -1,7 +1,8 @@
 /*
  * The Workbench frame: a left rail that owns the brand and navigation, and a
- * content column that fills the window at a readable measure. Nothing floats in
- * a gray void; the rail and the content each paint edge to edge.
+ * content column that fills the window. Nothing floats in a gray void; the rail
+ * and the content each paint edge to edge. A page that reads better narrow holds
+ * its own measure within that column, rather than one cap narrowing them all.
  */
 
 .wb {
@@ -91,8 +92,9 @@
   font-size: 13px;
   font-weight: 550;
 }
+/* Hover lifts the ink only; the filled well is the current page's alone, so
+   pointing at one destination never wears the mark that means you are on it. */
 .wb-nav-link:hover {
-  background: var(--raise);
   color: var(--ink);
 }
 /* Active: bold + filled well + accent bar, so the marker never rests on color
@@ -112,11 +114,23 @@
 }
 .wb-page {
   width: 100%;
-  max-width: 940px;
   padding: 28px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+}
+/* Rules and Active changes read every row at once and take the window. The
+   reading and manage pages hold a measure and centre in the column, so a card
+   is a reading column rather than a full-bleed panel with a void down one side.
+   The card fills the measure, so each page's prose reads to the card edge
+   without a per-paragraph width of its own. */
+.about-page,
+.profiles-page,
+.site-access-page,
+.import-export-page,
+.settings-page {
+  max-width: 40rem;
+  margin-inline: auto;
 }
 
 .wb-head {
@@ -134,11 +148,10 @@
   letter-spacing: -0.02em;
   color: var(--ink);
 }
-/* The shared page card: Site access, Import & export, and About all sit on it. */
-.sa-card,
-.ie-block,
-.about-card,
-.perm-card {
+/* The shared page card: Site access, Import & export, and About all sit on it.
+   :where() so the recipe carries no specificity, and a page's own single-class
+   modifier (the all-on card's row) wins over it without having to out-specify it. */
+:where(.sa-card, .ie-block, .about-card, .perm-card) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);

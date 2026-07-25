@@ -33,6 +33,16 @@
   color: var(--amber);
 }
 
+/* The one destructive affordance: worn by every confirm-to-delete and by the
+   rule editor's delete. Red text, no fill, a soft red on hover. */
+.btn.destructive {
+  color: var(--stop);
+}
+
+.btn.destructive:hover:not(:disabled) {
+  background: var(--stop-soft);
+}
+
 .icon-btn {
   display: grid;
   place-items: center;
@@ -72,10 +82,6 @@
 
 .menu-item:hover {
   background: var(--raise2);
-}
-
-.menu-item.destructive {
-  color: var(--amber);
 }
 
 .btn:disabled,

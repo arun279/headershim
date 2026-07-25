@@ -10,8 +10,7 @@
  * there.
  */
 
-import { dropInapplicable, settlesPerRequest } from "../../core/compile";
-import { findOverriddenRules } from "../../core/conflicts";
+import { settlesPerRequest } from "../../core/compile";
 import { type GrantSnapshot, missingGrants } from "../../core/grants";
 import { normalizeHeaderName } from "../../core/headers";
 import {
@@ -21,18 +20,20 @@ import {
   type HeaderOp,
   type Profile,
   type Rule,
+  type Scope,
   type StateDoc,
 } from "../../core/model";
 import { scopeCondition } from "../../core/scope";
 import type { SystemStatus } from "../../core/status";
-import { isSecretHeader, ruleValueSummary } from "../secret";
+import { overriddenLabels } from "./overridden";
 import {
   isNetworkManagedHeader,
+  type LineCore,
   type LineStatus,
+  lineCore,
   lineStatus,
-  type RefusedReason,
   refusedReason,
-  ruleLabel,
+  ruleDisplay,
 } from "./readout";
 
 interface FleetProvenance {
@@ -42,45 +43,16 @@ interface FleetProvenance {
   readonly color: BadgeColor;
 }
 
-interface Overrider {
-  readonly label: string;
-}
-
-type FleetScope =
-  | { readonly kind: "domains"; readonly domains: readonly string[] }
-  | { readonly kind: "all" }
-  | {
-      readonly kind: "pattern";
-      readonly pattern: string;
-      readonly hosts: readonly string[];
-    }
-  | {
-      readonly kind: "regex";
-      readonly regex: string;
-      readonly hosts: readonly string[];
-    };
-
-export interface FleetRule {
+export interface FleetRule extends LineCore {
   /** Stable key for rendering, focus, and tests. */
   readonly key: string;
   readonly profileId: string;
   readonly ruleId: string;
   readonly provenance: FleetProvenance;
-  readonly direction: Direction;
-  readonly operation: HeaderOp;
-  readonly header: string;
   /** Normalized header, the grouping key for the by-header lens. */
   readonly headerKey: string;
-  /** The redacted reading shown on the line; undefined for a remove. */
-  readonly display?: string;
-  readonly secret: boolean;
-  readonly enabled: boolean;
   readonly profileEnabled: boolean;
-  readonly status: LineStatus;
-  readonly overriddenBy?: Overrider;
-  readonly refused?: RefusedReason;
-  readonly missing?: readonly string[];
-  readonly scope: FleetScope;
+  readonly scope: Scope;
   /** How many distinct sites this rule names; 0 when its reach is broad. */
   readonly siteCount: number;
   /** True when the scope is not a concrete domain list (all / pattern / regex). */
@@ -105,19 +77,7 @@ export function projectFleet({
   status,
 }: FleetInput): FleetRule[] {
   const active = activeProfile(doc);
-  // Collisions resolve over the exact rules Chrome installs: dropInapplicable is
-  // the compiler's own input, so a row's overridden state matches the wire.
-  const installed = activeProfile(
-    dropInapplicable(doc, isRegexSupported, grants),
-  ).rules;
-  const rulesById = new Map(installed.map((rule) => [rule.id, rule]));
-  const overriddenBy = new Map<string, Overrider>();
-  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(installed)) {
-    const winner = rulesById.get(shadowedByRuleId);
-    if (winner !== undefined) {
-      overriddenBy.set(ruleId, { label: ruleLabel(winner) });
-    }
-  }
+  const overriddenBy = overriddenLabels(doc, grants, isRegexSupported);
 
   return doc.profiles.flatMap((profile) =>
     profile.rules.map((rule) =>
@@ -141,7 +101,7 @@ function fleetRule(
     paused: boolean;
     outOfSync: boolean;
     active: boolean;
-    overriddenBy: Overrider | undefined;
+    overriddenBy: string | undefined;
     isRegexSupported: (regex: string) => boolean;
   },
 ): FleetRule {
@@ -158,8 +118,6 @@ function fleetRule(
     needsAccess: missing.length > 0,
     perRequest: settlesPerRequest(rule),
   });
-  const display =
-    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
   return {
     key: `${profile.id}:${rule.id}`,
     profileId: profile.id,
@@ -170,50 +128,26 @@ function fleetRule(
       badgeText: profile.badgeText,
       color: profile.color,
     },
-    direction: rule.direction,
-    operation: rule.operation,
-    header: rule.header,
     headerKey: normalizeHeaderName(rule.header),
-    ...(display === undefined ? {} : { display }),
-    secret: isSecretHeader(rule.header),
-    enabled: rule.enabled,
+    ...lineCore({
+      direction: rule.direction,
+      operation: rule.operation,
+      header: rule.header,
+      display: ruleDisplay(rule),
+      enabled: rule.enabled,
+      status,
+      overriddenBy: context.overriddenBy,
+      refused,
+      missing,
+    }),
     profileEnabled: context.active,
     ...(rule.comment === undefined || rule.comment === ""
       ? {}
       : { comment: rule.comment }),
-    status,
-    // The collision winner is named only where the loser is actually running;
-    // an off rule is off, not overridden.
-    ...(status === "overridden" && context.overriddenBy !== undefined
-      ? { overriddenBy: context.overriddenBy }
-      : {}),
-    ...(status === "refused" && refused !== undefined ? { refused } : {}),
-    ...(status === "needs-access" ? { missing } : {}),
-    scope: fleetScope(rule),
+    scope: rule.scope,
     siteCount: siteCount(rule),
     crossSite: rule.scope.type !== "domains",
   };
-}
-
-function fleetScope(rule: Rule): FleetScope {
-  switch (rule.scope.type) {
-    case "domains":
-      return { kind: "domains", domains: [...rule.scope.domains] };
-    case "all":
-      return { kind: "all" };
-    case "pattern":
-      return {
-        kind: "pattern",
-        pattern: rule.scope.pattern,
-        hosts: [...rule.scope.hosts],
-      };
-    case "regex":
-      return {
-        kind: "regex",
-        regex: rule.scope.regex,
-        hosts: [...rule.scope.hosts],
-      };
-  }
 }
 
 function siteCount(rule: Rule): number {
@@ -236,7 +170,7 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
   const domains = new Map<string, FleetRule[]>();
   const crossSite: FleetRule[] = [];
   for (const rule of fleet) {
-    if (rule.scope.kind === "domains") {
+    if (rule.scope.type === "domains") {
       for (const domain of rule.scope.domains) {
         push(domains, domain, rule);
       }
@@ -284,11 +218,11 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
       // the caption states in the present tense.
       for (const rule of rules) {
         if (!isReaching(rule)) continue;
-        if (rule.scope.kind === "domains") {
+        if (rule.scope.type === "domains") {
           for (const domain of rule.scope.domains) sites.add(domain);
         } else {
           broad = true;
-          if (rule.scope.kind === "all") allSites = true;
+          if (rule.scope.type === "all") allSites = true;
           for (const host of hostsOf(rule)) sites.add(host);
         }
       }
@@ -311,11 +245,9 @@ export interface TapeRow {
   readonly direction: Direction;
   readonly operation: HeaderOp;
   readonly header: string;
-  readonly secret: boolean;
   readonly provenance: FleetProvenance;
   /** Only enabled active-profile states reach the tape. */
   readonly status: Exclude<LineStatus, "off" | "overridden">;
-  readonly refused?: RefusedReason;
 }
 
 const TAPE_ORDER: Record<TapeRow["status"], number> = {
@@ -348,12 +280,8 @@ export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
         direction: rule.direction,
         operation: rule.operation,
         header: rule.header,
-        secret: rule.secret,
         provenance: rule.provenance,
         status: rule.status,
-        ...(rule.status === "refused" && rule.refused !== undefined
-          ? { refused: rule.refused }
-          : {}),
       });
     }
   }
@@ -369,7 +297,7 @@ function isReaching(rule: FleetRule): boolean {
 }
 
 function hostsOf(rule: FleetRule): readonly string[] {
-  return rule.scope.kind === "pattern" || rule.scope.kind === "regex"
+  return rule.scope.type === "pattern" || rule.scope.type === "regex"
     ? rule.scope.hosts
     : [];
 }

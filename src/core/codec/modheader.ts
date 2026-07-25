@@ -1,6 +1,7 @@
 import { BADGE_PALETTE } from "../badge";
 import { classifyHeaderName, normalizeHeaderName } from "../headers";
 import {
+  availableProfileName,
   type BadgeColor,
   type HeaderOp,
   normalizeBadgeText,
@@ -13,7 +14,6 @@ import { err, ok, type Result } from "../result";
 import { BADGE_COLORS, isRecord } from "../validation";
 import { detectImportFormat } from "./detect";
 import {
-  availableProfileName,
   type ImportError,
   type ImportedProfile,
   type ImportPlan,
@@ -208,9 +208,9 @@ async function mapProfile(
   >
 > {
   const name = availableProfileName(
-    normalizeProfileName(source.title),
+    source.title.trim(),
     existingProfiles,
-    plannedProfiles,
+    plannedProfiles.map((profile) => profile.name),
   );
   const scopeResult = await importScope(source.urlFilters, validateRegex);
   if (!scopeResult.ok) {
@@ -655,10 +655,6 @@ function isOptionalRecordArray(
   value: unknown,
 ): value is readonly Record<string, unknown>[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every(isRecord));
-}
-
-function normalizeProfileName(title: string): string {
-  return title.trim().slice(0, 48).trimEnd();
 }
 
 function describeRow(row: Record<string, unknown>): string {

@@ -196,14 +196,7 @@ export function TabGlyph() {
       stroke-width="1.6"
       aria-hidden="true"
     >
-      <rect
-        x="2.5"
-        y="3.5"
-        width="11"
-        height="9"
-        rx="1.5"
-        stroke-dasharray="2 2"
-      />
+      <rect x="2.5" y="3.5" width="11" height="9" rx="1.5" />
     </svg>
   );
 }

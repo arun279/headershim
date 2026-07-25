@@ -1,6 +1,5 @@
 import {
   applyImportPlan,
-  availableProfileName,
   type ImportedProfile,
   type ImportPlan,
 } from "../../core/codec/headershim";
@@ -13,13 +12,15 @@ import {
 } from "../../core/limits";
 import {
   activeProfile,
+  availableProfileName,
   type BadgeColor,
   createProfile as buildProfile,
-  cloneRule,
+  createDefaultProfile,
   createRule,
+  defaultProfileColor,
   deriveBadgeText,
   isDerivedBadgeText,
-  isProfileNameAvailable,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type Rule,
@@ -319,21 +320,18 @@ export function createMutations({ validateRegex }: MutationDeps) {
       );
     },
 
-    createProfile(input: {
-      name: string;
-      badgeText?: string;
-      color: BadgeColor;
-    }): MutationResult<Profile> {
+    createProfile(name: string): MutationResult<Profile> {
       return commit((doc) => {
-        const available = availableName(doc, input.name);
+        const available = availableName(doc, name);
         if (!available.ok) return available;
-        const name = available.value;
         // A new profile is added, never activated: switching is the switcher's
-        // job, so creating one never changes what is running.
+        // job, so creating one never changes what is running. Its badge and
+        // colour, the two marks that tell one profile's rules from another's,
+        // are derived here from the name and the palette position.
         const profile = buildProfile({
-          name,
-          badgeText: input.badgeText ?? deriveBadgeText(name, badges(doc)),
-          color: input.color,
+          name: available.value,
+          badgeText: deriveBadgeText(available.value, badges(doc)),
+          color: defaultProfileColor(doc.profiles.length),
         });
         return ok([{ ...doc, profiles: [...doc.profiles, profile] }, profile]);
       });
@@ -375,18 +373,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
         if (source === undefined) {
           return notFound();
         }
-        // The copy takes its own badge: two profiles wearing one badge make the
-        // provenance mark on every rule row useless.
+        // The copy takes its own badge and colour: two profiles wearing one
+        // mark make the per-rule provenance signal and the toolbar colour
+        // useless, so the clone is derived the same way a fresh profile is.
         const name = cloneName(source.name, doc.profiles);
         const shell = buildProfile({
           name,
           badgeText: deriveBadgeText(name, badges(doc)),
-          color: source.color,
+          color: defaultProfileColor(doc.profiles.length),
         });
         let next = doc;
         const copies: Rule[] = [];
         for (const rule of source.rules) {
-          const [copy, allocated] = cloneRule(next, rule);
+          const [copy, allocated] = createRule(next, rule);
           copies.push(copy);
           next = allocated;
         }
@@ -413,23 +412,26 @@ export function createMutations({ validateRegex }: MutationDeps) {
         // The product never has zero profiles: deleting the last one
         // immediately recreates an empty Default.
         const placeholder =
-          remaining.length > 0
-            ? undefined
-            : buildProfile({
-                name: "Default",
-                badgeText: "DE",
-                color: "indigo",
-              });
+          remaining.length > 0 ? undefined : createDefaultProfile();
         const profiles = placeholder === undefined ? remaining : [placeholder];
         const wasActive = doc.activeProfileId === profileId;
         // Deleting the active profile hands activation to the profile that takes
         // its slot (the previous one when it was last), so one is always active.
         const heir = profiles[Math.min(index, profiles.length - 1)];
+        const activeProfileId =
+          wasActive && heir !== undefined ? heir.id : doc.activeProfileId;
+        // Deleting the active profile hands its slot to the heir, which can be the
+        // very profile the shortcut flips back to; drop the flip target then, so
+        // it never points at the row that is now active.
+        const { previousProfileId, ...rest } = doc;
         const next: StateDoc = {
-          ...doc,
+          ...rest,
           profiles,
-          activeProfileId:
-            wasActive && heir !== undefined ? heir.id : doc.activeProfileId,
+          activeProfileId,
+          ...(previousProfileId !== undefined &&
+          previousProfileId !== activeProfileId
+            ? { previousProfileId }
+            : {}),
         };
         return ok([
           next,
@@ -459,7 +461,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
               );
         const restored: Profile = {
           ...profile,
-          name: availableProfileName(profile.name, profiles, []),
+          name: availableProfileName(profile.name, profiles),
         };
         return ok([
           {
@@ -494,17 +496,26 @@ export function createMutations({ validateRegex }: MutationDeps) {
 
     activateProfile(profileId: string): MutationResult<void> {
       return commit((doc) => {
-        const profile = findProfile(doc, profileId);
-        if (profile === undefined) {
+        if (findProfile(doc, profileId) === undefined) {
           return notFound();
         }
-        const limits = checkEnabledRuleLimits(
-          profile.rules.filter((rule) => rule.enabled),
-        );
-        if (!limits.ok) {
-          return limits;
+        // Re-selecting the active profile keeps the flip target it already holds.
+        if (profileId === doc.activeProfileId) {
+          return ok([doc, undefined]);
         }
-        return ok([{ ...doc, activeProfileId: profileId }, undefined]);
+        // The enabled-rule caps are the commit guard's job: switching to a target
+        // over a cap grows the active enabled set past it, which the guard already
+        // rejects, so there is no separate check here.
+        // Remember the profile being left, so the profile shortcut can flip back
+        // to it; the shortcut path (model.activateProfile) does the same.
+        return ok([
+          {
+            ...doc,
+            activeProfileId: profileId,
+            previousProfileId: doc.activeProfileId,
+          },
+          undefined,
+        ]);
       });
     },
 
@@ -535,6 +546,14 @@ export function createMutations({ validateRegex }: MutationDeps) {
       return updateSettings({ theme });
     },
 
+    // Overwrites the whole document and hands back the one it replaced. Erase
+    // resets to the first-run seed and keeps the prior doc for its undo; the
+    // undo replays this with that doc. The commit guard re-checks the incoming
+    // doc's enabled set, so a restore of a once-valid doc passes on its own.
+    replaceDoc(next: StateDoc): MutationResult<StateDoc> {
+      return commit((doc) => ok([next, doc]));
+    },
+
     applyImport(plan: ImportPlan): MutationResult<void> {
       return commit((doc) => {
         // The plan's names were reserved against the doc at plan time; another
@@ -543,7 +562,11 @@ export function createMutations({ validateRegex }: MutationDeps) {
         for (const profile of plan.profiles) {
           profiles.push({
             ...profile,
-            name: availableProfileName(profile.name, doc.profiles, profiles),
+            name: availableProfileName(
+              profile.name,
+              doc.profiles,
+              profiles.map((planned) => planned.name),
+            ),
           });
         }
         return ok([applyImportPlan(doc, { ...plan, profiles }), undefined]);
@@ -687,7 +710,7 @@ function availableName(
   excludedProfileId?: string,
 ): Result<string, MutationError> {
   const name = candidate.trim();
-  return isProfileNameAvailable(doc.profiles, name, excludedProfileId)
+  return isStoredProfileNameValid(doc.profiles, name, excludedProfileId)
     ? ok(name)
     : err({ kind: "profile-name-unavailable", name } as const);
 }
@@ -740,8 +763,8 @@ function badges(doc: StateDoc, excludedProfileId?: string): string[] {
 function cloneName(base: string, profiles: readonly Profile[]): string {
   for (let n = 1; ; n += 1) {
     const suffix = n === 1 ? " copy" : ` copy ${n}`;
-    const candidate = `${base.slice(0, 48 - suffix.length)}${suffix}`;
-    if (isProfileNameAvailable(profiles, candidate)) {
+    const candidate = `${base}${suffix}`;
+    if (isStoredProfileNameValid(profiles, candidate)) {
       return candidate;
     }
   }

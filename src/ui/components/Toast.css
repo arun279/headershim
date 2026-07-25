@@ -1,13 +1,16 @@
-/* Slides up over the footer, one at a time, self-dismissing (no close control).
-   Inverted: panel on panel is a 1.18:1 step, so only its shadow separated the
-   toast from the footer it lands on and its bordered action read as a field
-   addon. The page's own ink and paper, swapped, make it a message rather than a
-   row, in both themes and without adding a colour to the vocabulary. */
+/* A bottom-centred overlay, one at a time, self-dismissing (no close control).
+   Fixed, not in-flow: in flow it is the surface's last row, so it breaks the
+   inset grid and resizes the popup document as it comes and goes. Inverted ink
+   on paper, since panel on panel is a 1.18:1 step that read as a field addon. */
 .toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-4);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  max-width: 376px;
+  max-width: min(376px, calc(100% - 2 * var(--sp-4)));
   padding: var(--sp-2) var(--sp-4);
   background: var(--ink);
   color: var(--paper);

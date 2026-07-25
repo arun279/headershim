@@ -1,12 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { render } from "../test/render";
-import {
-  Truncate,
-  truncateEnd,
-  truncateMiddle,
-  truncateWords,
-} from "./Truncate";
+import { Truncate, truncateEnd, truncateMiddle } from "./Truncate";
 
 describe("truncateMiddle", () => {
   it("keeps both ends and cuts the middle", () => {
@@ -78,24 +73,6 @@ describe("Truncate end mode", () => {
     );
     expect(root.querySelector("span")?.textContent).toBe(
       "api.very-long-stagi…",
-    );
-  });
-});
-
-describe("Truncate word mode", () => {
-  it("cuts a multiword profile name at a word boundary", () => {
-    expect(truncateWords("Staging environment overrides", 22)).toBe(
-      "Staging environment…",
-    );
-    const root = render(
-      <Truncate
-        mode="word"
-        value="Staging environment overrides"
-        maxChars={22}
-      />,
-    );
-    expect(root.querySelector("span")?.textContent).toBe(
-      "Staging environment…",
     );
   });
 });

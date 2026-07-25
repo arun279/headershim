@@ -1,9 +1,24 @@
 import { type ComponentChildren, createContext } from "preact";
-import { useCallback, useContext, useRef, useState } from "preact/hooks";
+import {
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 
-type Announce = (message: string, options?: { assertive?: boolean }) => number;
+interface LiveRegion {
+  /** Speak a message and return the nonce that identifies this announcement. */
+  announce: (message: string, options?: { assertive?: boolean }) => number;
+  /** Clear the polite region, but only if `nonce` is still its latest message,
+      so retiring a spent toast never talks over a newer announcement. */
+  retract: (nonce: number) => void;
+}
 
-const AnnounceContext = createContext<Announce>(() => 0);
+const LiveRegionContext = createContext<LiveRegion>({
+  announce: () => 0,
+  retract: () => {},
+});
 
 /**
  * Hosts the popup's two persistent live regions — polite (toasts, saves, verify
@@ -21,7 +36,7 @@ export function LiveRegionProvider({
   const [assertive, setAssertive] = useState({ message: "", nonce: 0 });
   const politeNonce = useRef(0);
   const assertiveNonce = useRef(0);
-  const announce = useCallback<Announce>((message, options) => {
+  const announce = useCallback<LiveRegion["announce"]>((message, options) => {
     const assertiveAnnouncement = options?.assertive === true;
     const nonceRef = assertiveAnnouncement ? assertiveNonce : politeNonce;
     nonceRef.current += 1;
@@ -30,9 +45,18 @@ export function LiveRegionProvider({
     setter({ message, nonce });
     return nonce;
   }, []);
+  const retract = useCallback<LiveRegion["retract"]>(
+    (nonce) => {
+      if (politeNonce.current === nonce) {
+        announce("");
+      }
+    },
+    [announce],
+  );
+  const region = useMemo(() => ({ announce, retract }), [announce, retract]);
 
   return (
-    <AnnounceContext.Provider value={announce}>
+    <LiveRegionContext.Provider value={region}>
       {children}
       <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         <span key={polite.nonce}>{polite.message}</span>
@@ -45,10 +69,14 @@ export function LiveRegionProvider({
       >
         <span key={assertive.nonce}>{assertive.message}</span>
       </div>
-    </AnnounceContext.Provider>
+    </LiveRegionContext.Provider>
   );
 }
 
-export function useAnnounce(): Announce {
-  return useContext(AnnounceContext);
+export function useAnnounce(): LiveRegion["announce"] {
+  return useContext(LiveRegionContext).announce;
+}
+
+export function useLiveRegion(): LiveRegion {
+  return useContext(LiveRegionContext);
 }

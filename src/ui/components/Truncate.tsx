@@ -5,7 +5,6 @@ export const TRUNCATION_LIMITS = {
   header: 32,
   value: 36,
   domain: 34,
-  profile: 22,
 } as const;
 
 /**
@@ -29,25 +28,13 @@ export function truncateEnd(text: string, max: number): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** Prefers a whole-word boundary for human-readable names. */
-export function truncateWords(text: string, max: number): string {
-  if (max <= 1 || text.length <= max) return text;
-  const budget = max - 1;
-  const prefix = text.slice(0, budget);
-  const boundary = prefix.lastIndexOf(" ");
-  return boundary >= Math.floor(budget / 2)
-    ? `${prefix.slice(0, boundary).trimEnd()}…`
-    : truncateEnd(text, max);
-}
-
 interface TruncateProps {
   value: string;
   /**
-   * "end" (default) keeps the leading portion. "middle" keeps both ends for
-   * machine identifiers and values. "word" keeps profile names on a word
-   * boundary when one fits.
+   * "end" (default) keeps the leading portion and clips the tail with a CSS
+   * ellipsis. "middle" keeps both ends for machine identifiers and values.
    */
-  mode?: "end" | "middle" | "word";
+  mode?: "end" | "middle";
   /**
    * A shared character ceiling for the data type. A mode that cuts the string by
    * hand also measures the rendered result against its live container and takes
@@ -88,16 +75,19 @@ export function HeaderValue({
   );
 }
 
-/** Human-readable profile names share one word-boundary treatment. */
+/**
+ * A profile name, clipped to whatever column each surface gives it: the wide
+ * Profiles row shows the whole name, the pill and the menu row cut it to the
+ * room they have. The container fills its column so the CSS ellipsis has a width
+ * to clip against.
+ */
 export function ProfileName({
   value,
   class: className,
 }: Pick<TruncateProps, "value" | "class">) {
   return (
     <Truncate
-      mode="word"
       value={value}
-      maxChars={TRUNCATION_LIMITS.profile}
       {...(className === undefined ? {} : { class: className })}
     />
   );
@@ -118,16 +108,16 @@ export function Truncate({
   maxChars,
   class: className,
 }: TruncateProps) {
-  // The two modes that cut the string by hand also measure the column they are
-  // cut for; end mode hands that job to the CSS ellipsis, which measures it for
-  // free. Either way the character ceiling is a ceiling, not the whole answer:
-  // 22 CJK characters take about twice the room 22 Latin ones do.
-  if (mode !== "end") {
+  // Middle mode cuts the string by hand and measures the column it is cut for;
+  // end mode hands that job to the CSS ellipsis, which measures it for free.
+  // Either way the character ceiling is a ceiling, not the whole answer: 22 CJK
+  // characters take about twice the room 22 Latin ones do.
+  if (mode === "middle") {
     return (
       <Measured
         value={value}
         maxChars={maxChars}
-        cut={mode === "middle" ? truncateMiddle : truncateWords}
+        cut={truncateMiddle}
         class={className}
       />
     );

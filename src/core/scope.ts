@@ -134,6 +134,14 @@ export function validateUrlFilter(
   return ok(undefined);
 }
 
+// A urlFilter that does not open with a pipe anchor is matched as a substring of
+// the whole URL, query string included, so it can reach a host it never names.
+// Chrome runs it exactly as written, so this is an author-time caution, not a
+// gate; the empty field is the unwritten scope, not a leak.
+export function isUnanchoredPattern(pattern: string): boolean {
+  return pattern !== "" && !pattern.startsWith("|");
+}
+
 // requestDomains carries the same atomic-batch hazard as urlFilter, so gate it
 // at the same two points: one entry Chrome refuses fails the whole update and
 // freezes the live ruleset at its last-good revision.

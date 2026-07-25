@@ -6,7 +6,7 @@ import {
 } from "../src/core/compile";
 import { originGranted } from "../src/core/grants";
 import {
-  activateNextProfile,
+  activatePreviousProfile,
   type StateDoc,
   type TabOverride,
 } from "../src/core/model";
@@ -254,8 +254,8 @@ export default defineBackground(() => {
         settings: { ...doc.settings, paused: !doc.settings.paused },
       }));
     }
-    if (command === "next-profile") {
-      return mutateState(activateNextProfile);
+    if (command === "previous-profile") {
+      return mutateState(activatePreviousProfile);
     }
     return undefined;
   }

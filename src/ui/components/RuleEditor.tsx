@@ -8,6 +8,7 @@ import {
 } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
+  coversSubresourceTypes,
   type GrantSnapshot,
   isAllSitesOrigin,
   originGranted,
@@ -88,7 +89,12 @@ interface RuleEditorProps {
   onGranted?: () => void;
   /** The rule was saved, but the permission prompt was declined. */
   onGrantDeclined?: (host: string) => void;
-  onCommitted?: (kind: "create" | "edit") => void;
+  /** A save landed: the host announces it, reading the saved rule's own row. */
+  onCommitted?: (commit: {
+    kind: "create" | "edit";
+    rule: Rule;
+    profileId: string | undefined;
+  }) => void;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
@@ -128,15 +134,6 @@ export type GrantSites = readonly [string, ...string[]];
 interface CommitGrant {
   origins: string[];
   sites: GrantSites;
-}
-
-/**
- * What a commit is about to ask Chrome for, in the words the button and the
- * decline both use. One site is named; several are counted, because naming the
- * first of them understates the reach the click is disclosing.
- */
-function grantTarget(sites: GrantSites): string {
-  return sites.length === 1 ? sites[0] : copy.actions.allowSites(sites.length);
 }
 
 /** Full-popup rule editor with explicit save and guarded discard. */
@@ -198,12 +195,16 @@ export function RuleEditor(props: RuleEditorProps) {
           granted = false;
         }
       }
-      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
+      props.onCommitted?.({
+        kind: props.rule === undefined ? "create" : "edit",
+        rule: outcome.value,
+        profileId: current.profileId,
+      });
       if (grant !== undefined) {
         if (granted === true) {
           props.onGranted?.();
         } else {
-          props.onGrantDeclined?.(grantTarget(grant.sites));
+          props.onGrantDeclined?.(copy.actions.andSites(grant.sites));
         }
       }
       props.onClose();
@@ -244,15 +245,18 @@ export function RuleEditor(props: RuleEditorProps) {
     }
   }, [confirmDiscard]);
 
-  // A rejected commit leaves focus on the button that was rejected. Every field
-  // already marks itself aria-invalid, so the first one in document order is the
-  // first one on screen.
+  // A rejected commit leaves focus on the button that raised it, which reads as
+  // a dead click. A field error exposes its offending control as aria-invalid; a
+  // form-level error has no field, so its banner is the target. Either way the
+  // first match in document order is the first on screen.
   useLayoutEffect(() => {
     if (Object.keys(errors).length === 0) {
       return;
     }
     fieldsRef.current
-      ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      ?.querySelector<HTMLElement>(
+        '[aria-invalid="true"], .editor-error-global',
+      )
       ?.focus();
   }, [errors]);
 
@@ -296,8 +300,12 @@ export function RuleEditor(props: RuleEditorProps) {
         ? copy.actions.createRule
         : copy.actions.saveChanges
       : mode === "new"
-        ? copy.actions.createRuleAndAllow(grantTarget(commitGrant.sites))
-        : copy.actions.saveChangesAndAllow(grantTarget(commitGrant.sites));
+        ? copy.actions.createRuleAndAllow(
+            copy.actions.andSites(commitGrant.sites),
+          )
+        : copy.actions.saveChangesAndAllow(
+            copy.actions.andSites(commitGrant.sites),
+          );
 
   return (
     <Sheet
@@ -321,6 +329,9 @@ export function RuleEditor(props: RuleEditorProps) {
             header={draft.header}
             direction={draft.direction}
             operation={draft.operation}
+            pattern={
+              draft.scope.type === "pattern" ? draft.scope.pattern : undefined
+            }
           />
           <div class="editor-actions">
             {confirmDiscard ? (
@@ -353,14 +364,13 @@ export function RuleEditor(props: RuleEditorProps) {
                 {/* A draft that was never saved has nothing to delete; Cancel
                     already discards it. */}
                 {props.onDelete !== undefined && props.rule !== undefined && (
-                  <button
-                    type="button"
-                    class="editor-delete"
+                  <Button
+                    kind="destructive"
                     disabled={busy}
                     onClick={props.onDelete}
                   >
                     {copy.editor.delete}
-                  </button>
+                  </Button>
                 )}
                 <button
                   type="button"
@@ -392,6 +402,7 @@ export function RuleEditor(props: RuleEditorProps) {
 
         <HeaderNameInput
           value={draft.header}
+          direction={draft.direction}
           error={errors.name}
           autoFocus
           inputRef={(element) => {
@@ -427,12 +438,6 @@ export function RuleEditor(props: RuleEditorProps) {
           <ValueField
             value={draft.value}
             generated={draft.generated}
-            frozenAt={
-              draft.generated !== undefined &&
-              draft.generated.at === props.rule?.generated?.at
-                ? formatFrozenAt(draft.generated.at)
-                : undefined
-            }
             error={errors.value}
             onInput={(value) =>
               update((current) => ({
@@ -477,7 +482,11 @@ export function RuleEditor(props: RuleEditorProps) {
         />
 
         {errors.editor !== undefined && (
-          <p class="editor-error editor-error-global" role="alert">
+          <p
+            class="editor-error editor-error-global"
+            role="alert"
+            tabIndex={-1}
+          >
             {errors.editor}
           </p>
         )}
@@ -778,11 +787,7 @@ function planCommitGrant(
   if (targets.length === 0) {
     return undefined;
   }
-  const reachesSubresources =
-    draft.resourceTypes === "all" ||
-    draft.resourceTypes.some(
-      (group) => group !== "pages" && group !== "subframes",
-    );
+  const reachesSubresources = coversSubresourceTypes(draft);
   const inferredInitiator =
     reachesSubresources &&
     tabDomain !== undefined &&
@@ -822,9 +827,4 @@ function targetHosts(scope: Scope): string[] {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
-}
-
-/** "2026-07-12T14:03:27.000Z" → "2026-07-12 14:03 UTC" (the designed reading). */
-function formatFrozenAt(iso: string): string {
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }

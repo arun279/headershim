@@ -121,7 +121,7 @@ export function ThisTabComposer({
           ref={headerRef}
           class="cin name mono"
           value={header}
-          placeholder={copy.editor.placeholders.headerName}
+          placeholder={copy.editor.placeholders.headerName[direction]}
           aria-label={copy.editor.labels.headerName}
           spellcheck={false}
           autocomplete="off"

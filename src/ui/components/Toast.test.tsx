@@ -22,6 +22,11 @@ describe("Toast", () => {
     expect(el.getAttribute("role")).toBeNull();
     expect(el.getAttribute("aria-live")).toBeNull();
     expect(el.textContent).toContain("Rule deleted");
+    // The visible message is hidden from the accessibility tree so it exists
+    // there exactly once, through the polite region, not twice.
+    expect(root.querySelector(".toast-msg")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
     expect(root.querySelector(".toast-action")).toBeNull();
   });
 

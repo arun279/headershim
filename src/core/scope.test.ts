@@ -5,6 +5,7 @@ import {
   expandResourceTypes,
   isDomainSupported,
   isHostnameShaped,
+  isUnanchoredPattern,
   originPatternForDomain,
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
@@ -155,6 +156,23 @@ describe("urlFilter grammar", () => {
     const result = validateUrlFilter("||*.example.com");
     expect(result).toEqual({ ok: false, error: "domain-anchor-wildcard" });
   });
+
+  // A pattern with no pipe anchor is a substring match over the whole URL, the
+  // silent leak the caution band warns about; one with a leading pipe is anchored
+  // to the front and an empty field is the unwritten scope.
+  it.each(["example.com/", "*.example.com/", "/api/"])(
+    "flags the unanchored pattern %s",
+    (pattern) => {
+      expect(isUnanchoredPattern(pattern)).toBe(true);
+    },
+  );
+
+  it.each(["||example.com/", "|https://example.com/", ""])(
+    "clears the anchored or empty pattern %s",
+    (pattern) => {
+      expect(isUnanchoredPattern(pattern)).toBe(false);
+    },
+  );
 });
 
 describe("requestDomains grammar", () => {

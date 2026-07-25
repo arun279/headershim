@@ -48,7 +48,6 @@
 .profile-badge {
   width: 24px;
   height: 24px;
-  flex: none;
   font-size: 10px;
 }
 
@@ -58,6 +57,8 @@
 }
 
 .profile-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
   color: var(--ink);
 }

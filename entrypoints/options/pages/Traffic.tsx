@@ -97,24 +97,24 @@ function TapeLine({ row }: { row: TapeRow }) {
           maxChars={TRUNCATION_LIMITS.header}
           class="tape-header"
         />
+        {/* A row that says "needs access" and offers no way to give it leaves the
+            reader to go and find the Site access page. A concrete host is one
+            request away; a cross-site row names no single site to ask for. */}
+        {row.status === "needs-access" && row.kind === "domain" ? (
+          <button
+            type="button"
+            class="grant tape-status"
+            aria-label={copy.options.siteAccess.grantLabel(row.host)}
+            onClick={() =>
+              void requestPermissions([originPatternForDomain(row.host)])
+            }
+          >
+            {copy.options.siteAccess.grant}
+          </button>
+        ) : (
+          <span class="tape-status">{statusLabel(row)}</span>
+        )}
       </span>
-      {/* A row that says "needs access" and offers no way to give it leaves the
-          reader to go and find the Site access page. A concrete host is one
-          request away; a cross-site row names no single site to ask for. */}
-      {row.status === "needs-access" && row.kind === "domain" ? (
-        <button
-          type="button"
-          class="grant tape-status"
-          aria-label={copy.options.siteAccess.grantLabel(row.host)}
-          onClick={() =>
-            void requestPermissions([originPatternForDomain(row.host)])
-          }
-        >
-          {copy.options.siteAccess.grant}
-        </button>
-      ) : (
-        <span class="tape-status">{statusLabel(row)}</span>
-      )}
     </li>
   );
 }
@@ -126,9 +126,7 @@ function statusLabel(row: TapeRow): string {
     case "needs-access":
       return text.status.needsAccess;
     case "refused":
-      return row.refused === undefined
-        ? text.status.refused
-        : copy.readout.refusedReason[row.refused];
+      return text.status.refused;
     case "managed":
       return text.status.managed;
     case "out-of-sync":

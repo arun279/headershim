@@ -3,8 +3,10 @@ import "./Toggle.css";
 interface ToggleProps {
   checked: boolean;
   /**
-   * Names the thing switched, e.g. "Turn off: authorization" or "All header
-   * changes". Checked always means that thing is on, never that it is stopped.
+   * Names the thing switched, e.g. "Rule on: authorization" or "All header
+   * changes", never the action a click performs: role switch already exposes
+   * on/off through aria-checked, so an action verb would fight it. It feeds both
+   * the accessible name and the hover title, since a bare knob has no other name.
    */
   label: string;
   onChange: (next: boolean) => void;
@@ -36,6 +38,7 @@ export function Toggle({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      title={label}
       aria-disabled={ariaDisabled}
       class={tone === undefined ? "sw" : `sw sw-${tone}`}
       disabled={disabled}

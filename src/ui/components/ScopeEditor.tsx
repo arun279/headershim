@@ -92,7 +92,11 @@ export function ScopeEditor(props: ScopeEditorProps) {
             <UrlScopeField
               id={id}
               label={copy.editor.scopeType.pattern}
-              hint={sentence(copy.editor.patternHint)}
+              hint={copy.editor.patternHint.map((line, index) => (
+                <p class="editor-micro" key={index}>
+                  {sentence(line)}
+                </p>
+              ))}
               invalid={props.error !== undefined && !hostError}
               hostInvalid={hostError}
               value={scope.pattern}
@@ -105,7 +109,9 @@ export function ScopeEditor(props: ScopeEditorProps) {
             <UrlScopeField
               id={id}
               label={copy.editor.scopeType.regex}
-              hint={copy.editor.regexHint}
+              hint={
+                <p class="editor-micro">{sentence(copy.editor.regexHint)}</p>
+              }
               invalid={props.error !== undefined && !hostError}
               hostInvalid={hostError}
               value={scope.regex}
@@ -170,7 +176,7 @@ function UrlScopeField({
         value={value}
         onInput={(event) => onValue(event.currentTarget.value)}
       />
-      <p class="editor-micro">{hint}</p>
+      {hint}
       <GrantHosts
         id={`${id}-hosts`}
         hosts={hosts}
@@ -287,6 +293,7 @@ function ResourceTypes({
           class="disclosure"
           aria-expanded={open}
           aria-controls={open ? `${id}-panel` : undefined}
+          aria-invalid={error !== undefined ? true : undefined}
           onClick={() => setOpen((current) => !current)}
         >
           {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}

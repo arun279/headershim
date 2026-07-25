@@ -1,12 +1,6 @@
-/* Base card recipe lives in App.css; About adds nothing to it.
-
-   One measure for the whole page. A measure counted in ch is a different width
-   at every type size, so three sizes of prose in one card stack gave three
-   ragged right edges within 90px of each other. This is the one right edge the
-   page reads to, whatever size a paragraph is set in. */
-.about-page {
-  --about-measure: 34rem;
-}
+/* Base card recipe lives in App.css; About adds nothing to it. The page holds
+   its own measure (App.css), so the card is that width and every size of prose
+   reads to the one card edge without a width of its own. */
 .about-build {
   font-size: 13px;
   font-weight: 650;
@@ -17,7 +11,6 @@
 }
 
 .about-description {
-  max-width: var(--about-measure);
   color: var(--ink2);
   font-size: 12px;
   line-height: 1.5;
@@ -42,8 +35,7 @@
    outranks the identity card above it instead of reading as fine print under it.
    One column at every width: the plain-word heading and the manifest id it maps
    to lead the row, the sentence answering what the permission is for reads under
-   them, and the specifics sit under that. The prose is held to a reading measure
-   while the rows and their dividers keep the card's full width. */
+   them, and the specifics sit under that. */
 .perm-list {
   list-style: none;
   display: flex;
@@ -93,10 +85,6 @@
   font-size: 13px;
   line-height: 1.55;
   color: var(--ink2);
-}
-.perm-reason,
-.perm-detail {
-  max-width: var(--about-measure);
 }
 .perm-detail::before {
   content: "";

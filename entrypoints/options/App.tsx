@@ -132,7 +132,11 @@ export function App() {
           ) : section === "import-export" ? (
             <ImportExportPage doc={app.doc} mutations={mutations} />
           ) : section === "settings" ? (
-            <SettingsPage doc={app.doc} mutations={mutations} />
+            <SettingsPage
+              doc={app.doc}
+              grants={app.grants}
+              mutations={mutations}
+            />
           ) : (
             <AboutPage />
           )}

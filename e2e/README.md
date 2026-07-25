@@ -51,7 +51,7 @@ Playwright cannot synthesize browser toolbar gestures, the operating system's ex
 | Boundary | Runnable coverage |
 |---|---|
 | DNR handling of `Content-Length` | Chrome currently sends a DNR-set value over HTTP/1.1 even when it conflicts with the body length. Whether the browser sends, rewrites, or rejects that value has no HeaderShim branch or state transition, so the suite does not pin it. |
-| Global extension shortcuts | `src/test/background.test.ts` drives `toggle-pause` and `next-profile` through `commands.onCommand`. `keyboard.spec.ts` exercises the equivalent popup commands with real key events. Opening the popup for `_execute_action` is browser-owned. |
+| Global extension shortcuts | `src/test/background.test.ts` drives `toggle-pause` and `previous-profile` through `commands.onCommand`. `keyboard.spec.ts` exercises the equivalent popup commands with real key events. Opening the popup for `_execute_action` is browser-owned. |
 | Destination-only access followed by initiator access | `src/core/grants.test.ts` proves the initiator is the remaining grant gap. `src/test/background.test.ts` proves grant changes refresh status with zero DNR rewrites. `grants.spec.ts` keeps the real missing-access 200 response and absent-header assertion. |
 | Revoking broad access while a narrow grant exists | `src/test/options-site-access.test.tsx` clicks the all-sites revoke control, proves the narrow permission survives, keeps its rule in Granted, and moves only the broad-covered rule to Needed. |
 

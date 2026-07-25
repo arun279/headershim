@@ -25,7 +25,23 @@ const onAdded = createEvent<[permissions: TestPermissions]>();
 const onRemoved = createEvent<[permissions: TestPermissions]>();
 const onCommand = createEvent<[command: string]>();
 
-Object.assign(fakeBrowser, { commands: { onCommand } });
+// The three declared commands, as browser.commands.getAll resolves them for the
+// switcher accelerator and the Settings shortcut list. Chrome returns no
+// description for the reserved action command, so its description is empty here
+// too.
+const commands = [
+  { name: "_execute_action", description: "", shortcut: "⌥⇧H" },
+  { name: "toggle-pause", description: "Toggle global pause", shortcut: "⌥⇧P" },
+  {
+    name: "previous-profile",
+    description: "Switch to the previous profile",
+    shortcut: "⌥⇧K",
+  },
+];
+
+Object.assign(fakeBrowser, {
+  commands: { onCommand, getAll: async () => commands },
+});
 
 Object.assign(fakeBrowser.runtime, {
   getManifest: () => ({ version: "1.0.0" }),

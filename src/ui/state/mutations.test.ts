@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { RegexValidator } from "../../core/codec/modheader";
 import type { Profile, Rule, RuleDraft, StateDoc } from "../../core/model";
+import { defaultProfileColor } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { read, write } from "../../platform/store";
 import {
@@ -448,14 +449,12 @@ describe("delete, restore, and move", () => {
 describe("profile operations", () => {
   it("creates a profile, derives badge initials, and leaves activation alone", async () => {
     await seed([profile("p1")]);
-    const created = await mutations.createProfile({
-      name: "Staging auth",
-      color: "teal",
-    });
+    const created = await mutations.createProfile("Staging auth");
 
     expect(created.ok && created.value).toMatchObject({
       name: "Staging auth",
       badgeText: "ST",
+      color: defaultProfileColor(1),
     });
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
@@ -465,18 +464,13 @@ describe("profile operations", () => {
     ).toBe(true);
   });
 
-  it.each(["p1", "P1", "  p1  ", "", "x".repeat(49)])(
+  it.each(["p1", "P1", "  p1  ", ""])(
     "rejects an unavailable or invalid name: %j",
     async (name) => {
       await seed([profile("p1")]);
-      expect(
-        errorKind(
-          await mutations.createProfile({
-            name,
-            color: "blue",
-          }),
-        ),
-      ).toBe("profile-name-unavailable");
+      expect(errorKind(await mutations.createProfile(name))).toBe(
+        "profile-name-unavailable",
+      );
     },
   );
 
@@ -515,14 +509,17 @@ describe("profile operations", () => {
   it("passes over a badge another profile already wears", async () => {
     await seed([profile("p1", { name: "Netlify", badgeText: "NE" })]);
 
-    const created = await mutations.createProfile({
-      name: "Nexus",
-      color: "teal",
-    });
+    const created = await mutations.createProfile("Nexus");
     expect(created.ok && created.value.badgeText).toBe("NX");
 
     const cloned = await mutations.cloneProfile("p1");
     expect(cloned.ok && cloned.value.badgeText).toBe("NT");
+  });
+
+  it("gives the clone the next palette colour, not the source's", async () => {
+    await seed([profile("p1", { color: "crimson" })]);
+    const cloned = await mutations.cloneProfile("p1");
+    expect(cloned.ok && cloned.value.color).toBe(defaultProfileColor(1));
   });
 
   it("clones deep with fresh rule identities and a ' copy' suffix", async () => {
@@ -547,11 +544,11 @@ describe("profile operations", () => {
     expect(clonedRule?.num).not.toBe(source.num);
   });
 
-  it("keeps clone names within the 48-character limit", async () => {
-    const long = "x".repeat(48);
+  it("clones a long name without truncating it", async () => {
+    const long = "x".repeat(200);
     await seed([profile("p1", { name: long })]);
     const cloned = await mutations.cloneProfile("p1");
-    expect(cloned.ok && cloned.value.name).toBe(`${"x".repeat(43)} copy`);
+    expect(cloned.ok && cloned.value.name).toBe(`${long} copy`);
   });
 
   it("clones an active profile without making the clone active", async () => {
@@ -573,6 +570,32 @@ describe("profile operations", () => {
     const deleted = await mutations.deleteProfile("p1");
     expect(deleted.ok && deleted.value.index).toBe(0);
     expect((await read()).activeProfileId).toBe("p2");
+  });
+
+  it("drops the flip target when deleting the active profile lands on it", async () => {
+    await seed([profile("p1"), profile("p2")], {
+      activeProfileId: "p2",
+      previousProfileId: "p1",
+    });
+
+    expect((await mutations.deleteProfile("p2")).ok).toBe(true);
+    const stored = await read();
+    // p1 is the heir, so keeping it as the flip target would aim the shortcut at
+    // the row it just landed on.
+    expect(stored.activeProfileId).toBe("p1");
+    expect(stored.previousProfileId).toBeUndefined();
+  });
+
+  it("keeps the flip target when deleting a profile that is not it", async () => {
+    await seed([profile("p1"), profile("p2"), profile("p3")], {
+      activeProfileId: "p3",
+      previousProfileId: "p1",
+    });
+
+    expect((await mutations.deleteProfile("p2")).ok).toBe(true);
+    const stored = await read();
+    expect(stored.activeProfileId).toBe("p3");
+    expect(stored.previousProfileId).toBe("p1");
   });
 
   it("restores activation with a deleted active profile", async () => {
@@ -613,10 +636,7 @@ describe("profile operations", () => {
     await seed([profile("p1"), doomed, profile("p3")]);
 
     await mutations.deleteProfile("p2");
-    await mutations.createProfile({
-      name: "p2",
-      color: "blue",
-    });
+    await mutations.createProfile("p2");
     expect(
       (
         await mutations.restoreProfile({
@@ -666,9 +686,20 @@ describe("activation semantics", () => {
     expect((await mutations.activateProfile("p2")).ok).toBe(true);
     const stored = await read();
     expect(stored.activeProfileId).toBe("p2");
+    // The profile it left becomes the flip target for the profile shortcut.
+    expect(stored.previousProfileId).toBe("p1");
     expect(
       stored.profiles.every((candidate) => !("enabled" in candidate)),
     ).toBe(true);
+  });
+
+  it("keeps the flip target when the active profile is re-selected", async () => {
+    await seed([profile("p1"), profile("p2")], { previousProfileId: "p2" });
+
+    expect((await mutations.activateProfile("p1")).ok).toBe(true);
+    const stored = await read();
+    expect(stored.activeProfileId).toBe("p1");
+    expect(stored.previousProfileId).toBe("p2");
   });
 
   it("reports not-found for an unknown profile", async () => {

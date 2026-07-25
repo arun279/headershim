@@ -33,14 +33,6 @@ body {
 .foot-sp {
   flex: 1;
 }
-.foot .pause {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  color: var(--ink2);
-  font-weight: 600;
-}
 
 /* Bordered "Add a change" and the empty-state action share this affordance. */
 .add {
@@ -64,20 +56,18 @@ body {
   height: 13px;
   color: var(--live);
 }
-/* The footer's controls hold their width: a shrunk label wraps mid-phrase, and
-   a shrunk icon button drops under the 24px minimum target. */
+/* The footer's controls hold their width so a shrunk label never wraps
+   mid-phrase. */
 .tab-btn {
-  display: inline-flex;
-  align-items: center;
   flex: none;
-  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink2);
-  padding: 6px 2px;
+  padding: 6px 8px;
+  border-radius: var(--r-ctl);
 }
-.tab-btn svg {
-  color: var(--ink3);
+.tab-btn:hover {
+  background: var(--raise);
 }
 .foot .icon-btn {
   flex: none;

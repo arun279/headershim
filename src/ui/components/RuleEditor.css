@@ -9,6 +9,14 @@
   white-space: nowrap;
 }
 
+/* A form has a measure of its own. The popup's 398px window supplies it there;
+   on the options page the editor sits on a column that fills the window, so it
+   holds itself to the same readable width rather than stretching a single-line
+   header field a metre wide. */
+.editor-sheet {
+  max-width: 34rem;
+}
+
 .editor-sheet .sheet-head {
   gap: var(--sp-3);
 }
@@ -140,6 +148,15 @@
   padding: var(--sp-3) var(--sp-4);
 }
 
+/* The commit button names every site its grant will ask Chrome for, and the
+   popup is 398px wide, so its label can outrun one line. It wraps within the
+   row rather than pushing the row wider than the popup. */
+.editor-actions .btn.primary {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+}
+
 .editor-cancel {
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
@@ -151,19 +168,10 @@
   background: var(--raise2);
 }
 
-/* Destructive, so it sits apart from the two actions that keep the rule. It
-   asks nothing: the toast it raises carries the undo. */
-.editor-delete {
+/* The destructive kind carries the red; here it only sits apart from the two
+   actions that keep the rule. Its toast carries the undo, so it asks nothing. */
+.editor-actions .btn.destructive {
   margin-right: auto;
-  min-height: 30px;
-  padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--r-ctl);
-  color: var(--stop);
-  font-weight: 600;
-}
-
-.editor-delete:hover:not(:disabled) {
-  background: var(--stop-soft);
 }
 
 .discard-title {

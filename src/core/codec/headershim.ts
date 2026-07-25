@@ -1,12 +1,13 @@
 import { headerSensitivity, normalizeHeaderName } from "../headers";
 import {
+  availableProfileName,
   type BadgeColor,
   createProfile,
   createRule,
   type Direction,
   deriveBadgeText,
   type HeaderOp,
-  isProfileNameAvailable,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type ResourceGroup,
@@ -109,11 +110,6 @@ type EnvelopeMigrationError = Extract<
   ImportError,
   { kind: "newer-version" | "invalid-export" }
 >;
-type MigrationStep = (
-  envelope: unknown,
-) => Result<unknown, EnvelopeMigrationError>;
-
-export const migrations: Readonly<Partial<Record<number, MigrationStep>>> = {};
 
 export function createHeadershimEnvelope(
   source: StateDoc | Profile,
@@ -153,52 +149,20 @@ export function importHeadershim(
 export function migrate(
   envelope: unknown,
 ): Result<HeadershimEnvelope, EnvelopeMigrationError> {
-  const initialVersion = versionOf(envelope);
-  if (initialVersion === undefined) {
+  const version = versionOf(envelope);
+  if (version === undefined) {
     return err({ kind: "invalid-export" });
   }
-  if (initialVersion > CURRENT_SCHEMA_VERSION) {
+  if (version > CURRENT_SCHEMA_VERSION) {
     return err({
       kind: "newer-version",
-      foundVersion: initialVersion,
+      foundVersion: version,
       supportedVersion: CURRENT_SCHEMA_VERSION,
     });
   }
 
-  let migrated = envelope;
-  let version = initialVersion;
-  // The initial envelope schema has no predecessor that can exercise this chain yet.
-  /* v8 ignore start */
-  while (version < CURRENT_SCHEMA_VERSION) {
-    const step = migrations[version];
-    if (!step) {
-      return err({ kind: "invalid-export" });
-    }
-
-    const result = step(migrated);
-    if (!result.ok) {
-      return result;
-    }
-
-    const nextVersion = versionOf(result.value);
-    if (!(nextVersion !== undefined && nextVersion > version)) {
-      return err({ kind: "invalid-export" });
-    }
-    if (nextVersion > CURRENT_SCHEMA_VERSION) {
-      return err({
-        kind: "newer-version",
-        foundVersion: nextVersion,
-        supportedVersion: CURRENT_SCHEMA_VERSION,
-      });
-    }
-
-    migrated = result.value;
-    version = nextVersion;
-  }
-  /* v8 ignore stop */
-
-  return isHeadershimEnvelope(migrated)
-    ? ok(migrated)
+  return isHeadershimEnvelope(envelope)
+    ? ok(envelope)
     : err({ kind: "invalid-export" });
 }
 
@@ -298,7 +262,11 @@ function createImportPlan(
 
   for (const exported of envelope.profiles) {
     profiles.push({
-      name: availableProfileName(exported.name, existingProfiles, profiles),
+      name: availableProfileName(
+        exported.name,
+        existingProfiles,
+        profiles.map((profile) => profile.name),
+      ),
       badgeText: exported.badge,
       color: exported.color,
       rules: exported.rules.map(importRuleDraft),
@@ -375,38 +343,6 @@ function importScope(scope: ExportedScope): Scope {
   }
 }
 
-export function availableProfileName(
-  base: string,
-  existingProfiles: readonly Profile[],
-  plannedProfiles: readonly ImportedProfile[],
-): string {
-  if (isAvailable(base, existingProfiles, plannedProfiles)) {
-    return base;
-  }
-
-  for (let suffix = 2; ; suffix += 1) {
-    const ending = ` ${suffix}`;
-    const candidate = `${base.slice(0, 48 - ending.length).trimEnd()}${ending}`;
-    if (isAvailable(candidate, existingProfiles, plannedProfiles)) {
-      return candidate;
-    }
-  }
-}
-
-function isAvailable(
-  candidate: string,
-  existingProfiles: readonly Profile[],
-  plannedProfiles: readonly ImportedProfile[],
-): boolean {
-  const normalized = candidate.toLowerCase();
-  return (
-    isProfileNameAvailable(existingProfiles, candidate) &&
-    plannedProfiles.every(
-      (profile) => profile.name.toLowerCase() !== normalized,
-    )
-  );
-}
-
 function versionOf(value: unknown): number | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -449,7 +385,7 @@ function isExportedProfile(value: unknown): value is ExportedProfile {
   const { name, badge, color, rules } = value;
   return (
     typeof name === "string" &&
-    isProfileNameAvailable([], name) &&
+    isStoredProfileNameValid([], name) &&
     typeof badge === "string" &&
     normalizeBadgeText(badge) === badge &&
     isOneOf(color, BADGE_COLORS) &&

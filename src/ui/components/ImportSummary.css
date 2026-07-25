@@ -9,8 +9,16 @@
   border-radius: var(--r-ctl);
 }
 
-.import-counts {
-  color: var(--ink);
+.import-source {
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+
+.import-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  list-style: none;
 }
 
 .import-attention {

@@ -9,12 +9,10 @@
  */
 
 import {
-  dropInapplicable,
   settlesPerRequest,
   type UncompilableReason,
   uncompilableReason,
 } from "../../core/compile";
-import { findOverriddenRules } from "../../core/conflicts";
 import type { GrantSnapshot } from "../../core/grants";
 import { missingGrants } from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
@@ -34,6 +32,7 @@ import {
   isSecretHeader,
   ruleValueSummary,
 } from "../secret";
+import { overriddenLabels } from "./overridden";
 
 /** Per-line health, in the same order the severity spine reads it. */
 export type LineStatus =
@@ -55,17 +54,17 @@ export type RefusedReason = "host" | UncompilableReason;
  */
 type Reach = "yes" | "no" | "unknown";
 
-export interface TabChange {
-  /** Stable key for rendering, focus, and tests. */
-  readonly key: string;
-  readonly source: "rule" | "override";
-  readonly profileId?: string;
-  readonly ruleId?: string;
-  readonly overrideNum?: number;
+/**
+ * The description every projected line carries, popup change line and Workbench
+ * fleet row alike: what the change does, how live it is, and the one exception
+ * it names. Assembled once in `lineCore`, so the two surfaces cannot drift on
+ * how a change reads or which of its states they carry; each surface spreads its
+ * own identity and reach fields around this core.
+ */
+export interface LineCore {
   readonly direction: Direction;
   readonly operation: HeaderOp;
   readonly header: string;
-  readonly value?: string;
   /** The redacted reading shown on the line; undefined for a remove. */
   readonly display?: string;
   readonly secret: boolean;
@@ -78,6 +77,16 @@ export interface TabChange {
   readonly refused?: RefusedReason;
   /** Origins to grant, when this line needs access. */
   readonly missing?: readonly string[];
+}
+
+export interface TabChange extends LineCore {
+  /** Stable key for rendering, focus, and tests. */
+  readonly key: string;
+  readonly source: "rule" | "override";
+  readonly profileId?: string;
+  readonly ruleId?: string;
+  readonly overrideNum?: number;
+  readonly value?: string;
   /**
    * How far this rule reaches past the tab the popup is open on: the number of
    * other domains it names, or "broad" for a scope that names none. Absent when
@@ -166,20 +175,7 @@ export function computeReadout({
     });
   }
 
-  // Collisions resolve over the exact rules Chrome installs: dropInapplicable is
-  // the compiler's own input, so a rule it drops, or narrows to its granted
-  // domains, shadows and is shadowed here precisely as it does on the wire.
-  const installed = activeProfile(
-    dropInapplicable(doc, isRegexSupported, grants),
-  ).rules;
-  const rulesById = new Map(installed.map((rule) => [rule.id, rule]));
-  const overriddenBy = new Map<string, string>();
-  for (const { ruleId, shadowedByRuleId } of findOverriddenRules(installed)) {
-    const winner = rulesById.get(shadowedByRuleId);
-    if (winner !== undefined) {
-      overriddenBy.set(ruleId, ruleLabel(winner));
-    }
-  }
+  const overriddenBy = overriddenLabels(doc, grants, isRegexSupported);
 
   const changes = applying.map(({ profile, rule, reach, missing }) =>
     ruleChange(profile, rule, {
@@ -270,6 +266,48 @@ function isAuthorizationToken(change: TabChange): boolean {
   );
 }
 
+/** The redacted reading a rule shows on a line; a remove withholds none. */
+export function ruleDisplay(
+  rule: Pick<Rule, "operation" | "generated" | "header" | "value">,
+): string | undefined {
+  return rule.operation === "remove" ? undefined : ruleValueSummary(rule);
+}
+
+/**
+ * The fields the popup line and the fleet row describe a change with, assembled
+ * once so neither surface can add a state the other forgets. Each caller resolves
+ * `status` from its own flags and hands the line its display and exceptions; the
+ * conditional shape (which exception a status is allowed to name) lives here.
+ */
+export function lineCore(input: {
+  direction: Direction;
+  operation: HeaderOp;
+  header: string;
+  display: string | undefined;
+  enabled: boolean;
+  status: LineStatus;
+  overriddenBy: string | undefined;
+  refused: RefusedReason | undefined;
+  missing: readonly string[];
+}): LineCore {
+  return {
+    direction: input.direction,
+    operation: input.operation,
+    header: input.header,
+    ...(input.display === undefined ? {} : { display: input.display }),
+    secret: isSecretHeader(input.header),
+    enabled: input.enabled,
+    status: input.status,
+    ...(input.status === "overridden" && input.overriddenBy !== undefined
+      ? { overriddenBy: input.overriddenBy }
+      : {}),
+    ...(input.status === "refused" && input.refused !== undefined
+      ? { refused: input.refused }
+      : {}),
+    ...(input.status === "needs-access" ? { missing: input.missing } : {}),
+  };
+}
+
 function ruleChange(
   profile: Profile,
   rule: Rule,
@@ -293,28 +331,24 @@ function ruleChange(
     needsAccess: context.missing.length > 0,
     perRequest: context.reach === "unknown",
   });
-  const secret = isSecretHeader(rule.header);
-  const display =
-    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
   const wider = widerReach(rule);
   return {
     key: `${profile.id}:${rule.id}`,
     source: "rule",
     profileId: profile.id,
     ruleId: rule.id,
-    direction: rule.direction,
-    operation: rule.operation,
-    header: rule.header,
+    ...lineCore({
+      direction: rule.direction,
+      operation: rule.operation,
+      header: rule.header,
+      display: ruleDisplay(rule),
+      enabled: rule.enabled,
+      status,
+      overriddenBy: context.overriddenBy,
+      refused,
+      missing: context.missing,
+    }),
     ...(rule.value === undefined ? {} : { value: rule.value }),
-    ...(display === undefined ? {} : { display }),
-    secret,
-    enabled: rule.enabled,
-    status,
-    ...(context.overriddenBy === undefined
-      ? {}
-      : { overriddenBy: context.overriddenBy }),
-    ...(status === "needs-access" ? { missing: context.missing } : {}),
-    ...(status === "refused" && refused !== undefined ? { refused } : {}),
     ...(wider === undefined ? {} : { widerReach: wider }),
   };
 }
@@ -337,22 +371,25 @@ function overrideChange(
     needsAccess: false,
     perRequest: false,
   });
-  const display =
-    override.operation === "remove"
-      ? undefined
-      : headerValueSummary(override.header, override.value);
   return {
     key: `override:${override.num}`,
     source: "override",
     overrideNum: override.num,
-    direction: override.direction,
-    operation: override.operation,
-    header: override.header,
+    ...lineCore({
+      direction: override.direction,
+      operation: override.operation,
+      header: override.header,
+      display:
+        override.operation === "remove"
+          ? undefined
+          : headerValueSummary(override.header, override.value),
+      enabled: override.enabled,
+      status,
+      overriddenBy: undefined,
+      refused: undefined,
+      missing: [],
+    }),
     ...(override.value === undefined ? {} : { value: override.value }),
-    ...(display === undefined ? {} : { display }),
-    secret: isSecretHeader(override.header),
-    enabled: override.enabled,
-    status,
   };
 }
 
@@ -452,8 +489,7 @@ export function previewSwitch(
     const key = normalizeHeaderName(rule.header);
     targetKeys.add(key);
     if (!current.has(key) && !adds.some((add) => add.header === rule.header)) {
-      const display =
-        rule.operation === "remove" ? undefined : ruleValueSummary(rule);
+      const display = ruleDisplay(rule);
       adds.push({
         header: rule.header,
         ...(display === undefined ? {} : { display }),
@@ -473,13 +509,6 @@ export function previewSwitch(
     }
   }
   return { drops, adds };
-}
-
-export function ruleLabel(rule: Rule): string {
-  const comment = rule.comment?.trim();
-  return comment === undefined || comment.length === 0
-    ? `${rule.header} rule`
-    : comment;
 }
 
 /** What this rule reaches beyond the one host the popup is open on. */

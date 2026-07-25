@@ -79,6 +79,7 @@ function SegmentedField<V extends string>({
         name={name}
         labelledBy={name}
         value={selected}
+        invalid={error !== undefined}
         options={options.map((value) => ({
           value,
           label: optionLabel(value),

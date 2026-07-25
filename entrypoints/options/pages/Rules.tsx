@@ -14,7 +14,7 @@ import {
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
 import { Segmented } from "../../../src/ui/components/Segmented";
 import { sentence } from "../../../src/ui/components/sentence";
-import { Toast } from "../../../src/ui/components/Toast";
+import { ToastHost } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
 import { HeaderValue, Truncate } from "../../../src/ui/components/Truncate";
 import { toneForStatus } from "../../../src/ui/components/toggleTone";
@@ -27,7 +27,8 @@ import {
   projectFleet,
 } from "../../../src/ui/state/fleet";
 import type { Mutations } from "../../../src/ui/state/mutations";
-import { useToast } from "../useToast";
+import { createdRuleToast } from "../../../src/ui/state/overridden";
+import { useToast } from "../../../src/ui/state/useToast";
 import "./Rules.css";
 
 const text = copy.options.allRules;
@@ -57,14 +58,7 @@ export function RulesPage({
   const announce = useAnnounce();
   const [lens, setLens] = useState<Lens>("header");
   const [editing, setEditing] = useState<Editing | undefined>(undefined);
-  const {
-    toast,
-    action: toastAction,
-    show: showToast,
-    showUndoable,
-    flash,
-    dismiss,
-  } = useToast();
+  const { toast, show: showToast, showUndoable, flash, dismiss } = useToast();
   // The editor is the options page's one heavy dependency; load it on demand so
   // it never sits in the initial bundle.
   const [Editor, setEditor] =
@@ -150,17 +144,7 @@ export function RulesPage({
 
   // One node for both branches: the delete toast has to survive the editor
   // closing under it, or its undo would vanish with the surface that raised it.
-  const toastNode = toast !== undefined && (
-    <Toast
-      nonce={toast.nonce}
-      onDismiss={dismiss}
-      persist={toastAction !== undefined}
-      actionLabel={toastAction?.label}
-      onAction={toastAction?.run}
-    >
-      {toast.message}
-    </Toast>
-  );
+  const toastNode = <ToastHost toast={toast} onDismiss={dismiss} />;
 
   if (editing !== undefined && editProfile !== undefined) {
     return (
@@ -195,10 +179,16 @@ export function RulesPage({
               showToast(copy.errors.grantDeclined(host))
             }
             onGranted={() => showToast(copy.toast.accessGranted)}
-            onCommitted={(kind) =>
+            onCommitted={({ kind, rule, profileId }) =>
               showToast(
                 kind === "create"
-                  ? copy.toast.ruleCreated
+                  ? createdRuleToast(
+                      doc,
+                      profileId ?? editProfile.id,
+                      rule,
+                      grants,
+                      isRegexSupported,
+                    )
                   : copy.toast.changesSaved,
               )
             }
@@ -408,7 +398,7 @@ function FleetRow({
             size={15}
           />
           <span class="verb">{copy.readout.verb[rule.operation]}</span>{" "}
-          <span class="k">{rule.header}</span>
+          <Truncate mode="end" value={rule.header} class="k" />
           {rule.display !== undefined && (
             <>
               {" "}
@@ -438,7 +428,7 @@ function FleetRow({
         )}
         <Toggle
           checked={rule.enabled}
-          label={copy.rules.switchLabel(rule.header, rule.enabled, sharedSites)}
+          label={copy.rules.switchLabel(rule.header, rule.enabled)}
           tone={toneForStatus(rule.status)}
           onChange={(next) => onToggle(rule, next)}
         />
@@ -460,7 +450,7 @@ function fleetReason(
         ? undefined
         : {
             tone: "rest",
-            label: copy.readout.overriddenBy(rule.overriddenBy.label),
+            label: copy.readout.overriddenBy(rule.overriddenBy),
           };
     case "refused":
       return rule.refused === undefined
@@ -518,7 +508,7 @@ function FleetWhy({
 }
 
 function scopeLabel(rule: FleetRule): string {
-  switch (rule.scope.kind) {
+  switch (rule.scope.type) {
     case "domains": {
       const [first, ...rest] = rule.scope.domains;
       return first === undefined

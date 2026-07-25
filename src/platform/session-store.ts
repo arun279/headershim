@@ -37,6 +37,11 @@ export function write(state: SessionState): Promise<void> {
   return browser.storage.session.set<StoredSession>({ sessionState: state });
 }
 
+/** Drops every tab's overrides; the background reconciles the session rules away. */
+export function clearOverrides(): Promise<void> {
+  return browser.storage.session.remove(SESSION_KEY);
+}
+
 export function subscribe(callback: () => void): () => void {
   return subscribeKey(SESSION_KEY, callback);
 }

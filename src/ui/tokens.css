@@ -217,16 +217,28 @@ button {
   font-family: var(--font-data);
 }
 
+/* Keycap chip: the outlined accelerator shown beside what a shortcut drives,
+   in the switcher row it flips to and the Settings shortcut list. */
+.kbd {
+  font-size: 10px;
+  opacity: 0.72;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
 /* Tinted colon: neutral ink3, never a semantic hue, marks the name/value seam. */
 .colon {
   color: var(--ink3);
 }
 
 /* Shared two-character profile badge glyph; the hue is set inline per profile.
-   overflow:hidden keeps a stray over-long badge inside its fixed square. */
+   A fixed glyph, never a shrinkable one: it holds its square in any flex row.
+   overflow:hidden keeps a stray over-long badge inside that square. */
 .badge-glyph {
   display: grid;
   place-items: center;
+  flex: none;
   overflow: hidden;
   border-radius: var(--r-chip);
   font-family: var(--font-data);
@@ -243,11 +255,24 @@ button {
   color: var(--ink);
 }
 
-.profile-name-input {
+/* The rename field and its commit hint stack in the row slot the name held. */
+.inline-rename {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
   flex: 1;
+  min-width: 0;
+}
+
+.profile-name-input {
   min-width: 0;
   padding: 6px var(--sp-3);
   font-weight: 500;
+}
+
+.inline-rename-hint {
+  font-size: 11px;
+  color: var(--ink2);
 }
 
 /* Silkscreen micro-label: source copy stays sentence case, caps via CSS only.
@@ -284,11 +309,15 @@ button {
    popup's change line and the options rule row. Only the type sizes differ, and
    each surface sets its own.
 
-   The header and the value both give way from their own content widths, so a
-   tight row shortens both; sized from zero the value loses every pixel first and
-   the arrow is left pointing at nothing. At rest, overridden, or held, the whole
-   sentence dims together: a strike through half of it says deleted, and none of
-   those three states deletes anything. */
+   The header names the change and the value is its payload, so under width
+   pressure the value gives way first while the header keeps its room: the header
+   is what you scan a row by, and on a secret row the value is already redacted,
+   so clipping the header would cut the only identity the line has left. Both
+   keep the same floor so neither collapses to nothing and leaves the arrow
+   pointing at empty space, and neither grows past its content, so a wide row
+   reads as one compact sentence rather than two stretched halves. At rest,
+   overridden, or held, the whole sentence dims together: a strike through half
+   of it says deleted, and none of those three states deletes anything. */
 .say .verb {
   flex: none;
   font-size: 12px;
@@ -296,7 +325,8 @@ button {
   color: var(--ink2);
 }
 .say .k {
-  min-width: 0;
+  flex: 0 1 auto;
+  min-width: 6ch;
   font-family: var(--font-data);
   font-weight: 600;
   color: var(--ink);
@@ -308,8 +338,8 @@ button {
   color: var(--ink3);
 }
 .say .v {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 8 auto;
+  min-width: 6ch;
   font-family: var(--font-data);
   color: var(--ink2);
 }

@@ -73,6 +73,9 @@ export interface StateDoc {
   v: 1;
   profiles: Profile[];
   activeProfileId: string;
+  /** The profile active just before this one, so the profile shortcut can flip
+   *  back to it. Absent until a first switch establishes the pair. */
+  previousProfileId?: string;
   nextRuleNum: number;
   settings: Settings;
 }
@@ -132,10 +135,6 @@ export function createRule(doc: StateDoc, draft: RuleDraft): [Rule, StateDoc] {
   ];
 }
 
-export function cloneRule(doc: StateDoc, rule: Rule): [Rule, StateDoc] {
-  return createRule(doc, rule);
-}
-
 export function createProfile(draft: ProfileDraft): Profile {
   return {
     id: crypto.randomUUID(),
@@ -144,6 +143,18 @@ export function createProfile(draft: ProfileDraft): Profile {
     color: draft.color,
     rules: [],
   };
+}
+
+/** The profile the product falls back to: the first-run seed, and the empty one
+ *  that takes the last profile's place when it is deleted. */
+export const DEFAULT_PROFILE_NAME = "Default";
+
+export function createDefaultProfile(): Profile {
+  return createProfile({
+    name: DEFAULT_PROFILE_NAME,
+    badgeText: "DE",
+    color: "indigo",
+  });
 }
 
 export function activeProfile(doc: StateDoc): Profile {
@@ -160,41 +171,34 @@ export function defaultProfileColor(profileCount: number): BadgeColor {
   return BADGE_COLORS[profileCount % BADGE_COLORS.length] ?? BADGE_COLORS[0];
 }
 
+// The one profile-activation transition. It remembers the profile it leaves in
+// previousProfileId, so the profile shortcut can flip back to it. A no-op when
+// the target is already active, absent, or over its enabled-rule caps (a profile
+// can grow past them while inactive), so the UI switch and the shortcut share
+// one guard and one bookkeeping rule.
 export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   const profile = doc.profiles.find((candidate) => candidate.id === profileId);
   if (
     profile === undefined ||
+    profileId === doc.activeProfileId ||
     !checkEnabledRuleLimits(profile.rules.filter((rule) => rule.enabled)).ok
   ) {
     return doc;
   }
-  return { ...doc, activeProfileId: profileId };
+  return {
+    ...doc,
+    activeProfileId: profileId,
+    previousProfileId: doc.activeProfileId,
+  };
 }
 
-export function activateNextProfile(doc: StateDoc): StateDoc {
-  const activeIndex = doc.profiles.indexOf(activeProfile(doc));
-  for (let step = 1; step <= doc.profiles.length; step += 1) {
-    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
-    if (next === undefined) {
-      continue;
-    }
-    const activated = activateProfile(doc, next.id);
-    if (activated.activeProfileId === next.id) {
-      return activated;
-    }
-  }
-  return doc;
-}
-
-export function isProfileNameAvailable(
-  profiles: readonly Profile[],
-  candidate: string,
-  excludedProfileId?: string,
-): boolean {
-  return (
-    candidate.length <= 48 &&
-    isStoredProfileNameValid(profiles, candidate, excludedProfileId)
-  );
+// The profile shortcut: flip to the profile that was active just before this
+// one. Repeated presses toggle between the two, so a two-environment user stays
+// on their pair and never lands on an empty profile they did not pick.
+export function activatePreviousProfile(doc: StateDoc): StateDoc {
+  return doc.previousProfileId === undefined
+    ? doc
+    : activateProfile(doc, doc.previousProfileId);
 }
 
 export function isStoredProfileNameValid(
@@ -210,6 +214,32 @@ export function isStoredProfileNameValid(
       profile.id !== excludedProfileId &&
       profile.name.toLowerCase() === normalized,
   );
+}
+
+/**
+ * A profile name free of both the stored profiles and any name reserved earlier
+ * in the same batch: the base when it is available, otherwise the base with the
+ * lowest " N" suffix that is. Creating a profile and importing a batch both name
+ * new profiles this way, so a collision resolves the same however it arose.
+ */
+export function availableProfileName(
+  base: string,
+  profiles: readonly Profile[],
+  takenNames: readonly string[] = [],
+): string {
+  const available = (candidate: string) =>
+    isStoredProfileNameValid(profiles, candidate) &&
+    !takenNames.some((name) => name.toLowerCase() === candidate.toLowerCase());
+
+  if (available(base)) {
+    return base;
+  }
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base} ${suffix}`;
+    if (available(candidate)) {
+      return candidate;
+    }
+  }
 }
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, {

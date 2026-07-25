@@ -128,7 +128,7 @@ test("an export round-trips through the options UI to an equivalent state, off",
   try {
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.getByRole("button", { name: strings.exportEverything }).click(),
+      page.getByRole("button", { name: strings.exportAll }).click(),
     ]);
     await download.saveAs(exportFile);
 

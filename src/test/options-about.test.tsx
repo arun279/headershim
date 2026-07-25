@@ -53,7 +53,7 @@ describe("options settings", () => {
 
   it("persists the theme choice and stamps data-theme on the root", async () => {
     const root = await mount("#settings");
-    expect(root.querySelectorAll(".settings-row")).toHaveLength(2);
+    expect(root.querySelectorAll(".settings-row")).toHaveLength(3);
     expect(root.querySelector('[role="radiogroup"]')?.className).toBe(
       "segmented",
     );
@@ -79,11 +79,11 @@ describe("options settings", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
   });
 
-  it("opens the browser shortcut manager from the shortcuts control", async () => {
+  it("opens the browser shortcut manager from the change link", async () => {
     const create = vi.spyOn(fakeBrowser.tabs, "create");
     const root = await mount("#settings");
     const link = [...root.querySelectorAll("a")].find((candidate) =>
-      candidate.textContent?.includes(settings.shortcuts),
+      candidate.textContent?.includes(settings.shortcutsManage),
     );
     if (link === undefined) {
       throw new Error("no shortcuts control");
@@ -94,6 +94,29 @@ describe("options settings", () => {
     expect(create).toHaveBeenCalledWith({
       url: "about:addons",
     });
+  });
+
+  it("lists each command with the key that drives it", async () => {
+    const root = await mount("#settings");
+    await vi.waitFor(() => {
+      if (root.querySelectorAll(".shortcut-list li").length !== 3) {
+        throw new Error("shortcuts are still loading");
+      }
+    });
+    const items = [...root.querySelectorAll(".shortcut-list li")];
+
+    expect(
+      items.map((li) => li.querySelector(".shortcut-desc")?.textContent),
+    ).toEqual([
+      "Open the popup",
+      "Toggle global pause",
+      "Switch to the previous profile",
+    ]);
+    expect(items.map((li) => li.querySelector(".kbd")?.textContent)).toEqual([
+      "⌥⇧H",
+      "⌥⇧P",
+      "⌥⇧K",
+    ]);
   });
 
   it("chooses the shortcut manager supported by the browser runtime", () => {

@@ -58,15 +58,21 @@ export function TokenHero({
               {host !== undefined && sentence(copy.token.swapOn(host))}
             </div>
           ) : (
-            <div class="tk-val mono">
+            <div class="tk-val mono" aria-hidden="true">
               {masked.scheme !== undefined && (
                 <span class="pre">{masked.scheme}</span>
               )}
-              <span class="dots" aria-hidden="true">
-                ••••••••
-              </span>
+              <span class="dots">••••••••</span>
               {masked.hasTail && <span class="last">{masked.last4}</span>}
             </div>
+          )}
+          {!swapping && (
+            <span class="sr-only">
+              {copy.token.maskedValue(
+                masked.scheme,
+                masked.hasTail ? masked.last4 : undefined,
+              )}
+            </span>
           )}
           {!swapping && change.status === "paused" && (
             <p class="tk-held">{copy.token.held}</p>

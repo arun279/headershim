@@ -17,9 +17,9 @@ interface ChangeLineProps {
 
 /**
  * One change, in the one grammar: a severity spine (teal live, amber a grant
- * away, managed, or not applied yet, red refused, faint where only Chrome can
- * settle the match, grey-dashed at rest), the operation glyph, and the wire
- * bytes. A live line adds no reason; the two things that do speak are an
+ * away, managed, or not applied yet, red refused, grey-dashed at rest), the
+ * operation glyph, and the wire bytes. A running line adds no reason unless
+ * only Chrome can settle its match; the other things that speak are an
  * exception, said once, and a reach past this tab, because the switch on the row
  * is the rule's switch and turning it off here turns it off there.
  */
@@ -47,7 +47,7 @@ export function ChangeLine({
   const toggleLabel =
     change.source === "override"
       ? copy.readout.overrideToggle(change.header, change.enabled)
-      : copy.readout.ruleToggle(change.header, change.enabled, reach);
+      : copy.rules.switchLabel(change.header, change.enabled);
 
   return (
     <div class={`change-line ${change.status}`} data-key={change.key}>

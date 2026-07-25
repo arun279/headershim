@@ -179,6 +179,16 @@ export function isSecretHeader(header: string): boolean {
 }
 
 /**
+ * Whether a header is one a site sends on its own responses. The single source
+ * behind both directions of the response-header advisory: the protection this
+ * takes away when it is changed on the response side, and the nothing it does
+ * on the request side.
+ */
+export function isSecurityResponseHeader(header: string): boolean {
+  return SECURITY_RESPONSE_HEADERS.has(normalizeHeaderName(header));
+}
+
+/**
  * Whether Chrome will append to this request header, given an already
  * normalized name. Exposed on its own because the compiler wants this answer
  * and nothing else: reaching it through classifyHeaderName pulls the advisory
@@ -232,7 +242,7 @@ export function headerSensitivity(
   if (
     input.direction === "response" &&
     input.operation !== "append" &&
-    SECURITY_RESPONSE_HEADERS.has(header)
+    isSecurityResponseHeader(header)
   ) {
     advisories.push({
       kind: "security-response",

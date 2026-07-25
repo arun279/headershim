@@ -86,6 +86,26 @@ describe("popup This-tab overrides", () => {
     expect(strip.querySelector(".change-line .k")?.textContent).toBe("x-a");
   });
 
+  // A confirmation is a verdict on the last attempt, not a standing offer, so
+  // opening a new form retires it: the pill goes, and its polite-region mirror
+  // goes with it, rather than being asserted to a screen reader indefinitely.
+  it("retires a spent confirmation and its announcement when a new form opens", async () => {
+    const root = await composeChange();
+    const region = () =>
+      root.querySelector('.sr-only[role="status"]')?.textContent;
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.toast.changesSaved,
+    );
+    expect(region()).toBe(copy.toast.changesSaved);
+
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+
+    expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(root.querySelector(".toast-msg")).toBeNull();
+    expect(region()).toBe("");
+  });
+
   it("splits a pasted header line across the composer fields", async () => {
     const root = await mount(createV1Seed());
     press(root.querySelector(".popup") as HTMLElement, "t");
@@ -243,7 +263,7 @@ describe("popup This-tab overrides", () => {
     const line = root.querySelector(".thistab .change-line") as HTMLElement;
     expect(line.classList.contains("live")).toBe(true);
     const toggle = line.querySelector(
-      '[aria-label="Turn off this-tab change: x-debug-trace"]',
+      '[aria-label="This-tab change on: x-debug-trace"]',
     ) as HTMLButtonElement;
     await act(async () => toggle.click());
     await settle();
@@ -256,7 +276,7 @@ describe("popup This-tab overrides", () => {
     ).not.toBeNull();
 
     const enable = root.querySelector(
-      '[aria-label="Turn on this-tab change: x-debug-trace"]',
+      '[aria-label="This-tab change off: x-debug-trace"]',
     ) as HTMLButtonElement;
     await act(async () => enable.click());
     await settle();

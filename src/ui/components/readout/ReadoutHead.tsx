@@ -11,6 +11,8 @@ interface ReadoutHeadProps {
   hasRows: boolean;
   profiles: readonly Profile[];
   activeProfile: Profile;
+  previousProfileId: string | undefined;
+  switchShortcut: string | undefined;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
   onNewProfile: () => Promise<string | undefined>;
@@ -27,6 +29,8 @@ export function ReadoutHead({
   hasRows,
   profiles,
   activeProfile,
+  previousProfileId,
+  switchShortcut,
   paused,
   onSwitchProfile,
   onNewProfile,
@@ -45,11 +49,16 @@ export function ReadoutHead({
   return (
     <header class="head">
       <div class="head-top">
-        {/* The slot holds the site this tab is on, set in the face reserved for
-            literal wire bytes. A tab with no site has nothing to put there, and
-            the product's own name set in that face would read as one. */}
+        {/* The slot names the site this tab is on, in the face reserved for
+            literal wire bytes. A tab with no site to name says so in a muted
+            marker: an empty slot reads as a dropped element, and the marker is
+            plain furniture, not the wire-byte face, so it never reads as a site
+            of its own. */}
         {readout.host === undefined ? (
-          <span class="site" />
+          <span class="site">
+            <GlobeGlyph />
+            <span class="no-site">{copy.readout.noSite}</span>
+          </span>
         ) : (
           <span class="site">
             <GlobeGlyph />
@@ -66,6 +75,8 @@ export function ReadoutHead({
         <ProfilePicker
           profiles={profiles}
           activeProfile={activeProfile}
+          previousProfileId={previousProfileId}
+          switchShortcut={switchShortcut}
           host={readout.host}
           onSwitch={onSwitchProfile}
           onNewProfile={onNewProfile}

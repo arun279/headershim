@@ -100,7 +100,7 @@ if (manifest.options_ui?.open_in_tab !== true) {
   violations.push("options_ui.open_in_tab must be true");
 }
 
-const allowedCommands = ["_execute_action", "toggle-pause", "next-profile"];
+const allowedCommands = ["_execute_action", "toggle-pause", "previous-profile"];
 const unexpectedCommands = Object.keys(manifest.commands ?? {}).filter(
   (command) => !allowedCommands.includes(command),
 );

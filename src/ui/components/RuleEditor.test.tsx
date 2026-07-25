@@ -187,9 +187,9 @@ function deleteButton(
   ) as HTMLButtonElement | undefined;
 }
 
-function openInsertMenu(ctx: ReturnType<typeof mount>): void {
+function openGenerateMenu(ctx: ReturnType<typeof mount>): void {
   fire(() =>
-    (ctx.root.querySelector(".insert-btn") as HTMLButtonElement).click(),
+    (ctx.root.querySelector(".generate-btn") as HTMLButtonElement).click(),
   );
 }
 
@@ -236,7 +236,7 @@ describe("RuleEditor commit model", () => {
       copy.actions.createRule,
     );
     expect(ctx.nameInput().placeholder).toBe(
-      copy.editor.placeholders.headerName,
+      copy.editor.placeholders.headerName.request,
     );
     // The value field carries no example: what a value looks like is decided by
     // the header named above it, so one header's example is wrong on the rest.
@@ -387,6 +387,9 @@ describe("RuleEditor commit model", () => {
   it("Esc closes the suggestion list first, the editor second", () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "auth");
+    // The list opens on a deliberate ↓, not on the keystroke, so it never sits
+    // over the value field waiting to eat a click meant for that field.
+    press(ctx.nameInput(), "ArrowDown");
     expect(ctx.root.querySelector('[role="listbox"]')).not.toBeNull();
     press(ctx.nameInput(), "Escape");
     expect(ctx.root.querySelector('[role="listbox"]')).toBeNull();
@@ -462,7 +465,9 @@ describe("RuleEditor commit model", () => {
       }),
       undefined,
     );
-    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("edit");
+    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "edit" }),
+    );
   });
 
   it("does not commit on Enter in the multiline value field", async () => {
@@ -638,7 +643,7 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
     expect(field?.textContent).toContain(copy.errors.headerNotModifiable);
   });
 
-  it("renders the append-allowlist copy under the operation control", async () => {
+  it("refuses request-append and lands focus on the operation control", async () => {
     const ctx = mount(
       {},
       {
@@ -649,14 +654,46 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
         },
       },
     );
-    const operation = ctx.operationInput("append");
-    setOperation(operation);
+    setOperation(ctx.operationInput("append"));
+    // A real click leaves focus on the primary; the refusal must move it.
+    ctx.saveButton().focus();
     await fillAndCommit(ctx, "x-custom-token");
     expect(ctx.nameInput().value).toBe("x-custom-token");
-    const field = operation.closest(".editor-primary-field");
-    expect(field?.textContent).toContain(
+
+    const append = ctx.operationInput("append");
+    expect(append.closest(".editor-primary-field")?.textContent).toContain(
       copy.errors.appendDisallowed("x-custom-token"),
     );
+    // A refusal that leaves focus on the button that raised it reads as a dead
+    // click; the operation control owns the refusal, so it takes the mark and
+    // the focus.
+    expect(append.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(append);
+  });
+
+  it("lands focus on the resource-types control when none stays selected", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    const disclosure = () =>
+      [...ctx.root.querySelectorAll(".disclosure")].find((button) =>
+        button.textContent?.includes(copy.editor.labels.resourceTypes),
+      ) as HTMLButtonElement;
+    fire(() => disclosure().click());
+    for (const box of ctx.root.querySelectorAll<HTMLInputElement>(
+      ".rt-item input",
+    )) {
+      if (box.checked) {
+        fire(() => box.click());
+      }
+    }
+    ctx.saveButton().focus();
+    await saveDraft(ctx);
+
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.errors()).toContain(copy.errors.scopeEmpty.resourceTypes);
+    expect(disclosure().getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(disclosure());
   });
 
   it.each([
@@ -700,13 +737,19 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       copy.errors.storageBudget,
     ],
   ] as const)(
-    "renders cap and budget errors at editor level",
+    "renders cap and budget errors at editor level and lands focus on the banner",
     async (error, message) => {
       const ctx = mount({}, { error: error as MutationError });
+      // A real click leaves focus on the primary; a form-level refusal has no
+      // field to blame, so the banner itself must take the focus back off it.
+      ctx.saveButton().focus();
       await fillAndCommit(ctx);
       expect(ctx.onClose).not.toHaveBeenCalled();
       expect(ctx.errors()).toContain(message);
       expect(ctx.nameInput().value).toBe("x-custom");
+      expect(document.activeElement).toBe(
+        ctx.root.querySelector(".editor-error-global"),
+      );
     },
   );
 });
@@ -781,26 +824,27 @@ describe("RuleEditor advisories and value field", () => {
     expect(ctx.root.querySelector(".value-row")).toBeNull();
   });
 
-  it("inserts a generated UUID literal with the frozen note, regenerates, and clears on hand edit", () => {
+  it("generates a UUID literal that replaces the value, regenerates, and clears on hand edit", () => {
     const ctx = mount();
-    openInsertMenu(ctx);
+    openGenerateMenu(ctx);
     const uuid = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.insertUuid,
+      (item) => item.textContent === copy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => uuid.click());
     const first = ctx.valueInput().value;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.root.textContent).toContain(copy.generatedValue.note);
+    // The generated value drops the literal note; hand-editing brings it back.
+    expect(ctx.root.textContent).not.toContain(copy.valueNote.literal);
 
-    openInsertMenu(ctx);
+    openGenerateMenu(ctx);
     const again = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.insertUuid,
+      (item) => item.textContent === copy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => again.click());
     expect(ctx.valueInput().value).not.toBe(first);
 
     typeInto(ctx.valueInput(), "hand-edited");
-    expect(ctx.root.textContent).not.toContain(copy.generatedValue.note);
+    expect(ctx.root.textContent).toContain(copy.valueNote.literal);
   });
 
   it("shows the freeze time for a saved generated value", () => {
@@ -811,7 +855,7 @@ describe("RuleEditor advisories and value field", () => {
       }),
     });
     expect(ctx.root.textContent).toContain(
-      copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
+      copy.valueNote.frozen("2026-07-12T14:03:27.000Z"),
     );
   });
 });
@@ -827,7 +871,9 @@ describe("RuleEditor grant moment", () => {
       "*://*.api.example.com/*",
     ]);
     expect(ctx.onSave).toHaveBeenCalledOnce();
-    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("create");
+    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "create" }),
+    );
     expect(ctx.onGranted).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
     expect(ctx.root.querySelector(".grant-panel")).toBeNull();
@@ -1129,18 +1175,18 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
   });
 
-  // The button is the disclosure of reach that comes before Chrome's own dialog.
-  // Naming the first of several sites while asking Chrome for all of them
-  // understates exactly the thing the button exists to state.
-  it("counts the sites when the commit asks Chrome for more than one", async () => {
+  // The button is the disclosure of reach that comes before Chrome's own dialog,
+  // and the popup does not survive that dialog, so the button is the last word.
+  // Naming the sites states exactly what Chrome will ask for; a count would hide
+  // which sites, understating the very thing the button exists to state.
+  it("names the sites when the commit asks Chrome for more than one", async () => {
     const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
     typeInto(ctx.chipInput(), "example.com");
     fire(() => press(ctx.chipInput(), "Enter"));
 
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow(copy.actions.allowSites(2)),
+      copy.actions.createRuleAndAllow("api.example.com and example.com"),
     );
-    expect(ctx.saveButton().textContent).toContain("2 sites");
 
     ctx.onRequestGrant.mockResolvedValueOnce(false);
     await fillAndCommit(ctx, "authorization");
@@ -1150,7 +1196,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     // The decline names the same reach the button did.
     expect(ctx.onGrantDeclined).toHaveBeenCalledExactlyOnceWith(
-      copy.actions.allowSites(2),
+      "api.example.com and example.com",
     );
   });
 

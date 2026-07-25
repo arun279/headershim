@@ -1,6 +1,6 @@
 import { normalizeHeaderName } from "./headers";
 import {
-  createProfile,
+  createDefaultProfile,
   isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
@@ -28,48 +28,16 @@ export type MigrationError =
   | { readonly kind: "corrupt" }
   | { readonly kind: "newer-store"; readonly foundVersion: number };
 
-type MigrationStep = (doc: unknown) => Result<unknown, MigrationError>;
-
-export const migrations: Readonly<Partial<Record<number, MigrationStep>>> = {};
-
 export function migrate(doc: unknown): Result<StateDoc, MigrationError> {
-  const initialVersion = versionOf(doc);
-  if (initialVersion === undefined) {
+  const version = versionOf(doc);
+  if (version === undefined) {
     return err({ kind: "corrupt" });
   }
-  if (initialVersion > CURRENT) {
-    return err({ kind: "newer-store", foundVersion: initialVersion });
+  if (version > CURRENT) {
+    return err({ kind: "newer-store", foundVersion: version });
   }
 
-  let migrated = doc;
-  let version = initialVersion;
-  // The initial schema has no predecessor that can exercise this chain yet.
-  /* v8 ignore start */
-  while (version < CURRENT) {
-    const step = migrations[version];
-    if (step === undefined) {
-      return err({ kind: "corrupt" });
-    }
-
-    const result = step(migrated);
-    if (!result.ok) {
-      return err(result.error);
-    }
-
-    const nextVersion = versionOf(result.value);
-    if (nextVersion === undefined || nextVersion <= version) {
-      return err({ kind: "corrupt" });
-    }
-    if (nextVersion > CURRENT) {
-      return err({ kind: "newer-store", foundVersion: nextVersion });
-    }
-
-    migrated = result.value;
-    version = nextVersion;
-  }
-  /* v8 ignore stop */
-
-  const repaired = repairActiveProfile(migrated);
+  const repaired = repairActiveProfile(doc);
   if (!isStateDoc(repaired)) {
     return err({ kind: "corrupt" });
   }
@@ -96,11 +64,7 @@ function repairActiveProfile(doc: unknown): unknown {
 }
 
 export function createV1Seed(): StateDoc {
-  const profile = createProfile({
-    name: "Default",
-    badgeText: "DE",
-    color: "indigo",
-  });
+  const profile = createDefaultProfile();
 
   return {
     v: CURRENT,
@@ -135,13 +99,22 @@ function isStateDoc(value: unknown): value is StateDoc {
     return false;
   }
 
-  const { v, profiles, activeProfileId, nextRuleNum, settings } = value;
+  const {
+    v,
+    profiles,
+    activeProfileId,
+    previousProfileId,
+    nextRuleNum,
+    settings,
+  } = value;
   if (
     v !== CURRENT ||
     !Array.isArray(profiles) ||
     profiles.length === 0 ||
     !profiles.every(isProfile) ||
     typeof activeProfileId !== "string" ||
+    (previousProfileId !== undefined &&
+      typeof previousProfileId !== "string") ||
     typeof nextRuleNum !== "number" ||
     !Number.isSafeInteger(nextRuleNum) ||
     nextRuleNum < 1 ||

@@ -5,6 +5,7 @@ import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
+import { InlineRename } from "./InlineRename";
 import { ProfileName } from "./Truncate";
 import "./ProfileList.css";
 
@@ -134,21 +135,6 @@ interface ProfileCardProps {
 function ProfileCard(props: ProfileCardProps) {
   const { profile } = props;
   const [renaming, setRenaming] = useState(false);
-  const nameInput = useRef<HTMLInputElement>(null);
-
-  const startRename = () => {
-    setRenaming(true);
-    // Focus lands after the input mounts.
-    queueMicrotask(() => nameInput.current?.select());
-  };
-
-  const commitName = () => {
-    const value = nameInput.current?.value.trim() ?? "";
-    setRenaming(false);
-    if (value.length > 0 && value !== profile.name) {
-      props.onRename(value);
-    }
-  };
 
   const onHandleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLElement>) => {
     switch (event.key) {
@@ -187,23 +173,10 @@ function ProfileCard(props: ProfileCardProps) {
           <DragGlyph />
         </button>
         {renaming ? (
-          <input
-            class="profile-name-input inset-field"
-            type="text"
-            maxLength={48}
-            aria-label={copy.options.profiles.nameLabel}
-            defaultValue={profile.name}
-            ref={nameInput}
-            onBlur={commitName}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitName();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                setRenaming(false);
-              }
-            }}
+          <InlineRename
+            value={profile.name}
+            onCommit={props.onRename}
+            onClose={() => setRenaming(false)}
           />
         ) : (
           <button
@@ -253,7 +226,7 @@ function ProfileCard(props: ProfileCardProps) {
             onChange={props.onBadgeChange}
           />
           <div class="profile-actions">
-            <Button kind="quiet" onClick={startRename}>
+            <Button kind="quiet" onClick={() => setRenaming(true)}>
               {copy.options.profiles.rename}
             </Button>
             <Button kind="quiet" onClick={props.onClone}>

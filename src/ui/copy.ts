@@ -17,7 +17,11 @@ import {
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "../core/limits";
-import type { BadgeColor, ResourceGroup } from "../core/model";
+import {
+  type BadgeColor,
+  DEFAULT_PROFILE_NAME,
+  type ResourceGroup,
+} from "../core/model";
 
 /**
  * A sentence is a segment list so the wire-facing tokens inside it (hostnames,
@@ -41,6 +45,13 @@ const rules = (n: number) => (n === 1 ? "rule" : "rules");
 const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 const changes = (n: number) => (n === 1 ? "change" : "changes");
 const sites = (n: number) => (n === 1 ? "site" : "sites");
+const overriddenByPhrase = (winner: string) => `overridden by ${winner}`;
+// Every site a grant will ask Chrome for, named, so the button that fires the
+// request states the same reach Chrome's own dialog will list.
+const andList = (items: readonly string[]) =>
+  items.length <= 1
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} and ${items.slice(-1).join("")}`;
 const managedHeader =
   "Chrome's network stack manages this header itself; a rule here usually has no effect.";
 
@@ -150,7 +161,7 @@ export const copy = {
       remove: "Would remove",
     },
     to: "→",
-    overriddenBy: (winner: string) => `overridden by ${winner}`,
+    overriddenBy: overriddenByPhrase,
     refusedReason: {
       host: "Chrome won't let extensions change the Host header",
       header: "Chrome won't accept this header name",
@@ -170,13 +181,10 @@ export const copy = {
     outOfSyncReason: "Chrome hasn't taken this rule yet",
     unconfirmed: (count: number) => `${count} confirmable only by Chrome`,
     outOfSync: (count: number) => `${count} not applied yet`,
-    details: "Details",
     grant: "Grant",
     // A rule Chrome can only run with broad access says so on the button, so the
     // click is honest before Chrome's own all-sites dialog appears.
     grantAllSites: "Grant all sites",
-    ruleToggle: (header: string, on: boolean, reach?: string) =>
-      `${on ? "Turn off" : "Turn on"}: ${header}${reach === undefined ? "" : `; ${reach}`}`,
     // The switch on a popup line is the rule's switch, not this tab's, so a rule
     // that reaches past this tab says how far before anyone flips it.
     widerReach: {
@@ -184,14 +192,14 @@ export const copy = {
       broad: "also on every other site it matches",
     },
     editValue: (header: string) => `Edit ${header} value`,
-    // Two different permanences, so two different words: the footer opens a
-    // saved rule, the composer commits a change that dies with the tab.
+    // The footer's two openers are actions, not passive scopes: addChange opens
+    // the saved-rule editor, justThisTab the this-tab composer. addThisTab is
+    // that composer's commit, left bare so it neither repeats the "THIS TAB
+    // ONLY" scope its heading already states, nor collides with the opener.
     addChange: "Add a change",
-    addThisTab: "Add to this tab",
-    justThisTab: "Just this tab",
+    justThisTab: "Add for this tab",
+    addThisTab: "Add",
     pauseSwitch: "All header changes",
-    onLabel: "On",
-    pausedLabel: "Paused",
     pausedBanner:
       "Everything paused. Switching back on restores this exact state.",
     empty: (host: string): Sentence => [
@@ -203,6 +211,10 @@ export const copy = {
     // another extension. Say why the screen is empty rather than asking for
     // something the reader has already done.
     noHost: `${BRAND_NAME} changes headers on websites, and this tab is not on one.`,
+    // The head's site slot, on a tab that has no site to name (a Chrome page, a
+    // new tab, a local file). Marks the slot as deliberately empty rather than a
+    // dropped element.
+    noSite: "No site",
     seeAllRules: "See all rules",
     // The standing data note: one sentence, because it stands under every
     // readout and every editor, and a disclosure that costs four lines of a
@@ -220,7 +232,7 @@ export const copy = {
     thisTabClears: "clears when you close the tab",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
     overrideToggle: (header: string, on: boolean) =>
-      `${on ? "Turn off" : "Turn on"} this-tab change: ${header}`,
+      `This-tab change ${on ? "on" : "off"}: ${header}`,
     switcher: {
       chipLabel: "Switch profile",
       title: "Switch profile",
@@ -249,9 +261,15 @@ export const copy = {
       remainingMs <= 0 ? "expired" : `expires in ${duration(remainingMs)}`,
     warnNote: "replace it before it lapses",
     valueLabel: (header: string) => header,
-    // The verb the field it opens commits with, and the verb the expiry note
-    // asks for. It shares the row with a live credential, so it is one word.
-    swap: "Replace",
+    // The masked value as one honest leaf: the scheme, that the middle is
+    // withheld, and the tail shown in the clear. A screen reader hears a mask
+    // rather than the two cleartext fragments read back as a whole credential.
+    maskedValue: (scheme: string | undefined, last4: string | undefined) =>
+      `${scheme === undefined ? "" : `${scheme} `}credential, hidden${last4 === undefined ? "" : `, ending in ${last4}`}`,
+    // The button that opens the swap field. It names its object, so a hover
+    // name or a screen reader gets more than a bare verb on the one control that
+    // can overwrite a live credential.
+    swap: "Replace token",
     swapOn: (host: string): Sentence => ["on ", data(host)],
     // Pause has to reach the hero in words, the way it reaches every line: a
     // dimmed card beside a live-looking button says nothing on its own.
@@ -353,6 +371,7 @@ export const copy = {
       newName: "New profile",
       ruleCount: (count: number) => `${count} ${rules(count)}`,
       nameLabel: "Profile name",
+      renameHint: "Press Enter to save, Esc to cancel",
       rename: "Rename",
       clone: "Clone",
       delete: "Delete",
@@ -365,7 +384,7 @@ export const copy = {
       deleteConfirm: {
         title: (name: string) => `Delete profile '${name}'?`,
         body: (count: number) =>
-          `Its ${count} ${rules(count)} will be deleted. Site grants are not changed.`,
+          `${count === 0 ? "" : `Its ${count} ${rules(count)} will be deleted. `}Site grants are not changed.`,
         confirm: "Delete profile",
       },
     },
@@ -393,23 +412,22 @@ export const copy = {
       choose: "Choose file…",
       fileInputLabel: `Import a ${BRAND_NAME} or ModHeader export`,
       exportHeading: "Export",
-      exportEverything: "Export everything",
+      // The file carries profiles and rules, not the site access, theme, pause,
+      // or active-profile state that stay with this browser, so the label names
+      // what it can carry rather than claiming everything.
+      exportAll: "Export all profiles",
       exportOne: "Export one profile",
       exportChoiceLabel: "Profile to export",
       // A standing hint between the Export heading and the export buttons, read
-      // before a download rather than raised by one.
+      // before a download rather than raised by one. It names what the file
+      // holds and what it does not: site access is a browser permission state a
+      // file cannot carry back, since each origin needs its own grant gesture.
       secretsReminder:
-        "This file contains the header values you typed, including any tokens or keys. Treat it like a credentials file.",
-      everythingFilename: "headershim-export.json",
+        "This file holds your profiles and rules. Treat it like a credentials file. Site access stays in this browser, not the file.",
+      exportFilename: "headershim-export.json",
       profileFilename: (slug: string) => `headershim-${slug}.json`,
       summaryHeading: "Import summary",
-      counts: (profileCount: number, ruleCount: number): Sentence => [
-        "Import will create ",
-        data(profileCount),
-        ` ${profiles(profileCount)} / `,
-        data(ruleCount),
-        ` ${rules(ruleCount)}.`,
-      ],
+      addsLead: "Adds these profiles and keeps the ones you have:",
       needAttention: (count: number) =>
         count === 1
           ? "1 item needs attention:"
@@ -418,6 +436,7 @@ export const copy = {
       convert: "Convert to frozen value",
       imported: (count: number) =>
         `Imported ${count} ${profiles(count)}, turned off. Turn them on when you're ready.`,
+      exported: (filename: string) => `Exported ${filename}`,
       warnings: {
         credentialHeader: (header: string): Sentence => [
           "Carries a credential in ",
@@ -494,6 +513,23 @@ export const copy = {
         options: { system: "System", light: "Light", dark: "Dark" },
       },
       shortcuts: "Keyboard shortcuts",
+      shortcutsManage: "Change",
+      shortcutUnset: "Not set",
+      // What each command does, in display order. Chrome returns no label for
+      // the reserved action command, so these live here and pair with the live
+      // key the browser reports for each.
+      commands: [
+        { name: "_execute_action", label: "Open the popup" },
+        { name: "toggle-pause", label: "Toggle global pause" },
+        { name: "previous-profile", label: "Switch to the previous profile" },
+      ],
+      eraseAll: {
+        action: "Erase everything",
+        confirmTitle: "Erase everything?",
+        confirmBody:
+          "This removes every profile and rule, revokes all site access, and clears any This-tab overrides.",
+        done: "Everything erased",
+      },
     },
     about: {
       title: "About",
@@ -549,9 +585,9 @@ export const copy = {
     createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
     saveChanges: "Save changes",
     saveChangesAndAllow: (host: string) => `Save changes and allow ${host}`,
-    // What a commit is about to ask Chrome for, when it is more than one site.
-    // Naming the first of several understates the reach the click discloses.
-    allowSites: (count: number) => `${count} ${sites(count)}`,
+    // The sites a commit will ask Chrome for, named in full. The permission
+    // prompt closes the popup, so this is the last disclosure the user reads.
+    andSites: andList,
     resume: "Resume",
     grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands; there is no
@@ -569,6 +605,10 @@ export const copy = {
 
   toast: {
     ruleCreated: "Rule created",
+    // A duplicate of a rule already above it is inert the moment it lands, so
+    // its success names the rule that wins over it rather than claiming it runs.
+    ruleCreatedOverridden: (winner: string) =>
+      `Rule created, but ${overriddenByPhrase(winner)}`,
     changesSaved: "Changes saved",
     // Confirms a grant landed, and says only that: a grant means the host is
     // permitted, while whether a rule runs there turns on pause, the active
@@ -580,12 +620,16 @@ export const copy = {
     ruleDeleted: "Rule deleted",
     rulesDeleted: (count: number) => `${count} ${rules(count)} deleted`,
     profileDeleted: (name: string) => `Profile '${name}' deleted`,
+    // Deleting the last profile leaves one behind: a fresh empty Default takes
+    // its place, so the toast says so rather than reading as a no-op.
+    lastProfileDeleted: (name: string) =>
+      `Profile '${name}' deleted; a new empty ${DEFAULT_PROFILE_NAME} replaces it`,
   },
 
   rules: {
     listLabel: "Rules",
-    switchLabel: (header: string, on: boolean, siteCount?: number) =>
-      `Rule ${on ? "on" : "off"}: ${header}${siteCount === undefined ? "" : `; affects all ${siteCount} sites`}`,
+    switchLabel: (header: string, on: boolean) =>
+      `Rule ${on ? "on" : "off"}: ${header}`,
     menuLabel: (header: string) => `Rule actions: ${header}`,
     direction: { request: "request", response: "response" },
     operation: { set: "set", append: "append", remove: "remove" },
@@ -662,11 +706,13 @@ export const copy = {
       comment: "Comment",
       resourceTypes: "Resource types",
     },
-    // A header name has one shape whatever the rule, so an example teaches it.
-    // A value does not: the field takes whatever this header carries, and an
-    // example of one header's value is wrong on every other header.
+    // A header name has one shape, but the example that teaches it belongs to a
+    // direction: a request header on the request side, a response header on the
+    // response side, so the hint is never a header the chosen side can't carry.
+    // A value has no such example: the field takes whatever this header carries,
+    // and an example of one header's value is wrong on every other header.
     placeholders: {
-      headerName: "authorization",
+      headerName: { request: "authorization", response: "set-cookie" },
     },
     // A pasted `name: value` line lands split across the two fields rather than
     // failing the name's token grammar on the colon.
@@ -682,7 +728,8 @@ export const copy = {
     },
     allSites: "All sites",
     allSitesHelper: "matches every website",
-    domainsHelper: "matches this domain and its subdomains",
+    domainsHelper:
+      "matches this domain and its subdomains, on any scheme and port",
     requestTarget:
       "Runs on requests to these hosts, which may differ from the page you are viewing.",
     addDomain: "+ add",
@@ -698,17 +745,33 @@ export const copy = {
     grantHostsAllSites: "Leave empty and this rule needs access to all sites.",
     grantHostsBounded:
       "This rule matches only the hosts listed here, and needs access to just them.",
+    // Two lines, not one glued by a separator: at the popup's width the second
+    // wraps under the first, so a middle dot between them orphans on its own. The
+    // first names the recommended anchored form; the second states what Chrome
+    // compiles a pattern with no anchor into, which is the reach that leaks.
     patternHint: [
-      data("||example.com/"),
-      " matches the site, subdomains, and every path · ",
-      data("||example.com/api/"),
-      " narrows it to /api/ paths",
+      [
+        data("||example.com/"),
+        " matches the site, its subdomains, and every path.",
+      ],
+      [
+        "Without ",
+        data("||"),
+        ", a pattern matches anywhere in the URL, including the query string.",
+      ],
+    ] satisfies readonly Sentence[],
+    // Regex is the one scope that can bind to subdomains without the domain, so
+    // the hint carries that idiom; the leading ^ also shows the anchoring a bare
+    // regex lacks, the same reach the pattern hint warns about.
+    regexHint: [
+      "Chrome matches this as an RE2 regex. ",
+      data("^https?://[^/]+\\.example\\.com/"),
+      " matches subdomains only, not the domain itself.",
     ] satisfies Sentence,
-    regexHint: "Uses Chrome's RE2 syntax.",
     allTypes: "All types",
-    insert: "Insert",
-    insertUuid: "UUID",
-    insertTimestamp: "Timestamp (ISO 8601)",
+    generate: "Generate",
+    generateUuid: "UUID",
+    generateTimestamp: "Timestamp (ISO 8601)",
     generatedKind: { uuid: "UUID", timestamp: "Timestamp" },
     newlineRemoved: "Line breaks removed. A header value is a single line.",
     caution: "Caution",
@@ -735,9 +798,14 @@ export const copy = {
     location: "redirect target",
   } as Partial<Record<string, string>>,
 
-  generatedValue: {
-    note: "Generated when you saved this rule. This value is frozen and does not change per request.",
-    frozen: (savedAtUtc: string) => `Frozen at save: ${savedAtUtc}`,
+  // The note under the value field, always present so the field is never silent
+  // about how the value is treated: a hand-typed value is used verbatim, and a
+  // generated one is frozen at a moment and never recomputed. Neither is a
+  // template that fills in per request.
+  valueNote: {
+    literal: "This value is used exactly as typed. It is not a template.",
+    frozen: (at: string) =>
+      `Frozen at ${at.slice(0, 10)} ${at.slice(11, 16)} UTC. This exact value is used every time, not regenerated.`,
   },
 
   errors: {
@@ -801,5 +869,20 @@ export const copy = {
       "This header carries a credential. This rule writes it on everything its scope reaches, so keep the scope as narrow as the job needs.",
     securityResponse:
       "Sites send this header to protect the pages they serve. Changing it turns that protection off wherever this rule reaches, for as long as it's on.",
+    // A response header on the request side: Chrome sends it and the server
+    // ignores it, so the rule does nothing. The header is right and the side is
+    // wrong, so the line names the side rather than the header.
+    responseOnRequest:
+      "Sites send this header on their responses, so a Request rule has no effect. Set Direction to Response to change it.",
+    // Fires while the pattern scope holds a pattern with no pipe anchor, the
+    // shape Chrome matches as a substring of the whole URL. Silent otherwise:
+    // the rule runs as written and a credential can ride a host it never names.
+    unanchoredPattern: [
+      "This URL pattern has no ",
+      data("||"),
+      " host anchor, so Chrome matches it anywhere in the URL, query string included, and it can reach a host the pattern does not name. Anchor it as ",
+      data("||host/"),
+      " to bind it to one host and its subdomains.",
+    ] satisfies Sentence,
   },
 } as const;
