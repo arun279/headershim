@@ -27,14 +27,14 @@ import {
   TriangleGlyph,
 } from "../../../src/ui/components/readout/glyphs";
 import { Truncate } from "../../../src/ui/components/Truncate";
-import { copy } from "../../../src/ui/copy";
+import { copy, siteAccessCopy } from "../../../src/ui/copy";
 import {
   type SiteAccessEntry,
   siteAccessView,
 } from "../../../src/ui/state/site-access";
 import "./SiteAccess.css";
 
-const text = copy.options.siteAccess;
+const text = siteAccessCopy;
 
 /**
  * Every origin headershim can touch, and every origin its enabled rules still
@@ -89,16 +89,18 @@ export function SiteAccessPage({
     });
 
   const revoke = (entry: SiteAccessEntry) =>
-    void removePermissions([entry.origin]).then((removed) => {
-      if (removed) {
-        announce(
-          grants.allSites
-            ? text.revokedUnderAllSites(entry.domain)
-            : text.revoked(entry.domain),
-        );
-        anchorFocus();
-      }
-    });
+    void removePermissions([...(entry.grantedOrigins ?? [entry.origin])]).then(
+      (removed) => {
+        if (removed) {
+          announce(
+            grants.allSites
+              ? text.revokedUnderAllSites(entry.domain)
+              : text.revoked(entry.domain),
+          );
+          anchorFocus();
+        }
+      },
+    );
 
   const grantAllSites = () =>
     void requestPermissions([ALL_SITES_ORIGIN]).then((granted) => {
@@ -158,6 +160,26 @@ export function SiteAccessPage({
               onAction={grant}
             />
           )}
+          {view.partial.length > 0 && (
+            <SiteGroup
+              heading={text.partialHeading}
+              entries={view.partial}
+              glyph={
+                <span class="sa-glyph needed">
+                  <TriangleGlyph />
+                </span>
+              }
+              count={(entry) =>
+                `${text.neededBy} ${usageCount(entry)} · ${text.partial(
+                  entry.limitedTo ?? entry.domain,
+                )}`
+              }
+              action={text.grant}
+              actionLabel={text.grantLabel}
+              pill
+              onAction={grant}
+            />
+          )}
           {view.granted.length > 0 && (
             <SiteGroup
               heading={text.grantedHeading}
@@ -173,9 +195,11 @@ export function SiteAccessPage({
               onAction={revoke}
             />
           )}
-          {view.needed.length === 0 && view.granted.length === 0 && (
-            <p class="sa-empty">{copy.emptyState.siteAccess}</p>
-          )}
+          {view.needed.length === 0 &&
+            view.partial.length === 0 &&
+            view.granted.length === 0 && (
+              <p class="sa-empty">{copy.emptyState.siteAccess}</p>
+            )}
           {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
         </div>
       )}

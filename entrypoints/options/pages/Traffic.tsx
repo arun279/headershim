@@ -14,7 +14,7 @@ import {
   TRUNCATION_LIMITS,
   Truncate,
 } from "../../../src/ui/components/Truncate";
-import { copy } from "../../../src/ui/copy";
+import { copy, siteAccessCopy } from "../../../src/ui/copy";
 import {
   groupBySite,
   projectFleet,
@@ -105,12 +105,12 @@ function TapeLine({ row }: { row: TapeRow }) {
           <button
             type="button"
             class="grant tape-status"
-            aria-label={copy.options.siteAccess.grantLabel(row.host)}
+            aria-label={siteAccessCopy.grantLabel(row.host)}
             onClick={() =>
               void requestPermissions([originPatternForDomain(row.host)])
             }
           >
-            {copy.options.siteAccess.grant}
+            {siteAccessCopy.grant}
           </button>
         ) : (
           <span class="tape-status">{statusLabel(row)}</span>

@@ -1,4 +1,4 @@
-import { copy } from "../../src/ui/copy";
+import { siteAccessCopy } from "../../src/ui/copy";
 import {
   expect,
   fetchEcho,
@@ -172,7 +172,7 @@ test("the site-access page mirrors the browser's granted and needed origins", as
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html#site-access`);
 
-  const text = copy.options.siteAccess;
+  const text = siteAccessCopy;
   await expect(
     page.getByRole("heading", { name: text.title, level: 1 }),
   ).toBeVisible();

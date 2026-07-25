@@ -46,6 +46,50 @@ const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 const changes = (n: number) => (n === 1 ? "change" : "changes");
 const sites = (n: number) => (n === 1 ? "site" : "sites");
 const overriddenByPhrase = (winner: string) => `overridden by ${winner}`;
+
+// Kept outside `copy.options` so popup builds that need other options wording
+// do not carry this page-only copy.
+export const siteAccessCopy = {
+  title: "Site access",
+  neededHeading: "Needed but not granted",
+  partialHeading: "Limited access",
+  grantedHeading: "Granted",
+  usedBy: "used by",
+  neededBy: "needed by",
+  partial: (origin: string) =>
+    `granted only to ${origin.replace(/\/\*$/, "")}; broaden to cover the rule's full site scope`,
+  ruleCount: (count: number) => `${count} ${rules(count)}`,
+  tabCount: (count: number) => `${count} tab ${changes(count)}`,
+  grant: "Grant",
+  grantLabel: (domain: string) => `Grant access to ${domain}`,
+  revoke: "Revoke",
+  revokeLabel: (domain: string) => `Revoke access to ${domain}`,
+  revoked: (domain: string) => `Access to ${domain} revoked`,
+  // A narrow grant removed while the broad grant stands changes nothing
+  // about reach; saying "revoked" there would claim access ended.
+  revokedUnderAllSites: (domain: string) =>
+    `${domain} grant removed. All-sites access still covers it.`,
+  // The standing note: shown while any enabled rule reaches
+  // subresources without naming the pages that start those requests.
+  initiatorNote:
+    "Requests started by other pages also need those pages granted.",
+  allSites: {
+    heading: "Allow on all sites",
+    consequence: `This gives ${BRAND_NAME} access to every website instead of asking one site at a time.`,
+    disclosure: "Review all-sites access",
+    // Chrome shows this exact warning before it can grant broad access.
+    warning:
+      'Chrome will warn: "Read and change all your data on all websites". Your rules still only apply where their scopes say, and you can revoke this access here at any time.',
+    sensitive: (count: number) =>
+      count === 1
+        ? "1 enabled rule attaches a credential or changes a security header and needs all-sites access to run. Allowing all sites lets it run wherever it matches."
+        : `${count} enabled rules attach a credential or change a security header and need all-sites access to run. Allowing all sites lets them run wherever they match.`,
+    button: "Allow on all sites",
+    on: "All-sites access is on",
+    revoked: "All-sites access revoked",
+  },
+};
+
 // Every site a grant will ask Chrome for, named, so the button that fires the
 // request states the same reach Chrome's own dialog will list.
 const andList = (items: readonly string[]) =>
@@ -470,42 +514,6 @@ export const copy = {
         droppedInitiatorDomain: `Dropped. ${BRAND_NAME} has no initiator scoping in this version.`,
         droppedTab: "Dropped. Use This-tab overrides for per-tab needs.",
         droppedUrlReplacement: `Dropped. ${BRAND_NAME} changes headers only.`,
-      },
-    },
-    siteAccess: {
-      title: "Site access",
-      neededHeading: "Needed but not granted",
-      grantedHeading: "Granted",
-      usedBy: "used by",
-      ruleCount: (count: number) => `${count} ${rules(count)}`,
-      tabCount: (count: number) => `${count} tab ${changes(count)}`,
-      grant: "Grant",
-      grantLabel: (domain: string) => `Grant access to ${domain}`,
-      revoke: "Revoke",
-      revokeLabel: (domain: string) => `Revoke access to ${domain}`,
-      revoked: (domain: string) => `Access to ${domain} revoked`,
-      // A narrow grant removed while the broad grant stands changes nothing
-      // about reach; saying "revoked" there would claim access ended.
-      revokedUnderAllSites: (domain: string) =>
-        `${domain} grant removed. All-sites access still covers it.`,
-      // The standing note: shown while any enabled rule reaches
-      // subresources without naming the pages that start those requests.
-      initiatorNote:
-        "Requests started by other pages also need those pages granted.",
-      allSites: {
-        heading: "Allow on all sites",
-        consequence: `This gives ${BRAND_NAME} access to every website instead of asking one site at a time.`,
-        disclosure: "Review all-sites access",
-        // Chrome shows this exact warning before it can grant broad access.
-        warning:
-          'Chrome will warn: "Read and change all your data on all websites". Your rules still only apply where their scopes say, and you can revoke this access here at any time.',
-        sensitive: (count: number) =>
-          count === 1
-            ? "1 enabled rule attaches a credential or changes a security header and needs all-sites access to run. Allowing all sites lets it run wherever it matches."
-            : `${count} enabled rules attach a credential or change a security header and need all-sites access to run. Allowing all sites lets them run wherever they match.`,
-        button: "Allow on all sites",
-        on: "All-sites access is on",
-        revoked: "All-sites access revoked",
       },
     },
     settings: {

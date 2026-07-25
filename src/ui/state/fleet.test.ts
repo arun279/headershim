@@ -93,6 +93,21 @@ describe("projectFleet status ladder", () => {
     expect(entry.missing).toEqual(["*://*.svc.test/*"]);
   });
 
+  it("does not call a wider rule live under Chrome's exact-origin grant", () => {
+    const fleet = projectFleet({
+      profiles: [profile({ rules: [rule({ id: "r" })] })],
+      grants: {
+        origins: ["https://svc.test/*"],
+        allSites: false,
+      },
+      status: LIVE,
+    });
+
+    const entry = byKey(fleet, "p1:r");
+    expect(entry.status).toBe("needs-access");
+    expect(entry.missing).toEqual(["*://*.svc.test/*"]);
+  });
+
   it("marks a Host rule refused even when granted", () => {
     const fleet = projectFleet({
       profiles: [profile({ rules: [rule({ id: "r", header: "host" })] })],

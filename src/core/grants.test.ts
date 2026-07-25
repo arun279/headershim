@@ -6,7 +6,9 @@ import {
   type GrantSnapshot,
   isAllSitesOrigin,
   missingGrants,
+  originGrantCoverage,
   originGranted,
+  originPatternCoverage,
   requiredOrigins,
 } from "./grants";
 import type { Profile, Rule, Scope, StateDoc } from "./model";
@@ -32,6 +34,59 @@ function rule(
 }
 
 describe("origin patterns", () => {
+  it("keeps matching the exact shape returned from the extension's own prompt", () => {
+    expect(
+      originPatternCoverage(
+        "*://*.example.test/*",
+        originPatternForDomain("example.test"),
+      ),
+    ).toBe("full");
+  });
+
+  it("partly covers exactly the bare host Chrome stores for toolbar access", () => {
+    const observed = "https://example.com/*";
+
+    expect(
+      originGrantCoverage("example.com", {
+        origins: [observed],
+        allSites: false,
+      }),
+    ).toBe("partial");
+    expect(
+      originGrantCoverage("www.example.com", {
+        origins: [observed],
+        allSites: false,
+      }),
+    ).toBe("none");
+  });
+
+  it("partly covers the host when Chrome stores a non-default port", () => {
+    const observed = "http://localhost:55848/*";
+
+    expect(
+      originGrantCoverage("localhost", {
+        origins: [observed],
+        allSites: false,
+      }),
+    ).toBe("partial");
+    expect(domainFromOriginPattern(observed)).toBe("localhost");
+  });
+
+  it("accepts an IP literal in extension-requested and browser-stored shapes", () => {
+    expect(
+      originGrantCoverage("127.0.0.1", {
+        origins: ["*://127.0.0.1/*"],
+        allSites: false,
+      }),
+    ).toBe("full");
+    expect(
+      originGrantCoverage("127.0.0.1", {
+        origins: ["http://127.0.0.1:55848/*"],
+        allSites: false,
+      }),
+    ).toBe("partial");
+  });
+
   it.each(["127.0.0.1", "[::1]"])(
     "round-trips an exact IP host: %s",
     (domain) => {
@@ -51,6 +106,59 @@ describe("origin patterns", () => {
         allSites: false,
       }),
     ).toBe(false);
+  });
+
+  it("does not treat a bare-host grant as full coverage of its subdomains", () => {
+    expect(
+      originGrantCoverage("example.com", {
+        origins: ["*://example.com/*"],
+        allSites: false,
+      }),
+    ).toBe("partial");
+  });
+
+  it("distinguishes partial reach from full coverage for a wider rule", () => {
+    const subject = rule({ type: "domains", domains: ["example.com"] }, [
+      "pages",
+    ]);
+    const narrowed = {
+      origins: ["https://example.com/*"],
+      allSites: false,
+    } as const;
+
+    expect(originGrantCoverage("example.com", narrowed)).toBe("partial");
+    expect(missingGrants(subject, narrowed)).toEqual([
+      originPatternForDomain("example.com"),
+    ]);
+  });
+
+  it("isolates scheme and port containment for an exact IP host", () => {
+    const required = originPatternForDomain("127.0.0.1");
+
+    expect(originPatternCoverage("http://127.0.0.1/*", required)).toBe(
+      "partial",
+    );
+    expect(originPatternCoverage("*://127.0.0.1:55848/*", required)).toBe(
+      "partial",
+    );
+  });
+
+  it("intersects nested subdomain wildcards in either order", () => {
+    expect(
+      originPatternCoverage("*://*.sub.example.com/*", "*://*.example.com/*"),
+    ).toBe("partial");
+  });
+
+  it("keeps scheme and port disjoint when Chrome would not apply the rule", () => {
+    expect(
+      originPatternCoverage("http://localhost/*", "https://localhost/*"),
+    ).toBe("none");
+    expect(
+      originPatternCoverage(
+        "http://localhost:55848/*",
+        "http://localhost:58991/*",
+      ),
+    ).toBe("none");
   });
 });
 
@@ -201,14 +309,19 @@ describe("missingGrants", () => {
         allSites: false,
       }),
     ).toEqual([]);
-    // A grant the user narrowed through chrome://extensions carries a concrete
-    // scheme; the rule still runs on it, so it satisfies the requirement too.
-    expect(
-      missingGrants(subject, {
-        origins: ["https://*.example.com/*"],
-        allSites: false,
-      }),
-    ).toEqual([]);
+    // Chrome's toolbar site-access control stores a concrete scheme and the
+    // bare host. That observed exact-origin grant only partially covers the
+    // wider subdomain requirement and therefore still needs widening.
+    const toolbarNarrowed = {
+      origins: ["https://api.example.com/*"],
+      allSites: false,
+    } as const;
+    expect(originGrantCoverage("api.example.com", toolbarNarrowed)).toBe(
+      "partial",
+    );
+    expect(missingGrants(subject, toolbarNarrowed)).toEqual([
+      originPatternForDomain("api.example.com"),
+    ]);
   });
 
   it("treats all-sites access as satisfying targets and initiators", () => {
@@ -295,6 +408,17 @@ describe("siteAccessView", () => {
     return { id, name: id, badgeText: "PR", color: "blue", rules };
   }
 
+  const enabledOverride = {
+    num: 1,
+    tabId: 5,
+    originHost: "api.example.com",
+    direction: "request",
+    operation: "set",
+    header: "x-session",
+    value: "1",
+    enabled: true,
+  } as const;
+
   it("aggregates needed origins across rules, sorted by domain", () => {
     const subject = doc([
       profile("p1", [
@@ -319,11 +443,13 @@ describe("siteAccessView", () => {
 
     expect(siteAccessView(subject, none).needed).toEqual([
       {
+        coverage: "none",
         origin: originPatternForDomain("api.example.com"),
         domain: "api.example.com",
         ruleCount: 2,
       },
       {
+        coverage: "none",
         origin: originPatternForDomain("zeta.example.com"),
         domain: "zeta.example.com",
         ruleCount: 1,
@@ -351,6 +477,7 @@ describe("siteAccessView", () => {
 
     expect(siteAccessView(subject, none).needed).toEqual([
       {
+        coverage: "none",
         origin: originPatternForDomain("api.example.com"),
         domain: "api.example.com",
         ruleCount: 1,
@@ -379,7 +506,15 @@ describe("siteAccessView", () => {
 
     expect(
       siteAccessView(subject, { origins: [granted], allSites: false }).granted,
-    ).toEqual([{ origin: granted, domain: "api.example.com", ruleCount: 2 }]);
+    ).toEqual([
+      {
+        coverage: "full",
+        origin: granted,
+        domain: "api.example.com",
+        ruleCount: 2,
+        grantedOrigins: [granted],
+      },
+    ]);
   });
 
   it("keeps a rule-less grant listed with a zero count", () => {
@@ -390,25 +525,24 @@ describe("siteAccessView", () => {
         origins: [granted],
         allSites: false,
       }).granted,
-    ).toEqual([{ origin: granted, domain: "old.example.com", ruleCount: 0 }]);
+    ).toEqual([
+      {
+        coverage: "full",
+        origin: granted,
+        domain: "old.example.com",
+        ruleCount: 0,
+        grantedOrigins: [granted],
+      },
+    ]);
   });
 
   it("counts enabled this-tab changes in granted and needed origins", () => {
     const origin = originPatternForDomain("api.example.com");
-    const override = {
-      num: 1,
-      tabId: 5,
-      originHost: "api.example.com",
-      direction: "request",
-      operation: "set",
-      header: "x-session",
-      value: "1",
-      enabled: true,
-    } as const;
     const subject = doc([profile("p1", [])]);
 
-    expect(siteAccessView(subject, none, [override]).needed).toEqual([
+    expect(siteAccessView(subject, none, [enabledOverride]).needed).toEqual([
       {
+        coverage: "none",
         origin,
         domain: "api.example.com",
         ruleCount: 0,
@@ -417,17 +551,49 @@ describe("siteAccessView", () => {
     ]);
     expect(
       siteAccessView(subject, { origins: [origin], allSites: false }, [
-        override,
-        { ...override, num: 2, enabled: false },
+        enabledOverride,
+        { ...enabledOverride, num: 2, enabled: false },
       ]).granted,
     ).toEqual([
       {
+        coverage: "full",
         origin,
         domain: "api.example.com",
         ruleCount: 0,
         thisTabCount: 1,
+        grantedOrigins: [origin],
       },
     ]);
+  });
+
+  it("keeps narrowed-grant rule and this-tab usage visible and actionable", () => {
+    const observed = "https://api.example.com/*";
+    const required = originPatternForDomain("api.example.com");
+    const subject = doc([
+      profile("p1", [
+        rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+      ]),
+    ]);
+
+    expect(
+      siteAccessView(subject, { origins: [observed], allSites: false }, [
+        enabledOverride,
+      ]),
+    ).toMatchObject({
+      needed: [],
+      partial: [
+        {
+          coverage: "partial",
+          origin: required,
+          domain: "api.example.com",
+          ruleCount: 1,
+          thisTabCount: 1,
+          grantedOrigins: [observed],
+          limitedTo: observed,
+        },
+      ],
+      granted: [],
+    });
   });
 
   it("excludes the broad origin from the granted list", () => {

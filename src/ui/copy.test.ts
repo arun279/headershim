@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { copy, sentenceText } from "./copy";
+import { copy, sentenceText, siteAccessCopy } from "./copy";
 
 const privacyPolicy = readFileSync(
   new URL("../../PRIVACY.md", import.meta.url),
@@ -183,10 +183,10 @@ describe("copy", () => {
   });
 
   it("keeps About factual and site-access wording precise", () => {
-    expect(copy.options.siteAccess.allSites.warning).toContain(
+    expect(siteAccessCopy.allSites.warning).toContain(
       '"Read and change all your data on all websites"',
     );
-    expect(copy.options.siteAccess.allSites.warning).toContain(
+    expect(siteAccessCopy.allSites.warning).toContain(
       "you can revoke this access here at any time.",
     );
     expect(copy.options.about).not.toHaveProperty("theme");
@@ -209,17 +209,22 @@ describe("copy", () => {
         "title",
       ].sort(),
     );
-    expect(copy.options.siteAccess.usedBy).toBe("used by");
-    expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");
-    expect(copy.options.siteAccess.tabCount(1)).toBe("1 tab change");
-    expect(copy.options.siteAccess.revoked("api.example.com")).toBe(
+    expect(siteAccessCopy.usedBy).toBe("used by");
+    expect(siteAccessCopy.neededBy).toBe("needed by");
+    expect(siteAccessCopy.partialHeading).toBe("Limited access");
+    expect(siteAccessCopy.partial("https://api.example.com/*")).toContain(
+      "granted only to https://api.example.com",
+    );
+    expect(siteAccessCopy.ruleCount(2)).toBe("2 rules");
+    expect(siteAccessCopy.tabCount(1)).toBe("1 tab change");
+    expect(siteAccessCopy.revoked("api.example.com")).toBe(
       "Access to api.example.com revoked",
     );
     // While the broad grant stands, removing a narrow grant must not claim
     // access ended.
-    expect(
-      copy.options.siteAccess.revokedUnderAllSites("api.example.com"),
-    ).toBe("api.example.com grant removed. All-sites access still covers it.");
+    expect(siteAccessCopy.revokedUnderAllSites("api.example.com")).toBe(
+      "api.example.com grant removed. All-sites access still covers it.",
+    );
   });
 
   // The About rows are the source of the long disclosure and PRIVACY.md is the

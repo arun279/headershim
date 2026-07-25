@@ -4,7 +4,7 @@ import {
   isAllSitesOrigin,
   missingGrants,
   originGranted,
-  originPatternContains,
+  originPatternCoverage,
   requiredOrigins,
 } from "../../core/grants";
 import {
@@ -16,28 +16,32 @@ import {
 import { expandResourceTypes, originPatternForDomain } from "../../core/scope";
 
 export interface SiteAccessEntry {
+  readonly coverage: "full" | "partial" | "none";
   readonly origin: string;
   readonly domain: string;
   readonly ruleCount: number;
   /** Enabled temporary changes using this origin, omitted when there are none. */
   readonly thisTabCount?: number;
+  /** Concrete Chrome grant(s) represented by this one domain-keyed row. */
+  readonly grantedOrigins?: readonly string[];
+  /** The exact narrowed origin to explain on a partial row. */
+  readonly limitedTo?: string;
 }
 
 export interface SiteAccessView {
   readonly needed: readonly SiteAccessEntry[];
+  readonly partial: readonly SiteAccessEntry[];
   readonly granted: readonly SiteAccessEntry[];
   readonly initiatorNote: boolean;
 }
 
 /**
- * The Site access page's world: origins enabled saved or temporary changes
- * still need, origins already granted with the changes that reference them,
- * and whether the standing initiator note applies. Pattern and regex rules
- * count through their persisted hosts, via requiredOrigins. Needed entries
- * never include the broad origin — the all-sites card is its only grant
- * affordance, so broad access stays behind its honest framing. Granted rule
- * counts span all saved rules because grants outlive them; temporary counts
- * include enabled session rows that are using the grant now.
+ * One row per displayed domain, classified as full, partial, or missing. Chrome
+ * can retain several origin strings for one domain, but exposing each string as
+ * a separate row makes one site appear simultaneously granted and ungranted.
+ * Partial counts describe changes that need broader access, not current usage.
+ * Needed entries never include the broad origin — the all-sites card is its
+ * only grant affordance, so broad access stays behind its honest framing.
  */
 export function siteAccessView(
   doc: StateDoc,
@@ -67,25 +71,70 @@ export function siteAccessView(
   const required = doc.profiles.flatMap((profile) =>
     profile.rules.map(requiredOrigins),
   );
+  const grantedByDomain = new Map<string, string[]>();
+  for (const origin of granted.origins) {
+    if (isAllSitesOrigin(origin)) continue;
+    const domain = domainFromOriginPattern(origin) ?? origin;
+    const origins = grantedByDomain.get(domain) ?? [];
+    origins.push(origin);
+    grantedByDomain.set(domain, origins);
+  }
+
+  const neededEntries = [...needed]
+    .map(([origin, usage]) => entry(origin, usage, "none"))
+    .sort(byDomain);
+  const partialDomains = new Set<string>();
+  const partial = neededEntries.flatMap((neededEntry) => {
+    const origins = grantedByDomain.get(neededEntry.domain) ?? [];
+    const limitedTo = origins.find(
+      (origin) =>
+        originPatternCoverage(origin, neededEntry.origin) === "partial",
+    );
+    if (limitedTo === undefined) {
+      return [];
+    }
+    partialDomains.add(neededEntry.domain);
+    return [
+      {
+        ...neededEntry,
+        coverage: "partial" as const,
+        grantedOrigins: origins,
+        limitedTo,
+      },
+    ];
+  });
+
   return {
-    needed: [...needed]
-      .map(([origin, usage]) => entry(origin, usage))
-      .sort(byDomain),
-    granted: granted.origins
-      .filter((origin) => !isAllSitesOrigin(origin))
-      .map((origin) => {
-        const ruleCount = required.filter((origins) =>
-          origins.some((candidate) => originPatternContains(origin, candidate)),
+    needed: neededEntries.filter(
+      (neededEntry) => !partialDomains.has(neededEntry.domain),
+    ),
+    partial,
+    granted: [...grantedByDomain]
+      .filter(([domain]) => !partialDomains.has(domain))
+      .map(([domain, origins]) => {
+        const ruleCount = required.filter((ruleOrigins) =>
+          ruleOrigins.some((candidate) =>
+            origins.some(
+              (origin) => originPatternCoverage(origin, candidate) !== "none",
+            ),
+          ),
         ).length;
         const thisTabCount = overrides.filter(
           (override) =>
             override.enabled &&
-            originPatternContains(
-              origin,
-              originPatternForDomain(override.originHost),
+            origins.some(
+              (origin) =>
+                originPatternCoverage(
+                  origin,
+                  originPatternForDomain(override.originHost),
+                ) !== "none",
             ),
         ).length;
-        return entry(origin, { ruleCount, thisTabCount });
+        return {
+          ...entry(origins[0] ?? domain, { ruleCount, thisTabCount }, "full"),
+          domain,
+          grantedOrigins: origins,
+        };
       })
       .sort(byDomain),
     initiatorNote:
@@ -114,8 +163,13 @@ function incrementUsage(
   usage.set(origin, { ...current, [field]: current[field] + 1 });
 }
 
-function entry(origin: string, usage: UsageCount): SiteAccessEntry {
+function entry(
+  origin: string,
+  usage: UsageCount,
+  coverage: SiteAccessEntry["coverage"],
+): SiteAccessEntry {
   return {
+    coverage,
     origin,
     domain: domainFromOriginPattern(origin) ?? origin,
     ruleCount: usage.ruleCount,

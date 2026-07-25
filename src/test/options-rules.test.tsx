@@ -8,7 +8,7 @@ import { originPatternForDomain } from "../core/scope";
 import { setReconcileError } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
-import { copy } from "../ui/copy";
+import { copy, siteAccessCopy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
 
@@ -511,7 +511,7 @@ describe("active changes", () => {
       copy.readout.heldVerb.set,
     );
     expect(row.querySelector(".tape-status")?.textContent).toBe(
-      copy.options.siteAccess.grant,
+      siteAccessCopy.grant,
     );
   });
 

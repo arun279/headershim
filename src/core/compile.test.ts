@@ -83,6 +83,26 @@ const granting = (...domains: string[]): GrantSnapshot => ({
 });
 
 describe("dynamic rule compilation", () => {
+  it("installs only Chrome's exact-origin subset under a toolbar grant", () => {
+    const doc = state([profile("active", [storedRule(99)])]);
+    const narrowed: GrantSnapshot = {
+      origins: ["https://example.com/*"],
+      allSites: false,
+    };
+
+    expect(compileDynamic(dropInapplicable(doc, () => true, narrowed))).toEqual(
+      [
+        expect.objectContaining({
+          id: 99,
+          condition: expect.objectContaining({
+            requestDomains: ["example.com"],
+            urlFilter: "|https://example.com^",
+          }),
+        }),
+      ],
+    );
+  });
+
   it("matches the observed main-frame and cross-origin request rule shapes", () => {
     expect(
       compileDynamic(
@@ -151,6 +171,27 @@ describe("dynamic rule compilation", () => {
         },
       },
     ]);
+  });
+
+  it("anchors Chrome's observed non-default-port grant", () => {
+    const doc = state([
+      profile("active", [
+        storedRule(98, {
+          scope: { type: "domains", domains: ["localhost"] },
+        }),
+      ]),
+    ]);
+    const narrowed: GrantSnapshot = {
+      origins: ["http://localhost:55848/*"],
+      allSites: false,
+    };
+
+    expect(
+      compileDynamic(dropInapplicable(doc, () => true, narrowed))[0]?.condition,
+    ).toMatchObject({
+      requestDomains: ["localhost"],
+      urlFilter: "|http://localhost:55848/",
+    });
   });
 
   it("keeps stable ids while assigning distinct decreasing priorities from visible order", () => {
@@ -459,6 +500,48 @@ describe("dropping inapplicable rules", () => {
     expect(compiledIds(doc, supportAll, granting())).toEqual([]);
   });
 
+  it("narrows away an exact-origin grant but keeps a fully covered sibling", () => {
+    const doc = state([
+      profile("mixed-coverage", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["a.example", "b.example"] },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: [originPatternForDomain("a.example"), "https://b.example/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled[0]?.condition.requestDomains).toEqual(["a.example"]);
+  });
+
+  it.each(["pattern", "regex"] as const)(
+    "narrows a partly granted %s rule to its fully granted hosts",
+    (type) => {
+      const scope =
+        type === "pattern"
+          ? {
+              type,
+              pattern: "||api^",
+              hosts: ["a.example", "b.example"],
+            }
+          : {
+              type,
+              regex: "^https://api/",
+              hosts: ["a.example", "b.example"],
+            };
+      const doc = state([profile(type, [storedRule(1, { scope })])]);
+      const compiled = compileDynamic(
+        dropInapplicable(doc, supportAll, granting("a.example")),
+      );
+
+      expect(compiled[0]?.condition.requestDomains).toEqual(["a.example"]);
+    },
+  );
+
   it("strips only the enabled rules Chrome would reject, so the batch survives", () => {
     const doc = state([
       profile("mixed", [
@@ -617,6 +700,18 @@ describe("session rule compilation", () => {
     expect(
       compileSession([sessionOverride(1)], false, granting("other.test")),
     ).toEqual([]);
+  });
+
+  it("confines an override to Chrome's exact-origin grant", () => {
+    expect(
+      compileSession([sessionOverride(1)], false, {
+        origins: ["https://host-1.example/*"],
+        allSites: false,
+      })[0]?.condition,
+    ).toMatchObject({
+      requestDomains: ["host-1.example"],
+      urlFilter: "|https://host-1.example^",
+    });
   });
 
   it("keeps an override under a parent-domain grant", () => {

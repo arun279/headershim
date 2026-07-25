@@ -14,7 +14,12 @@ import {
   uncompilableReason,
 } from "../../core/compile";
 import type { GrantSnapshot } from "../../core/grants";
-import { missingGrants, originGranted } from "../../core/grants";
+import {
+  coversSubresourceTypes,
+  missingGrants,
+  narrowedGrantUrlFilter,
+  originGranted,
+} from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
 import {
   activeProfile,
@@ -168,15 +173,20 @@ export function computeReadout({
     missing: readonly string[];
   }[] = [];
   for (const rule of profile.rules) {
-    const reach = ruleReach(rule, host);
-    if (reach === "no") {
+    const baseReach = ruleReach(rule, host);
+    if (baseReach === "no") {
       continue;
     }
+    const access = rule.enabled
+      ? grantStateForHost(rule, host, grants)
+      : { missing: [], narrowed: false };
+    const reach =
+      baseReach === "yes" && access.narrowed ? "unknown" : baseReach;
     applying.push({
       profile,
       rule,
       reach,
-      missing: rule.enabled ? missingGrants(rule, grants) : [],
+      missing: access.missing,
     });
   }
 
@@ -360,9 +370,14 @@ function overrideChange(
   // A this-tab override compiles to a tabIds + requestDomains condition on the
   // tab it was made from. Its one host is the compiler's grant test, so the
   // popup derives the same needs-access state from the same snapshot.
-  const missing = originGranted(override.originHost, grants)
-    ? []
-    : [originPatternForDomain(override.originHost)];
+  const fullyGranted = originGranted(override.originHost, grants);
+  const narrowed =
+    !fullyGranted &&
+    narrowedGrantUrlFilter(override.originHost, grants) !== undefined;
+  const missing =
+    fullyGranted || narrowed
+      ? []
+      : [originPatternForDomain(override.originHost)];
   const status = lineStatus({
     running: override.enabled,
     paused,
@@ -374,7 +389,7 @@ function overrideChange(
     refused: false,
     managed: isNetworkManagedHeader(override.header),
     needsAccess: missing.length > 0,
-    perRequest: false,
+    perRequest: narrowed,
   });
   return {
     key: `override:${override.num}`,
@@ -542,4 +557,55 @@ function ruleReach(rule: Rule, host: string): Reach {
       : "no";
   }
   return settlesPerRequest(rule) ? "unknown" : "yes";
+}
+
+/**
+ * The compiler narrows every host-named scope to its fully granted
+ * requestDomains entries. Any one such entry that reaches this tab is enough
+ * for the target side of the rule to be installed here.
+ */
+function grantStateForHost(
+  rule: Rule,
+  host: string,
+  grants: GrantSnapshot,
+): { readonly missing: string[]; readonly narrowed: boolean } {
+  const missing = missingGrants(rule, grants);
+  const targetHosts =
+    rule.scope.type === "all"
+      ? []
+      : rule.scope.type === "domains"
+        ? rule.scope.domains
+        : rule.scope.hosts;
+  if (targetHosts.length === 0) {
+    return { missing, narrowed: false };
+  }
+
+  const reachingDomains = targetHosts.filter((domain) =>
+    hostUnder(host, domain),
+  );
+  if (reachingDomains.length === 0) {
+    return { missing, narrowed: false };
+  }
+
+  const fullyCovered = reachingDomains.some((domain) =>
+    originGranted(domain, grants),
+  );
+  const narrowed =
+    !fullyCovered &&
+    rule.scope.type === "domains" &&
+    reachingDomains.some(
+      (domain) => narrowedGrantUrlFilter(domain, grants) !== undefined,
+    );
+  const initiatorOrigins = coversSubresourceTypes(rule)
+    ? rule.initiators.map(originPatternForDomain)
+    : [];
+  const reachingOrigins =
+    fullyCovered || narrowed ? [] : reachingDomains.map(originPatternForDomain);
+  return {
+    missing: missing.filter(
+      (origin) =>
+        initiatorOrigins.includes(origin) || reachingOrigins.includes(origin),
+    ),
+    narrowed,
+  };
 }

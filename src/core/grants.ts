@@ -30,6 +30,8 @@ export interface GrantSnapshot {
   readonly allSites: boolean;
 }
 
+export type GrantCoverage = "full" | "partial" | "none";
+
 export function requiredOrigins(
   rule: Pick<Rule, "scope" | "resourceTypes" | "initiators">,
 ): string[] {
@@ -66,13 +68,48 @@ export function requiredOrigins(
 }
 
 export function originGranted(domain: string, granted: GrantSnapshot): boolean {
+  return originGrantCoverage(domain, granted) === "full";
+}
+
+export function originGrantCoverage(
+  domain: string,
+  granted: GrantSnapshot,
+): GrantCoverage {
   if (granted.allSites) {
-    return true;
+    return "full";
   }
   const required = originPatternForDomain(domain);
-  return granted.origins.some((origin) =>
-    originPatternContains(origin, required),
+  return combinedCoverage(
+    granted.origins.map((origin) => originPatternCoverage(origin, required)),
   );
+}
+
+/**
+ * The exact URL prefix Chrome's toolbar grant permits inside a wider
+ * requestDomains condition. The observed toolbar shape is always a concrete
+ * scheme and bare host, with an optional non-default port. Anchoring all three
+ * axes lets the compiler keep that subset installed without activeTab widening
+ * it to the rule's ungranted schemes, ports, or subdomains.
+ */
+export function narrowedGrantUrlFilter(
+  domain: string,
+  granted: GrantSnapshot,
+): string | undefined {
+  const required = originPatternForDomain(domain);
+  for (const origin of granted.origins) {
+    const pattern = parseOriginPattern(origin);
+    if (
+      pattern !== undefined &&
+      pattern.scheme !== "*" &&
+      !pattern.includesSubdomains &&
+      originPatternCoverage(origin, required) === "partial"
+    ) {
+      return pattern.port === undefined
+        ? `|${pattern.scheme}://${pattern.host}^`
+        : `|${pattern.scheme}://${pattern.host}:${pattern.port}/`;
+    }
+  }
+  return undefined;
 }
 
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
@@ -82,9 +119,11 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
 
   return requiredOrigins(rule).filter(
     (origin) =>
-      !granted.origins.some((grantedOrigin) =>
-        originPatternContains(grantedOrigin, origin),
-      ),
+      combinedCoverage(
+        granted.origins.map((grantedOrigin) =>
+          originPatternCoverage(grantedOrigin, origin),
+        ),
+      ) !== "full",
   );
 }
 
@@ -102,42 +141,84 @@ export function coversSubresourceTypes(
   );
 }
 
-export function originPatternContains(
+export function originPatternCoverage(
   granted: string,
   required: string,
-): boolean {
-  if (granted === required) {
-    return true;
-  }
-
+): GrantCoverage {
   const grantedPattern = parseOriginPattern(granted);
   const requiredPattern = parseOriginPattern(required);
-  if (
-    grantedPattern === undefined ||
-    requiredPattern === undefined ||
-    !grantedPattern[1]
-  ) {
-    return false;
+  if (grantedPattern === undefined || requiredPattern === undefined) {
+    return "none";
   }
-  return hostUnder(requiredPattern[0], grantedPattern[0]);
+
+  if (!patternsIntersect(grantedPattern, requiredPattern)) {
+    return "none";
+  }
+  return patternContains(grantedPattern, requiredPattern) ? "full" : "partial";
 }
 
 export function domainFromOriginPattern(pattern: string): string | undefined {
-  return parseOriginPattern(pattern)?.[0];
+  return parseOriginPattern(pattern)?.host;
 }
 
-// The scheme is any of *, http, https: a rule's origins are always scheme-wild
-// (`*://…`), but a grant the user narrowed through chrome://extensions is stored
-// as the intersection of their pick and the manifest's `*://*/*`, which keeps
-// their concrete scheme. Reading only `*://` would call such a grant missing and
-// drop a rule the browser would run.
-function parseOriginPattern(
-  pattern: string,
-): readonly [domain: string, includesSubdomains: boolean] | undefined {
-  const match = /^(?:\*|https?):\/\/(\*\.)?([^/]+)\/\*$/.exec(pattern);
-  const domain = match?.[2];
-  if (domain === undefined || domain === "*") {
+interface OriginPattern {
+  readonly scheme: "*" | "http" | "https";
+  readonly host: string;
+  readonly includesSubdomains: boolean;
+  /** Undefined means every port, as Chrome's containment oracle confirms. */
+  readonly port: string | undefined;
+}
+
+// Chrome returns extension-requested patterns byte-identically, while its
+// toolbar narrowing returns a concrete scheme, a bare host, and a non-default
+// port when present. Keep all three axes: Chrome enforces them independently.
+function parseOriginPattern(pattern: string): OriginPattern | undefined {
+  const match =
+    /^(\*|https?):\/\/(\*\.)?(\[[^\]]+\]|[^/:]+)(?::(\d+))?\/\*$/.exec(pattern);
+  const scheme = match?.[1] as OriginPattern["scheme"] | undefined;
+  const host = match?.[3];
+  if (scheme === undefined || host === undefined || host === "*") {
     return undefined;
   }
-  return [domain, match?.[1] !== undefined];
+  return {
+    scheme,
+    host,
+    includesSubdomains: match?.[2] !== undefined,
+    port: match?.[4],
+  };
+}
+
+function combinedCoverage(coverages: readonly GrantCoverage[]): GrantCoverage {
+  return coverages.includes("full")
+    ? "full"
+    : coverages.includes("partial")
+      ? "partial"
+      : "none";
+}
+
+function patternContains(
+  granted: OriginPattern,
+  required: OriginPattern,
+): boolean {
+  return (
+    (granted.scheme === "*" || granted.scheme === required.scheme) &&
+    (granted.port === undefined || granted.port === required.port) &&
+    (granted.includesSubdomains
+      ? hostUnder(required.host, granted.host)
+      : !required.includesSubdomains && granted.host === required.host)
+  );
+}
+
+function patternsIntersect(left: OriginPattern, right: OriginPattern): boolean {
+  const schemesIntersect =
+    left.scheme === "*" || right.scheme === "*" || left.scheme === right.scheme;
+  const portsIntersect =
+    left.port === undefined ||
+    right.port === undefined ||
+    left.port === right.port;
+  const hostsIntersect =
+    (left.includesSubdomains && hostUnder(right.host, left.host)) ||
+    (right.includesSubdomains && hostUnder(left.host, right.host)) ||
+    left.host === right.host;
+  return schemesIntersect && portsIntersect && hostsIntersect;
 }

@@ -1,4 +1,10 @@
-import { type GrantSnapshot, missingGrants, originGranted } from "./grants";
+import {
+  coversSubresourceTypes,
+  type GrantSnapshot,
+  missingGrants,
+  narrowedGrantUrlFilter,
+  originGranted,
+} from "./grants";
 import {
   allowsRequestAppend,
   HTTP_TOKEN,
@@ -68,10 +74,11 @@ export interface DnrRule {
  * sending the header the user refused. Keeping it out is what makes "needs
  * access" a state the product enforces rather than a label it prints.
  *
- * A domains rule runs on each of its domains independently, so a partial grant
- * narrows it to the granted domains rather than dropping it whole: revoking one
- * site cannot silence the rule on the sites still granted. Every other scope
- * names no per-host list to narrow, so it stays all-or-nothing.
+ * Every host-named scope runs on each requestDomains entry independently, so
+ * an incomplete set of grants narrows it to the fully covered hosts rather than
+ * dropping it whole. A toolbar-narrowed domains grant is compiled as an exact
+ * URL prefix, keeping Chrome's granted scheme/host/port subset live while
+ * preventing activeTab from widening the condition.
  *
  * The stored doc is untouched; only the compiler's view of it is filtered.
  * Regex validity needs the browser's RE2 (async), so the caller resolves it
@@ -93,9 +100,12 @@ export function dropInapplicable(
                 return [rule];
               }
               const narrowed = narrowToGranted(rule, granted);
-              return uncompilableReason(narrowed, isRegexSupported) ===
-                undefined && missingGrants(narrowed, granted).length === 0
-                ? [narrowed]
+              return uncompilableReason(narrowed.rule, isRegexSupported) ===
+                undefined &&
+                (narrowed.targetSecured
+                  ? initiatorsGranted(narrowed.rule, granted)
+                  : missingGrants(narrowed.rule, granted).length === 0)
+                ? [narrowed.rule]
                 : [];
             }),
           }
@@ -104,23 +114,63 @@ export function dropInapplicable(
   };
 }
 
-// Drop a domains rule's ungranted domains, leaving the granted ones to compile.
-// An emptied list falls to uncompilableReason (Chrome refuses an empty one), so
-// a rule with no granted domain still leaves the ruleset. Only domains scope
-// carries such a list; the rest have nothing to narrow.
-function narrowToGranted(rule: Rule, granted: GrantSnapshot): Rule {
-  if (rule.scope.type !== "domains") {
-    return rule;
+interface NarrowedRule {
+  readonly rule: Rule;
+  /** The target is constrained to an exact narrowed grant by the condition. */
+  readonly targetSecured: boolean;
+}
+
+// Narrow every scope that carries requestDomains. Pattern and regex scopes keep
+// their authored matcher and lose only ungranted hosts. A domains scope with no
+// fully covered host can still run under Chrome's observed toolbar grant: turn
+// that exact origin into a URL-anchored pattern. If no host survives, retain the
+// original requirement so missingGrants drops it instead of accidentally
+// turning an empty host list into broad access.
+function narrowToGranted(rule: Rule, granted: GrantSnapshot): NarrowedRule {
+  if (rule.scope.type === "all") {
+    return { rule, targetSecured: false };
   }
-  return {
-    ...rule,
-    scope: {
-      ...rule.scope,
-      domains: rule.scope.domains.filter((domain) =>
-        originGranted(domain, granted),
-      ),
-    },
-  };
+  const hosts =
+    rule.scope.type === "domains" ? rule.scope.domains : rule.scope.hosts;
+  const fullyGranted = hosts.filter((host) => originGranted(host, granted));
+  if (fullyGranted.length > 0) {
+    return {
+      rule: {
+        ...rule,
+        scope:
+          rule.scope.type === "domains"
+            ? { ...rule.scope, domains: fullyGranted }
+            : { ...rule.scope, hosts: fullyGranted },
+      },
+      targetSecured: false,
+    };
+  }
+  if (rule.scope.type === "domains") {
+    for (const domain of rule.scope.domains) {
+      const urlFilter = narrowedGrantUrlFilter(domain, granted);
+      if (urlFilter !== undefined) {
+        return {
+          rule: {
+            ...rule,
+            scope: {
+              type: "pattern",
+              pattern: urlFilter,
+              hosts: [domain],
+            },
+          },
+          targetSecured: true,
+        };
+      }
+    }
+  }
+  return { rule, targetSecured: false };
+}
+
+function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
+  return (
+    !coversSubresourceTypes(rule) ||
+    rule.initiators.every((initiator) => originGranted(initiator, granted))
+  );
 }
 
 export type UncompilableReason =
@@ -256,10 +306,19 @@ export function compileSession(
   paused: boolean,
   granted: GrantSnapshot,
 ): DnrRule[] {
-  const enabledOverrides = overrides.filter(
-    (override) =>
-      override.enabled && originGranted(override.originHost, granted),
-  );
+  const enabledOverrides = overrides.flatMap<{
+    readonly override: TabOverride;
+    readonly urlFilter: string | undefined;
+  }>((override) => {
+    if (!override.enabled) {
+      return [];
+    }
+    if (originGranted(override.originHost, granted)) {
+      return [{ override, urlFilter: undefined }];
+    }
+    const urlFilter = narrowedGrantUrlFilter(override.originHost, granted);
+    return urlFilter === undefined ? [] : [{ override, urlFilter }];
+  });
   if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
       `Cannot compile ${enabledOverrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
@@ -269,13 +328,14 @@ export function compileSession(
     return [];
   }
 
-  return enabledOverrides.map((override, index) => ({
+  return enabledOverrides.map(({ override, urlFilter }, index) => ({
     id: override.num,
     priority: SESSION_PRIORITY_TOP - index,
     action: headerAction(override),
     condition: {
       tabIds: [override.tabId],
       requestDomains: [override.originHost],
+      ...(urlFilter === undefined ? {} : { urlFilter }),
       resourceTypes: expandResourceTypes("all"),
     },
   }));

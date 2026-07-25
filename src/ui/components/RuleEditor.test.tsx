@@ -1175,6 +1175,18 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
   });
 
+  it("offers to widen Chrome's exact-origin toolbar grant", () => {
+    const granted: GrantSnapshot = {
+      origins: ["https://api.example.com/*"],
+      allSites: false,
+    };
+    const ctx = mount({ grants: granted, prefillDomain: "api.example.com" });
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("api.example.com"),
+    );
+  });
+
   // The button is the disclosure of reach that comes before Chrome's own dialog,
   // and the popup does not survive that dialog, so the button is the last word.
   // Naming the sites states exactly what Chrome will ask for; a count would hide

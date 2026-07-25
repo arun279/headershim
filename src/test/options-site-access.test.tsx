@@ -7,11 +7,11 @@ import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
 import { write as writeSession } from "../platform/session-store";
 import { write } from "../platform/store";
-import { copy } from "../ui/copy";
+import { copy, siteAccessCopy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
 
-const text = copy.options.siteAccess;
+const text = siteAccessCopy;
 
 async function mount(profiles: Profile[]): Promise<HTMLElement> {
   await write(stateDoc(profiles));
@@ -202,6 +202,48 @@ describe("options site access", () => {
     await settle();
 
     expectGranted(root, "api.example.com");
+  });
+
+  it("shows one limited row for Chrome's narrowed grant", async () => {
+    const observed = "https://api.example.com/*";
+    await fakeBrowser.permissions.request({ origins: [observed] });
+    const root = await mount(apiRuleOnly());
+
+    const limited = group(root, text.partialHeading);
+    expect(limited.querySelectorAll("li")).toHaveLength(1);
+    expect(limited.textContent).toContain("api.example.com");
+    expect(limited.textContent).toContain(text.neededBy);
+    expect(limited.textContent).toContain(text.partial(observed));
+    expect(root.querySelector(`ul[aria-label="${text.neededHeading}"]`)).toBe(
+      null,
+    );
+    expect(root.querySelector(`ul[aria-label="${text.grantedHeading}"]`)).toBe(
+      null,
+    );
+    expect(
+      rowButton(root, text.grantLabel("api.example.com")).textContent,
+    ).toBe(text.grant);
+  });
+
+  it("groups same-domain grants and revokes them together", async () => {
+    const observed = "https://api.example.com/*";
+    const broad = originPatternForDomain("api.example.com");
+    await fakeBrowser.permissions.request({ origins: [observed] });
+    await fakeBrowser.permissions.request({ origins: [broad] });
+    const root = await mount(apiRuleOnly());
+
+    const granted = group(root, text.grantedHeading);
+    expect(granted.querySelectorAll("li")).toHaveLength(1);
+
+    fire(() => rowButton(root, text.revokeLabel("api.example.com")).click());
+    await settle();
+
+    expect(
+      await fakeBrowser.permissions.contains({ origins: [observed] }),
+    ).toBe(false);
+    expect(await fakeBrowser.permissions.contains({ origins: [broad] })).toBe(
+      false,
+    );
   });
 
   it("shows the honest all-sites card and swaps it for the revoke line after grant", async () => {

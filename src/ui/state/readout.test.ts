@@ -149,10 +149,26 @@ describe("computeReadout", () => {
       grants: NONE,
       activeProfile: profile({ rules: [rule()] }),
     });
-    expect(readout.request[0]?.status).toBe("needs-access");
-    expect(readout.request[0]?.missing).toEqual(["*://*.api.example.com/*"]);
+    expect(readout.request[0]).toMatchObject({
+      status: "needs-access",
+      missing: ["*://*.api.example.com/*"],
+    });
     expect(readout.needsAccess).toBe(1);
     expect(readout.total).toBe(0);
+  });
+
+  it("leaves Chrome to settle a rule under its exact-origin grant", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: {
+        origins: ["https://api.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile({ rules: [rule()] }),
+    });
+
+    expect(readout.request[0]?.status).toBe("unconfirmed");
+    expect(readout.request[0]?.missing).toBeUndefined();
   });
 
   it.each([
@@ -286,6 +302,21 @@ describe("computeReadout", () => {
     expect(readout.total).toBe(1);
   });
 
+  it("leaves Chrome to settle a this-tab override under an exact-origin grant", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: {
+        origins: ["https://api.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile(),
+      overrides: [override()],
+    });
+
+    expect(readout.overrides[0]?.status).toBe("unconfirmed");
+    expect(readout.overrides[0]?.missing).toBeUndefined();
+  });
+
   it("marks a Host rule refused, honestly and enabled", () => {
     const readout = computeReadout({
       ...base,
@@ -335,8 +366,8 @@ describe("computeReadout", () => {
   it("resolves collisions over the narrowed rules the compiler installs", () => {
     // A domains rule granted on only one of its sites is installed there, at full
     // priority, narrowed to that site: on this host it shadows a lower rule for
-    // the same header exactly as it does on the wire. Its own row still reads
-    // needs-access for the site it is missing.
+    // the same header exactly as it does on the wire. The popup is host-scoped,
+    // so another domain's grant gap does not mislabel this tab.
     const partly = rule({
       scope: { type: "domains", domains: ["api.example.com", "other.test"] },
     });
@@ -349,11 +380,34 @@ describe("computeReadout", () => {
 
     expect(
       readout.request.find((change) => change.ruleId === partly.id)?.status,
-    ).toBe("needs-access");
+    ).toBe("live");
     expect(
       readout.request.find((change) => change.ruleId === lower.id)?.status,
     ).toBe("overridden");
     expect(readout.overridden).toBe(1);
+  });
+
+  it("needs no grant when any reaching domain is fully covered", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: {
+        origins: ["*://*.api.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: {
+              type: "domains",
+              domains: ["example.com", "api.example.com"],
+            },
+          }),
+        ],
+      }),
+    });
+
+    expect(readout.request[0]?.status).toBe("live");
+    expect(readout.request[0]?.missing).toBeUndefined();
   });
 
   it("never promotes an overridden authorization rule into the token hero", () => {
@@ -462,6 +516,30 @@ describe("computeReadout", () => {
       }),
     });
     expect(readout.request[0]?.widerReach).toBe(1);
+  });
+
+  it("does not demand an ungranted sibling host after narrowing a pattern rule", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: {
+        origins: ["*://*.api.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: {
+              type: "pattern",
+              pattern: "||api^",
+              hosts: ["api.example.com", "other.test"],
+            },
+          }),
+        ],
+      }),
+    });
+
+    expect(readout.request[0]?.status).toBe("unconfirmed");
+    expect(readout.request[0]?.missing).toBeUndefined();
   });
 
   it("declines to claim a pattern rule matches this tab", () => {
