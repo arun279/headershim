@@ -397,7 +397,13 @@ function FleetRow({
             color={rule.provenance.color}
             size={15}
           />
-          <span class="verb">{copy.readout.verb[rule.operation]}</span>{" "}
+          <span class="verb">
+            {
+              (rule.status === "needs-access"
+                ? copy.readout.heldVerb
+                : copy.readout.verb)[rule.operation]
+            }
+          </span>{" "}
           <Truncate mode="end" value={rule.header} class="k" />
           {rule.display !== undefined && (
             <>
@@ -462,6 +468,8 @@ function fleetReason(
       return { tone: "amber", label: copy.readout.outOfSyncReason };
     case "unconfirmed":
       return { tone: "rest", label: copy.readout.unconfirmedReason };
+    case "needs-access":
+      return { tone: "amber", label: copy.readout.needsAccessReason(false) };
     // A rule in a profile that is not the active one reads as at-rest; the row
     // names the profile it lives in so its own colour glyph is not the only clue.
     case "off":

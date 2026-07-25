@@ -5,6 +5,7 @@ import { App } from "../../entrypoints/options/App";
 import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
+import { write as writeSession } from "../platform/session-store";
 import { write } from "../platform/store";
 import { copy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
@@ -103,7 +104,7 @@ describe("options site access", () => {
 
     const needed = group(root, text.neededHeading);
     expect(needed.textContent).toContain("api.example.com");
-    expect(needed.textContent).toContain(text.usedBy(2));
+    expect(needed.textContent).toContain(`${text.usedBy} ${text.ruleCount(2)}`);
     expect(group(root, text.grantedHeading).textContent).toContain(
       "granted.example.com",
     );
@@ -154,6 +155,39 @@ describe("options site access", () => {
     );
     expect(root.querySelector(`ul[aria-label="${text.grantedHeading}"]`)).toBe(
       null,
+    );
+  });
+
+  it("shows this-tab use and keeps it needed after revocation", async () => {
+    await grantOrigins("api.example.com");
+    await writeSession({
+      nextNum: 2,
+      tabs: {
+        5: [
+          {
+            num: 1,
+            tabId: 5,
+            originHost: "api.example.com",
+            direction: "request",
+            operation: "set",
+            header: "x-session",
+            value: "1",
+            enabled: true,
+          },
+        ],
+      },
+    });
+    const root = await mount([profile("p1")]);
+    const granted = group(root, text.grantedHeading);
+
+    expect(granted.textContent).toContain(text.tabCount(1));
+    expect(granted.textContent).not.toContain(text.ruleCount(0));
+
+    fire(() => rowButton(root, text.revokeLabel("api.example.com")).click());
+    await settle();
+
+    expect(group(root, text.neededHeading).textContent).toContain(
+      `${text.usedBy} ${text.tabCount(1)}`,
     );
   });
 

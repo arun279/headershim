@@ -233,14 +233,15 @@ test("a wide window centres the reading pages on a measure", async ({
   await page.goto(`chrome-extension://${extensionId}/options.html#settings`);
 
   await expect(page.locator(".wb-page")).toBeVisible();
-  const { leftGap, rightGap } = await page.evaluate(() => {
-    const column = document.querySelector(".wb-page")!.getBoundingClientRect();
-    const main = document.querySelector(".wb-main")!.getBoundingClientRect();
-    return {
-      leftGap: column.left - main.left,
-      rightGap: main.right - column.right,
-    };
-  });
+  const column = await page.locator(".wb-page").boundingBox();
+  const main = await page.locator(".wb-main").boundingBox();
+  if (column === null || main === null) {
+    throw new Error(
+      "the page column and its main region must both be laid out",
+    );
+  }
+  const leftGap = column.x - main.x;
+  const rightGap = main.x + main.width - (column.x + column.width);
   // Substantial slack on both sides proves a bounded measure, not a filled
   // frame; the two gaps matching proves it is centred rather than left-hugging.
   expect(leftGap).toBeGreaterThan(100);

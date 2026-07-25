@@ -15,6 +15,7 @@ import {
   compileSession,
   type DnrRule,
 } from "../src/core/compile";
+import { type GrantSnapshot, isAllSitesOrigin } from "../src/core/grants";
 import {
   createRule,
   type RuleDraft,
@@ -107,6 +108,8 @@ interface SessionSeed {
   tabs: { [tabId: number]: TabOverride[] };
 }
 
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
+
 export async function activeTabId(worker: Worker): Promise<number> {
   const id = await worker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({
@@ -128,7 +131,7 @@ export async function getSessionRules(worker: Worker): Promise<DnrRule[]> {
   return rules as DnrRule[];
 }
 
-function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
+export function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
   // Same "state" lock the background holds around its session pruning, so a
   // seed cannot interleave with an in-flight onUpdated/onRemoved cleanup.
   return worker.evaluate(
@@ -140,11 +143,20 @@ function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
   );
 }
 
+async function assertAllSitesGranted(worker: Worker): Promise<void> {
+  const { origins } = await worker.evaluate(() => chrome.permissions.getAll());
+  expect(
+    origins.some(isAllSitesOrigin),
+    "seedSessionAndWait requires the host-access build's all-sites grant",
+  ).toBe(true);
+}
+
 export async function seedSessionAndWait(
   worker: Worker,
   overrides: readonly TabOverride[],
 ): Promise<DnrRule[]> {
-  const desired = compileSession(overrides, false);
+  await assertAllSitesGranted(worker);
+  const desired = compileSession(overrides, false, ALL_SITES);
   const tabs: { [tabId: number]: TabOverride[] } = {};
   for (const override of overrides) {
     const rows = tabs[override.tabId] ?? [];

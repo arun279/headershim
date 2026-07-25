@@ -1,4 +1,4 @@
-import { activeProfile, type Rule, type StateDoc } from "./model";
+import type { Rule } from "./model";
 import {
   expandResourceTypes,
   hostUnder,
@@ -88,85 +88,6 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
   );
 }
 
-export interface SiteAccessEntry {
-  readonly origin: string;
-  readonly domain: string;
-  readonly ruleCount: number;
-}
-
-export interface SiteAccessView {
-  readonly needed: readonly SiteAccessEntry[];
-  readonly granted: readonly SiteAccessEntry[];
-  readonly initiatorNote: boolean;
-}
-
-/**
- * The Site access page's world: origins enabled rules still need, origins
- * already granted with the rules that reference them (pattern and regex rules
- * count through their persisted hosts, via requiredOrigins), and whether the
- * standing initiator note applies. Needed entries never include the broad
- * origin — the all-sites card is its only grant affordance, so broad access
- * stays behind its honest framing. Granted counts span all rules regardless of
- * enabled state, because grants outlive the rules that asked for them.
- */
-export function siteAccessView(
-  doc: StateDoc,
-  granted: GrantSnapshot,
-): SiteAccessView {
-  const needed = new Map<string, number>();
-  for (const rule of activeProfile(doc).rules) {
-    if (!rule.enabled) continue;
-    for (const origin of missingGrants(rule, granted)) {
-      if (!isAllSitesOrigin(origin)) {
-        needed.set(origin, (needed.get(origin) ?? 0) + 1);
-      }
-    }
-  }
-
-  const required = doc.profiles.flatMap((profile) =>
-    profile.rules.map(requiredOrigins),
-  );
-  return {
-    needed: [...needed]
-      .map(([origin, ruleCount]) => entry(origin, ruleCount))
-      .sort(byDomain),
-    granted: granted.origins
-      .filter((origin) => !isAllSitesOrigin(origin))
-      .map((origin) =>
-        entry(
-          origin,
-          required.filter((origins) =>
-            origins.some((candidate) =>
-              originPatternContains(origin, candidate),
-            ),
-          ).length,
-        ),
-      )
-      .sort(byDomain),
-    initiatorNote:
-      !granted.allSites &&
-      activeProfile(doc).rules.some(
-        (rule) =>
-          rule.enabled &&
-          rule.initiators.length === 0 &&
-          rule.scope.type !== "all" &&
-          subresourceScopedRule(rule),
-      ),
-  };
-}
-
-function entry(origin: string, ruleCount: number): SiteAccessEntry {
-  return {
-    origin,
-    domain: domainFromOriginPattern(origin) ?? origin,
-    ruleCount,
-  };
-}
-
-function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
-  return a.domain.localeCompare(b.domain);
-}
-
 /**
  * Whether the rule reaches beyond navigations. Only then does the platform
  * require the initiating page granted too, so only then can an unnamed
@@ -181,22 +102,10 @@ export function coversSubresourceTypes(
   );
 }
 
-/**
- * When the standing initiator note is worth showing on a healthy rule:
- * the rule reaches subresources but NOT top-level page navigations, so its
- * requests are genuinely started by some *other* page and that page needs
- * granting too. A default all-types rule includes main_frame — the common
- * direct-navigation case the user is not surprised by — so it stays quiet.
- */
-function subresourceScopedRule(rule: Rule): boolean {
-  const expanded = expandResourceTypes(rule.resourceTypes);
-  return (
-    !expanded.includes("main_frame") &&
-    expanded.some((type) => type !== "main_frame" && type !== "sub_frame")
-  );
-}
-
-function originPatternContains(granted: string, required: string): boolean {
+export function originPatternContains(
+  granted: string,
+  required: string,
+): boolean {
   if (granted === required) {
     return true;
   }

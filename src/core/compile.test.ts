@@ -76,6 +76,12 @@ function sessionOverride(num: number): TabOverride {
   };
 }
 
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
+const granting = (...domains: string[]): GrantSnapshot => ({
+  origins: domains.map(originPatternForDomain),
+  allSites: false,
+});
+
 describe("dynamic rule compilation", () => {
   it("matches the observed main-frame and cross-origin request rule shapes", () => {
     expect(
@@ -328,7 +334,7 @@ describe("dynamic rule compilation", () => {
         state([profile("rule-off", [storedRule(3, { enabled: false })])]),
       ),
     ).toEqual([]);
-    expect(compileSession([sessionOverride(1)], true)).toEqual([]);
+    expect(compileSession([sessionOverride(1)], true, ALL_SITES)).toEqual([]);
   });
 
   it("rejects enabled and regex rule counts above their compile limits", () => {
@@ -360,12 +366,6 @@ describe("dynamic rule compilation", () => {
       compileDynamic(state([profile("regex-overflow", regexRules)])),
     ).toThrow(RangeError);
   });
-});
-
-const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
-const granting = (...domains: string[]): GrantSnapshot => ({
-  origins: domains.map(originPatternForDomain),
-  allSites: false,
 });
 
 describe("dropping inapplicable rules", () => {
@@ -569,7 +569,7 @@ describe("session rule compilation", () => {
       { length: MAX_SESSION_OVERRIDES },
       (_, index) => sessionOverride(index + 1),
     );
-    const compiled = compileSession(overrides, false);
+    const compiled = compileSession(overrides, false, ALL_SITES);
 
     expect(compiled).toHaveLength(MAX_SESSION_OVERRIDES);
     expect(compiled[0]?.priority).toBe(SESSION_PRIORITY_TOP);
@@ -605,8 +605,44 @@ describe("session rule compilation", () => {
           sessionOverride(index + 1),
         ),
         false,
+        ALL_SITES,
       ),
     ).toThrow(RangeError);
+  });
+
+  // Same reason the stored ruleset is grant-filtered before compilation: the
+  // action's activeTab grant makes any installed rule live on the tab it was
+  // pinned to, so an ungranted row has to be absent, not merely tidied away.
+  it("drops an override whose host is not granted", () => {
+    expect(
+      compileSession([sessionOverride(1)], false, granting("other.test")),
+    ).toEqual([]);
+  });
+
+  it("keeps an override under a parent-domain grant", () => {
+    const override = { ...sessionOverride(1), originHost: "api.example.com" };
+    const compiled = compileSession([override], false, granting("example.com"));
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition.requestDomains).toEqual(["api.example.com"]);
+  });
+
+  it("keeps an override under all-sites access", () => {
+    expect(compileSession([sessionOverride(1)], false, ALL_SITES)).toHaveLength(
+      1,
+    );
+  });
+
+  it("compiles the granted rows and drops the rest in one pass", () => {
+    const granted = { ...sessionOverride(1), originHost: "api.example.com" };
+    const ungranted = { ...sessionOverride(2), originHost: "api.other.test" };
+    const compiled = compileSession(
+      [granted, ungranted],
+      false,
+      granting("example.com"),
+    );
+
+    expect(compiled.map((rule) => rule.id)).toEqual([1]);
   });
 });
 
@@ -636,7 +672,7 @@ describe("portable conditions", () => {
     );
     const compiled = [
       ...dynamic,
-      ...compileSession([sessionOverride(4)], false),
+      ...compileSession([sessionOverride(4)], false, ALL_SITES),
     ];
 
     for (const rule of compiled) {

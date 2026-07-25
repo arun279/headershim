@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { siteAccessView } from "../ui/state/site-access";
 import {
   ALL_SITES_ORIGIN,
   domainFromOriginPattern,
@@ -7,7 +8,6 @@ import {
   missingGrants,
   originGranted,
   requiredOrigins,
-  siteAccessView,
 } from "./grants";
 import type { Profile, Rule, Scope, StateDoc } from "./model";
 import { originPatternForDomain } from "./scope";
@@ -391,6 +391,43 @@ describe("siteAccessView", () => {
         allSites: false,
       }).granted,
     ).toEqual([{ origin: granted, domain: "old.example.com", ruleCount: 0 }]);
+  });
+
+  it("counts enabled this-tab changes in granted and needed origins", () => {
+    const origin = originPatternForDomain("api.example.com");
+    const override = {
+      num: 1,
+      tabId: 5,
+      originHost: "api.example.com",
+      direction: "request",
+      operation: "set",
+      header: "x-session",
+      value: "1",
+      enabled: true,
+    } as const;
+    const subject = doc([profile("p1", [])]);
+
+    expect(siteAccessView(subject, none, [override]).needed).toEqual([
+      {
+        origin,
+        domain: "api.example.com",
+        ruleCount: 0,
+        thisTabCount: 1,
+      },
+    ]);
+    expect(
+      siteAccessView(subject, { origins: [origin], allSites: false }, [
+        override,
+        { ...override, num: 2, enabled: false },
+      ]).granted,
+    ).toEqual([
+      {
+        origin,
+        domain: "api.example.com",
+        ruleCount: 0,
+        thisTabCount: 1,
+      },
+    ]);
   });
 
   it("excludes the broad origin from the granted list", () => {

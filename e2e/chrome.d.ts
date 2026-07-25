@@ -9,10 +9,6 @@ interface ChromePermissionsQuery {
   permissions?: string[];
 }
 
-interface ChromeMatchedRule {
-  rule: { ruleId: number };
-}
-
 interface ChromeTab {
   id?: number;
   url?: string;
@@ -36,10 +32,6 @@ declare const chrome: {
       addRules?: unknown[];
       removeRuleIds?: number[];
     }): Promise<void>;
-    getMatchedRules(filter: {
-      tabId: number;
-      minTimeStamp?: number;
-    }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;
   };
   action: {
     getBadgeText(details: { tabId?: number }): Promise<string>;

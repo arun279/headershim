@@ -1,19 +1,25 @@
 import type { ComponentChildren } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
   isAllSitesOrigin,
   requiredOrigins,
-  type SiteAccessEntry,
-  siteAccessView,
 } from "../../../src/core/grants";
 import { headerSensitivity } from "../../../src/core/headers";
-import { activeProfile, type StateDoc } from "../../../src/core/model";
+import {
+  activeProfile,
+  type StateDoc,
+  type TabOverride,
+} from "../../../src/core/model";
 import {
   remove as removePermissions,
   request as requestPermissions,
 } from "../../../src/platform/permissions";
+import {
+  read as readSession,
+  subscribe as subscribeSession,
+} from "../../../src/platform/session-store";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import {
@@ -22,6 +28,10 @@ import {
 } from "../../../src/ui/components/readout/glyphs";
 import { Truncate } from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
+import {
+  type SiteAccessEntry,
+  siteAccessView,
+} from "../../../src/ui/state/site-access";
 import "./SiteAccess.css";
 
 const text = copy.options.siteAccess;
@@ -44,7 +54,8 @@ export function SiteAccessPage({
   const announce = useAnnounce();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
-  const view = siteAccessView(doc, grants);
+  const overrides = useSessionOverrides();
+  const view = siteAccessView(doc, grants, overrides);
   const profile = activeProfile(doc);
   // A sensitive rule cautions only when its honest requirement is broad access:
   // requiredOrigins yields the all-sites origin for all-scope or hostless
@@ -140,7 +151,7 @@ export function SiteAccessPage({
                   <TriangleGlyph />
                 </span>
               }
-              count={text.usedBy}
+              count={(entry) => `${text.usedBy} ${usageCount(entry)}`}
               action={text.grant}
               actionLabel={text.grantLabel}
               pill
@@ -156,7 +167,7 @@ export function SiteAccessPage({
                   <CheckGlyph />
                 </span>
               }
-              count={text.ruleCount}
+              count={usageCount}
               action={text.revoke}
               actionLabel={text.revokeLabel}
               onAction={revoke}
@@ -204,6 +215,25 @@ export function SiteAccessPage({
   );
 }
 
+/** Global session usage belongs to this global page, not the popup's tab view. */
+function useSessionOverrides(): readonly TabOverride[] {
+  const [overrides, setOverrides] = useState<readonly TabOverride[]>([]);
+  useEffect(() => {
+    let disposed = false;
+    const load = () =>
+      readSession().then((session) => {
+        if (!disposed) setOverrides(Object.values(session.tabs).flat());
+      });
+    void load();
+    const unsubscribe = subscribeSession(() => void load());
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, []);
+  return overrides;
+}
+
 function SiteGroup({
   heading,
   entries,
@@ -217,7 +247,7 @@ function SiteGroup({
   heading: string;
   entries: readonly SiteAccessEntry[];
   glyph: ComponentChildren;
-  count: (n: number) => string;
+  count: (entry: SiteAccessEntry) => string;
   action: string;
   actionLabel: (domain: string) => string;
   /** Granting is the same act the rule rows offer, so it carries the same pill. */
@@ -239,7 +269,7 @@ function SiteGroup({
               value={entry.domain}
               class="mono sa-domain"
             />
-            <span class="sa-count">{count(entry.ruleCount)}</span>
+            <span class="sa-count">{count(entry)}</span>
             {pill === true ? (
               <button
                 type="button"
@@ -263,4 +293,14 @@ function SiteGroup({
       </ul>
     </>
   );
+}
+
+function usageCount(entry: SiteAccessEntry): string {
+  const counts = [
+    ...(entry.ruleCount > 0 ? [text.ruleCount(entry.ruleCount)] : []),
+    ...(entry.thisTabCount === undefined
+      ? []
+      : [text.tabCount(entry.thisTabCount)]),
+  ];
+  return counts.length === 0 ? text.ruleCount(0) : counts.join(" · ");
 }

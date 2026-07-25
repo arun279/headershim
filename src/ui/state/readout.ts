@@ -14,7 +14,7 @@ import {
   uncompilableReason,
 } from "../../core/compile";
 import type { GrantSnapshot } from "../../core/grants";
-import { missingGrants } from "../../core/grants";
+import { missingGrants, originGranted } from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
 import {
   activeProfile,
@@ -25,7 +25,12 @@ import {
   type StateDoc,
   type TabOverride,
 } from "../../core/model";
-import { conditionReaches, hostUnder, scopeCondition } from "../../core/scope";
+import {
+  conditionReaches,
+  hostUnder,
+  originPatternForDomain,
+  scopeCondition,
+} from "../../core/scope";
 import type { SystemStatus } from "../../core/status";
 import {
   headerValueSummary,
@@ -83,6 +88,8 @@ export interface TabChange extends LineCore {
   /** Stable key for rendering, focus, and tests. */
   readonly key: string;
   readonly source: "rule" | "override";
+  /** Pause is holding this enabled line, even when access owns its status. */
+  readonly held: boolean;
   readonly profileId?: string;
   readonly ruleId?: string;
   readonly overrideNum?: number;
@@ -139,7 +146,7 @@ export function computeReadout({
   const paused = status === "paused";
   const outOfSync = status === "out-of-sync";
   const overrideLines = overrides.map((override) =>
-    overrideChange(override, paused, outOfSync),
+    overrideChange(override, grants, paused, outOfSync),
   );
   const profile = activeProfile(doc);
 
@@ -188,29 +195,19 @@ export function computeReadout({
     }),
   );
 
-  // The credential hero prefers a live this-tab swap over the stored rule, so a
-  // Swap reads back as the value it just set; otherwise it is the rule itself.
+  // The credential hero is a saved-rule surface. This-tab rows retain their
+  // lifetime controls in the temporary strip in every state.
   const heroable = (change: TabChange) =>
     isAuthorizationToken(change) && HERO_STATUS.includes(change.status);
-  const overrideToken = overrideLines.find(heroable);
   const ruleTokenIndex = changes.findIndex(heroable);
-  const token =
-    overrideToken ??
-    (ruleTokenIndex === -1 ? undefined : changes[ruleTokenIndex]);
-
-  const listedOverrides =
-    overrideToken === undefined
-      ? overrideLines
-      : overrideLines.filter((line) => line !== overrideToken);
-  const listed = changes.filter(
-    (_, index) => overrideToken !== undefined || index !== ruleTokenIndex,
-  );
+  const token = ruleTokenIndex === -1 ? undefined : changes[ruleTokenIndex];
+  const listed = changes.filter((_, index) => index !== ruleTokenIndex);
   return {
     host,
     request: listed.filter((change) => change.direction === "request"),
     response: listed.filter((change) => change.direction === "response"),
     ...(token === undefined ? {} : { token }),
-    overrides: listedOverrides,
+    overrides: overrideLines,
     ...summarize([...changes, ...overrideLines]),
   };
 }
@@ -324,6 +321,7 @@ function ruleChange(
   const status = lineStatus({
     running: rule.enabled,
     paused: context.paused,
+    promoteNeedsAccessWhilePaused: false,
     outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,
@@ -335,6 +333,7 @@ function ruleChange(
   return {
     key: `${profile.id}:${rule.id}`,
     source: "rule",
+    held: context.paused && rule.enabled,
     profileId: profile.id,
     ruleId: rule.id,
     ...lineCore({
@@ -355,25 +354,33 @@ function ruleChange(
 
 function overrideChange(
   override: TabOverride,
+  grants: GrantSnapshot,
   paused: boolean,
   outOfSync: boolean,
 ): TabChange {
   // A this-tab override compiles to a tabIds + requestDomains condition on the
-  // tab it was made from: nothing here is granted, refused, or settled per
-  // request, so only the ladder's global rungs can move it off live.
+  // tab it was made from. Its one host is the compiler's grant test, so the
+  // popup derives the same needs-access state from the same snapshot.
+  const missing = originGranted(override.originHost, grants)
+    ? []
+    : [originPatternForDomain(override.originHost)];
   const status = lineStatus({
     running: override.enabled,
     paused,
+    // A This-tab row keeps its Remove control beside Grant, so access remains
+    // actionable even while the global pause is holding everything else.
+    promoteNeedsAccessWhilePaused: true,
     outOfSync,
     overridden: false,
     refused: false,
     managed: isNetworkManagedHeader(override.header),
-    needsAccess: false,
+    needsAccess: missing.length > 0,
     perRequest: false,
   });
   return {
     key: `override:${override.num}`,
     source: "override",
+    held: paused && override.enabled,
     overrideNum: override.num,
     ...lineCore({
       direction: override.direction,
@@ -387,7 +394,7 @@ function overrideChange(
       status,
       overriddenBy: undefined,
       refused: undefined,
-      missing: [],
+      missing,
     }),
     ...(override.value === undefined ? {} : { value: override.value }),
   };
@@ -401,6 +408,8 @@ export function lineStatus(flags: {
   /** The rule is switched on and its profile is the active one. */
   running: boolean;
   paused: boolean;
+  /** Whether a temporary row can expose its grant action while paused. */
+  promoteNeedsAccessWhilePaused: boolean;
   outOfSync: boolean;
   overridden: boolean;
   refused: boolean;
@@ -411,7 +420,16 @@ export function lineStatus(flags: {
   // A rule that is switched off, or sits in an inactive profile, is off
   // regardless of pause; only a rule that would otherwise run reads as paused.
   if (!flags.running) return "off";
-  if (flags.paused) return "paused";
+  // Stored rules stay held while paused: Grant cannot make one run, and pause
+  // owns their verb, count, hero reading, and Workbench status. A temporary
+  // This-tab row is the exception because its lifetime control remains on the
+  // same line beside Grant.
+  if (
+    flags.paused &&
+    !(flags.promoteNeedsAccessWhilePaused && flags.needsAccess)
+  ) {
+    return "paused";
+  }
   // Chrome has not taken the current ruleset, so what is applied is unknown —
   // the same precedence core/status gives it, one line at a time.
   if (flags.outOfSync) return "out-of-sync";

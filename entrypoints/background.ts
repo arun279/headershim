@@ -4,7 +4,6 @@ import {
   compileSession,
   dropInapplicable,
 } from "../src/core/compile";
-import { originGranted } from "../src/core/grants";
 import {
   activatePreviousProfile,
   type StateDoc,
@@ -40,6 +39,8 @@ import {
 } from "../src/platform/store";
 import { domainFromUrl } from "../src/platform/tabs";
 
+const MAX_RECONCILE_ATTEMPTS = 2;
+
 export default defineBackground(() => {
   // Wake-local coordination for the single-flight scheduler, not durable
   // state: a service-worker death mid-write self-heals on the next trigger.
@@ -48,20 +49,12 @@ export default defineBackground(() => {
 
   // Every listener registers synchronously at wake time; one registered after
   // an await would be silently dropped on event-driven service-worker wakes.
-  browser.runtime.onInstalled.addListener(() => reconcile());
-  browser.runtime.onStartup.addListener(() => reconcile());
   subscribeState(() => void reconcile());
   subscribeSession(() => void reconcile());
   // Grants are a compile input, so a grant change is a reconcile: it installs
-  // the rules a grant was waiting on and pulls the dynamic ones a revoke took
-  // back. Reconcile runs first and unconditionally so those leave the batch at
-  // once; pruning the This-tab rows a revoked host still holds runs alongside,
-  // and its own session write reconciles them. Both swallow their rejections, as
-  // the fire-and-forget cleanup listeners do, so no rejected write escapes.
-  onGrantsChanged(() => {
-    void reconcile();
-    void endUngrantedOverrides().catch(noop);
-  });
+  // the rules a grant was waiting on and pulls back the ones a revoke covered,
+  // stored and This-tab alike.
+  onGrantsChanged(() => void reconcile());
   browser.tabs.onRemoved.addListener((tabId) =>
     pruneOverrides((_row, id) => id !== tabId).catch(noop),
   );
@@ -71,6 +64,12 @@ export default defineBackground(() => {
   browser.commands.onCommand.addListener((command) =>
     handleCommand(command)?.catch(noop),
   );
+  browser.runtime.onStartup.addListener(() => void reconcile());
+  browser.runtime.onInstalled.addListener(() => void reconcile());
+  // A worker wake is itself a reconciliation trigger. Browser events are not
+  // durable, so this also retries a stale rule left by a failed update before
+  // the previous worker stopped.
+  void reconcile();
 
   function reconcile(): Promise<void> {
     if (running !== undefined) {
@@ -90,7 +89,13 @@ export default defineBackground(() => {
     try {
       do {
         dirty = false;
-        const applied = (await applyOnce()) || (await applyOnce());
+        let applied = false;
+        for (let attempt = 0; attempt < MAX_RECONCILE_ATTEMPTS; attempt += 1) {
+          if (await applyOnce()) {
+            applied = true;
+            break;
+          }
+        }
         await flagReconcileError(!applied);
         await refreshBadge();
       } while (dirty);
@@ -122,6 +127,7 @@ export default defineBackground(() => {
     const desiredSession = compileSession(
       Object.values(session.tabs).flat(),
       doc.settings.paused,
+      granted,
     );
     const [actualDynamic, actualSession] = await Promise.all([
       getDynamicRules(),
@@ -203,9 +209,8 @@ export default defineBackground(() => {
   }
 
   // The one session-row pruner: keep the rows the predicate accepts, across
-  // every tab, in a single locked write. Tab close, cross-origin navigation and
-  // a revoked grant are the same operation with different predicates, so a
-  // revoke is one write however many tabs held the host.
+  // every tab, in a single locked write. Tab close and cross-origin navigation
+  // are the two lifetime ends that remove rows before the tab can reuse them.
   async function pruneOverrides(
     keep: (row: TabOverride, tabId: number) => boolean,
   ): Promise<void> {
@@ -225,14 +230,6 @@ export default defineBackground(() => {
         await writeSession({ ...current, tabs });
       }
     });
-  }
-
-  // A this-tab row lives exactly as long as its grant: a revoke takes it out
-  // with the dynamic rules that shared the host, so activeTab has nothing left
-  // to widen on that tab.
-  async function endUngrantedOverrides(): Promise<void> {
-    const granted = await grantSnapshot();
-    await pruneOverrides((row) => originGranted(row.originHost, granted));
   }
 
   function enforceOverrideLifetime(

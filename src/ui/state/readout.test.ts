@@ -202,6 +202,91 @@ describe("computeReadout", () => {
     expect(readout.total).toBe(0);
   });
 
+  it("marks a this-tab override needs-access when its host is not granted", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: NONE,
+      activeProfile: profile(),
+      overrides: [override()],
+    });
+
+    expect(readout.overrides[0]?.status).toBe("needs-access");
+    expect(readout.overrides[0]?.missing).toEqual(["*://*.api.example.com/*"]);
+    expect(readout.needsAccess).toBe(1);
+    expect(readout.total).toBe(0);
+  });
+
+  it.each([
+    ["live", GRANTED, LIVE],
+    ["needs-access", NONE, LIVE],
+    ["paused", GRANTED, PAUSED],
+  ] as const)(
+    "keeps a %s this-tab authorization change in the removable strip",
+    (expectedStatus, grants, status) => {
+      const readout = computeReadout({
+        ...base,
+        grants,
+        status,
+        activeProfile: profile(),
+        overrides: [
+          override({ header: "authorization", value: "Bearer secret" }),
+        ],
+      });
+
+      expect(readout.token).toBeUndefined();
+      expect(readout.overrides[0]?.status).toBe(expectedStatus);
+      expect(readout.overrides[0]?.source).toBe("override");
+    },
+  );
+
+  it("reports missing access rather than holding a paused this-tab change", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: NONE,
+      status: PAUSED,
+      activeProfile: profile(),
+      overrides: [override()],
+    });
+
+    expect(readout.overrides[0]?.status).toBe("needs-access");
+    expect(readout.overrides[0]?.held).toBe(true);
+    expect(readout.needsAccess).toBe(1);
+    expect(readout.held).toBe(0);
+  });
+
+  it("keeps an ungranted stored rule held while paused", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: NONE,
+      status: PAUSED,
+      activeProfile: profile({ rules: [rule()] }),
+    });
+
+    expect(readout.request[0]?.status).toBe("paused");
+    expect(readout.held).toBe(1);
+    expect(readout.needsAccess).toBe(0);
+  });
+
+  it("keeps a this-tab override live under a parent-domain grant", () => {
+    const readout = computeReadout({
+      ...base,
+      grants: {
+        origins: ["*://*.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile(),
+      overrides: [
+        override(),
+        override({ num: 2, originHost: "api.other.test" }),
+      ],
+    });
+
+    expect(readout.overrides[0]?.status).toBe("live");
+    expect(readout.overrides[0]?.missing).toBeUndefined();
+    expect(readout.overrides[1]?.status).toBe("needs-access");
+    expect(readout.total).toBe(1);
+  });
+
   it("marks a Host rule refused, honestly and enabled", () => {
     const readout = computeReadout({
       ...base,
@@ -500,7 +585,7 @@ describe("computeReadout", () => {
     expect(readout.total).toBe(0);
   });
 
-  it("lifts a this-tab authorization swap into the token, out of the strip", () => {
+  it("leaves a this-tab authorization change in the temporary strip", () => {
     const readout = computeReadout({
       ...base,
       activeProfile: profile(),
@@ -509,8 +594,8 @@ describe("computeReadout", () => {
         override({ num: 8, header: "x-flag", value: "1" }),
       ],
     });
-    expect(readout.token?.overrideNum).toBe(7);
-    expect(readout.overrides.map((o) => o.overrideNum)).toEqual([8]);
+    expect(readout.token).toBeUndefined();
+    expect(readout.overrides.map((o) => o.overrideNum)).toEqual([7, 8]);
   });
 
   it("excludes an override-only reconcile failure from the headline", () => {

@@ -109,6 +109,12 @@ describe("all rules", () => {
     expect(blocked.querySelector(".grant")?.textContent).toBe(
       copy.readout.grant,
     );
+    expect(blocked.querySelector(".verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
+    );
+    expect(blocked.querySelector(".why")?.textContent).toContain(
+      copy.readout.needsAccessReason(false),
+    );
   });
 
   it("keeps the running tone off the switch of a rule Chrome refuses", async () => {

@@ -111,6 +111,7 @@ function fleetRule(
   const status = lineStatus({
     running,
     paused: context.paused,
+    promoteNeedsAccessWhilePaused: false,
     outOfSync: context.outOfSync,
     overridden: context.overriddenBy !== undefined,
     refused: refused !== undefined,

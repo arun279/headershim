@@ -447,6 +447,10 @@ describe("popup readout", () => {
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
     expect(status().textContent).toBe("0 changes on this tab");
+    expect(line.querySelector(".why.amber")?.textContent).toBe(
+      copy.readout.needsAccessReason(false),
+    );
+    expect(line.textContent).not.toContain("until you close the tab");
     const grant = root.querySelector(
       ".change-line .grant",
     ) as HTMLButtonElement;
@@ -670,6 +674,23 @@ describe("popup readout", () => {
     await act(async () => pause.click());
     await settle();
     expect((await read()).settings.paused).toBe(false);
+  });
+
+  it("holds an ungranted stored rule while paused without offering Grant", async () => {
+    const seed = seededDoc([rule()]);
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      false,
+    );
+
+    const line = root.querySelector(".change-line.paused") as HTMLElement;
+    expect(line).not.toBeNull();
+    expect(line.querySelector(".verb")?.textContent).toBe("Would set");
+    expect(line.querySelector(".grant")).toBeNull();
+    expect(line.querySelector('[role="switch"]')).not.toBeNull();
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "1 change held on this tab",
+    );
   });
 
   it("opens options from the footer gear", async () => {

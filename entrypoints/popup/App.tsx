@@ -303,7 +303,7 @@ function Ready({
     }
     // The request fires inside the commit gesture, and its answer decides the
     // write: an override on a host Chrome will not let us touch applies to
-    // nothing, and this-tab lines have no needs-access reading to fall back on.
+    // nothing.
     const granted = await requestPermissions([
       originPatternForDomain(tabDomain),
     ]);
@@ -448,6 +448,7 @@ function Ready({
           <ThisTabStrip
             overrides={readout.overrides}
             onToggle={toggleChange}
+            onGrant={grantChange}
             onRemove={removeChange}
             onEditValue={editChangeValue}
           />
@@ -534,12 +535,12 @@ function DirectionGroup({
         <span class="rule" aria-hidden="true" />
       </div>
       {changes.map((change) => (
-        <ChangeLine
+        <BoundChangeLine
           key={change.key}
           change={change}
-          onToggle={(next) => onToggle(change, next)}
-          onGrant={() => onGrant(change)}
-          onEditValue={(value) => onEditValue(change, value)}
+          onToggle={onToggle}
+          onGrant={onGrant}
+          onEditValue={onEditValue}
         />
       ))}
     </section>
@@ -549,11 +550,13 @@ function DirectionGroup({
 function ThisTabStrip({
   overrides,
   onToggle,
+  onGrant,
   onRemove,
   onEditValue,
 }: {
   overrides: readonly TabChange[];
   onToggle: (change: TabChange, next: boolean) => void;
+  onGrant: (change: TabChange) => void;
   onRemove: (change: TabChange) => void;
   onEditValue: (change: TabChange, value: string) => Promise<boolean>;
 }) {
@@ -564,16 +567,40 @@ function ThisTabStrip({
         <span class="clears">{copy.readout.thisTabClears}</span>
       </div>
       {overrides.map((change) => (
-        <ChangeLine
+        <BoundChangeLine
           key={change.key}
           change={change}
-          onToggle={(next) => onToggle(change, next)}
-          onGrant={() => undefined}
-          onEditValue={(value) => onEditValue(change, value)}
-          onRemove={() => onRemove(change)}
+          onToggle={onToggle}
+          onGrant={onGrant}
+          onEditValue={onEditValue}
+          onRemove={onRemove}
         />
       ))}
     </section>
+  );
+}
+
+function BoundChangeLine({
+  change,
+  onToggle,
+  onGrant,
+  onRemove,
+  onEditValue,
+}: {
+  change: TabChange;
+  onToggle: (change: TabChange, next: boolean) => void;
+  onGrant: (change: TabChange) => void;
+  onRemove?: (change: TabChange) => void;
+  onEditValue: (change: TabChange, value: string) => Promise<boolean>;
+}) {
+  return (
+    <ChangeLine
+      change={change}
+      onToggle={(next) => onToggle(change, next)}
+      onGrant={() => onGrant(change)}
+      onEditValue={(value) => onEditValue(change, value)}
+      {...(onRemove === undefined ? {} : { onRemove: () => onRemove(change) })}
+    />
   );
 }
 

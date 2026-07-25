@@ -26,8 +26,14 @@ vi.mock("../platform/tabs", () => ({
   activeTabDomain: () => Promise.resolve("app.example.com"),
 }));
 
-beforeEach(() => {
+// The compiler drops a This-tab row whose host is not granted, and the popup
+// asks for that grant in the click gesture before it writes one, so the seeded
+// rows below start from the grant a real change would already hold.
+const TAB_ORIGIN = "*://*.app.example.com/*";
+
+beforeEach(async () => {
   fakeBrowser.reset();
+  await fakeBrowser.permissions.request({ origins: [TAB_ORIGIN] });
 });
 
 function override(overrides: Partial<TabOverride> = {}): TabOverride {
@@ -224,6 +230,7 @@ describe("popup This-tab overrides", () => {
   });
 
   it("writes nothing when the host grant is declined", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
     vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValue(false);
     const root = await composeChange();
     // Nothing stored, so no row can read live while applying to nothing; the
@@ -283,6 +290,88 @@ describe("popup This-tab overrides", () => {
     expect((await readSession()).tabs[5]?.[0]?.enabled).toBe(true);
   });
 
+  it("offers Grant and Remove when an authorization override needs access", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
+    const request = vi.spyOn(fakeBrowser.permissions, "request");
+    const root = await mount(createV1Seed(), {
+      nextNum: 2,
+      tabs: {
+        5: [
+          override({
+            header: "authorization",
+            value: "Bearer secret-1234",
+          }),
+        ],
+      },
+    });
+
+    expect(root.querySelector(".token")).toBeNull();
+    const line = root.querySelector(
+      ".thistab .change-line.needs-access",
+    ) as HTMLElement;
+    expect(line.querySelector("button.grant")).not.toBeNull();
+    expect(
+      line.querySelector(
+        '[aria-label="Remove this-tab change: authorization"]',
+      ),
+    ).not.toBeNull();
+    expect(line.querySelector(".why.amber")?.textContent).toBe(
+      copy.readout.needsAccessReason(true),
+    );
+
+    await act(async () =>
+      line.querySelector<HTMLButtonElement>("button.grant")?.click(),
+    );
+    expect(request).toHaveBeenCalledExactlyOnceWith({
+      origins: [TAB_ORIGIN],
+    });
+  });
+
+  it("describes an ungranted remove without claiming it stores a value", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
+    const { value: _value, ...remove } = override({
+      operation: "remove",
+      header: "x-trace",
+    });
+    const root = await mount(createV1Seed(), {
+      nextNum: 2,
+      tabs: { 5: [remove] },
+    });
+
+    const line = root.querySelector(
+      ".thistab .change-line.needs-access",
+    ) as HTMLElement;
+    expect(line.textContent).toContain(copy.readout.needsAccessReason(true));
+    expect(line.textContent).not.toContain("value you typed");
+  });
+
+  it("shows missing access rather than holding a paused override", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
+    const seed = createV1Seed();
+    const root = await mount(
+      {
+        ...seed,
+        settings: { ...seed.settings, paused: true },
+      },
+      {
+        nextNum: 2,
+        tabs: { 5: [override()] },
+      },
+    );
+
+    expect(root.querySelector(".change-line.needs-access")).not.toBeNull();
+    expect(root.querySelector(".change-line.paused")).toBeNull();
+    expect(root.querySelector(".change-line .verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
+    );
+    expect(root.querySelector(".status")?.textContent).toContain(
+      "0 changes held on this tab",
+    );
+    expect(root.querySelector(".substatus")?.textContent).toContain(
+      "1 needs access",
+    );
+  });
+
   it("removes an override from its row", async () => {
     const root = await mount(createV1Seed(), {
       nextNum: 2,
@@ -296,7 +385,7 @@ describe("popup This-tab overrides", () => {
     expect((await readSession()).tabs).toEqual({});
   });
 
-  it("does not report a removed override token as saved", async () => {
+  it("does not report a removed authorization override as saved", async () => {
     const original = override({
       header: "authorization",
       value: "Bearer original-1234",
@@ -305,10 +394,24 @@ describe("popup This-tab overrides", () => {
       nextNum: 2,
       tabs: { 5: [original] },
     });
+    expect(root.querySelector(".token")).toBeNull();
+    const line = root.querySelector(".thistab .change-line") as HTMLElement;
+    expect(
+      line.querySelector(
+        '[aria-label="Remove this-tab change: authorization"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      line.querySelector('[aria-label="This-tab change on: authorization"]'),
+    ).not.toBeNull();
     fire(() =>
-      (root.querySelector(".token .swap") as HTMLButtonElement).click(),
+      line
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Edit authorization value"]',
+        )
+        ?.click(),
     );
-    const field = root.querySelector(".swapfield input") as HTMLInputElement;
+    const field = line.querySelector(".v-input") as HTMLInputElement;
     typeInto(field, "Bearer replacement-5678");
     const get = vi
       .spyOn(fakeBrowser.storage.session, "get")
@@ -318,7 +421,7 @@ describe("popup This-tab overrides", () => {
     await settle();
     get.mockRestore();
 
-    expect(root.querySelector(".swapfield input")).not.toBeNull();
+    expect(root.querySelector(".v-input")).not.toBeNull();
     expect(root.querySelector(".toast-msg")?.textContent).toBe(
       copy.errors.saveFailed,
     );

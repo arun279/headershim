@@ -3,17 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import background from "../../entrypoints/background";
 import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
+import type { GrantSnapshot } from "../core/grants";
 import {
   createProfile,
   createRule,
   type Rule,
   type RuleDraft,
   type StateDoc,
+  type TabOverride,
 } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import {
   getReconcileError,
   read as readSessionState,
+  type SessionState,
   write as writeSession,
 } from "../platform/session-store";
 import {
@@ -30,10 +33,12 @@ import {
 
 let dnr: ReturnType<typeof installDnr>;
 
-// Every rule below is scoped to example.com, and grants are a compile input, so
-// the reconcile mechanics under test start from a granted host. The gate itself
-// is the subject of its own case, which revokes first.
+// Every rule and This-tab row below is scoped under example.com, and grants are
+// a compile input for both rule kinds, so the reconcile mechanics under test
+// start from a granted host. The gate itself is the subject of its own cases,
+// which revoke first.
 const RULE_ORIGIN = "*://*.example.com/*";
+const RULE_GRANT: GrantSnapshot = { origins: [RULE_ORIGIN], allSites: false };
 
 beforeEach(async () => {
   dnr = installDnr();
@@ -68,6 +73,20 @@ function withRule(doc: StateDoc, header: string): StateDoc {
 const override = (tabId: number, originHost: string) =>
   tabOverride({ tabId, originHost });
 
+// The session store as the popup leaves it: rows grouped under their own tab.
+async function seedRows(...rows: TabOverride[]): Promise<TabOverride[]> {
+  const tabs: SessionState["tabs"] = {};
+  const numberedRows = rows.map((row, index) => ({
+    ...row,
+    num: index + 1,
+  }));
+  numberedRows.forEach((numbered) => {
+    tabs[numbered.tabId] = [...(tabs[numbered.tabId] ?? []), numbered];
+  });
+  await writeSession({ nextNum: numberedRows.length + 1, tabs });
+  return numberedRows;
+}
+
 const tabInfo = (url?: string) => tabInfoAt(5, url);
 
 function triggerCommand(command: string): Promise<unknown> {
@@ -100,13 +119,8 @@ function uiMutate(update: (doc: StateDoc) => StateDoc): Promise<void> {
 const addRule = (header: string) => (doc: StateDoc) => withRule(doc, header);
 
 describe("background lifecycle", () => {
-  it("seeds the Default profile on install without touching rule sets", async () => {
+  it("seeds the Default profile on worker wake without touching rule sets", async () => {
     start();
-
-    await fakeBrowser.runtime.onInstalled.trigger({
-      reason: "install",
-      temporary: false,
-    });
     await settle();
 
     const doc = await readState();
@@ -138,13 +152,13 @@ describe("background lifecycle", () => {
   });
 
   it("makes no DNR writes when already converged", async () => {
-    start();
-    await writeState(withRule(createV1Seed(), "x-one"));
-    await settle();
+    const doc = withRule(createV1Seed(), "x-one");
+    await writeState(doc);
+    dnr.fake.dynamicRules = compileDynamic(doc);
     dnr.updateDynamicRules.mockClear();
     dnr.updateSessionRules.mockClear();
 
-    await fakeBrowser.runtime.onStartup.trigger();
+    start();
     await settle();
 
     expect(dnr.getDynamicRules).toHaveBeenCalled();
@@ -153,10 +167,10 @@ describe("background lifecycle", () => {
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
   });
 
-  it("self-heals drifted rule sets on a non-install browser event", async () => {
-    start();
+  it("self-heals drifted rule sets on profile startup", async () => {
     const doc = withRule(createV1Seed(), "x-one");
     await writeState(doc);
+    start();
     await settle();
     const stray: DnrRule = {
       id: 99,
@@ -170,10 +184,7 @@ describe("background lifecycle", () => {
     dnr.fake.dynamicRules = [stray];
     dnr.updateDynamicRules.mockClear();
 
-    await fakeBrowser.runtime.onInstalled.trigger({
-      reason: "update",
-      temporary: false,
-    });
+    await fakeBrowser.runtime.onStartup.trigger();
     await settle();
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledExactlyOnceWith({
@@ -207,19 +218,57 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual([]);
   });
 
-  it("ends a tab's session rows when its host's grant is revoked", async () => {
+  // The same statement for This-tab rows, which activeTab reaches just as
+  // readily: the row is a compile input, so the grant is what puts its rule in
+  // and a revoke is what takes it out.
+  it("installs a session rule only once its host is granted", async () => {
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     start();
-    await writeSession({
-      nextNum: 2,
-      tabs: { 5: [override(5, "app.example.com")] },
-    });
+    const row = override(5, "app.example.com");
+    await seedRows(row);
+    await settle();
+
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
+
+    await fakeBrowser.permissions.request({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect(await dnr.fake.getSessionRules()).toEqual(
+      compileSession([row], false, RULE_GRANT),
+    );
+
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
+  });
+
+  it("removes a session rule for a grant revoked while the worker was down", async () => {
+    // Nothing is listening for the revoke, so no prune runs: the wake has to
+    // re-derive the session band from the grants it reads now and remove the
+    // stale installed rule without waiting for another browser event.
+    const row = override(5, "app.example.com");
+    await seedRows(row);
+    dnr.fake.sessionRules = compileSession([row], false, RULE_GRANT);
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
+
+    start();
+    await settle();
+
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
+  });
+
+  it("keeps a revoked tab row stored while taking its session rule out", async () => {
+    const row = override(5, "app.example.com");
+    start();
+    await seedRows(row);
     await settle();
     expect(await dnr.fake.getSessionRules()).toHaveLength(1);
 
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     await settle();
 
-    expect((await readSessionState()).tabs).toEqual({});
+    expect((await readSessionState()).tabs[5]).toEqual([row]);
     expect(await dnr.fake.getSessionRules()).toEqual([]);
   });
 
@@ -272,7 +321,7 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
   });
 
-  it("retries a rejected update once from a fresh read", async () => {
+  it("retries a rejected update from a fresh read", async () => {
     start();
     const doc = withRule(createV1Seed(), "x-one");
     dnr.updateDynamicRules.mockRejectedValueOnce(new Error("rejected"));
@@ -285,8 +334,9 @@ describe("background lifecycle", () => {
     expect(await getReconcileError()).toBe(false);
   });
 
-  it("raises the health flag after a failed retry and clears it on convergence", async () => {
+  it("raises the health flag after bounded retries and clears it on convergence", async () => {
     start();
+    await settle();
     const doc = withRule(createV1Seed(), "x-one");
     dnr.updateDynamicRules.mockRejectedValue(new Error("rejected"));
 
@@ -299,10 +349,31 @@ describe("background lifecycle", () => {
     dnr.updateDynamicRules.mockImplementation((options) =>
       dnr.fake.updateDynamicRules(options),
     );
-    await fakeBrowser.runtime.onStartup.trigger();
+    await fakeBrowser.permissions.request({
+      origins: ["*://*.retry-trigger.test/*"],
+    });
     await settle();
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await getReconcileError()).toBe(false);
+  });
+
+  it("removes a revoked session rule after a rejected removal", async () => {
+    start();
+    await seedRows(override(5, "app.example.com"));
+    await settle();
+    expect(await dnr.fake.getSessionRules()).toHaveLength(1);
+    dnr.updateSessionRules.mockClear();
+
+    dnr.updateSessionRules.mockRejectedValueOnce(
+      new Error("first removal rejected"),
+    );
+
+    await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
+    await settle();
+
+    expect(dnr.updateSessionRules).toHaveBeenCalledTimes(2);
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
     expect(await getReconcileError()).toBe(false);
   });
 
@@ -315,10 +386,6 @@ describe("background lifecycle", () => {
     );
 
     start();
-    void fakeBrowser.runtime.onInstalled.trigger({
-      reason: "install",
-      temporary: false,
-    });
 
     for (const event of [
       fakeBrowser.runtime.onInstalled,
@@ -445,7 +512,6 @@ describe("background lifecycle", () => {
   });
 
   it("refuses to write when the store is newer than this build", async () => {
-    start();
     const stray: DnrRule = {
       id: 42,
       priority: 9,
@@ -459,8 +525,7 @@ describe("background lifecycle", () => {
     const newer = { v: 2, unknownShape: true };
 
     await fakeBrowser.storage.local.set({ state: newer });
-    await settle();
-    await fakeBrowser.runtime.onStartup.trigger();
+    start();
     await settle();
 
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
@@ -473,15 +538,18 @@ describe("background lifecycle", () => {
   it("empties both rule sets on pause and restores them on resume", async () => {
     start();
     const doc = withRule(createV1Seed(), "x-live");
-    const row = override(5, "app.example");
+    const row = override(5, "app.example.com");
     const expectRuleSets = async (dynamic: DnrRule[], session: DnrRule[]) => {
       expect(await dnr.fake.getDynamicRules()).toEqual(dynamic);
       expect(await dnr.fake.getSessionRules()).toEqual(session);
     };
     await writeState(doc);
-    await writeSession({ nextNum: 2, tabs: { 5: [row] } });
+    await seedRows(row);
     await settle();
-    await expectRuleSets(compileDynamic(doc), compileSession([row], false));
+    await expectRuleSets(
+      compileDynamic(doc),
+      compileSession([row], false, RULE_GRANT),
+    );
 
     await triggerCommand("toggle-pause");
     await settle();
@@ -489,16 +557,19 @@ describe("background lifecycle", () => {
 
     await triggerCommand("toggle-pause");
     await settle();
-    await expectRuleSets(compileDynamic(doc), compileSession([row], false));
+    await expectRuleSets(
+      compileDynamic(doc),
+      compileSession([row], false, RULE_GRANT),
+    );
   });
 
   it("drops a tab's session rows when the tab closes", async () => {
     start();
-    const kept = override(7, "kept.example");
-    await writeSession({
-      nextNum: 3,
-      tabs: { 5: [override(5, "app.example")], 7: [kept] },
-    });
+    const [, kept] = await seedRows(
+      override(5, "app.example.com"),
+      override(7, "kept.example.com"),
+    );
+    if (kept === undefined) throw new Error("missing kept row");
     await settle();
 
     await fakeBrowser.tabs.onRemoved.trigger(5, {
@@ -509,20 +580,20 @@ describe("background lifecycle", () => {
 
     expect((await readSessionState()).tabs).toEqual({ 7: [kept] });
     expect(await dnr.fake.getSessionRules()).toEqual(
-      compileSession([kept], false),
+      compileSession([kept], false, RULE_GRANT),
     );
   });
 
   it("ends overrides on cross-origin navigation but keeps them for same-origin updates", async () => {
     start();
-    const row = override(5, "app.example");
-    await writeSession({ nextNum: 2, tabs: { 5: [row] } });
+    const row = override(5, "app.example.com");
+    await seedRows(row);
     await settle();
 
     await fakeBrowser.tabs.onUpdated.trigger(
       5,
       { status: "complete" },
-      tabInfo("https://app.example/spa/route"),
+      tabInfo("https://app.example.com/spa/route"),
     );
     await settle();
     expect((await readSessionState()).tabs).toEqual({ 5: [row] });
@@ -530,7 +601,7 @@ describe("background lifecycle", () => {
     await fakeBrowser.tabs.onUpdated.trigger(
       5,
       { status: "loading" },
-      tabInfo("https://other.example/"),
+      tabInfo("https://other.example.com/"),
     );
     await settle();
     expect((await readSessionState()).tabs).toEqual({});
@@ -539,10 +610,7 @@ describe("background lifecycle", () => {
 
   it("ends overrides when the tab's url is no longer visible", async () => {
     start();
-    await writeSession({
-      nextNum: 2,
-      tabs: { 5: [override(5, "app.example")] },
-    });
+    await seedRows(override(5, "app.example.com"));
     await settle();
 
     await fakeBrowser.tabs.onUpdated.trigger(5, {}, tabInfo());
@@ -551,18 +619,16 @@ describe("background lifecycle", () => {
     expect((await readSessionState()).tabs).toEqual({});
   });
 
-  it("restores the paused badge on startup", async () => {
-    start();
+  it("restores the paused badge on worker wake", async () => {
     const doc = withRule(createV1Seed(), "x-live");
     await writeState({
       ...doc,
       settings: { ...doc.settings, paused: true },
     });
-    await settle();
     const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
     const setTitle = vi.spyOn(browser.action, "setTitle");
 
-    await fakeBrowser.runtime.onStartup.trigger();
+    start();
     await settle();
 
     expect(setBackground).toHaveBeenCalledWith({ color: "#6E7B88" });
@@ -570,14 +636,12 @@ describe("background lifecycle", () => {
     expect(await browser.action.getBadgeText({})).toBe("II");
   });
 
-  it("paints the active profile badge on startup regardless of grant state", async () => {
+  it("paints the active profile badge on worker wake regardless of grant state", async () => {
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
-    start();
     await writeState(withRule(createV1Seed(), "x-live"));
-    await settle();
     const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
 
-    await fakeBrowser.runtime.onStartup.trigger();
+    start();
     await settle();
 
     // The seed's Default profile paints its own badge even though the rule's

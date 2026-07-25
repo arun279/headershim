@@ -97,7 +97,6 @@ export function TokenHero({
       {swapping ? (
         <SwapField
           header={change.header}
-          source={change.source}
           onReplace={async (next) => {
             const outcome = await onSwap(next);
             if (outcome !== false) setSwapping(false);
@@ -142,12 +141,10 @@ export function TokenHero({
 
 function SwapField({
   header,
-  source,
   onReplace,
   onCancel,
 }: {
   header: string;
-  source: TabChange["source"];
   onReplace: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -156,7 +153,7 @@ function SwapField({
     <div class="swapfield">
       <div class="lab">
         <span>{copy.token.pasteLabel}</span>
-        <span class="r">{copy.token.pasteReplaces[source]}</span>
+        <span class="r">{copy.token.pasteReplaces}</span>
       </div>
       <input
         class="mono"

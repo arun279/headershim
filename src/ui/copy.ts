@@ -153,8 +153,9 @@ export const copy = {
     attentionLabel: "Needs attention",
     direction: { request: "Request", response: "Response" },
     verb: { set: "Set", append: "Append", remove: "Remove" },
-    // While everything is paused a line states what it would do, not what it
-    // does. Pause has to change the sentence, not only the colour it is set in.
+    // While everything is paused an enabled line states what it would do, even
+    // when a missing grant owns its status. Pause changes the sentence, not
+    // only the colour it is set in.
     heldVerb: {
       set: "Would set",
       append: "Would append",
@@ -230,6 +231,10 @@ export const copy = {
       "The values you type are stored on this device without encryption, and a request rule sends them to every site it matches.",
     thisTabTag: "This tab only",
     thisTabClears: "clears when you close the tab",
+    needsAccessReason: (temporary: boolean) =>
+      temporary
+        ? "Not running. This change stays until you close the tab."
+        : "Not running.",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
     overrideToggle: (header: string, on: boolean) =>
       `This-tab change ${on ? "on" : "off"}: ${header}`,
@@ -275,12 +280,9 @@ export const copy = {
     // dimmed card beside a live-looking button says nothing on its own.
     held: "held while header changes are paused",
     pasteLabel: "Paste the new token",
-    // Where the new bytes land, said before you commit them: a swap rewrites
-    // whichever change is carrying the token, and those two live different lives.
-    pasteReplaces: {
-      rule: "replaces the token on the saved rule",
-      override: "replaces the token on this tab",
-    },
+    // Where the new bytes land, said before commit. Only saved rules enter the
+    // token hero; temporary changes keep their lifetime controls in the strip.
+    pasteReplaces: "replaces the token on the saved rule",
     pasteAria: "New token value",
     replace: "Replace",
     cancel: "Cancel",
@@ -475,8 +477,9 @@ export const copy = {
       title: "Site access",
       neededHeading: "Needed but not granted",
       grantedHeading: "Granted",
-      usedBy: (count: number) => `used by ${count} ${rules(count)}`,
+      usedBy: "used by",
       ruleCount: (count: number) => `${count} ${rules(count)}`,
+      tabCount: (count: number) => `${count} tab ${changes(count)}`,
       grant: "Grant",
       grantLabel: (domain: string) => `Grant access to ${domain}`,
       revoke: "Revoke",

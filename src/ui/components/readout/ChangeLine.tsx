@@ -33,11 +33,11 @@ export function ChangeLine({
   const [editing, setEditing] = useState(false);
   const canEdit = change.operation !== "remove" && change.value !== undefined;
   // Pause changes the sentence, not only the colour it is set in: a held line
-  // says what it would do rather than claiming to be doing it.
-  const verb =
-    change.status === "paused"
-      ? copy.readout.heldVerb[change.operation]
-      : copy.readout.verb[change.operation];
+  // says what it would do rather than claiming to be doing it. Access may own
+  // the visible status while pause still holds the line.
+  const verb = change.held
+    ? copy.readout.heldVerb[change.operation]
+    : copy.readout.verb[change.operation];
   const reach =
     change.widerReach === undefined
       ? undefined
@@ -132,6 +132,12 @@ export function ChangeLine({
             {copy.readout.unconfirmedReason}
           </p>
         )}
+        {change.status === "needs-access" && (
+          <p class="why amber">
+            <span class="dot" aria-hidden="true" />
+            {copy.readout.needsAccessReason(change.source === "override")}
+          </p>
+        )}
         {reach !== undefined && (
           <p class="why rest">
             <span class="dot" aria-hidden="true" />
@@ -140,29 +146,27 @@ export function ChangeLine({
         )}
       </div>
       <div class="line-control">
+        {onRemove !== undefined && (
+          <button
+            type="button"
+            class="line-remove"
+            aria-label={copy.readout.removeOverride(change.header)}
+            onClick={onRemove}
+          >
+            <RemoveGlyph />
+          </button>
+        )}
         {change.status === "needs-access" ? (
           <button type="button" class="grant" onClick={onGrant}>
             {grantLabel(change.missing)}
           </button>
         ) : (
-          <>
-            {onRemove !== undefined && (
-              <button
-                type="button"
-                class="line-remove"
-                aria-label={copy.readout.removeOverride(change.header)}
-                onClick={onRemove}
-              >
-                <RemoveGlyph />
-              </button>
-            )}
-            <Toggle
-              checked={change.enabled}
-              label={toggleLabel}
-              tone={toneForStatus(change.status)}
-              onChange={onToggle}
-            />
-          </>
+          <Toggle
+            checked={change.enabled}
+            label={toggleLabel}
+            tone={toneForStatus(change.status)}
+            onChange={onToggle}
+          />
         )}
       </div>
     </div>

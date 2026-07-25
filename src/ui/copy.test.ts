@@ -206,8 +206,9 @@ describe("copy", () => {
         "title",
       ].sort(),
     );
-    expect(copy.options.siteAccess.usedBy(1)).toBe("used by 1 rule");
+    expect(copy.options.siteAccess.usedBy).toBe("used by");
     expect(copy.options.siteAccess.ruleCount(2)).toBe("2 rules");
+    expect(copy.options.siteAccess.tabCount(1)).toBe("1 tab change");
     expect(copy.options.siteAccess.revoked("api.example.com")).toBe(
       "Access to api.example.com revoked",
     );

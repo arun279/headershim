@@ -42,7 +42,9 @@ Every row below runs in the `host-access` project and asserts an observable netw
 | `a granted This-tab override modifies a same-origin request` | A tab-scoped session rule changes the echoed same-origin request header. |
 | `a same-site navigation and an SPA route change keep the override` | Static host access exposes each updated tab URL; the session rule remains installed after both a navigation and `history.pushState`. |
 
-The shipped-build project retains the permission-sensitive coverage: missing access remains a silent network no-op, needs-access UI stays loud, the Site access page mirrors the browser's empty grant state, and the extension manifest keeps its optional-only install posture. Other untagged tests exercise DNR readback normalization, pause and resume, self-healing, tab confinement, cross-site cleanup, badges, import/export, keyboard operation, accessibility, and options authoring.
+The This-tab confinement and lifetime specs run in the host-access project without asserting on the wire. A complementary shipped-build spec seeds an ungranted This-tab row and proves its session band stays empty.
+
+The shipped-build project retains the permission-sensitive coverage: missing access remains a silent network no-op, needs-access UI stays loud, the Site access page mirrors the browser's empty grant state, and the extension manifest keeps its optional-only install posture. Other untagged tests exercise DNR readback normalization, pause and resume, self-healing, badges, import/export, keyboard operation, accessibility, and options authoring.
 
 ## Browser-owned interactions excluded from the suite
 
@@ -54,5 +56,3 @@ Playwright cannot synthesize browser toolbar gestures, the operating system's ex
 | Global extension shortcuts | `src/test/background.test.ts` drives `toggle-pause` and `previous-profile` through `commands.onCommand`. `keyboard.spec.ts` exercises the equivalent popup commands with real key events. Opening the popup for `_execute_action` is browser-owned. |
 | Destination-only access followed by initiator access | `src/core/grants.test.ts` proves the initiator is the remaining grant gap. `src/test/background.test.ts` proves grant changes refresh status with zero DNR rewrites. `grants.spec.ts` keeps the real missing-access 200 response and absent-header assertion. |
 | Revoking broad access while a narrow grant exists | `src/test/options-site-access.test.tsx` clicks the all-sites revoke control, proves the narrow permission survives, keeps its rule in Granted, and moves only the broad-covered rule to Needed. |
-
-The separate `e2e/packed` harness remains available for CRX and managed-policy experiments through the `e2e:packed:*` scripts. It is not part of `pnpm e2e` and is not a substitute for the unpacked on-wire project above.

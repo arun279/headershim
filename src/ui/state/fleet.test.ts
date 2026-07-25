@@ -212,6 +212,16 @@ describe("projectFleet status ladder", () => {
     expect(byKey(fleet, "p1:off").status).toBe("off");
   });
 
+  it("keeps an ungranted stored rule paused rather than actionable", () => {
+    const fleet = projectFleet({
+      profiles: [profile({ rules: [rule({ id: "held" })] })],
+      grants: NONE,
+      status: PAUSED,
+    });
+
+    expect(byKey(fleet, "p1:held").status).toBe("paused");
+  });
+
   it("reads every rule in an inactive profile as off", () => {
     const fleet = projectFleet({
       profiles: [

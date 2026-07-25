@@ -242,11 +242,24 @@ export function settlesPerRequest(rule: Rule): boolean {
   );
 }
 
+/**
+ * The reason dropInapplicable gives for stored rules holds for this-tab rows
+ * too: invoking the action hands over activeTab, and the engine applies whatever
+ * is installed to a host it has access to, so a row whose host is not granted
+ * must be absent from the batch rather than merely pruned from storage. Taking
+ * the snapshot as a parameter is what makes a grant-blind compile a build error.
+ * A row carries exactly one host, so there is nothing to narrow: it compiles or
+ * it is absent.
+ */
 export function compileSession(
   overrides: readonly TabOverride[],
   paused: boolean,
+  granted: GrantSnapshot,
 ): DnrRule[] {
-  const enabledOverrides = overrides.filter((override) => override.enabled);
+  const enabledOverrides = overrides.filter(
+    (override) =>
+      override.enabled && originGranted(override.originHost, granted),
+  );
   if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
       `Cannot compile ${enabledOverrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
