@@ -713,6 +713,8 @@ function mapError(
       return { scope: copy.errors.scopeEmpty[scopeType] };
     case "enabled-rule-limit-exceeded":
       return { editor: copy.errors.ruleCap };
+    case "dynamic-rule-limit-exceeded":
+      return { editor: copy.errors.dynamicRuleCap };
     case "regex-rule-limit-exceeded":
       return { editor: copy.errors.regexRuleCap };
     case "doc-byte-limit-exceeded":

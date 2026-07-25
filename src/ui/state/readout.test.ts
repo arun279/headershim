@@ -91,6 +91,7 @@ function override(overrides: Partial<TabOverride> = {}): TabOverride {
 
 const base = {
   host: "api.example.com" as string | undefined,
+  origin: "https://api.example.com" as string | undefined,
   grants: GRANTED,
   overrides: [] as TabOverride[],
   status: LIVE,
@@ -169,6 +170,54 @@ describe("computeReadout", () => {
 
     expect(readout.request[0]?.status).toBe("unconfirmed");
     expect(readout.request[0]?.missing).toBeUndefined();
+  });
+
+  it("recognizes the current origin inside a narrowed subdomain grant", () => {
+    const subjectRule = rule({
+      scope: { type: "domains", domains: ["example.com"] },
+    });
+    const readout = computeReadout({
+      ...base,
+      host: "deep.sub.example.com",
+      origin: "https://deep.sub.example.com",
+      grants: {
+        origins: ["*://*.sub.example.com/*"],
+        allSites: false,
+      },
+      activeProfile: profile({ rules: [subjectRule] }),
+    });
+
+    expect(readout.request[0]?.status).toBe("unconfirmed");
+    expect(readout.request[0]?.missing).toBeUndefined();
+  });
+
+  it("needs access when the narrowed grant cannot cover this tab origin", () => {
+    const readout = computeReadout({
+      ...base,
+      host: "localhost",
+      origin: "https://localhost:55849",
+      grants: {
+        origins: ["http://localhost:55848/*"],
+        allSites: false,
+      },
+      activeProfile: profile({
+        rules: [
+          rule({
+            scope: { type: "domains", domains: ["localhost"] },
+          }),
+        ],
+      }),
+      overrides: [override({ originHost: "localhost" })],
+    });
+
+    expect(readout.request[0]).toMatchObject({
+      status: "needs-access",
+      missing: ["*://*.localhost/*"],
+    });
+    expect(readout.overrides[0]).toMatchObject({
+      status: "needs-access",
+      missing: ["*://*.localhost/*"],
+    });
   });
 
   it.each([
@@ -390,8 +439,9 @@ describe("computeReadout", () => {
   it("needs no grant when any reaching domain is fully covered", () => {
     const readout = computeReadout({
       ...base,
+      host: "deep.sub.example.test",
       grants: {
-        origins: ["*://*.api.example.com/*"],
+        origins: ["*://*.example.test/*"],
         allSites: false,
       },
       activeProfile: profile({
@@ -399,7 +449,7 @@ describe("computeReadout", () => {
           rule({
             scope: {
               type: "domains",
-              domains: ["example.com", "api.example.com"],
+              domains: ["test", "example.test"],
             },
           }),
         ],

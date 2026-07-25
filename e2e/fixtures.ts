@@ -33,10 +33,10 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 interface ExtensionBuildOptions {
-  extensionBuild: "host-access" | "shipped";
+  extensionBuild: "host-access" | "narrow-host-access" | "shipped";
 }
 
-interface WorkerFixtures {
+interface WorkerFixtures extends ExtensionBuildOptions {
   echoServers: EchoServers;
 }
 
@@ -46,15 +46,13 @@ interface TestFixtures {
   extensionId: string;
 }
 
-export const test = base.extend<
-  ExtensionBuildOptions & TestFixtures,
-  WorkerFixtures
->({
-  extensionBuild: ["shipped", { option: true }],
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  extensionBuild: ["shipped", { option: true, scope: "worker" }],
   echoServers: [
-    // biome-ignore lint/correctness/noEmptyPattern: Playwright resolves fixture dependencies from this parameter's destructuring; it declares none.
-    async ({}, use) => {
-      const { servers, child } = await spawnEchoServers();
+    async ({ extensionBuild }, use) => {
+      const { servers, child } = await spawnEchoServers(
+        extensionBuild === "narrow-host-access",
+      );
       await use(servers);
       await stopEchoServers(child);
     },
@@ -69,7 +67,9 @@ export const test = base.extend<
       ".output",
       extensionBuild === "host-access"
         ? "chrome-mv3-e2e-hostaccess"
-        : "chrome-mv3",
+        : extensionBuild === "narrow-host-access"
+          ? "chrome-mv3-e2e-narrow-hostaccess"
+          : "chrome-mv3",
     );
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",

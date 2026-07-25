@@ -2,7 +2,7 @@ import {
   coversSubresourceTypes,
   type GrantSnapshot,
   missingGrants,
-  narrowedGrantUrlFilter,
+  narrowedGrantUrlFilters,
   originGranted,
 } from "./grants";
 import {
@@ -11,7 +11,7 @@ import {
   normalizeHeaderName,
 } from "./headers";
 import {
-  MAX_ENABLED_RULES,
+  MAX_DYNAMIC_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "./limits";
@@ -89,6 +89,7 @@ export function dropInapplicable(
   isRegexSupported: (regex: string) => boolean,
   granted: GrantSnapshot,
 ): StateDoc {
+  let nextSyntheticNum = state.nextRuleNum;
   return {
     ...state,
     profiles: state.profiles.map((profile) =>
@@ -99,18 +100,37 @@ export function dropInapplicable(
               if (!rule.enabled) {
                 return [rule];
               }
-              const narrowed = narrowToGranted(rule, granted);
-              return uncompilableReason(narrowed.rule, isRegexSupported) ===
-                undefined &&
-                (narrowed.targetSecured
-                  ? initiatorsGranted(narrowed.rule, granted)
-                  : missingGrants(narrowed.rule, granted).length === 0)
-                ? [narrowed.rule]
-                : [];
+              return narrowToGranted(rule, granted).flatMap(
+                (narrowed, index) => {
+                  if (
+                    uncompilableReason(narrowed.rule, isRegexSupported) !==
+                      undefined ||
+                    (narrowed.targetSecured
+                      ? !initiatorsGranted(narrowed.rule, granted)
+                      : missingGrants(narrowed.rule, granted).length !== 0)
+                  ) {
+                    return [];
+                  }
+                  if (index === 0) {
+                    return [narrowed.rule];
+                  }
+                  return [
+                    {
+                      ...narrowed.rule,
+                      num: nextSyntheticNum++,
+                    },
+                  ];
+                },
+              );
             }),
           }
         : profile,
     ),
+    // Synthetic variants exist only in this compiler view. Advancing its
+    // allocator guarantees their DNR numeric ids cannot collide with authored
+    // rules; the shared authored id deliberately keeps projections attached to
+    // the one stored rule they represent.
+    nextRuleNum: nextSyntheticNum,
   };
 }
 
@@ -126,44 +146,59 @@ interface NarrowedRule {
 // that exact origin into a URL-anchored pattern. If no host survives, retain the
 // original requirement so missingGrants drops it instead of accidentally
 // turning an empty host list into broad access.
-function narrowToGranted(rule: Rule, granted: GrantSnapshot): NarrowedRule {
+function narrowToGranted(
+  rule: Rule,
+  granted: GrantSnapshot,
+): readonly NarrowedRule[] {
   if (rule.scope.type === "all") {
-    return { rule, targetSecured: false };
+    return [{ rule, targetSecured: false }];
   }
   const hosts =
     rule.scope.type === "domains" ? rule.scope.domains : rule.scope.hosts;
   const fullyGranted = hosts.filter((host) => originGranted(host, granted));
-  if (fullyGranted.length > 0) {
-    return {
-      rule: {
-        ...rule,
-        scope:
-          rule.scope.type === "domains"
-            ? { ...rule.scope, domains: fullyGranted }
-            : { ...rule.scope, hosts: fullyGranted },
-      },
-      targetSecured: false,
-    };
-  }
-  if (rule.scope.type === "domains") {
-    for (const domain of rule.scope.domains) {
-      const urlFilter = narrowedGrantUrlFilter(domain, granted);
-      if (urlFilter !== undefined) {
-        return {
-          rule: {
-            ...rule,
-            scope: {
-              type: "pattern",
-              pattern: urlFilter,
-              hosts: [domain],
+  const fullyGrantedSet = new Set(fullyGranted);
+  const narrowed: NarrowedRule[] =
+    fullyGranted.length === 0
+      ? []
+      : [
+          {
+            rule: {
+              ...rule,
+              scope:
+                rule.scope.type === "domains"
+                  ? { ...rule.scope, domains: fullyGranted }
+                  : { ...rule.scope, hosts: fullyGranted },
             },
+            targetSecured: false,
           },
-          targetSecured: true,
-        };
+        ];
+  if (rule.scope.type === "domains") {
+    const seenFilters = new Set<string>();
+    for (const domain of rule.scope.domains) {
+      // A full grant already admits every concrete subset for this domain.
+      // Emitting both would apply append rules twice on the narrower origin.
+      if (fullyGrantedSet.has(domain)) {
+        continue;
+      }
+      for (const urlFilter of narrowedGrantUrlFilters(domain, granted)) {
+        if (!seenFilters.has(urlFilter)) {
+          seenFilters.add(urlFilter);
+          narrowed.push({
+            rule: {
+              ...rule,
+              scope: {
+                type: "pattern",
+                pattern: urlFilter,
+                hosts: [domain],
+              },
+            },
+            targetSecured: true,
+          });
+        }
       }
     }
   }
-  return { rule, targetSecured: false };
+  return narrowed.length === 0 ? [{ rule, targetSecured: false }] : narrowed;
 }
 
 function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
@@ -248,9 +283,9 @@ export function compileDynamic(state: StateDoc): DnrRule[] {
     state.profiles
       .find((profile) => profile.id === state.activeProfileId)
       ?.rules.filter((rule) => rule.enabled) ?? [];
-  if (enabledRules.length > MAX_ENABLED_RULES) {
+  if (enabledRules.length > MAX_DYNAMIC_RULES) {
     throw new RangeError(
-      `Cannot compile ${enabledRules.length} enabled rules; the limit is ${MAX_ENABLED_RULES}`,
+      `Cannot compile ${enabledRules.length} dynamic rules; the limit is ${MAX_DYNAMIC_RULES}`,
     );
   }
   const regexCount = enabledRules.filter(
@@ -316,8 +351,9 @@ export function compileSession(
     if (originGranted(override.originHost, granted)) {
       return [{ override, urlFilter: undefined }];
     }
-    const urlFilter = narrowedGrantUrlFilter(override.originHost, granted);
-    return urlFilter === undefined ? [] : [{ override, urlFilter }];
+    return narrowedGrantUrlFilters(override.originHost, granted).map(
+      (urlFilter) => ({ override, urlFilter }),
+    );
   });
   if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
@@ -328,17 +364,26 @@ export function compileSession(
     return [];
   }
 
-  return enabledOverrides.map(({ override, urlFilter }, index) => ({
-    id: override.num,
-    priority: SESSION_PRIORITY_TOP - index,
-    action: headerAction(override),
-    condition: {
-      tabIds: [override.tabId],
-      requestDomains: [override.originHost],
-      ...(urlFilter === undefined ? {} : { urlFilter }),
-      resourceTypes: expandResourceTypes("all"),
-    },
-  }));
+  let nextSyntheticNum =
+    overrides.reduce((max, override) => Math.max(max, override.num), 0) + 1;
+  const seenOverrideNums = new Set<number>();
+  return enabledOverrides.map(({ override, urlFilter }, index) => {
+    const id = seenOverrideNums.has(override.num)
+      ? nextSyntheticNum++
+      : override.num;
+    seenOverrideNums.add(override.num);
+    return {
+      id,
+      priority: SESSION_PRIORITY_TOP - index,
+      action: headerAction(override),
+      condition: {
+        tabIds: [override.tabId],
+        requestDomains: [override.originHost],
+        ...(urlFilter === undefined ? {} : { urlFilter }),
+        resourceTypes: expandResourceTypes("all"),
+      },
+    };
+  });
 }
 
 function headerAction(

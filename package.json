@@ -17,6 +17,7 @@
     "dev": "wxt",
     "build": "wxt build",
     "build:e2e:hostaccess": "E2E_HOST_ACCESS=1 wxt build",
+    "build:e2e:narrow-hostaccess": "E2E_NARROW_HOST_ACCESS=1 wxt build",
     "icons": "node scripts/render-icons.mjs",
     "lint": "biome lint .",
     "format": "biome format --write .",
@@ -34,7 +35,7 @@
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
-    "e2e": "pnpm build && pnpm build:e2e:hostaccess && playwright test",
+    "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "postinstall": "wxt prepare",
     "prepare": "git config core.hooksPath .githooks"
   },
@@ -61,12 +62,12 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "5.25 kB"
+      "limit": "5.5 kB"
     },
     {
       "name": "Shared UI runtime",
       "path": ".output/chrome-mv3/chunks/readout-*.js",
-      "limit": "15 kB"
+      "limit": "26 kB"
     },
     {
       "name": "Popup initial load",

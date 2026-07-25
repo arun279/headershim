@@ -12,7 +12,7 @@ import { CURRENT } from "../../src/core/schema";
 import { originPatternForDomain } from "../../src/core/scope";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
-import { activeTabDomain } from "../../src/platform/tabs";
+import { activeTabDomain, activeTabOrigin } from "../../src/platform/tabs";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
 import { DataNote } from "../../src/ui/components/DataNote";
@@ -99,6 +99,7 @@ function Ready({
   const [addingTo, setAddingTo] = useState<string | undefined>(undefined);
   const [composing, setComposing] = useState(false);
   const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
+  const [tabOrigin, setTabOrigin] = useState<string | undefined>(undefined);
   const [tabResolved, setTabResolved] = useState(false);
   const [switchShortcut, setSwitchShortcut] = useState<string | undefined>(
     undefined,
@@ -116,6 +117,7 @@ function Ready({
       setTabDomain(host);
       setTabResolved(true);
     });
+    void activeTabOrigin().then(setTabOrigin);
     // The bound accelerator makes the profile shortcut discoverable; read once so
     // the switcher can print it on the row it would flip to.
     void browser.commands.getAll().then((commands) => {
@@ -155,12 +157,13 @@ function Ready({
       computeReadout({
         doc,
         host: tabDomain,
+        origin: tabOrigin,
         grants,
         overrides,
         isRegexSupported,
         status,
       }),
-    [doc, tabDomain, grants, overrides, isRegexSupported, status],
+    [doc, tabDomain, tabOrigin, grants, overrides, isRegexSupported, status],
   );
 
   const run = <T,>(

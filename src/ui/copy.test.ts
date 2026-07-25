@@ -126,7 +126,7 @@ describe("copy", () => {
     expect(copy.errors.appendDisallowed("x-custom-token")).toContain(
       "x-custom-token isn't one of them",
     );
-    expect(copy.errors.ruleCounter(4120)).toBe("4,120 of 4,500 enabled rules.");
+    expect(copy.errors.ruleCounter(2120)).toBe("2,120 of 4,500 enabled rules.");
     expect(copy.errors.importNewer(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );

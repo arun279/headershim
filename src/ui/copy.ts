@@ -835,6 +835,8 @@ export const copy = {
     appendDisallowed: (name: string) =>
       `Chrome only allows appending to a fixed set of request headers, and ${name} isn't one of them. Use Set instead. It replaces any existing value.`,
     ruleCap: `Chrome caps extensions at 5,000 header rules, and enabling this would pass ${BRAND_NAME}'s safe limit of ${MAX_ENABLED_RULES.toLocaleString("en-US")}. Disable or delete rules you're not using, or turn off a profile.`,
+    dynamicRuleCap:
+      "This profile would expand past Chrome's 5,000-rule limit because rules that name several sites can require one installed rule per site. Use fewer sites or split the profile.",
     ruleCounter: (enabled: number) =>
       `${enabled.toLocaleString("en-US")} of ${MAX_ENABLED_RULES.toLocaleString("en-US")} enabled rules.`,
     regexRuleCap: `Chrome separately caps regex-scoped rules at ${MAX_REGEX_RULES.toLocaleString("en-US")}, and enabling this would pass that limit. Disable or delete regex rules you're not using, or switch some scopes to URL patterns.`,

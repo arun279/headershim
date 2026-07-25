@@ -9,10 +9,11 @@ pnpm e2e
 HEADED=1 pnpm e2e
 ```
 
-`pnpm e2e` builds two unpacked artifacts before Playwright starts:
+`pnpm e2e` builds three unpacked artifacts before Playwright starts:
 
 - `.output/chrome-mv3` is the shipped build. It declares only `optional_host_permissions: ["*://*/*"]`, and the `shipped` Playwright project loads it for every untagged test.
 - `.output/chrome-mv3-e2e-hostaccess` is the test-only traffic build. Setting `E2E_HOST_ACCESS=1` adds `host_permissions: ["*://*/*"]` and selects the distinct output directory. The `host-access` Playwright project loads it only for tests tagged `@host-access`.
+- `.output/chrome-mv3-e2e-narrow-hostaccess` holds the literal browser-observed `host_permissions: ["http://localhost:55848/*"]`. Its one test proves the background installs the anchored rule, the HTTP echo receives the header, and the HTTPS echo does not.
 
 The static grant lets Chromium apply DNR rules immediately without an optional permission prompt. Everything else in the two builds is identical. The test-only artifact is never packaged or checked as a release artifact. `scripts/manifest-policy.mjs` continues to inspect only `.output/chrome-mv3`, requiring zero static host permissions and the exact optional wildcard permission.
 

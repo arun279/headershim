@@ -22,6 +22,7 @@ import { render, settle } from "../ui/test/render";
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: () => Promise.resolve("api.acme.dev"),
+  activeTabOrigin: () => Promise.resolve("https://api.acme.dev"),
 }));
 
 function installDnr() {

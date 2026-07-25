@@ -24,6 +24,7 @@ import {
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: () => Promise.resolve("app.example.com"),
+  activeTabOrigin: () => Promise.resolve("https://app.example.com"),
 }));
 
 // The compiler drops a This-tab row whose host is not granted, and the popup

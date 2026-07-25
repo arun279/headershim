@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_ENABLED_RULES } from "./limits";
 import {
   activatePreviousProfile,
   activateProfile,
@@ -239,7 +240,7 @@ describe("activateProfile", () => {
   });
 
   it("refuses a profile whose enabled rules exceed the live caps", () => {
-    const oversized = bulkProfile("two", "Bulk", 4_501);
+    const oversized = bulkProfile("two", "Bulk", MAX_ENABLED_RULES + 1);
     const doc = docWith(
       [profile("one", "Default"), oversized, profile("three", "QA")],
       "one",
@@ -304,7 +305,7 @@ describe("activatePreviousProfile", () => {
   });
 
   it("refuses to flip to a previous profile now over the live caps", () => {
-    const oversized = bulkProfile("two", "Bulk", 4_501);
+    const oversized = bulkProfile("two", "Bulk", MAX_ENABLED_RULES + 1);
     const doc = {
       ...docWith([profile("one", "Default"), oversized], "one"),
       previousProfileId: "two",

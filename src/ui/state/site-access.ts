@@ -1,11 +1,11 @@
 import {
+  coversSubresourceTypes,
   domainFromOriginPattern,
   type GrantSnapshot,
   isAllSitesOrigin,
   missingGrants,
+  narrowedGrantUrlFilters,
   originGranted,
-  originPatternCoverage,
-  requiredOrigins,
 } from "../../core/grants";
 import {
   activeProfile,
@@ -68,9 +68,6 @@ export function siteAccessView(
     );
   }
 
-  const required = doc.profiles.flatMap((profile) =>
-    profile.rules.map(requiredOrigins),
-  );
   const grantedByDomain = new Map<string, string[]>();
   for (const origin of granted.origins) {
     if (isAllSitesOrigin(origin)) continue;
@@ -85,11 +82,14 @@ export function siteAccessView(
     .sort(byDomain);
   const partialDomains = new Set<string>();
   const partial = neededEntries.flatMap((neededEntry) => {
-    const origins = grantedByDomain.get(neededEntry.domain) ?? [];
-    const limitedTo = origins.find(
+    const origins = granted.origins.filter(
       (origin) =>
-        originPatternCoverage(origin, neededEntry.origin) === "partial",
+        narrowedGrantUrlFilters(neededEntry.domain, {
+          origins: [origin],
+          allSites: false,
+        }).length !== 0,
     );
+    const limitedTo = origins[0];
     if (limitedTo === undefined) {
       return [];
     }
@@ -110,25 +110,21 @@ export function siteAccessView(
     ),
     partial,
     granted: [...grantedByDomain]
-      .filter(([domain]) => !partialDomains.has(domain))
+      .filter(
+        ([domain]) =>
+          !neededEntries.some((neededEntry) => neededEntry.domain === domain),
+      )
       .map(([domain, origins]) => {
-        const ruleCount = required.filter((ruleOrigins) =>
-          ruleOrigins.some((candidate) =>
-            origins.some(
-              (origin) => originPatternCoverage(origin, candidate) !== "none",
-            ),
-          ),
-        ).length;
+        const rowGrant = { origins, allSites: false };
+        const ruleCount = activeProfile(doc)
+          .rules.filter((rule) => rule.enabled)
+          .filter((rule) => ruleUsesGrant(rule, rowGrant, granted)).length;
         const thisTabCount = overrides.filter(
           (override) =>
             override.enabled &&
-            origins.some(
-              (origin) =>
-                originPatternCoverage(
-                  origin,
-                  originPatternForDomain(override.originHost),
-                ) !== "none",
-            ),
+            (originGranted(override.originHost, rowGrant) ||
+              narrowedGrantUrlFilters(override.originHost, rowGrant).length !==
+                0),
         ).length;
         return {
           ...entry(origins[0] ?? domain, { ruleCount, thisTabCount }, "full"),
@@ -175,6 +171,31 @@ function entry(
     ruleCount: usage.ruleCount,
     ...(usage.thisTabCount === 0 ? {} : { thisTabCount: usage.thisTabCount }),
   };
+}
+
+function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
+  return (
+    !coversSubresourceTypes(rule) ||
+    rule.initiators.every((initiator) => originGranted(initiator, granted))
+  );
+}
+
+function ruleUsesGrant(
+  rule: Rule,
+  rowGrant: GrantSnapshot,
+  granted: GrantSnapshot,
+): boolean {
+  if (!initiatorsGranted(rule, granted) || rule.scope.type === "all") {
+    return false;
+  }
+  const hosts =
+    rule.scope.type === "domains" ? rule.scope.domains : rule.scope.hosts;
+  return hosts.some(
+    (host) =>
+      originGranted(host, rowGrant) ||
+      (rule.scope.type === "domains" &&
+        narrowedGrantUrlFilters(host, rowGrant).length !== 0),
+  );
 }
 
 function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { RegexValidator } from "../../core/codec/modheader";
+import { MAX_ENABLED_RULES } from "../../core/limits";
 import type { Profile, Rule, RuleDraft, StateDoc } from "../../core/model";
 import { defaultProfileColor } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
@@ -215,8 +216,8 @@ describe("saveRule", () => {
     );
   });
 
-  it("blocks a new enabled rule past the 4,500 cap but allows a disabled one", async () => {
-    await seed([profile("p1", { rules: rules(4_500) })]);
+  it("blocks a new enabled rule past the safe cap but allows a disabled one", async () => {
+    await seed([profile("p1", { rules: rules(MAX_ENABLED_RULES) })]);
 
     expect(errorKind(await mutations.saveRule("p1", undefined, draft()))).toBe(
       "enabled-rule-limit-exceeded",
@@ -224,6 +225,24 @@ describe("saveRule", () => {
     expect(
       (await mutations.saveRule("p1", undefined, draft({ enabled: false }))).ok,
     ).toBe(true);
+  });
+
+  it("blocks an enabled edit whose per-site projections exceed Chrome's limit", async () => {
+    const existing = rule();
+    const doc = await seed([profile("p1", { rules: [existing] })]);
+    const domains = Array.from(
+      { length: 5_001 },
+      (_, index) => `host-${index}.example.com`,
+    );
+
+    const outcome = await mutations.saveRule(
+      "p1",
+      existing.id,
+      draft({ scope: { type: "domains", domains } }),
+    );
+
+    expect(errorKind(outcome)).toBe("dynamic-rule-limit-exceeded");
+    expect(await read()).toEqual(doc);
   });
 
   it("blocks a save that would pass the 4 MB storage budget", async () => {
@@ -257,7 +276,9 @@ describe("setRuleEnabled", () => {
   it("fails at the cap boundary before commit", async () => {
     const disabled = rule({ enabled: false });
     const doc = await seed([
-      profile("p1", { rules: [...rules(4_500), disabled] }),
+      profile("p1", {
+        rules: [...rules(MAX_ENABLED_RULES), disabled],
+      }),
     ]);
 
     const outcome = await mutations.setRuleEnabled("p1", disabled.id, true);
@@ -384,7 +405,11 @@ describe("delete, restore, and move", () => {
   it("restore respects the cap after the enabled set refilled", async () => {
     const doomed = rule();
     const disabled = rule({ enabled: false });
-    await seed([profile("p1", { rules: [doomed, ...rules(4_499), disabled] })]);
+    await seed([
+      profile("p1", {
+        rules: [doomed, ...rules(MAX_ENABLED_RULES - 1), disabled],
+      }),
+    ]);
 
     const deleted = await mutations.deleteRule("p1", doomed.id);
     expect(deleted.ok).toBe(true);
@@ -418,7 +443,7 @@ describe("delete, restore, and move", () => {
   it("cap-checks a move from a disabled profile into an enabled one", async () => {
     const moving = rule();
     await seed([
-      profile("p1", { rules: rules(4_500) }),
+      profile("p1", { rules: rules(MAX_ENABLED_RULES) }),
       profile("p2", { rules: [moving] }),
     ]);
 
@@ -430,7 +455,7 @@ describe("delete, restore, and move", () => {
   it("leaves an edit untouched when its move is rejected", async () => {
     const moving = rule({ header: "x-before" });
     const doc = await seed([
-      profile("p1", { rules: rules(4_500) }),
+      profile("p1", { rules: rules(MAX_ENABLED_RULES) }),
       profile("p2", { rules: [moving] }),
     ]);
 
@@ -710,9 +735,9 @@ describe("activation semantics", () => {
     expect(await read()).toEqual(doc);
   });
 
-  it("blocks activating a profile past the 4,500 cap before commit", async () => {
+  it("blocks activating a profile past the safe cap before commit", async () => {
     const doc = await seed(
-      [profile("p1"), profile("p2", { rules: rules(4_501) })],
+      [profile("p1"), profile("p2", { rules: rules(MAX_ENABLED_RULES + 1) })],
       { activeProfileId: "p1" },
     );
 

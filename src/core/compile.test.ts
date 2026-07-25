@@ -10,6 +10,8 @@ import {
 } from "./compile";
 import type { GrantSnapshot } from "./grants";
 import {
+  checkEnabledRuleLimits,
+  MAX_DYNAMIC_RULES,
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
@@ -81,7 +83,6 @@ const granting = (...domains: string[]): GrantSnapshot => ({
   origins: domains.map(originPatternForDomain),
   allSites: false,
 });
-
 describe("dynamic rule compilation", () => {
   it("installs only Chrome's exact-origin subset under a toolbar grant", () => {
     const doc = state([profile("active", [storedRule(99)])]);
@@ -385,11 +386,18 @@ describe("dynamic rule compilation", () => {
     const compiled = compileDynamic(state([profile("full", atLimit)]));
 
     expect(compiled).toHaveLength(MAX_ENABLED_RULES);
-    expect(compiled.at(-1)?.priority).toBe(501);
+    expect(compiled.at(-1)?.priority).toBe(
+      DYNAMIC_PRIORITY_TOP - MAX_ENABLED_RULES + 1,
+    );
     expect(() =>
       compileDynamic(
         state([
-          profile("overflow", [...atLimit, storedRule(MAX_ENABLED_RULES + 1)]),
+          profile(
+            "overflow",
+            Array.from({ length: MAX_DYNAMIC_RULES + 1 }, (_, index) =>
+              storedRule(index + 1),
+            ),
+          ),
         ]),
       ),
     ).toThrow(RangeError);
@@ -500,22 +508,171 @@ describe("dropping inapplicable rules", () => {
     expect(compiledIds(doc, supportAll, granting())).toEqual([]);
   });
 
-  it("narrows away an exact-origin grant but keeps a fully covered sibling", () => {
+  it("compiles both a fully covered host and Chrome's exact-origin sibling", () => {
     const doc = state([
       profile("mixed-coverage", [
         storedRule(1, {
-          scope: { type: "domains", domains: ["a.example", "b.example"] },
+          scope: {
+            type: "domains",
+            domains: ["example.test", "example.com"],
+          },
         }),
       ]),
     ]);
     const compiled = compileDynamic(
       dropInapplicable(doc, supportAll, {
-        origins: [originPatternForDomain("a.example"), "https://b.example/*"],
+        origins: ["*://*.example.test/*", "https://example.com/*"],
         allSites: false,
       }),
     );
 
-    expect(compiled[0]?.condition.requestDomains).toEqual(["a.example"]);
+    expect(compiled.map(({ condition }) => condition)).toEqual([
+      expect.objectContaining({ requestDomains: ["example.test"] }),
+      expect.objectContaining({
+        requestDomains: ["example.com"],
+        urlFilter: "|https://example.com^",
+      }),
+    ]);
+  });
+
+  it("does not duplicate a narrowed subset already covered by a full grant", () => {
+    const doc = state([
+      profile("covered-subset", [
+        storedRule(1, {
+          header: "accept",
+          operation: "append",
+          scope: { type: "domains", domains: ["example.test"] },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: ["*://*.example.test/*", "https://example.test/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition).toEqual(
+      expect.objectContaining({ requestDomains: ["example.test"] }),
+    );
+    expect(compiled[0]?.condition.urlFilter).toBeUndefined();
+  });
+
+  it("deduplicates overlapping domains narrowed to the same exact origin", () => {
+    const doc = state([
+      profile("overlap", [
+        storedRule(1, {
+          header: "accept",
+          operation: "append",
+          scope: {
+            type: "domains",
+            domains: ["example.com", "sub.example.com"],
+          },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: ["https://sub.example.com/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition.urlFilter).toBe("|https://sub.example.com^");
+  });
+
+  it("keeps an extension-requested subdomain grant live for a parent-domain rule", () => {
+    const doc = state([
+      profile("parent", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com"] },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: ["*://*.sub.example.com/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition).toMatchObject({
+      requestDomains: ["example.com"],
+      urlFilter: "||sub.example.com^",
+    });
+  });
+
+  it("compiles every narrowed grant for one rule independent of grant order", () => {
+    const doc = state([
+      profile("multiple-grants", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com"] },
+        }),
+      ]),
+    ]);
+    const grants = ["https://b.example.com/*", "https://a.example.com/*"];
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: grants,
+        allSites: false,
+      }),
+    );
+
+    expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
+      "|https://b.example.com^",
+      "|https://a.example.com^",
+    ]);
+    expect(
+      compileDynamic(
+        dropInapplicable(doc, supportAll, {
+          origins: grants.toReversed(),
+          allSites: false,
+        }),
+      ).map((rule) => rule.condition.urlFilter),
+    ).toEqual(["|https://a.example.com^", "|https://b.example.com^"]);
+  });
+
+  it("compiles wildcard-scheme bare-host grants across both granted schemes", () => {
+    const doc = state([
+      profile("wildcard-scheme", [
+        storedRule(1, {
+          scope: { type: "domains", domains: ["example.com"] },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: ["*://example.com/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
+      "|http://example.com^",
+      "|https://example.com^",
+    ]);
+  });
+
+  it("rejects an authored set whose grant projections could overflow Chrome", () => {
+    const rules = Array.from({ length: MAX_ENABLED_RULES }, (_, index) =>
+      storedRule(index + 1, {
+        scope: {
+          type: "domains",
+          domains: ["example.test", "example.com"],
+        },
+      }),
+    );
+    expect(checkEnabledRuleLimits(rules)).toEqual({
+      ok: false,
+      error: {
+        kind: "dynamic-rule-limit-exceeded",
+        count: MAX_ENABLED_RULES * 2,
+        limit: MAX_DYNAMIC_RULES,
+      },
+    });
   });
 
   it.each(["pattern", "regex"] as const)(
@@ -712,6 +869,19 @@ describe("session rule compilation", () => {
       requestDomains: ["host-1.example"],
       urlFilter: "|https://host-1.example^",
     });
+  });
+
+  it("compiles every narrowed origin held for one override", () => {
+    const compiled = compileSession([sessionOverride(1)], false, {
+      origins: ["https://host-1.example/*", "http://host-1.example:55848/*"],
+      allSites: false,
+    });
+
+    expect(compiled.map((rule) => rule.id)).toEqual([1, 2]);
+    expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
+      "|https://host-1.example^",
+      "|http://host-1.example:55848/",
+    ]);
   });
 
   it("keeps an override under a parent-domain grant", () => {

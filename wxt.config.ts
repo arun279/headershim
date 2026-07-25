@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
+import { NARROWED_ORIGIN } from "./e2e/echo-ports.mjs";
 import { BRAND_NAME } from "./src/brand";
 import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "./src/core/grants";
 import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
@@ -10,6 +11,8 @@ import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
 // keeps its optional-only permission posture.
 // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
 const e2eHostAccess = process.env["E2E_HOST_ACCESS"] === "1";
+// biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
+const e2eNarrowHostAccess = process.env["E2E_NARROW_HOST_ACCESS"] === "1";
 
 // The trust page displays the commit each build came from; a
 // release build is always a git checkout, so the working tree is the source.
@@ -22,7 +25,11 @@ function commitHash(): string {
 }
 
 export default defineConfig({
-  ...(e2eHostAccess ? { outDirTemplate: "chrome-mv3-e2e-hostaccess" } : {}),
+  ...(e2eHostAccess
+    ? { outDirTemplate: "chrome-mv3-e2e-hostaccess" }
+    : e2eNarrowHostAccess
+      ? { outDirTemplate: "chrome-mv3-e2e-narrow-hostaccess" }
+      : {}),
   vite: () => ({
     esbuild: {
       jsx: "automatic",
@@ -46,7 +53,11 @@ export default defineConfig({
     // The same list the About page draws its disclosure rows from, so the
     // product cannot declare a permission it does not explain.
     permissions: [...MANIFEST_PERMISSIONS],
-    ...(e2eHostAccess ? { host_permissions: [ALL_SITES_ORIGIN] } : {}),
+    ...(e2eHostAccess
+      ? { host_permissions: [ALL_SITES_ORIGIN] }
+      : e2eNarrowHostAccess
+        ? { host_permissions: [NARROWED_ORIGIN] }
+        : {}),
     optional_host_permissions: [ALL_SITES_ORIGIN],
     // HeaderShim reads and writes headers through declarativeNetRequest and
     // opens no connection of its own. connect-src 'none' is the

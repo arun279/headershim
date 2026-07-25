@@ -1,10 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
 interface ExtensionBuildOptions {
-  extensionBuild: "host-access" | "shipped";
+  extensionBuild: "host-access" | "narrow-host-access" | "shipped";
 }
 
 const hostAccessTag = /@host-access/;
+const narrowHostAccessTag = /@narrow-host-access/;
 
 // A loaded extension only works in a persistent context, which the fixtures own
 // per test; the runner stays single-worker so the extension's service worker and
@@ -27,13 +28,18 @@ export default defineConfig<ExtensionBuildOptions>({
   projects: [
     {
       name: "shipped",
-      grepInvert: hostAccessTag,
+      grepInvert: [hostAccessTag, narrowHostAccessTag],
       use: { extensionBuild: "shipped" },
     },
     {
       name: "host-access",
       grep: hostAccessTag,
       use: { extensionBuild: "host-access" },
+    },
+    {
+      name: "narrow-host-access",
+      grep: narrowHostAccessTag,
+      use: { extensionBuild: "narrow-host-access" },
     },
   ],
 });

@@ -71,7 +71,7 @@ export function originGranted(domain: string, granted: GrantSnapshot): boolean {
   return originGrantCoverage(domain, granted) === "full";
 }
 
-export function originGrantCoverage(
+function originGrantCoverage(
   domain: string,
   granted: GrantSnapshot,
 ): GrantCoverage {
@@ -85,31 +85,66 @@ export function originGrantCoverage(
 }
 
 /**
- * The exact URL prefix Chrome's toolbar grant permits inside a wider
- * requestDomains condition. The observed toolbar shape is always a concrete
- * scheme and bare host, with an optional non-default port. Anchoring all three
- * axes lets the compiler keep that subset installed without activeTab widening
- * it to the rule's ungranted schemes, ports, or subdomains.
+ * URL filters that confine a wider requestDomains condition to every partial
+ * grant Chrome actually holds. One stored pattern can require more than one
+ * filter: a wildcard-scheme bare host needs separate HTTP and HTTPS anchors,
+ * while a concrete-scheme subdomain grant needs apex and wildcard-host anchors.
+ * Keeping every intersection prevents grant ordering from deciding which
+ * origins run, and preserving each stored scheme/host/port subset prevents
+ * activeTab from widening it to the rest of the authored rule.
  */
-export function narrowedGrantUrlFilter(
+export function narrowedGrantUrlFilters(
   domain: string,
   granted: GrantSnapshot,
-): string | undefined {
+): string[] {
   const required = originPatternForDomain(domain);
+  const filters = new Set<string>();
   for (const origin of granted.origins) {
     const pattern = parseOriginPattern(origin);
     if (
       pattern !== undefined &&
-      pattern.scheme !== "*" &&
-      !pattern.includesSubdomains &&
       originPatternCoverage(origin, required) === "partial"
     ) {
-      return pattern.port === undefined
-        ? `|${pattern.scheme}://${pattern.host}^`
-        : `|${pattern.scheme}://${pattern.host}:${pattern.port}/`;
+      for (const filter of urlFiltersForPattern(pattern)) {
+        filters.add(filter);
+      }
     }
   }
-  return undefined;
+  return [...filters];
+}
+
+/** Whether that exact narrowed grant admits requests from this tab origin. */
+export function narrowedGrantCoversOrigin(
+  domain: string,
+  granted: GrantSnapshot,
+  origin: string | undefined,
+): boolean {
+  if (origin === undefined) {
+    return false;
+  }
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  const scheme = url.protocol.slice(0, -1);
+  if (scheme !== "http" && scheme !== "https") {
+    return false;
+  }
+  const required = originPatternForDomain(domain);
+  return granted.origins.some((grantedOrigin) => {
+    const pattern = parseOriginPattern(grantedOrigin);
+    return (
+      pattern !== undefined &&
+      (pattern.scheme === "*" || pattern.scheme === scheme) &&
+      (pattern.includesSubdomains
+        ? hostUnder(url.hostname, pattern.host)
+        : pattern.host === url.hostname) &&
+      (pattern.port === undefined || pattern.port === url.port) &&
+      originPatternCoverage(grantedOrigin, required) === "partial"
+    );
+  });
 }
 
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
@@ -186,6 +221,29 @@ function parseOriginPattern(pattern: string): OriginPattern | undefined {
     includesSubdomains: match?.[2] !== undefined,
     port: match?.[4],
   };
+}
+
+function urlFiltersForPattern(pattern: OriginPattern): string[] {
+  if (pattern.scheme === "*" && pattern.includesSubdomains) {
+    return [
+      pattern.port === undefined
+        ? `||${pattern.host}^`
+        : `||${pattern.host}:${pattern.port}/`,
+    ];
+  }
+
+  const schemes =
+    pattern.scheme === "*" ? (["http", "https"] as const) : [pattern.scheme];
+  const hosts = pattern.includesSubdomains
+    ? [pattern.host, `*.${pattern.host}`]
+    : [pattern.host];
+  return schemes.flatMap((scheme) =>
+    hosts.map((host) =>
+      pattern.port === undefined
+        ? `|${scheme}://${host}^`
+        : `|${scheme}://${host}:${pattern.port}/`,
+    ),
+  );
 }
 
 function combinedCoverage(coverages: readonly GrantCoverage[]): GrantCoverage {

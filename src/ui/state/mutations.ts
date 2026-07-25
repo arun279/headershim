@@ -9,6 +9,7 @@ import {
   checkEnabledRuleLimits,
   checkStateDocByteLimit,
   type LimitError,
+  projectedDynamicRuleCount,
 } from "../../core/limits";
 import {
   activeProfile,
@@ -112,7 +113,9 @@ export function createMutations({ validateRegex }: MutationDeps) {
     const nextEnabled = enabledRules(next);
     if (
       nextEnabled.length > prevEnabled.length ||
-      regexCount(nextEnabled) > regexCount(prevEnabled)
+      regexCount(nextEnabled) > regexCount(prevEnabled) ||
+      projectedDynamicRuleCount(nextEnabled) >
+        projectedDynamicRuleCount(prevEnabled)
     ) {
       const limits = checkEnabledRuleLimits(nextEnabled);
       if (!limits.ok) {

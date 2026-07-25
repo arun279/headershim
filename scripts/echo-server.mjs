@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { createSecureServer } from "node:http2";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { NARROW_H1_PORT, NARROW_H2_PORT } from "../e2e/echo-ports.mjs";
 
 // Two header-echo servers for the e2e harness: HTTP/1.1 in the clear and
 // HTTP/2 over a throwaway self-signed cert. Every request is answered with an
@@ -79,9 +80,9 @@ function selfSignedCert() {
   return material;
 }
 
-function listen(server, host) {
+function listen(server, host, port = 0) {
   return new Promise((resolve) => {
-    server.listen(0, host, () => {
+    server.listen(port, host, () => {
       resolve(server.address().port);
     });
   });
@@ -89,6 +90,8 @@ function listen(server, host) {
 
 export async function startEchoServers({
   host = "localhost",
+  h1Port = 0,
+  h2Port = 0,
   listenHost,
 } = {}) {
   const cacheRequests = new Map();
@@ -149,17 +152,17 @@ export async function startEchoServers({
     stream.end(echoBody(h2Headers(headers)));
   });
 
-  const [h1Port, h2Port] = await Promise.all([
-    listen(h1, listenHost),
-    listen(h2, listenHost),
+  const [boundH1Port, boundH2Port] = await Promise.all([
+    listen(h1, listenHost, h1Port),
+    listen(h2, listenHost, h2Port),
   ]);
 
   const crossHost = host === "localhost" ? "127.0.0.1" : "localhost";
 
   return {
-    h1CrossUrl: `http://${crossHost}:${h1Port}`,
-    h1Url: `http://${host}:${h1Port}`,
-    h2Url: `https://${host}:${h2Port}`,
+    h1CrossUrl: `http://${crossHost}:${boundH1Port}`,
+    h1Url: `http://${host}:${boundH1Port}`,
+    h2Url: `https://${host}:${boundH2Port}`,
     async close() {
       await Promise.all([
         new Promise((resolve) => h1.close(resolve)),
@@ -170,7 +173,10 @@ export async function startEchoServers({
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const servers = await startEchoServers();
+  const literalPorts = process.env.HEADERSHIM_LITERAL_GRANT_PORTS === "1";
+  const servers = await startEchoServers(
+    literalPorts ? { h1Port: NARROW_H1_PORT, h2Port: NARROW_H2_PORT } : {},
+  );
   process.stdout.write(
     `${JSON.stringify({ h1CrossUrl: servers.h1CrossUrl, h1Url: servers.h1Url, h2Url: servers.h2Url })}\n`,
   );

@@ -17,7 +17,8 @@ import type { GrantSnapshot } from "../../core/grants";
 import {
   coversSubresourceTypes,
   missingGrants,
-  narrowedGrantUrlFilter,
+  narrowedGrantCoversOrigin,
+  narrowedGrantUrlFilters,
   originGranted,
 } from "../../core/grants";
 import { classifyHeaderName, normalizeHeaderName } from "../../core/headers";
@@ -131,6 +132,7 @@ export interface TabReadout {
 export interface ReadoutInput {
   readonly doc: StateDoc;
   readonly host: string | undefined;
+  readonly origin: string | undefined;
   readonly grants: GrantSnapshot;
   readonly overrides: readonly TabOverride[];
   readonly isRegexSupported: (regex: string) => boolean;
@@ -141,6 +143,7 @@ export interface ReadoutInput {
 export function computeReadout({
   doc,
   host,
+  origin,
   grants,
   overrides,
   isRegexSupported,
@@ -149,7 +152,7 @@ export function computeReadout({
   const paused = status === "paused";
   const outOfSync = status === "out-of-sync";
   const overrideLines = overrides.map((override) =>
-    overrideChange(override, grants, paused, outOfSync),
+    overrideChange(override, origin, grants, paused, outOfSync),
   );
   const profile = activeProfile(doc);
 
@@ -178,7 +181,7 @@ export function computeReadout({
       continue;
     }
     const access = rule.enabled
-      ? grantStateForHost(rule, host, grants)
+      ? grantStateForHost(rule, host, origin, grants)
       : { missing: [], narrowed: false };
     const reach =
       baseReach === "yes" && access.narrowed ? "unknown" : baseReach;
@@ -363,6 +366,7 @@ function ruleChange(
 
 function overrideChange(
   override: TabOverride,
+  origin: string | undefined,
   grants: GrantSnapshot,
   paused: boolean,
   outOfSync: boolean,
@@ -371,9 +375,12 @@ function overrideChange(
   // tab it was made from. Its one host is the compiler's grant test, so the
   // popup derives the same needs-access state from the same snapshot.
   const fullyGranted = originGranted(override.originHost, grants);
-  const narrowed =
+  const hasNarrowedGrant =
     !fullyGranted &&
-    narrowedGrantUrlFilter(override.originHost, grants) !== undefined;
+    narrowedGrantUrlFilters(override.originHost, grants).length !== 0;
+  const narrowed =
+    hasNarrowedGrant &&
+    narrowedGrantCoversOrigin(override.originHost, grants, origin);
   const missing =
     fullyGranted || narrowed
       ? []
@@ -567,6 +574,7 @@ function ruleReach(rule: Rule, host: string): Reach {
 function grantStateForHost(
   rule: Rule,
   host: string,
+  origin: string | undefined,
   grants: GrantSnapshot,
 ): { readonly missing: string[]; readonly narrowed: boolean } {
   const missing = missingGrants(rule, grants);
@@ -590,11 +598,16 @@ function grantStateForHost(
   const fullyCovered = reachingDomains.some((domain) =>
     originGranted(domain, grants),
   );
-  const narrowed =
+  const hasNarrowedGrant =
     !fullyCovered &&
     rule.scope.type === "domains" &&
     reachingDomains.some(
-      (domain) => narrowedGrantUrlFilter(domain, grants) !== undefined,
+      (domain) => narrowedGrantUrlFilters(domain, grants).length !== 0,
+    );
+  const narrowed =
+    hasNarrowedGrant &&
+    reachingDomains.some((domain) =>
+      narrowedGrantCoversOrigin(domain, grants, origin),
     );
   const initiatorOrigins = coversSubresourceTypes(rule)
     ? rule.initiators.map(originPatternForDomain)

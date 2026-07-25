@@ -15,6 +15,7 @@ import { fire, press, render, settle, typeInto } from "../ui/test/render";
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: vi.fn(() => Promise.resolve("api.example.com")),
+  activeTabOrigin: () => Promise.resolve("https://api.example.com"),
 }));
 
 const ORIGIN = "*://*.api.example.com/*";

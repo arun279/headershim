@@ -1,9 +1,15 @@
 import { siteAccessCopy } from "../../src/ui/copy";
 import {
+  NARROW_H1_PORT,
+  NARROW_H2_PORT,
+  NARROWED_ORIGIN,
+} from "../echo-ports.mjs";
+import {
   expect,
   fetchEcho,
   getBadgeText,
   getDynamicRules,
+  readEcho,
   seedState,
   seedStateAndWait,
   stateWithRules,
@@ -63,6 +69,47 @@ test("an enabled rule with no grant is compiled out of the ruleset entirely", as
   expect(beforeGrant.status).toBe(200);
   expect(beforeGrant.requestHeaders).not.toHaveProperty(HEADER);
   expect(await getDynamicRules(serviceWorker)).toEqual([]);
+});
+
+test("a browser-stored narrowed grant reaches DNR and acts only on its granted scheme", {
+  tag: "@narrow-host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
+  expect(echoServers.h1Url).toBe(`http://localhost:${NARROW_H1_PORT}`);
+  expect(echoServers.h2Url).toBe(`https://localhost:${NARROW_H2_PORT}`);
+  expect(
+    await serviceWorker.evaluate(async () => {
+      const permissions = await chrome.permissions.getAll();
+      return permissions.origins ?? [];
+    }),
+  ).toEqual([NARROWED_ORIGIN]);
+
+  const doc = stateWithRules([
+    {
+      direction: "request",
+      operation: "set",
+      header: "x-headershim-probe",
+      value: "applied",
+      scope: { type: "domains", domains: ["localhost"] },
+      resourceTypes: ["pages"],
+      initiators: [],
+      enabled: true,
+    },
+  ]);
+  await seedState(serviceWorker, doc);
+  await expect
+    .poll(async () => (await getDynamicRules(serviceWorker))[0]?.condition)
+    .toMatchObject({
+      requestDomains: ["localhost"],
+      urlFilter: `|http://localhost:${NARROW_H1_PORT}/`,
+    });
+
+  const granted = await context.newPage();
+  await granted.goto(echoServers.h1Url);
+  expect((await readEcho(granted))["x-headershim-probe"]).toBe("applied");
+
+  const otherScheme = await context.newPage();
+  await otherScheme.goto(echoServers.h2Url);
+  expect((await readEcho(otherScheme))["x-headershim-probe"]).toBeUndefined();
 });
 
 test("response-header rules apply to HTTP-cached responses", {
