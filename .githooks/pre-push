@@ -1,2 +1,2 @@
 #!/bin/sh
-exec pnpm check
+exec pnpm verify

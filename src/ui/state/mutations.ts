@@ -327,10 +327,10 @@ export function createMutations({ validateRegex }: MutationDeps) {
       return commit((doc) => {
         const available = availableName(doc, name);
         if (!available.ok) return available;
-        // A new profile is added, never activated: switching is the switcher's
-        // job, so creating one never changes what is running. Its badge and
-        // colour, the two marks that tell one profile's rules from another's,
-        // are derived here from the name and the palette position.
+        // A new profile is added, never activated: this mutation leaves what is
+        // running alone, and each caller decides whether to switch to it. Its
+        // badge and colour, the two marks that tell one profile's rules from
+        // another's, are derived here from the name and the palette position.
         const profile = buildProfile({
           name: available.value,
           badgeText: deriveBadgeText(available.value, badges(doc)),

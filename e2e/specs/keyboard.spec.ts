@@ -9,6 +9,7 @@ import {
   stateWithRules,
   test,
 } from "../fixtures";
+import { pathologicalDoc } from "../fixtures/pathological";
 
 // The popup's real in-popup key bindings, driven through key events against the
 // built popup: the popup-wide `n` command and the editor's own key semantics
@@ -369,4 +370,59 @@ test("options rules can be created and edited from the keyboard", {
   await page.keyboard.press("Enter");
   await expect(editDialog).toBeHidden();
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("edited");
+});
+
+// Opening the rule editor and closing it, and switching profiles, must each
+// leave focus on a real element, never stranded on <body>, which would drop
+// keyboard and screen-reader users with no anchor (WCAG 2.4.3). The platform
+// only restores focus when it is inside a closing dialog, so app code owns this.
+// Driven under the pathological seed so a long value or profile name cannot
+// knock focus loose, and polled because focus settles a frame after a layer
+// unmounts. Host-access build with a web tab in front so the readout resolves a
+// host and both the editor and the switch are reachable.
+test("popup layer transitions never strand focus on the body", {
+  tag: "@host-access",
+}, async ({ context, echoServers, extensionId, serviceWorker }) => {
+  const host = new URL(echoServers.h1Url).hostname;
+  await seedStateAndWait(serviceWorker, pathologicalDoc(host));
+  const web = await context.newPage();
+  await web.goto(`${echoServers.h1Url}/focus`);
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await web.bringToFront();
+  await page.reload();
+
+  const focusOnBody = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return active === null || active === document.body;
+    });
+
+  // The rule editor is opened from the Add control and closed with Escape: focus
+  // enters the dialog, and on close it returns to the readout landmark rather
+  // than falling to the body (the editor is a full-surface swap that unmounts the
+  // opener, so the app, not the platform, has to place focus).
+  await page
+    .getByRole("button", { name: copy.readout.addChange })
+    .first()
+    .focus();
+  await page.keyboard.press("Enter");
+  const editor = page.getByRole("dialog");
+  await expect(editor).toBeVisible();
+  await expect.poll(focusOnBody).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeHidden();
+  await expect.poll(focusOnBody).toBe(false);
+
+  // Switching profiles from the picker lands focus on the switch trigger. Pick
+  // the first unselected row: a profile name can truncate in the picker, so it
+  // cannot be selected reliably by a name that may be cut.
+  await page
+    .getByRole("button", { name: copy.readout.switcher.chipLabel })
+    .click();
+  const picker = page.locator("#profile-switch-pop");
+  await expect(picker).toBeVisible();
+  await picker.locator(".pop-list .popt:not(.sel)").first().click();
+  await expect(picker).toBeHidden();
+  await expect.poll(focusOnBody).toBe(false);
 });

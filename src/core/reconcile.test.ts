@@ -46,7 +46,7 @@ describe("planReconcile", () => {
     expect(planReconcile(desired, actual)).toBeNull();
   });
 
-  it("converges when the echo reorders resourceTypes and requestDomains (C1-1)", () => {
+  it("converges when the echo reorders resourceTypes and requestDomains", () => {
     const desired: DnrRule[] = [
       {
         id: 3,
@@ -97,6 +97,20 @@ describe("planReconcile", () => {
       addRules: desired,
     });
     expect(plan?.addRules).toBe(desired);
+  });
+
+  it("removes an installed rule that omits resourceTypes", () => {
+    const installed: DnrRule = {
+      id: 999_999,
+      priority: 1,
+      action: { type: "modifyHeaders" },
+      condition: { urlFilter: "||stale.example/" },
+    };
+
+    expect(planReconcile([], [installed])).toEqual({
+      removeRuleIds: [999_999],
+      addRules: [],
+    });
   });
 
   it("treats a stable id change as drift", () => {

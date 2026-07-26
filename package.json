@@ -34,8 +34,10 @@
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
+    "check:test-classes": "node scripts/check-test-classes.mjs",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
+    "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
     "prepare": "git config core.hooksPath .githooks"
   },

@@ -45,7 +45,7 @@ interface DnrRuleCondition {
   initiatorDomains?: string[];
   urlFilter?: string;
   regexFilter?: string;
-  resourceTypes: DnrResourceType[];
+  resourceTypes?: DnrResourceType[];
   tabIds?: number[];
 }
 

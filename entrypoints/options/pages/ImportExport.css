@@ -22,7 +22,16 @@
   gap: var(--sp-3);
 }
 
+/* The picker sizes to its widest option, which is a profile name of any length,
+   so it is held to the row and long names truncate instead of pushing the page
+   wider than the window. */
+.ie-export-choice {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .ie-select {
+  max-width: 100%;
   min-height: 32px;
   padding: 6px var(--sp-3);
   background: var(--raise2);

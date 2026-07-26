@@ -72,7 +72,7 @@ describe("resource type expansion", () => {
   it("emits a multi-group subset in canonical DNR order, not UI-group order", () => {
     // xhr+scripts in UI order would be [xmlhttprequest, script]; the compiler
     // must emit DNR enum order so the reconcile round-trip compares equal to
-    // whatever order Chrome echoes back (C1-1).
+    // whatever order Chrome echoes back.
     expect(expandResourceTypes(["xhr", "scripts"])).toEqual([
       "script",
       "xmlhttprequest",

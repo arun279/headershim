@@ -40,8 +40,10 @@ test("the shipped build keeps an ungranted This-tab row out of the session band"
   const row = override(tabId, originHost);
 
   // Begin with a stale rule so zero can only be observed after reconcile has
-  // run. With the grant filter broken, the update atomically replaces this
-  // sentinel with the ungranted override and the poll never reaches zero.
+  // run. The sentinel deliberately omits optional resourceTypes, matching a
+  // legal browser-returned rule shape that normalization must tolerate. With
+  // the grant filter broken, reconcile replaces it with the ungranted override
+  // and the poll never reaches zero.
   await serviceWorker.evaluate(() =>
     chrome.declarativeNetRequest.updateSessionRules({
       addRules: [

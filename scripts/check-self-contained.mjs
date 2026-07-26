@@ -52,7 +52,7 @@ const RULES = [
   {
     name: "finding-id",
     pattern:
-      /\b(?:correctness-\d+(?:-\d+)?|SEC\d+(?:-\d+)?|SIMP\d+(?:-\d+)?|TEST\d+(?:-\d+)?|SF\d+(?:-\d+)?|a11y-design-\d+(?:-\d+)?|T\d{2})\b/g,
+      /\b(?:correctness-\d+(?:-\d+)?|SEC\d+(?:-\d+)?|SIMP\d+(?:-\d+)?|TEST\d+(?:-\d+)?|SF\d+(?:-\d+)?|a11y-design-\d+(?:-\d+)?|T\d{2}|C\d+-\d+)\b/g,
     hint: "references an internal task/finding id: describe the behavior instead",
   },
   {

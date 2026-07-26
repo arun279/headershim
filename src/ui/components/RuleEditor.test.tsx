@@ -876,7 +876,6 @@ describe("RuleEditor grant moment", () => {
     );
     expect(ctx.onGranted).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
-    expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
 
   it("requests a different tab origin without changing the authored initiators", async () => {

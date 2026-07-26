@@ -1,4 +1,3 @@
-import type { ComponentChildren } from "preact";
 import {
   useEffect,
   useId,
@@ -99,8 +98,6 @@ interface RuleEditorProps {
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
   modal?: boolean | undefined;
-  /** A standing disclosure the host keeps below the editor, within the dialog. */
-  note?: ComponentChildren;
   /** A parent-owned close request, such as choosing another options profile. */
   closeRequest?: number | undefined;
   /** The requested close was cancelled in the dirty-draft confirmation. */
@@ -312,7 +309,6 @@ export function RuleEditor(props: RuleEditorProps) {
       label={title}
       class="editor-sheet"
       modal={props.modal ?? true}
-      note={props.note}
       initialFocus={initialFocusRef}
       onKeyDown={onKeyDown}
       header={

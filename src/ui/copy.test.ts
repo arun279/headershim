@@ -244,22 +244,17 @@ describe("copy", () => {
     }
   });
 
-  // The popup note and the export hint are compressions of the same facts, too
-  // short to carry a whole sentence of the long form, so what is pinned is the
-  // clause each shares with it. The popup's clause about reach is deliberately
-  // the scope alone: a short note that overstates exposure is safe, one that
-  // understates it is not.
-  it("compresses the shared facts into the popup note and the export hint", () => {
+  // The About permissions card states the two facts that matter while a
+  // credential is in the clipboard, and the export hint carries the same
+  // credentials-file warning: the in-product disclosure lives where a user
+  // deciding whether to trust the extension reads it.
+  it("carries the shared data facts on the About card and the export hint", () => {
     const aboutStorage = permissionRow("storage");
     const aboutRulesEngine = permissionRow(
       "declarativeNetRequestWithHostAccess",
     );
 
-    expect(copy.readout.dataNote).toContain(
-      "stored on this device without encryption",
-    );
     expect(aboutStorage).toContain("stored on this device without encryption");
-    expect(copy.readout.dataNote).toContain("to every site it matches");
     expect(aboutRulesEngine).toContain("to every site it matches");
 
     expect(copy.options.importExport.secretsReminder).toContain(

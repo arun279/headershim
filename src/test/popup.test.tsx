@@ -12,7 +12,10 @@ import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
 // activeTabDomain is a spy: a tab with no web origin is its own popup state.
-vi.mock("../platform/tabs", () => ({
+// Only the active-tab reads are stubbed, so openAboutPage still runs for real
+// against the fake browser.
+vi.mock("../platform/tabs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../platform/tabs")>()),
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: vi.fn(() => Promise.resolve("api.example.com")),
   activeTabOrigin: () => Promise.resolve("https://api.example.com"),
@@ -100,7 +103,6 @@ async function mount(doc?: StateDoc, granted = false) {
     root,
     status: () => root.querySelector(".status") as HTMLElement,
     lines: () => [...root.querySelectorAll(".change-line")],
-    body: () => root.querySelector(".popup-body") as HTMLElement,
   };
 }
 
@@ -695,16 +697,17 @@ describe("popup readout", () => {
   });
 
   it("opens options from the footer gear", async () => {
-    const open = vi
-      .spyOn(fakeBrowser.runtime, "openOptionsPage")
-      .mockResolvedValue(undefined);
+    const open = vi.spyOn(fakeBrowser.tabs, "create");
     const { root } = await mount(createV1Seed(), true);
     fire(() =>
       (
         root.querySelector('.foot [aria-label="Options"]') as HTMLButtonElement
       ).click(),
     );
-    expect(open).toHaveBeenCalledOnce();
+    await settle();
+    expect(open).toHaveBeenCalledExactlyOnceWith({
+      url: fakeBrowser.runtime.getURL("/options.html#about"),
+    });
   });
 });
 
@@ -859,7 +862,7 @@ describe("popup profile switch", () => {
 
     const stored = await read();
     expect(stored.profiles).toHaveLength(2);
-    expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
+    expect(stored.activeProfileId).toBe(stored.profiles[1]?.id);
     expect(stored.profiles[1]?.name).toBe("QA headers");
     expect(root.querySelector(".pop")).not.toBeNull();
     expect(document.activeElement).toBe(
@@ -941,11 +944,12 @@ describe("popup profile switch", () => {
     await settle();
 
     const current = root.querySelector('[aria-current="true"]');
-    expect((await read()).profiles).toHaveLength(2);
+    const updated = await read();
+    expect(updated.profiles).toHaveLength(2);
     expect(root.querySelector(".profile-name-input")).toBeNull();
-    // Creating never switches: the active profile is still the seeded one.
+    expect(updated.activeProfileId).toBe(updated.profiles[1]?.id);
     expect(current?.querySelector(".nm")?.textContent).toBe(
-      stored.profiles[0]?.name,
+      updated.profiles[1]?.name,
     );
     expect(document.activeElement).toBe(current);
   });
@@ -1010,30 +1014,6 @@ describe("popup authoring entry points", () => {
     await settle();
     expect(root.querySelector(".rule-editor")).not.toBeNull();
     expect(root.querySelector(".pausebar")).not.toBeNull();
-  });
-
-  // The note is the product's own disclosure of where a typed value goes, so it
-  // has to survive the surface swap into the editor, which is the surface where
-  // the value is being typed. There it has to be inside the sheet: the sheet is
-  // aria-modal, and a note outside it is on screen but out of the accessibility
-  // tree. It also stays out of the scrolling body, and stays last within its
-  // surface, so it reads as the final word on the readout.
-  it("keeps the data note last on the readout and inside the editor's dialog", async () => {
-    const { root, body } = await mount(seededDoc([rule()]), true);
-    const popup = () => root.querySelector(".popup") as HTMLElement;
-    expect(root.querySelector(".popup > .datanote")).toBe(
-      popup().lastElementChild,
-    );
-    expect(body().querySelector(".datanote")).toBeNull();
-
-    press(popup(), "n");
-    await settle();
-    const dialog = root.querySelector(
-      '.editor-sheet[role="dialog"][aria-modal="true"]',
-    ) as HTMLElement;
-    expect(dialog).not.toBeNull();
-    expect(dialog.lastElementChild?.className).toBe("datanote");
-    expect(dialog.querySelector(".sheet-region .datanote")).toBeNull();
   });
 
   // The whole point of the created toast is that a duplicate does not pass off

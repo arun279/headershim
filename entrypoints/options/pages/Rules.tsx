@@ -5,7 +5,6 @@ import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
-import { DataNote } from "../../../src/ui/components/DataNote";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
 import { changeVerb } from "../../../src/ui/components/readout/changeVerb";
 import {
@@ -166,7 +165,6 @@ export function RulesPage({
             rule={editingRule}
             grants={grants}
             modal={false}
-            note={<DataNote />}
             onSave={(ruleId, draft, profileId) =>
               save(ruleId, draft, profileId, editProfile.id)
             }

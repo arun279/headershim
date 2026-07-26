@@ -19,10 +19,10 @@ Open `chrome://extensions`, turn on Developer mode, choose "Load unpacked", and 
 pnpm install
 pnpm dev
 pnpm build
-pnpm check
+pnpm verify
 ```
 
-`pnpm install` configures git hooks: staged files are linted on commit, and the full check suite runs before every push. `pnpm check` runs the same suite on demand.
+`pnpm install` configures git hooks: staged files are linted on commit, and the full verification gate runs before every push. `pnpm verify` runs the same gate on demand.
 
 ## License
 

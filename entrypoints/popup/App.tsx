@@ -12,10 +12,13 @@ import { CURRENT } from "../../src/core/schema";
 import { originPatternForDomain } from "../../src/core/scope";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
-import { activeTabDomain, activeTabOrigin } from "../../src/platform/tabs";
+import {
+  activeTabDomain,
+  activeTabOrigin,
+  openAboutPage,
+} from "../../src/platform/tabs";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
-import { DataNote } from "../../src/ui/components/DataNote";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { RuleEditor } from "../../src/ui/components/RuleEditor";
@@ -194,6 +197,10 @@ function Ready({
       reportBlockedCommit(outcome.error);
       return undefined;
     }
+    // The profile exists either way, so its id is the result even if the switch
+    // does not land: the caller still needs it to open inline rename.
+    const activated = await mutations.activateProfile(outcome.value.id);
+    if (!activated.ok) reportBlockedCommit(activated.error);
     return outcome.value.id;
   };
 
@@ -363,6 +370,20 @@ function Ready({
     }
   }, [addingTo, addingProfile]);
 
+  // The editor is a full-surface swap that unmounts whatever held focus, so the
+  // dialog's own restore would land on <body> once it closes. Return focus to
+  // the readout landmark instead, so it is never stranded (WCAG 2.4.3).
+  const readoutRef = useRef<HTMLElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (editing) {
+      wasEditing.current = true;
+    } else if (wasEditing.current) {
+      wasEditing.current = false;
+      readoutRef.current?.focus();
+    }
+  }, [editing]);
+
   if (addingProfile !== undefined) {
     return (
       <main class="popup" tabIndex={-1}>
@@ -393,7 +414,6 @@ function Ready({
             )
           }
           onClose={() => setAddingTo(undefined)}
-          note={<DataNote />}
         />
         <ToastHost toast={toast} onDismiss={dismiss} />
       </main>
@@ -412,7 +432,7 @@ function Ready({
 
   return (
     // tabIndex -1 lets a removed section land focus on the landmark, not <body>.
-    <main class="popup" tabIndex={-1}>
+    <main class="popup" tabIndex={-1} ref={readoutRef}>
       <ReadoutHead
         readout={readout}
         hasRows={hasRows}
@@ -496,7 +516,7 @@ function Ready({
         <Button
           kind="ghost"
           label={copy.actions.options}
-          onClick={() => void browser.runtime.openOptionsPage()}
+          onClick={() => void openAboutPage()}
         >
           <GearGlyph />
         </Button>
@@ -507,7 +527,6 @@ function Ready({
         />
       </footer>
       <ToastHost toast={toast} onDismiss={dismiss} />
-      <DataNote />
     </main>
   );
 }

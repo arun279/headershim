@@ -27,7 +27,7 @@ export function normalize(rules: DnrRule[]): DnrRule[] {
       ...(rule.condition.requestDomains === undefined
         ? {}
         : { requestDomains: [...rule.condition.requestDomains].sort() }),
-      resourceTypes: [...rule.condition.resourceTypes].sort(),
+      resourceTypes: [...(rule.condition.resourceTypes ?? [])].sort(),
       ...(rule.condition.tabIds === undefined
         ? {}
         : { tabIds: [...rule.condition.tabIds].sort((a, b) => a - b) }),

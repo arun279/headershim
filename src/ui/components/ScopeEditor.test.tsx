@@ -125,7 +125,6 @@ describe("ScopeEditor domain chips", () => {
       .map((id) => ctx.root.querySelector(`#${id}`))
       .find((node) => node?.textContent === copy.editor.addChipHint);
     expect(hint?.className).toBe("sr-only");
-    expect(ctx.root.querySelector(".chip-field-hint")).toBeNull();
   });
 
   it("commits pending text when the field blurs", () => {

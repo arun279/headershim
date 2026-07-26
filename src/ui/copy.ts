@@ -260,18 +260,6 @@ export const copy = {
     // dropped element.
     noSite: "No site",
     seeAllRules: "See all rules",
-    // The standing data note: one sentence, because it stands under every
-    // readout and every editor, and a disclosure that costs four lines of a
-    // 600px popup is a disclosure people learn to look past. It carries the two
-    // facts that matter while a credential is in the clipboard: where the value
-    // comes to rest, and that turning the rule on is what sends it out. Both
-    // hold wherever a value can be read or typed, including a chrome:// page
-    // with no site to read. Reach is stated as the scope alone, without the
-    // grant that narrows it, so the short form overstates exposure rather than
-    // understating it; the exact statement, scope and grant together, is the
-    // About page, also in the product.
-    dataNote:
-      "The values you type are stored on this device without encryption, and a request rule sends them to every site it matches.",
     thisTabTag: "This tab only",
     thisTabClears: "clears when you close the tab",
     needsAccessReason: (temporary: boolean) =>

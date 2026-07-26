@@ -62,7 +62,9 @@ export function TokenHero({
               {masked.scheme !== undefined && (
                 <span class="pre">{masked.scheme}</span>
               )}
-              <span class="dots">••••••••</span>
+              <span class="dots" data-decorative>
+                ••••••••
+              </span>
               {masked.hasTail && <span class="last">{masked.last4}</span>}
             </div>
           )}

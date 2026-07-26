@@ -141,10 +141,13 @@ test("an export round-trips through the options UI to an equivalent state, off",
 
     await page.locator('input[type="file"]').setInputFiles(exportFile);
 
-    const summary = page.locator(".import-summary");
+    const summary = page.getByRole("region", {
+      name: strings.summaryHeading,
+    });
     await expect(summary).toBeVisible();
-    await expect(summary.locator(".import-counts")).toContainText("2");
-    await expect(summary.locator(".import-counts")).toContainText("3");
+    await expect(
+      summary.getByRole("list").first().getByRole("listitem"),
+    ).toHaveText(["Staging", "Local"]);
 
     await summary
       .getByRole("button", { name: strings.import, exact: true })
