@@ -33,6 +33,10 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Names every test browser's profile directory, which is also how a spec picks
+// this suite's browsers out of the process table.
+export const PROFILE_PREFIX = "headershim-e2e-";
+
 interface ExtensionBuildOptions {
   extensionBuild: "host-access" | "narrow-host-access" | "shipped";
 }
@@ -61,7 +65,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
 
   context: async ({ extensionBuild }, use) => {
-    const userDataDir = await mkdtemp(path.join(tmpdir(), "headershim-e2e-"));
+    const userDataDir = await mkdtemp(path.join(tmpdir(), PROFILE_PREFIX));
     const { HEADED } = process.env;
     const extensionPath = path.join(
       root,
@@ -82,6 +86,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         `--load-extension=${extensionPath}`,
         // The h2 echo server presents a throwaway self-signed cert.
         "--ignore-certificate-errors",
+        // This moves the GPU service into the browser process rather than
+        // changing what it does, so nothing a spec renders is affected and the
+        // browser each test launches costs one process less.
+        "--in-process-gpu",
       ],
     });
     await use(context);

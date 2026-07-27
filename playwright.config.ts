@@ -8,15 +8,22 @@ const hostAccessTag = /@host-access/;
 const narrowHostAccessTag = /@narrow-host-access/;
 
 // A loaded extension only works in a persistent context, so the fixtures give
-// each test a fresh profile directory and each worker its own echo servers, and
-// the run takes the default worker count. The narrow-host-access project is the
-// one place two workers would want the same resource, and it caps itself below.
+// each test a fresh profile directory and each worker its own echo servers. The
+// narrow-host-access project is the one place two workers would want the same
+// resource, and it caps itself below.
 // Locally retries stay off so a genuine header-modification defect surfaces
 // immediately; CI gets a modest backstop for the inherently eventual browser
 // operations (DNR propagation, focus/render) that only misbehave under load, on
 // top of the per-condition polling the specs already do.
 export default defineConfig<ExtensionBuildOptions>({
   testDir: "./e2e/specs",
+  // Each test launches its own browser, so the worker count sets how much
+  // machine the suite needs. Two cuts the wall clock by about a third against
+  // one, peaking at 18 browser processes with free memory never sampled below
+  // 86 percent on an 8 core 16 GB host. Playwright's default is half the
+  // logical cores, four there, and four exhausts that host: context setup and
+  // teardown time out across several specs.
+  workers: 2,
   // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
   retries: process.env["CI"] ? 2 : 0,
   reporter: [["list"]],

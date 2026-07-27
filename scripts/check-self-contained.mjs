@@ -3,10 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // Guards against committed code/docs/tests referencing material that isn't in
-// this repo: private planning-doc citations, internal task/finding ids, and
-// process framing (checklists, review rounds, handoffs) a reader with only
-// the repo has no way to resolve. See README/e2e/README.md for the
-// reader-facing alternative each of these was rewritten into.
+// this repo: private planning-doc citations, internal task/finding ids,
+// process framing (checklists, review rounds, handoffs), and substitution
+// slots left unfilled, all of which a reader with only the repo has no way to
+// resolve. See README/e2e/README.md for the reader-facing alternative each of
+// these was rewritten into.
 
 const root = path.resolve(import.meta.dirname, "..");
 const SELF_PATH = "scripts/check-self-contained.mjs";
@@ -43,6 +44,14 @@ const RULES = [
     name: "private-doc-citation",
     pattern: /\b(?:SPEC|DESIGN|ARCHITECTURE)\b/g,
     hint: "cites a private planning document: inline the actual constraint instead",
+  },
+  {
+    // A comment line that is nothing but a screaming-snake token is a slot an
+    // edit was supposed to substitute into and didn't, so the line names
+    // something only the generator knew and says nothing to the reader.
+    name: "placeholder-token",
+    pattern: /(?<=^\s*\/\/\s*)[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?=\s*$)/g,
+    hint: "is a placeholder token, not a comment: write the sentence it stood in for",
   },
   {
     name: "section-symbol",
