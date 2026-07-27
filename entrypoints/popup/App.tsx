@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import { browser } from "wxt/browser";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
@@ -354,7 +360,10 @@ function Ready({
         togglePause: () => run(mutations.setPaused(!paused)),
         closePopup: () => window.close(),
       });
-  useEffect(() => {
+  // Bound in the commit that paints this view, not after it. A passive effect
+  // leaves a frame in which the popup is on screen with its commands dead, and
+  // a key struck in that frame is dropped with nothing to tell the user why.
+  useLayoutEffect(() => {
     const listener = (event: KeyboardEvent) => handlerRef.current(event);
     document.addEventListener("keydown", listener);
     return () => document.removeEventListener("keydown", listener);

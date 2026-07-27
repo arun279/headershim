@@ -1,9 +1,10 @@
-import type { Locator, Page, Worker } from "@playwright/test";
+import type { Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
 import {
   expect,
+  openPopup,
   seedState,
   seedStateAndWait,
   stateWithRules,
@@ -18,39 +19,6 @@ import { pathologicalDoc } from "../fixtures/pathological";
 // (Alt+Shift+…) are the browser's own shortcut manager dispatching
 // chrome.commands and cannot be synthesized by Playwright or CDP; their
 // application-side command handlers run in src/test/background.test.ts.
-
-async function openPopup(
-  page: Page,
-  extensionId: string,
-  serviceWorker: Worker,
-  doc: StateDoc,
-): Promise<void> {
-  await seedState(serviceWorker, doc);
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  // The profile switcher is the head landmark the Ready view always draws, so
-  // its presence is the stable signal that the popup has rendered.
-  await expect(
-    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
-  ).toBeVisible();
-}
-
-// The popup's keydown listener attaches in a post-paint effect, so a shortcut
-// pressed the instant the head lands can fall in the gap before it is live and
-// be dropped. Re-press until the layer it opens is on screen. Each attempt first
-// checks whether the layer is already up, so a press that landed just after the
-// inner timeout is never followed by a stray keypress into the layer's focused
-// field; the whole retry stays inside the configured expect timeout.
-async function pressUntilVisible(
-  page: Page,
-  key: string,
-  layer: Locator,
-): Promise<void> {
-  await expect(async () => {
-    if (await layer.isVisible()) return;
-    await page.keyboard.press(key);
-    await expect(layer).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10_000 });
-}
 
 function firstRuleValue(serviceWorker: Worker): Promise<string | undefined> {
   return serviceWorker.evaluate(async () => {
@@ -78,11 +46,10 @@ test("the new-rule shortcut opens the editor", async ({
 }) => {
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
-  await pressUntilVisible(
-    page,
-    "n",
+  await page.keyboard.press("n");
+  await expect(
     page.getByRole("dialog", { name: copy.editor.heading("new", "Default") }),
-  );
+  ).toBeVisible();
 });
 
 // The `t` command opens the This-tab composer. The redesigned composer authors
@@ -104,11 +71,10 @@ test("the this-tab shortcut opens the composer", {
   await expect(
     page.getByRole("button", { name: copy.readout.justThisTab }),
   ).toBeVisible();
-  await pressUntilVisible(
-    page,
-    "t",
+  await page.keyboard.press("t");
+  await expect(
     page.getByRole("region", { name: copy.readout.newChange }),
-  );
+  ).toBeVisible();
 });
 
 // The editor key semantics run on the static host-access build so the seeded
@@ -127,7 +93,8 @@ test("plain Enter stays in a field while the commit chord saves", {
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
 
   await editor
     .getByRole("combobox", { name: copy.editor.labels.headerName })
@@ -180,7 +147,8 @@ test("Esc on a clean draft closes without committing", async ({
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(editor).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBeUndefined();
@@ -199,7 +167,8 @@ test("Esc on a dirty draft guards, then a bare Esc closes the popup", async ({
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
   await editor
     .getByRole("textbox", { name: copy.editor.labels.value })
     .fill("dirty-draft");

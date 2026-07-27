@@ -6,6 +6,7 @@ import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
 import {
+  atPaint,
   fire,
   pasteInto,
   press,
@@ -363,6 +364,28 @@ describe("RuleEditor commit model", () => {
     discardDirtyDraft(ctx);
     expect(ctx.onSave).not.toHaveBeenCalled();
     expect(ctx.onClose).toHaveBeenCalledOnce();
+  });
+
+  // Preact diffs the actions row by index, so the Cancel that raises the guard
+  // and the Discard that replaces it are one DOM node, and a pointer Cancel
+  // leaves focus sitting on it. Placing focus in the commit that paints the
+  // guard is what stops an Enter struck straight after from answering the
+  // question with the one outcome that cannot be taken back.
+  it("focuses Keep editing in the commit that paints the guard", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    const cancel = ctx.root.querySelector(
+      ".editor-cancel",
+    ) as HTMLButtonElement;
+    cancel.focus();
+    const focused = atPaint(
+      () => ctx.root.querySelector(".discard-title") !== null,
+      () => document.activeElement?.textContent,
+    );
+
+    cancel.click();
+    expect(await focused).toBe(copy.editor.discardConfirm.keepEditing);
+    expect(cancel.textContent).toBe(copy.editor.discardConfirm.discard);
   });
 
   it("Esc during an in-flight save waits for the outcome instead of pretending to revert", async () => {

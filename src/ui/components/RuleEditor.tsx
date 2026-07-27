@@ -236,7 +236,10 @@ export function RuleEditor(props: RuleEditorProps) {
     requestClose();
   }, [props.closeRequest]);
 
-  useEffect(() => {
+  // Placed in the commit that paints the guard, not after it: the guard asks a
+  // question, and a key struck before focus lands answers it with whichever
+  // control the browser was left on rather than with the safe default.
+  useLayoutEffect(() => {
     if (confirmDiscard) {
       keepEditingRef.current?.focus();
     }

@@ -120,6 +120,11 @@ async function reachable(page: Page): Promise<void> {
 }
 
 async function measure(page: Page, theme: Theme, label: string): Promise<void> {
+  // Chromium throttles requestAnimationFrame in a background tab, and both the
+  // settle below and every trial click wait on frames, so a measurement costs a
+  // throttled frame per control. The real popup is drawn over the foreground
+  // tab, never behind one, so the front is also the faithful place to measure.
+  await page.bringToFront();
   await settle(page, theme);
   await test.step(label, async () => {
     await sweep(page, label);

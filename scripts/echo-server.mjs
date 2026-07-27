@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { createSecureServer } from "node:http2";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { NARROW_H1_PORT, NARROW_H2_PORT } from "../e2e/echo-ports.mjs";
+import { NARROW_H1_PORT } from "../e2e/echo-ports.mjs";
 
 // Two header-echo servers for the e2e harness: HTTP/1.1 in the clear and
 // HTTP/2 over a throwaway self-signed cert. Every request is answered with an
@@ -175,7 +175,7 @@ export async function startEchoServers({
 if (import.meta.url === `file://${process.argv[1]}`) {
   const literalPorts = process.env.HEADERSHIM_LITERAL_GRANT_PORTS === "1";
   const servers = await startEchoServers(
-    literalPorts ? { h1Port: NARROW_H1_PORT, h2Port: NARROW_H2_PORT } : {},
+    literalPorts ? { h1Port: NARROW_H1_PORT } : {},
   );
   process.stdout.write(
     `${JSON.stringify({ h1CrossUrl: servers.h1CrossUrl, h1Url: servers.h1Url, h2Url: servers.h2Url })}\n`,

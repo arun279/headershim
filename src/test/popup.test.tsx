@@ -8,7 +8,15 @@ import { createV1Seed } from "../core/schema";
 import { setReconcileError } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
-import { fire, press, render, settle, typeInto } from "../ui/test/render";
+import {
+  atPaint,
+  fire,
+  paint,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../ui/test/render";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
 // activeTabDomain is a spy: a tab with no web origin is its own popup state.
@@ -1095,5 +1103,28 @@ describe("popup lifecycle", () => {
       true,
     );
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  // The popup opens under a keystroke and users keep typing into it, so a key
+  // struck the instant the readout lands has to be heard rather than dropped
+  // with nothing to say why. The switcher chip is the head control the readout
+  // always draws, and the run that paints it is the run that binds the commands.
+  it("hears a command key struck the instant the readout head lands", async () => {
+    await write(seededDoc([rule()]));
+    const heard = atPaint(
+      () => document.querySelector(".prof") !== null,
+      () => {
+        const event = new KeyboardEvent("keydown", {
+          key: "n",
+          bubbles: true,
+          cancelable: true,
+        });
+        document.body.dispatchEvent(event);
+        return event.defaultPrevented;
+      },
+    );
+
+    paint(<App />);
+    expect(await heard).toBe(true);
   });
 });

@@ -1,9 +1,5 @@
 import { siteAccessCopy } from "../../src/ui/copy";
-import {
-  NARROW_H1_PORT,
-  NARROW_H2_PORT,
-  NARROWED_ORIGIN,
-} from "../echo-ports.mjs";
+import { NARROW_H1_PORT, NARROWED_ORIGIN } from "../echo-ports.mjs";
 import {
   expect,
   fetchEcho,
@@ -75,7 +71,6 @@ test("a browser-stored narrowed grant reaches DNR and acts only on its granted s
   tag: "@narrow-host-access",
 }, async ({ context, echoServers, serviceWorker }) => {
   expect(echoServers.h1Url).toBe(`http://localhost:${NARROW_H1_PORT}`);
-  expect(echoServers.h2Url).toBe(`https://localhost:${NARROW_H2_PORT}`);
   expect(
     await serviceWorker.evaluate(async () => {
       const permissions = await chrome.permissions.getAll();

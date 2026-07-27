@@ -24,6 +24,7 @@ import {
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
 import { createV1Seed } from "../src/core/schema";
+import { copy } from "../src/ui/copy";
 import {
   type EchoServers,
   spawnEchoServers,
@@ -103,7 +104,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 export { expect };
 
-interface SessionSeed {
+export interface SessionSeed {
   nextNum: number;
   tabs: { [tabId: number]: TabOverride[] };
 }
@@ -209,6 +210,23 @@ export function seedState(worker: Worker, doc: StateDoc): Promise<void> {
       ),
     doc,
   );
+}
+
+// Seeds the document the popup will read, opens it, and waits for the Ready
+// view. The profile-switcher chip is the head control that view always draws,
+// and the view binds the popup's key commands in the commit that paints it, so
+// the chip on screen is the signal a synthetic keypress will be heard.
+export async function openPopup(
+  page: Page,
+  extensionId: string,
+  worker: Worker,
+  doc: StateDoc,
+): Promise<void> {
+  await seedState(worker, doc);
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(
+    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
+  ).toBeVisible();
 }
 
 export async function seedStateAndWait(

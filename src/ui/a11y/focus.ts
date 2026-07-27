@@ -1,5 +1,5 @@
 import type { RefObject } from "preact";
-import { useEffect } from "preact/hooks";
+import { useLayoutEffect } from "preact/hooks";
 
 const FOCUSABLE = [
   "a[href]",
@@ -50,6 +50,11 @@ interface FocusTrapOptions {
  * previously focused element on deactivation. Modal callers can additionally
  * confine Tab/Shift+Tab to the container; inline modes keep normal page Tab
  * order while retaining the same enter/restore focus lifecycle.
+ *
+ * Focus lands in the commit that paints the container, not after it. The
+ * container's own key handlers only see keys aimed inside it, so a passive
+ * effect would leave a frame where the layer is on screen and every key struck
+ * at it, Escape included, goes to whatever the container replaced.
  */
 export function useFocusTrap(
   containerRef: RefObject<HTMLElement | null>,
@@ -60,7 +65,7 @@ export function useFocusTrap(
     trapFocus = true,
   }: FocusTrapOptions = {},
 ): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!active || container === null) return;
 
