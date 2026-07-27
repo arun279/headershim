@@ -16,44 +16,107 @@ import {
   MAX_SESSION_OVERRIDES,
 } from "./limits";
 import type { HeaderOp, Rule, StateDoc, TabOverride } from "./model";
+import { normalize } from "./reconcile";
 import {
   type DnrResourceType,
   expandResourceTypes,
   isDomainSupported,
   isRegexFilterSupported,
+  originPatternForDomain,
   scopeCondition,
   validateUrlFilter,
 } from "./scope";
+import {
+  type AbsentReason,
+  type Batch,
+  type Entry,
+  overrideKey,
+  type PlacedRef,
+  type Placement,
+  type RuleKey,
+  ruleKey,
+  type Standing,
+  type UncompilableReason,
+} from "./verdict";
+
+export type { UncompilableReason } from "./verdict";
 
 export const DYNAMIC_PRIORITY_TOP = 5_000;
 export const SESSION_PRIORITY_TOP = 10_000;
 
 interface DnrHeaderModification {
-  header: string;
-  operation: HeaderOp;
-  value?: string;
+  readonly header: string;
+  readonly operation: HeaderOp;
+  readonly value?: string;
 }
 
 interface DnrRuleAction {
-  type: "modifyHeaders";
-  requestHeaders?: DnrHeaderModification[];
-  responseHeaders?: DnrHeaderModification[];
+  readonly type: "modifyHeaders";
+  readonly requestHeaders?: DnrHeaderModification[];
+  readonly responseHeaders?: DnrHeaderModification[];
 }
 
 interface DnrRuleCondition {
-  requestDomains?: string[];
-  initiatorDomains?: string[];
-  urlFilter?: string;
-  regexFilter?: string;
-  resourceTypes?: DnrResourceType[];
-  tabIds?: number[];
+  readonly requestDomains?: string[];
+  readonly initiatorDomains?: string[];
+  readonly urlFilter?: string;
+  readonly regexFilter?: string;
+  readonly resourceTypes?: DnrResourceType[];
+  readonly tabIds?: number[];
 }
 
 export interface DnrRule {
-  id: number;
-  priority: number;
-  action: DnrRuleAction;
-  condition: DnrRuleCondition;
+  readonly id: number;
+  readonly priority: number;
+  readonly action: DnrRuleAction;
+  readonly condition: DnrRuleCondition;
+}
+
+export interface ReadonlyDnrRuleCondition {
+  readonly requestDomains?: readonly string[];
+  readonly initiatorDomains?: readonly string[];
+  readonly urlFilter?: string;
+  readonly regexFilter?: string;
+  readonly resourceTypes?: readonly DnrResourceType[];
+  readonly tabIds?: readonly number[];
+}
+
+interface ReadonlyDnrRuleAction {
+  readonly type: "modifyHeaders";
+  readonly requestHeaders?: readonly DnrHeaderModification[];
+  readonly responseHeaders?: readonly DnrHeaderModification[];
+}
+
+export interface ReadonlyDnrRule {
+  readonly id: number;
+  readonly priority: number;
+  readonly action: ReadonlyDnrRuleAction;
+  readonly condition: ReadonlyDnrRuleCondition;
+}
+
+export interface CompileInput {
+  readonly doc: StateDoc;
+  readonly overrides: readonly TabOverride[];
+  readonly granted: GrantSnapshot;
+  readonly isRegexSupported: (regex: string) => boolean;
+}
+
+export function installedRevisionOf(
+  dynamic: readonly DnrRule[],
+  session: readonly DnrRule[],
+): string {
+  const text = [
+    ...normalize([...dynamic]).map((rule) => `dynamic:${JSON.stringify(rule)}`),
+    ...normalize([...session]).map((rule) => `session:${JSON.stringify(rule)}`),
+  ]
+    .sort()
+    .join("\n");
+  const bytes = new TextEncoder().encode(text);
+  let hash = 0x811c9dc5;
+  for (const byte of bytes) {
+    hash = Math.imul(hash ^ byte, 0x01000193);
+  }
+  return `${(hash >>> 0).toString(16).padStart(8, "0")}:${bytes.length}:${dynamic.length + session.length}`;
 }
 
 /**
@@ -100,27 +163,11 @@ export function dropInapplicable(
               if (!rule.enabled) {
                 return [rule];
               }
-              return narrowToGranted(rule, granted).flatMap(
-                (narrowed, index) => {
-                  if (
-                    uncompilableReason(narrowed.rule, isRegexSupported) !==
-                      undefined ||
-                    (narrowed.targetSecured
-                      ? !initiatorsGranted(narrowed.rule, granted)
-                      : missingGrants(narrowed.rule, granted).length !== 0)
-                  ) {
-                    return [];
-                  }
-                  if (index === 0) {
-                    return [narrowed.rule];
-                  }
-                  return [
-                    {
-                      ...narrowed.rule,
-                      num: nextSyntheticNum++,
-                    },
-                  ];
-                },
+              return applicableNarrowings(rule, granted, isRegexSupported).map(
+                ({ narrowed, sourceIndex }) =>
+                  sourceIndex === 0
+                    ? narrowed.rule
+                    : { ...narrowed.rule, num: nextSyntheticNum++ },
               );
             }),
           }
@@ -138,6 +185,11 @@ interface NarrowedRule {
   readonly rule: Rule;
   /** The target is constrained to an exact narrowed grant by the condition. */
   readonly targetSecured: boolean;
+}
+
+interface ApplicableNarrowing {
+  readonly narrowed: NarrowedRule;
+  readonly sourceIndex: number;
 }
 
 // Narrow every scope that carries requestDomains. Pattern and regex scopes keep
@@ -208,13 +260,20 @@ function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
   );
 }
 
-export type UncompilableReason =
-  | "header"
-  | "append"
-  | "value"
-  | "pattern"
-  | "regex"
-  | "domains";
+function applicableNarrowings(
+  rule: Rule,
+  granted: GrantSnapshot,
+  isRegexSupported: (regex: string) => boolean,
+): ApplicableNarrowing[] {
+  return narrowToGranted(rule, granted).flatMap((narrowed, sourceIndex) =>
+    uncompilableReason(narrowed.rule, isRegexSupported) === undefined &&
+    (narrowed.targetSecured
+      ? initiatorsGranted(narrowed.rule, granted)
+      : missingGrants(narrowed.rule, granted).length === 0)
+      ? [{ narrowed, sourceIndex }]
+      : [],
+  );
+}
 
 /**
  * Why Chrome would refuse this rule, or undefined when it will run it. This is
@@ -278,36 +337,6 @@ export function uncompilableReason(
   }
 }
 
-export function compileDynamic(state: StateDoc): DnrRule[] {
-  const enabledRules =
-    state.profiles
-      .find((profile) => profile.id === state.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled) ?? [];
-  if (enabledRules.length > MAX_DYNAMIC_RULES) {
-    throw new RangeError(
-      `Cannot compile ${enabledRules.length} dynamic rules; the limit is ${MAX_DYNAMIC_RULES}`,
-    );
-  }
-  const regexCount = enabledRules.filter(
-    (rule) => rule.scope.type === "regex",
-  ).length;
-  if (regexCount > MAX_REGEX_RULES) {
-    throw new RangeError(
-      `Cannot compile ${regexCount} regex rules; the limit is ${MAX_REGEX_RULES}`,
-    );
-  }
-  if (state.settings.paused) {
-    return [];
-  }
-
-  return enabledRules.map((rule, index) => ({
-    id: rule.num,
-    priority: DYNAMIC_PRIORITY_TOP - index,
-    action: headerAction(rule),
-    condition: compileRuleCondition(rule),
-  }));
-}
-
 function compileRuleCondition(rule: Rule): DnrRuleCondition {
   return {
     ...scopeCondition(rule.scope),
@@ -327,47 +356,241 @@ export function settlesPerRequest(rule: Rule): boolean {
   );
 }
 
+interface DynamicCandidate {
+  readonly key: RuleKey;
+  readonly narrowed: boolean;
+  readonly rule: Rule;
+}
+
+interface SessionNarrowing {
+  readonly override: TabOverride;
+  readonly urlFilter: string | undefined;
+}
+
+interface SessionCandidate extends SessionNarrowing {
+  readonly key: RuleKey;
+}
+
+interface KeyedRule {
+  readonly key: RuleKey;
+  readonly rule: Rule;
+}
+
+interface KeyedOverride {
+  readonly key: RuleKey;
+  readonly override: TabOverride;
+}
+
+function keyRules(profileId: string, rules: readonly Rule[]): KeyedRule[] {
+  const occurrences = new Map<string, number>();
+  return rules.map((rule) => {
+    const occurrence = occurrences.get(rule.id) ?? 0;
+    occurrences.set(rule.id, occurrence + 1);
+    return { key: ruleKey(profileId, rule.id, occurrence), rule };
+  });
+}
+
+function keyOverrides(overrides: readonly TabOverride[]): KeyedOverride[] {
+  const occurrences = new Map<number, number>();
+  return overrides.map((override) => {
+    const occurrence = occurrences.get(override.num) ?? 0;
+    occurrences.set(override.num, occurrence + 1);
+    return { key: overrideKey(override.num, occurrence), override };
+  });
+}
+
+export function compile(input: CompileInput): Batch {
+  const { doc, granted, isRegexSupported, overrides } = input;
+  const dynamicCandidates = collectDynamicCandidates(
+    doc,
+    granted,
+    isRegexSupported,
+  );
+  const dynamicLimits = new Map<RuleKey, "dynamic" | "regex">();
+  const dynamicOverflow = dynamicCandidates.length > MAX_DYNAMIC_RULES;
+  const regexOverflow =
+    dynamicCandidates.filter(
+      (candidate) => candidate.rule.scope.type === "regex",
+    ).length > MAX_REGEX_RULES;
+  const eligibleDynamic = dynamicCandidates.filter((candidate) => {
+    if (dynamicOverflow) {
+      dynamicLimits.set(candidate.key, "dynamic");
+      return false;
+    }
+    if (regexOverflow && candidate.rule.scope.type === "regex") {
+      dynamicLimits.set(candidate.key, "regex");
+      return false;
+    }
+    return true;
+  });
+  const compiledDynamic = eligibleDynamic.map((candidate, index) => ({
+    id: candidate.rule.num,
+    priority: DYNAMIC_PRIORITY_TOP - index,
+    action: headerAction(candidate.rule),
+    condition: compileRuleCondition(candidate.rule),
+  }));
+
+  const keyedOverrides = keyOverrides(overrides);
+  const sessionCandidates = collectSessionCandidates(keyedOverrides, granted);
+  const sessionOverflow = sessionCandidates.length > MAX_SESSION_OVERRIDES;
+  const compiledSession = sessionOverflow
+    ? []
+    : compileSessionCandidates(sessionCandidates, overrides);
+  const placements = collectPlacements(
+    eligibleDynamic,
+    compiledDynamic,
+    sessionOverflow ? [] : sessionCandidates,
+    compiledSession,
+  );
+  const entries = [
+    ...doc.profiles.flatMap((profile) => {
+      return keyRules(profile.id, profile.rules).map(({ key, rule }) =>
+        storedEntry(
+          key,
+          profile.id,
+          profile.name,
+          doc.activeProfileId,
+          rule,
+          granted,
+          isRegexSupported,
+          placements.get(key) ?? [],
+          dynamicLimits.get(key),
+        ),
+      );
+    }),
+    ...keyedOverrides.map(({ key, override }) =>
+      overrideEntry(
+        key,
+        doc.activeProfileId,
+        override,
+        placements.get(key) ?? [],
+        sessionOverflow,
+      ),
+    ),
+  ];
+  const dynamic = doc.settings.paused ? [] : compiledDynamic;
+  const session = doc.settings.paused ? [] : compiledSession;
+  return {
+    installedRevision: installedRevisionOf(dynamic, session),
+    paused: doc.settings.paused,
+    dynamic,
+    session,
+    entries,
+    slots: collectSlots(entries),
+  };
+}
+
+export function compileDynamic(state: StateDoc): DnrRule[] {
+  const enabledRules =
+    state.profiles
+      .find((profile) => profile.id === state.activeProfileId)
+      ?.rules.filter((rule) => rule.enabled) ?? [];
+  if (enabledRules.length > MAX_DYNAMIC_RULES) {
+    throw new RangeError(
+      `Dynamic rules: ${enabledRules.length}/${MAX_DYNAMIC_RULES}`,
+    );
+  }
+  const regexCount = enabledRules.filter(
+    (rule) => rule.scope.type === "regex",
+  ).length;
+  if (regexCount > MAX_REGEX_RULES) {
+    throw new RangeError(`Regex rules: ${regexCount}/${MAX_REGEX_RULES}`);
+  }
+  if (state.settings.paused) {
+    return [];
+  }
+  return enabledRules.map((rule, index) => ({
+    id: rule.num,
+    priority: DYNAMIC_PRIORITY_TOP - index,
+    action: headerAction(rule),
+    condition: compileRuleCondition(rule),
+  }));
+}
+
 /**
- * The reason dropInapplicable gives for stored rules holds for this-tab rows
- * too: invoking the action hands over activeTab, and the engine applies whatever
- * is installed to a host it has access to, so a row whose host is not granted
- * must be absent from the batch rather than merely pruned from storage. Taking
- * the snapshot as a parameter is what makes a grant-blind compile a build error.
- * A row carries exactly one host, so there is nothing to narrow: it compiles or
- * it is absent.
+ * An ungranted this-tab row must stay out of the installed batch. Invoking the
+ * action provides activeTab, which would otherwise make that row take effect.
  */
 export function compileSession(
   overrides: readonly TabOverride[],
   paused: boolean,
   granted: GrantSnapshot,
 ): DnrRule[] {
-  const enabledOverrides = overrides.flatMap<{
-    readonly override: TabOverride;
-    readonly urlFilter: string | undefined;
-  }>((override) => {
-    if (!override.enabled) {
-      return [];
-    }
-    if (originGranted(override.originHost, granted)) {
-      return [{ override, urlFilter: undefined }];
-    }
-    return narrowedGrantUrlFilters(override.originHost, granted).map(
-      (urlFilter) => ({ override, urlFilter }),
-    );
-  });
-  if (enabledOverrides.length > MAX_SESSION_OVERRIDES) {
+  const candidates = overrides.flatMap((override) =>
+    narrowOverride(override, granted),
+  );
+  if (candidates.length > MAX_SESSION_OVERRIDES) {
     throw new RangeError(
-      `Cannot compile ${enabledOverrides.length} session rules; the limit is ${MAX_SESSION_OVERRIDES}`,
+      `Session rules: ${candidates.length}/${MAX_SESSION_OVERRIDES}`,
     );
   }
-  if (paused) {
+  return paused ? [] : compileSessionCandidates(candidates, overrides);
+}
+
+function collectDynamicCandidates(
+  doc: StateDoc,
+  granted: GrantSnapshot,
+  isRegexSupported: (regex: string) => boolean,
+): DynamicCandidate[] {
+  const profile = doc.profiles.find(
+    (candidate) => candidate.id === doc.activeProfileId,
+  );
+  if (profile === undefined) {
     return [];
   }
+  let nextSyntheticNum = doc.nextRuleNum;
+  return keyRules(profile.id, profile.rules).flatMap(({ key, rule }) => {
+    if (!rule.enabled) {
+      return [];
+    }
+    return applicableNarrowings(rule, granted, isRegexSupported).map(
+      ({ narrowed, sourceIndex }) => ({
+        key,
+        narrowed: narrowed.targetSecured,
+        rule:
+          sourceIndex === 0
+            ? narrowed.rule
+            : { ...narrowed.rule, num: nextSyntheticNum++ },
+      }),
+    );
+  });
+}
 
+function collectSessionCandidates(
+  overrides: readonly KeyedOverride[],
+  granted: GrantSnapshot,
+): SessionCandidate[] {
+  return overrides.flatMap<SessionCandidate>(({ key, override }) =>
+    narrowOverride(override, granted).map((candidate) => ({
+      key,
+      ...candidate,
+    })),
+  );
+}
+
+function narrowOverride(
+  override: TabOverride,
+  granted: GrantSnapshot,
+): SessionNarrowing[] {
+  if (!override.enabled) {
+    return [];
+  }
+  if (originGranted(override.originHost, granted)) {
+    return [{ override, urlFilter: undefined }];
+  }
+  return narrowedGrantUrlFilters(override.originHost, granted).map(
+    (urlFilter) => ({ override, urlFilter }),
+  );
+}
+
+function compileSessionCandidates(
+  candidates: readonly SessionNarrowing[],
+  overrides: readonly TabOverride[],
+): DnrRule[] {
   let nextSyntheticNum =
     overrides.reduce((max, override) => Math.max(max, override.num), 0) + 1;
   const seenOverrideNums = new Set<number>();
-  return enabledOverrides.map(({ override, urlFilter }, index) => {
+  return candidates.map(({ override, urlFilter }, index) => {
     const id = seenOverrideNums.has(override.num)
       ? nextSyntheticNum++
       : override.num;
@@ -376,14 +599,287 @@ export function compileSession(
       id,
       priority: SESSION_PRIORITY_TOP - index,
       action: headerAction(override),
-      condition: {
-        tabIds: [override.tabId],
-        requestDomains: [override.originHost],
-        ...(urlFilter === undefined ? {} : { urlFilter }),
-        resourceTypes: expandResourceTypes("all"),
-      },
+      condition: overrideCondition(override, urlFilter),
     };
   });
+}
+
+function overrideCondition(
+  override: TabOverride,
+  urlFilter?: string,
+): DnrRuleCondition {
+  return {
+    tabIds: [override.tabId],
+    requestDomains: [override.originHost],
+    ...(urlFilter === undefined ? {} : { urlFilter }),
+    resourceTypes: expandResourceTypes("all"),
+  };
+}
+
+function collectPlacements(
+  dynamicCandidates: readonly DynamicCandidate[],
+  dynamic: readonly DnrRule[],
+  sessionCandidates: readonly SessionCandidate[],
+  session: readonly DnrRule[],
+): Map<RuleKey, Placement[]> {
+  const placements = new Map<RuleKey, Placement[]>();
+  dynamic.forEach((rule, index) => {
+    const candidate = dynamicCandidates[index];
+    if (candidate !== undefined) {
+      pushPlacement(placements, candidate.key, {
+        dnrId: rule.id,
+        band: "dynamic",
+        priority: rule.priority,
+        condition: copyCondition(rule.condition),
+        narrowed: candidate.narrowed,
+        tabId: undefined,
+      });
+    }
+  });
+  session.forEach((rule, index) => {
+    const candidate = sessionCandidates[index];
+    if (candidate !== undefined) {
+      pushPlacement(placements, candidate.key, {
+        dnrId: rule.id,
+        band: "session",
+        priority: rule.priority,
+        condition: copyCondition(rule.condition),
+        narrowed: candidate.urlFilter !== undefined,
+        tabId: candidate.override.tabId,
+      });
+    }
+  });
+  return placements;
+}
+
+function copyCondition(condition: DnrRuleCondition): ReadonlyDnrRuleCondition {
+  return {
+    ...condition,
+    ...(condition.requestDomains === undefined
+      ? {}
+      : { requestDomains: [...condition.requestDomains] }),
+    ...(condition.initiatorDomains === undefined
+      ? {}
+      : { initiatorDomains: [...condition.initiatorDomains] }),
+    ...(condition.resourceTypes === undefined
+      ? {}
+      : { resourceTypes: [...condition.resourceTypes] }),
+    ...(condition.tabIds === undefined
+      ? {}
+      : { tabIds: [...condition.tabIds] }),
+  };
+}
+
+function pushPlacement(
+  placements: Map<RuleKey, Placement[]>,
+  key: RuleKey,
+  placement: Placement,
+): void {
+  const existing = placements.get(key);
+  if (existing === undefined) {
+    placements.set(key, [placement]);
+  } else {
+    existing.push(placement);
+  }
+}
+
+function storedEntry(
+  key: RuleKey,
+  profileId: string,
+  profileName: string,
+  activeProfileId: string,
+  rule: Rule,
+  granted: GrantSnapshot,
+  isRegexSupported: (regex: string) => boolean,
+  placements: readonly Placement[],
+  overLimit: "dynamic" | "regex" | undefined,
+): Entry {
+  return {
+    key,
+    profileId,
+    label: rule.comment?.trim() || `${rule.header} rule`,
+    stage: rule.direction,
+    headerKey: normalizeHeaderName(rule.header),
+    header: rule.header,
+    operation: rule.operation,
+    authored: compileRuleCondition(rule),
+    standing:
+      rule.enabled && profileId === activeProfileId
+        ? standingForRule(
+            rule,
+            granted,
+            isRegexSupported,
+            placements,
+            overLimit,
+          )
+        : {
+            kind: "absent",
+            reason: rule.enabled
+              ? { kind: "other-profile", profileName }
+              : { kind: "off" },
+          },
+    uncoveredSchemes: uncoveredSchemes(rule, granted),
+    initiatorUnnamed:
+      coversSubresourceTypes(rule) && rule.initiators.length === 0,
+  };
+}
+
+function standingForRule(
+  rule: Rule,
+  granted: GrantSnapshot,
+  isRegexSupported: (regex: string) => boolean,
+  placements: readonly Placement[],
+  overLimit: "dynamic" | "regex" | undefined,
+): Standing {
+  const firstPlacement = placements[0];
+  if (firstPlacement !== undefined) {
+    return {
+      kind: "placed",
+      placements: [firstPlacement, ...placements.slice(1)],
+    };
+  }
+  if (overLimit !== undefined) {
+    return {
+      kind: "absent",
+      reason: { kind: "over-limit", limit: overLimit },
+    };
+  }
+  const refusal = uncompilableReason(rule, isRegexSupported);
+  if (refusal !== undefined) {
+    return { kind: "absent", reason: { kind: "refused", reason: refusal } };
+  }
+  return {
+    kind: "absent",
+    reason: ungrantedReason(rule, granted),
+  };
+}
+
+function ungrantedReason(rule: Rule, granted: GrantSnapshot): AbsentReason {
+  const missingInitiators = coversSubresourceTypes(rule)
+    ? rule.initiators
+        .filter((initiator) => !originGranted(initiator, granted))
+        .map(originPatternForDomain)
+    : [];
+  const targetReached = narrowToGranted(rule, granted).some(
+    ({ rule: narrowed, targetSecured }) =>
+      targetSecured ||
+      missingGrants({ ...narrowed, initiators: [] }, granted).length === 0,
+  );
+  const initiatorReason = missingReason(
+    "ungranted-initiator",
+    missingInitiators,
+  );
+  if (targetReached && initiatorReason !== undefined) {
+    return initiatorReason;
+  }
+  return (
+    missingReason("ungranted", missingGrants(rule, granted)) ?? {
+      kind: "refused",
+      reason: "domains",
+    }
+  );
+}
+
+function missingReason(
+  kind: "ungranted" | "ungranted-initiator",
+  missing: readonly string[],
+): AbsentReason | undefined {
+  const [first, ...rest] = missing;
+  return first === undefined ? undefined : { kind, missing: [first, ...rest] };
+}
+
+function overrideEntry(
+  key: RuleKey,
+  profileId: string,
+  override: TabOverride,
+  placements: readonly Placement[],
+  overLimit: boolean,
+): Entry {
+  const firstPlacement = placements[0];
+  const standing: Standing =
+    firstPlacement !== undefined
+      ? {
+          kind: "placed",
+          placements: [firstPlacement, ...placements.slice(1)],
+        }
+      : {
+          kind: "absent",
+          reason: override.enabled
+            ? overLimit
+              ? { kind: "over-limit", limit: "session" }
+              : {
+                  kind: "ungranted",
+                  missing: [originPatternForDomain(override.originHost)],
+                }
+            : { kind: "off" },
+        };
+  return {
+    key,
+    profileId,
+    label: `${override.header} rule`,
+    stage: override.direction,
+    headerKey: normalizeHeaderName(override.header),
+    header: override.header,
+    operation: override.operation,
+    authored: overrideCondition(override),
+    standing,
+    uncoveredSchemes: [],
+    initiatorUnnamed: false,
+  };
+}
+
+function uncoveredSchemes(
+  rule: Rule,
+  granted: GrantSnapshot,
+): readonly ("ws" | "wss")[] {
+  if (
+    !expandResourceTypes(rule.resourceTypes).includes("websocket") ||
+    granted.origins.includes("<all_urls>")
+  ) {
+    return [];
+  }
+  if (rule.scope.type === "domains" || rule.scope.type === "all") {
+    return ["ws", "wss"];
+  }
+  const matcher =
+    rule.scope.type === "pattern" ? rule.scope.pattern : rule.scope.regex;
+  const scheme = /^\^?\|?(https?|wss?):(?:\\?\/){2}/.exec(matcher)?.[1];
+  return scheme === "http" || scheme === "https"
+    ? []
+    : scheme === "ws" || scheme === "wss"
+      ? [scheme]
+      : ["ws", "wss"];
+}
+
+function collectSlots(
+  entries: readonly Entry[],
+): ReadonlyMap<string, readonly PlacedRef[]> {
+  const slots = new Map<string, PlacedRef[]>();
+  for (const entry of entries) {
+    if (entry.standing.kind === "absent") {
+      continue;
+    }
+    for (const placement of entry.standing.placements) {
+      const slot = `${entry.stage}:${entry.headerKey}`;
+      const placedRef = {
+        key: entry.key,
+        operation: entry.operation,
+        placement,
+      };
+      const existing = slots.get(slot);
+      if (existing === undefined) {
+        slots.set(slot, [placedRef]);
+      } else {
+        existing.push(placedRef);
+      }
+    }
+  }
+  for (const placements of slots.values()) {
+    placements.sort(
+      (left, right) => right.placement.priority - left.placement.priority,
+    );
+  }
+  return slots;
 }
 
 function headerAction(

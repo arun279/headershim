@@ -103,9 +103,8 @@ export default defineBackground(() => {
         await refreshBadge();
       } while (dirty);
     } catch {
-      // A throw outside the update*Rules window (a rejected read, a compile
-      // RangeError, a storage write) must still fail closed and visible rather
-      // than escape unhandled and leave state silently unreconciled.
+      // A throw outside the update*Rules window must still fail closed and
+      // visible rather than escape unhandled and leave state unreconciled.
       await flagReconcileError(true).catch(noop);
       await refreshBadge().catch(noop);
     }
@@ -116,9 +115,8 @@ export default defineBackground(() => {
     if (doc === undefined) {
       return true;
     }
-    // Resolve every enabled regex against the browser's RE2 (async) and read
-    // the live grants, so the pure core drop can strip the rules that must not
-    // reach the batch before compilation sees them.
+    // Resolve every enabled regex against the browser's RE2 and read the live
+    // grants before compiling both bands.
     const [session, granted, isRegexSupported] = await Promise.all([
       readSession(),
       grantSnapshot(),

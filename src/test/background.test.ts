@@ -4,6 +4,7 @@ import { browser } from "wxt/browser";
 import background from "../../entrypoints/background";
 import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
 import type { GrantSnapshot } from "../core/grants";
+import { MAX_DYNAMIC_RULES } from "../core/limits";
 import {
   createProfile,
   createRule,
@@ -356,6 +357,46 @@ describe("background lifecycle", () => {
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
     expect(await getReconcileError()).toBe(false);
+  });
+
+  it("keeps installed rules and raises the health flag on compile overflow", async () => {
+    const seed = createV1Seed();
+    const active = seed.profiles[0];
+    if (active === undefined) {
+      throw new Error("seed must contain an active profile");
+    }
+    const overflow: StateDoc = {
+      ...seed,
+      nextRuleNum: MAX_DYNAMIC_RULES + 2,
+      profiles: [
+        {
+          ...active,
+          rules: Array.from({ length: MAX_DYNAMIC_RULES + 1 }, (_, index) => ({
+            ...baseDraft,
+            id: `overflow-${index}`,
+            num: index + 1,
+          })),
+        },
+      ],
+    };
+    const installed: DnrRule = {
+      id: 90_001,
+      priority: 1,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [{ header: "x-existing", operation: "remove" }],
+      },
+      condition: { resourceTypes: ["main_frame"] },
+    };
+    dnr.fake.dynamicRules = [installed];
+
+    start();
+    await writeState(overflow);
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual([installed]);
+    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(await getReconcileError()).toBe(true);
   });
 
   it("removes a revoked session rule after two rejected removals", async () => {
