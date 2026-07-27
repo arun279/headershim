@@ -186,7 +186,7 @@ export const copy = {
     // Substatus segments, shown only when a count is nonzero.
     needsAccess: (count: number) => `${count} needs access`,
     refused: (count: number) =>
-      count === 1 ? "1 refused by Chrome" : `${count} refused by Chrome`,
+      count === 1 ? "1 needs attention" : `${count} need attention`,
     managed: (count: number) =>
       count === 1 ? "1 managed by Chrome" : `${count} managed by Chrome`,
     overridden: (count: number) =>
@@ -207,7 +207,7 @@ export const copy = {
     to: "→",
     overriddenBy: overriddenByPhrase,
     refusedReason: {
-      host: "Chrome won't let extensions change the Host header",
+      host: "Chrome won't let extensions change the Host header on HTTP/2, but it can on HTTP/1.1",
       header: "Chrome won't accept this header name",
       append:
         "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
@@ -522,11 +522,11 @@ export const copy = {
         { name: "previous-profile", label: "Switch to the previous profile" },
       ],
       eraseAll: {
-        action: "Erase everything",
-        confirmTitle: "Erase everything?",
+        action: "Start over",
+        confirmTitle: "Start over?",
         confirmBody:
-          "This removes every profile and rule, revokes all site access, and clears any This-tab overrides.",
-        done: "Everything erased",
+          "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, and clears any This-tab overrides. Undo restores only the configuration, not site access or This-tab overrides.",
+        done: "Configuration replaced",
       },
     },
     about: {

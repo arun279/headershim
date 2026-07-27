@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "../core/grants";
+import { MINIMUM_CHROME_VERSION } from "../core/limits";
 import { copy, sentenceText, siteAccessCopy } from "./copy";
 
 const privacyPolicy = readFileSync(
   new URL("../../PRIVACY.md", import.meta.url),
+  "utf8",
+);
+const readme = readFileSync(
+  new URL("../../README.md", import.meta.url),
   "utf8",
 );
 
@@ -67,7 +73,7 @@ describe("copy", () => {
     expect(sentenceText(copy.readout.status(4))).toBe("4 changes on this tab");
     expect(copy.readout.needsAccess(2)).toBe("2 needs access");
     expect(copy.readout.overridden(1)).toBe("1 overridden by another rule");
-    expect(copy.readout.refused(3)).toBe("3 refused by Chrome");
+    expect(copy.readout.refused(3)).toBe("3 need attention");
     // The one state only Chrome can settle names Chrome at the count, not a
     // bare "unconfirmed".
     expect(copy.readout.unconfirmed(2)).toBe("2 confirmable only by Chrome");
@@ -144,7 +150,7 @@ describe("copy", () => {
 
   it("keeps the static canonical strings verbatim", () => {
     expect(copy.readout.refusedReason.host).toBe(
-      "Chrome won't let extensions change the Host header",
+      "Chrome won't let extensions change the Host header on HTTP/2, but it can on HTTP/1.1",
     );
     // Names the control the footer actually has, not a "Resume" that never
     // appears on any surface.
@@ -164,6 +170,13 @@ describe("copy", () => {
     expect(copy.options.profiles.nameTaken("Staging")).toBe(
       "'Staging' is taken. Use a different name.",
     );
+    expect(copy.options.settings.eraseAll).toEqual({
+      action: "Start over",
+      confirmTitle: "Start over?",
+      confirmBody:
+        "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, and clears any This-tab overrides. Undo restores only the configuration, not site access or This-tab overrides.",
+      done: "Configuration replaced",
+    });
     // One canonical label per state across the popup and the options
     // Active-changes surface: no per-surface drift.
     expect(copy.options.traffic.status.unconfirmed).toBe(
@@ -180,6 +193,16 @@ describe("copy", () => {
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );
+  });
+
+  it("keeps README manifest facts aligned with their constants", () => {
+    expect(readme).toContain(`Chrome ${MINIMUM_CHROME_VERSION} or later`);
+    expect(readme).toContain(
+      `The manifest declares ${MANIFEST_PERMISSIONS.map((name) => `\`${name}\``)
+        .join(", ")
+        .replace(/, ([^,]+)$/, ", and $1")}.`,
+    );
+    expect(readme).toContain(`request up to \`${ALL_SITES_ORIGIN}\``);
   });
 
   it("keeps About factual and site-access wording precise", () => {
