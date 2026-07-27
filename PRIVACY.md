@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-23
+Last updated: 2026-07-27
 
 HeaderShim keeps your rules, profiles, and settings in Chrome's local extension storage, in this browser on this device. A value you type can itself be sensitive, such as an Authorization token or a Cookie value, because setting those headers is what the extension does. Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file. Chrome's synced storage is not used, so nothing is copied to your Google account. The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.
 
@@ -10,7 +10,7 @@ HeaderShim applies your header rules through Chrome's rules engine, which runs a
 
 While header changes are running, each rule you turn on in the active profile that Chrome accepts, and whose sites you have granted, is handed to the rules engine as a dynamic rule, with the header value in the clear. A rule in a profile that is not active is not, and neither is one still waiting on a site grant. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage. Turning the rule off, deleting it, switching to another profile, revoking a site the rule needs, or pausing every header change takes it back out of the dynamic ruleset. A this-tab change goes to the session ruleset instead, which Chrome clears when the browser shuts down.
 
-If HeaderShim cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data.
+If HeaderShim cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data. Start over in Settings does not remove that set-aside copy.
 
 Opening the popup on a site reads that tab's address and reduces it to a hostname, to show what applies there and prefill a new rule's scope. Full addresses are not stored. Chrome reports that tab's address as it navigates, for as long as the tab stays on that site, and HeaderShim uses that to end a this-tab change when the tab leaves the site it was made for. Opening the popup is a gesture Chrome answers with temporary host access to that tab, which lasts while the tab stays on that site. That access is Chrome's to give and take back; the access a rule needs is the site grant you approve, and HeaderShim asks for that separately.
 

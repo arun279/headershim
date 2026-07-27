@@ -507,7 +507,7 @@ describe("popup readout", () => {
       "Chrome won't let extensions change the Host header",
     );
     expect(root.querySelector(".substatus .stop")?.textContent).toBe(
-      "1 refused by Chrome",
+      "1 needs attention",
     );
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
