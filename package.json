@@ -26,16 +26,18 @@
     "check:test": "vitest run --coverage",
     "check:knip": "knip",
     "check:knip:production": "knip --production --include files",
+    "check:fake-browser": "node scripts/check-fake-browser.mjs",
     "check:dup": "jscpd",
     "check:size": "pnpm build && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
     "check:no-network": "pnpm build && node scripts/check-no-network.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
+    "check:overrides": "node scripts/check-overrides.mjs",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check:test-classes": "node scripts/check-test-classes.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
@@ -45,20 +47,19 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.5.5",
-    "@playwright/test": "1.61.1",
+    "@playwright/test": "1.62.0",
     "@resvg/resvg-js": "^2.6.2",
-    "@size-limit/file": "^12.1.0",
+    "@size-limit/file": "^13.0.1",
     "@tsconfig/strictest": "^2.0.8",
     "@vitest/coverage-v8": "^4.1.9",
-    "@webext-core/fake-browser": "^1.5.2",
     "happy-dom": "^20.11.1",
-    "jscpd": "^5.0.11",
+    "jscpd": "^5.0.14",
     "knip": "^6.29.0",
     "preact": "^10.29.7",
-    "size-limit": "^12.1.0",
+    "size-limit": "^13.0.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
-    "wxt": "^0.20.27"
+    "wxt": "^0.21.1"
   },
   "size-limit": [
     {
@@ -115,16 +116,21 @@
   ],
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
       "spawn-sync"
+    ],
+    "//overrides": [
+      "adm-zip: firefox-profile 4.7.0 restricts adm-zip to ~0.5.x, which triggers GHSA-xcpc-8h2w-3j85. Drop when firefox-profile accepts adm-zip 0.6.0 or later, or when WXT no longer reaches firefox-profile through web-ext-run.",
+      "multimatch: web-ext-run 0.2.4 pins multimatch to 6.0.0, which reaches brace-expansion 1 and GHSA-mh99-v99m-4gvg. Drop when web-ext-run accepts multimatch 8.0.0 or later, or when WXT no longer depends on web-ext-run.",
+      "shell-quote: fx-runner 1.4.0 pins shell-quote to 1.7.3, which triggers GHSA-395f-4hp3-45gv and GHSA-w7jw-789q-3m8p. Drop when fx-runner accepts shell-quote 1.9.0 or later, or when WXT no longer reaches fx-runner through web-ext-run.",
+      "tmp: web-ext-run 0.2.4 pins tmp to 0.2.5, which triggers GHSA-ph9p-34f9-6g65. Drop when web-ext-run accepts tmp 0.2.6 or later, or when WXT no longer depends on web-ext-run.",
+      "uuid: node-notifier 10.0.1 restricts uuid to ^8.3.2, which triggers GHSA-w5hq-g745-h8pq. Drop when node-notifier excludes the affected uuid ranges, or when WXT no longer reaches node-notifier through web-ext-run."
     ],
     "overrides": {
       "adm-zip": ">=0.6.0",
-      "esbuild": ">=0.28.1",
       "multimatch": ">=8.0.0",
-      "shell-quote": ">=1.8.4",
+      "shell-quote": ">=1.9.0",
       "tmp": ">=0.2.6",
-      "uuid": ">=11.1.1"
+      "uuid": ">=11.1.1 <12.0.0 || >=12.0.1 <13.0.0 || >=13.0.1"
     }
   }
 }

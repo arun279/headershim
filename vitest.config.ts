@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { WxtVitest } from "wxt/testing";
+import { WxtVitest } from "wxt/testing/vitest-plugin";
 
 export default defineConfig({
   // Tests do not launch WXT's reload server. A fixed strict port avoids a

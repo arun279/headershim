@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/popup/App";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
@@ -360,7 +361,9 @@ describe("popup readout", () => {
     typeInto(field, SWAP_TO);
     const get = vi
       .spyOn(fakeBrowser.storage.local, "get")
-      .mockResolvedValueOnce({ state: { v: 9 } });
+      .mockImplementationOnce(
+        async (): Promise<{ state: { v: number } }> => ({ state: { v: 9 } }),
+      );
 
     try {
       press(field, "Enter");
@@ -910,9 +913,15 @@ describe("popup profile switch", () => {
     if (first === undefined) throw new Error("missing original profile");
     const get = vi
       .spyOn(fakeBrowser.storage.local, "get")
-      .mockResolvedValueOnce({
-        state: { ...stored, profiles: [first], activeProfileId: first.id },
-      });
+      .mockImplementationOnce(
+        async (): Promise<{ state: StateDoc }> => ({
+          state: {
+            ...stored,
+            profiles: [first],
+            activeProfileId: first.id,
+          },
+        }),
+      );
 
     try {
       typeInto(input, "Vanished profile");

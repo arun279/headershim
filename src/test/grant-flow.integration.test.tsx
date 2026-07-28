@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { App } from "../../entrypoints/popup/App";
 import {

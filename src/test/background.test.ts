@@ -1,6 +1,6 @@
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
 import type { GrantSnapshot } from "../core/grants";

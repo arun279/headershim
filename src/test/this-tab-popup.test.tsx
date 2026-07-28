@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/popup/App";
 import type { StateDoc, TabOverride } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import {
   read as readSession,
+  type SessionState,
   write as writeSession,
 } from "../platform/session-store";
 import { write } from "../platform/store";
@@ -232,7 +234,9 @@ describe("popup This-tab overrides", () => {
 
   it("writes nothing when the host grant is declined", async () => {
     await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
-    vi.spyOn(fakeBrowser.permissions, "request").mockResolvedValue(false);
+    vi.spyOn(fakeBrowser.permissions, "request").mockImplementation(
+      async (): Promise<boolean> => false,
+    );
     const root = await composeChange();
     // Nothing stored, so no row can read live while applying to nothing; the
     // draft stays put and says why.
@@ -459,7 +463,11 @@ describe("popup This-tab overrides", () => {
     typeInto(field, "Bearer replacement-5678");
     const get = vi
       .spyOn(fakeBrowser.storage.session, "get")
-      .mockResolvedValueOnce({ sessionState: { nextNum: 2, tabs: {} } });
+      .mockImplementationOnce(
+        async (): Promise<{ sessionState: SessionState }> => ({
+          sessionState: { nextNum: 2, tabs: {} },
+        }),
+      );
 
     press(field, "Enter");
     await settle();

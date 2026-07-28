@@ -31,10 +31,6 @@ export default defineConfig({
       ? { outDirTemplate: "chrome-mv3-e2e-narrow-hostaccess" }
       : {}),
   vite: () => ({
-    esbuild: {
-      jsx: "automatic",
-      jsxImportSource: "preact",
-    },
     define: {
       __COMMIT__: JSON.stringify(commitHash()),
     },
