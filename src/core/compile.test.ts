@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  compile,
+  inspect as compileCore,
   compileDynamic,
+  compile as compileOutput,
   compileSession,
   type DnrRule,
   DYNAMIC_PRIORITY_TOP,
   dropInapplicable,
-  installedRevisionOf,
   SESSION_PRIORITY_TOP,
   uncompilableReason,
 } from "./compile";
@@ -105,101 +105,38 @@ const granting = (...domains: string[]): GrantSnapshot => ({
   allSites: false,
 });
 
-describe("installed revision", () => {
-  const first: DnrRule = {
-    id: 1,
-    priority: 5_000,
-    action: {
-      type: "modifyHeaders",
-      requestHeaders: [
-        {
-          header: "x-revision",
-          operation: "set",
-          value: "one",
-        },
-      ],
-    },
-    condition: {
-      requestDomains: ["b.example", "a.example"],
-      initiatorDomains: ["b.initiator", "a.initiator"],
-      resourceTypes: ["xmlhttprequest", "script"],
-      tabIds: [2, 1],
-    },
-  };
-  const second: DnrRule = {
-    ...first,
-    id: 2,
-    priority: 4_999,
-  };
+function placementKeys(batch: ReturnType<typeof compileCore>): string[] {
+  return batch.entries.flatMap((entry) =>
+    entry.standing.kind === "placed"
+      ? entry.standing.placements.map(
+          (placement) => `${placement.band}:${placement.dnrId}`,
+        )
+      : [],
+  );
+}
 
-  it("tracks every part of the installed rule text and its band", () => {
-    const baseline = installedRevisionOf([first], []);
-    const mutations: readonly DnrRule[] = [
-      { ...first, id: 3 },
-      { ...first, priority: 4_998 },
-      {
-        ...first,
-        condition: {
-          ...first.condition,
-          urlFilter: "||example.com^",
-        },
-      },
-      {
-        ...first,
-        action: {
-          ...first.action,
-          requestHeaders: [
-            {
-              header: "x-other",
-              operation: "set",
-              value: "one",
-            },
-          ],
-        },
-      },
-      {
-        ...first,
-        action: {
-          ...first.action,
-          requestHeaders: [
-            {
-              header: "x-revision",
-              operation: "set",
-              value: "two",
-            },
-          ],
-        },
-      },
-    ];
-
-    for (const mutation of mutations) {
-      expect(installedRevisionOf([mutation], [])).not.toBe(baseline);
-    }
-    expect(installedRevisionOf([], [first])).not.toBe(baseline);
-    expect(installedRevisionOf([first, second], []).endsWith(":2")).toBe(true);
-  });
-
-  it("ignores rule order and order-insensitive condition arrays", () => {
-    expect(installedRevisionOf([first, second], [])).toBe(
-      installedRevisionOf(
-        [
-          second,
-          {
-            ...first,
-            condition: {
-              ...first.condition,
-              requestDomains: ["a.example", "b.example"],
-              initiatorDomains: ["a.initiator", "b.initiator"],
-              resourceTypes: ["script", "xmlhttprequest"],
-              tabIds: [1, 2],
-            },
-          },
-        ],
-        [],
-      ),
-    );
-  });
-});
+function compile(
+  input: Parameters<typeof compileCore>[0],
+): ReturnType<typeof compileCore> {
+  const batch = compileCore(input);
+  const output = compileOutput(input);
+  expect(output.dynamic).toEqual(batch.dynamic);
+  expect(output.session).toEqual(batch.session);
+  expect(output.overLimit).toBe(batch.overLimit);
+  if (batch.paused) {
+    expect(batch.dynamic).toEqual([]);
+    expect(batch.session).toEqual([]);
+    return batch;
+  }
+  const emitted = [
+    ...batch.dynamic.map((rule) => `dynamic:${rule.id}`),
+    ...batch.session.map((rule) => `session:${rule.id}`),
+  ];
+  const placed = placementKeys(batch);
+  expect(placed.toSorted()).toEqual(emitted.toSorted());
+  expect(new Set(placed).size).toBe(placed.length);
+  return batch;
+}
 
 describe("batch compilation", () => {
   const doc = state([
@@ -283,20 +220,6 @@ describe("batch compilation", () => {
       granted,
       isRegexSupported: () => true,
     });
-    const emitted = [
-      ...batch.dynamic.map((rule) => `dynamic:${rule.id}`),
-      ...batch.session.map((rule) => `session:${rule.id}`),
-    ];
-    const placed = batch.entries.flatMap((entry) =>
-      entry.standing.kind === "placed"
-        ? entry.standing.placements.map(
-            (placement) => `${placement.band}:${placement.dnrId}`,
-          )
-        : [],
-    );
-
-    expect(placed.toSorted()).toEqual(emitted.toSorted());
-    expect(new Set(placed).size).toBe(placed.length);
     const slotted = [...batch.slots].flatMap(([slot, refs]) =>
       refs.map((ref) => ({
         slot,
@@ -315,7 +238,7 @@ describe("batch compilation", () => {
           }))
         : [],
     );
-    expect(slotted).toHaveLength(placed.length);
+    expect(slotted).toHaveLength(placementKeys(batch).length);
     expect(slotted.map((value) => JSON.stringify(value)).toSorted()).toEqual(
       expectedSlots.map((value) => JSON.stringify(value)).toSorted(),
     );
@@ -627,207 +550,6 @@ describe("batch compilation", () => {
     );
     expect(paused.slots).toEqual(running.slots);
   });
-
-  it("changes the installed revision only when installed rule text changes", () => {
-    const input = {
-      doc,
-      overrides,
-      granted,
-      isRegexSupported: () => true,
-    };
-    const baseline = compile(input).installedRevision;
-    const active = doc.profiles[0];
-    const inactive = doc.profiles[1];
-    if (active === undefined || inactive === undefined) {
-      throw new Error("fixture requires active and inactive profiles");
-    }
-    const first = active.rules[0];
-    const second = active.rules[1];
-    const inactiveFirst = inactive.rules[0];
-    const firstOverride = overrides[0];
-    if (
-      first === undefined ||
-      second === undefined ||
-      inactiveFirst === undefined ||
-      firstOverride === undefined
-    ) {
-      throw new Error("fixture requires two active rules");
-    }
-    const dynamicMutations: readonly StateDoc[] = [
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [{ ...first, enabled: false }, ...active.rules.slice(1)],
-          },
-          inactive,
-        ],
-      },
-      { ...doc, activeProfileId: inactive.id },
-      {
-        ...doc,
-        profiles: [
-          { ...active, rules: [second, first, ...active.rules.slice(2)] },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [
-              {
-                ...first,
-                scope: { type: "domains", domains: ["partial.test"] },
-              },
-              ...active.rules.slice(1),
-            ],
-          },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [{ ...first, header: "x-other" }, ...active.rules.slice(1)],
-          },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [{ ...first, value: "changed" }, ...active.rules.slice(1)],
-          },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [
-              { ...first, initiators: ["example.com"] },
-              ...active.rules.slice(1),
-            ],
-          },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        profiles: [
-          {
-            ...active,
-            rules: [
-              { ...first, resourceTypes: ["xhr"] },
-              ...active.rules.slice(1),
-            ],
-          },
-          inactive,
-        ],
-      },
-      {
-        ...doc,
-        settings: { ...doc.settings, paused: true },
-      },
-    ];
-
-    for (const changedDoc of dynamicMutations) {
-      expect(compile({ ...input, doc: changedDoc }).installedRevision).not.toBe(
-        baseline,
-      );
-    }
-    expect(
-      compile({ ...input, overrides: overrides.slice(1) }).installedRevision,
-    ).not.toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        overrides: [
-          ...overrides,
-          { ...sessionOverride(13), originHost: "example.com" },
-        ],
-      }).installedRevision,
-    ).not.toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        overrides: [
-          { ...firstOverride, enabled: false },
-          ...overrides.slice(1),
-        ],
-      }).installedRevision,
-    ).not.toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        granted: {
-          ...granted,
-          origins: granted.origins.slice(1),
-        },
-      }).installedRevision,
-    ).not.toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        granted: {
-          ...granted,
-          origins: [...granted.origins, "*://*.ungranted.test/*"],
-        },
-      }).installedRevision,
-    ).not.toBe(baseline);
-
-    expect(
-      compile({
-        ...input,
-        doc: {
-          ...doc,
-          profiles: [
-            { ...active, name: "renamed" },
-            {
-              ...inactive,
-              rules: [{ ...inactiveFirst, header: "x-cosmetic" }],
-            },
-          ],
-        },
-      }).installedRevision,
-    ).toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        doc: {
-          ...doc,
-          profiles: [
-            {
-              ...active,
-              rules: [
-                { ...first, comment: "cosmetic" },
-                ...active.rules.slice(1),
-              ],
-            },
-            inactive,
-          ],
-        },
-      }).installedRevision,
-    ).toBe(baseline);
-    expect(
-      compile({
-        ...input,
-        doc: {
-          ...doc,
-          settings: { ...doc.settings, theme: "dark" },
-        },
-      }).installedRevision,
-    ).toBe(baseline);
-  });
 });
 
 describe("dynamic rule compilation", () => {
@@ -1137,29 +859,44 @@ describe("dynamic rule compilation", () => {
       DYNAMIC_PRIORITY_TOP - MAX_ENABLED_RULES + 1,
     );
     const dynamicOverflowDoc = state([
-      profile(
-        "overflow",
-        Array.from({ length: MAX_DYNAMIC_RULES + 1 }, (_, index) =>
+      profile("overflow", [
+        ...Array.from({ length: MAX_DYNAMIC_RULES + 1 }, (_, index) =>
           storedRule(index + 1),
         ),
-      ),
+        storedRule(MAX_DYNAMIC_RULES + 2, { header: "bad header" }),
+        storedRule(MAX_DYNAMIC_RULES + 3, {
+          scope: { type: "domains", domains: ["ungranted.test"] },
+        }),
+      ]),
     ]);
-    expect(() => compileDynamic(dynamicOverflowDoc)).toThrow(RangeError);
+    expect(compileDynamic(dynamicOverflowDoc)).toHaveLength(MAX_DYNAMIC_RULES);
     const dynamicOverflow = compile({
       doc: dynamicOverflowDoc,
       overrides: [],
-      granted: ALL_SITES,
+      granted: granting("example.com"),
       isRegexSupported: () => true,
     });
-    expect(dynamicOverflow.dynamic).toEqual([]);
+    expect(dynamicOverflow.dynamic).toHaveLength(MAX_DYNAMIC_RULES);
     expect(
-      dynamicOverflow.entries.every(
-        (entry) =>
-          entry.standing.kind === "absent" &&
-          entry.standing.reason.kind === "over-limit" &&
-          entry.standing.reason.limit === "dynamic",
-      ),
+      dynamicOverflow.entries
+        .slice(0, MAX_DYNAMIC_RULES)
+        .every((entry) => entry.standing.kind === "placed"),
     ).toBe(true);
+    expect(dynamicOverflow.entries.at(-3)?.standing).toEqual({
+      kind: "absent",
+      reason: { kind: "over-limit", limit: "dynamic" },
+    });
+    expect(dynamicOverflow.entries.at(-2)?.standing).toEqual({
+      kind: "absent",
+      reason: { kind: "refused", reason: "header" },
+    });
+    expect(dynamicOverflow.entries.at(-1)?.standing).toEqual({
+      kind: "absent",
+      reason: {
+        kind: "ungranted",
+        missing: [originPatternForDomain("ungranted.test")],
+      },
+    });
 
     const regexRules = Array.from({ length: MAX_REGEX_RULES + 1 }, (_, index) =>
       storedRule(index + 1, {
@@ -1171,23 +908,49 @@ describe("dynamic rule compilation", () => {
       }),
     );
     const regexOverflow = compile({
-      doc: state([profile("regex-overflow", regexRules)]),
+      doc: state([
+        profile("regex-overflow", [
+          ...regexRules,
+          storedRule(MAX_REGEX_RULES + 2),
+        ]),
+      ]),
       overrides: [],
       granted: ALL_SITES,
       isRegexSupported: () => true,
     });
-    expect(regexOverflow.dynamic).toEqual([]);
-    expect(() =>
-      compileDynamic(state([profile("regex-overflow", regexRules)])),
-    ).toThrow(RangeError);
+    expect(regexOverflow.dynamic).toHaveLength(MAX_REGEX_RULES + 1);
     expect(
-      regexOverflow.entries.every(
-        (entry) =>
-          entry.standing.kind === "absent" &&
-          entry.standing.reason.kind === "over-limit" &&
-          entry.standing.reason.limit === "regex",
+      compileDynamic(
+        state([
+          profile("regex-overflow", [
+            ...regexRules,
+            storedRule(MAX_REGEX_RULES + 2),
+          ]),
+        ]),
       ),
+    ).toEqual(regexOverflow.dynamic);
+    expect(
+      regexOverflow.entries
+        .slice(0, MAX_REGEX_RULES)
+        .every((entry) => entry.standing.kind === "placed"),
     ).toBe(true);
+    expect(regexOverflow.entries.at(-2)?.standing).toEqual({
+      kind: "absent",
+      reason: { kind: "over-limit", limit: "regex" },
+    });
+    expect(regexOverflow.entries.at(-1)?.standing.kind).toBe("placed");
+
+    const pausedOverflow = compile({
+      doc: {
+        ...dynamicOverflowDoc,
+        settings: { theme: "system", paused: true },
+      },
+      overrides: [],
+      granted: granting("example.com"),
+      isRegexSupported: () => true,
+    });
+    expect(pausedOverflow.dynamic).toEqual([]);
+    expect(pausedOverflow.overLimit).toBe(false);
   });
 });
 
@@ -1256,6 +1019,30 @@ describe("dropping inapplicable rules", () => {
 
     expect(compiledIds(doc, supportAll, granting("example.com"))).toEqual([]);
     expect(compiledIds(doc, supportAll, ALL_SITES)).toEqual([1]);
+  });
+
+  it("holds hostless matchers out until all-sites is granted", () => {
+    const doc = state([
+      profile("hostless", [
+        storedRule(1, {
+          scope: {
+            type: "pattern",
+            pattern: "||example.com^",
+            hosts: [],
+          },
+        }),
+        storedRule(2, {
+          scope: {
+            type: "regex",
+            regex: "^https://example\\.com/",
+            hosts: [],
+          },
+        }),
+      ]),
+    ]);
+
+    expect(compiledIds(doc, supportAll, granting("example.com"))).toEqual([]);
+    expect(compiledIds(doc, supportAll, ALL_SITES)).toEqual([1, 2]);
   });
 
   it("narrows a partly granted domains rule to the granted domains", () => {
@@ -1613,24 +1400,42 @@ describe("session rule compilation", () => {
   });
 
   it("reports a session rule count above its bounded priority band", () => {
-    const overrides = Array.from(
+    const overflowing = Array.from(
       { length: MAX_SESSION_OVERRIDES + 1 },
       (_, index) => sessionOverride(index + 1),
-    ).concat({ ...sessionOverride(MAX_SESSION_OVERRIDES + 2), enabled: false });
+    );
+    const disabled = {
+      ...sessionOverride(MAX_SESSION_OVERRIDES + 2),
+      enabled: false,
+    };
+    const ungranted = sessionOverride(MAX_SESSION_OVERRIDES + 3);
+    const overrides = [...overflowing, disabled, ungranted];
+    const granted = {
+      origins: overflowing.map((override) =>
+        originPatternForDomain(override.originHost),
+      ),
+      allSites: false,
+    };
     const batch = compile({
       doc: state([profile("active", [])]),
       overrides,
-      granted: ALL_SITES,
+      granted,
       isRegexSupported: () => true,
     });
 
-    expect(batch.session).toEqual([]);
-    expect(() => compileSession(overrides, false, ALL_SITES)).toThrow(
-      RangeError,
+    expect(batch.overLimit).toBe(true);
+    expect(batch.session).toHaveLength(MAX_SESSION_OVERRIDES);
+    expect(compileSession(overrides, false, granted)).toHaveLength(
+      MAX_SESSION_OVERRIDES,
     );
     expect(
       batch.entries
-        .slice(0, -1)
+        .slice(0, MAX_SESSION_OVERRIDES)
+        .every((entry) => entry.standing.kind === "placed"),
+    ).toBe(true);
+    expect(
+      batch.entries
+        .slice(MAX_SESSION_OVERRIDES, overflowing.length)
         .every(
           (entry) =>
             entry.standing.kind === "absent" &&
@@ -1638,9 +1443,18 @@ describe("session rule compilation", () => {
             entry.standing.reason.limit === "session",
         ),
     ).toBe(true);
-    expect(batch.entries.at(-1)?.standing).toEqual({
+    expect(batch.entries.at(-2)?.standing).toEqual({
       kind: "absent",
       reason: { kind: "off" },
+    });
+    expect(batch.entries.at(-1)?.standing).toEqual({
+      kind: "absent",
+      reason: {
+        kind: "ungranted",
+        missing: [
+          originPatternForDomain(`host-${MAX_SESSION_OVERRIDES + 3}.example`),
+        ],
+      },
     });
   });
 

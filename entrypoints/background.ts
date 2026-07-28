@@ -1,9 +1,5 @@
 import { planBadge } from "../src/core/badge";
-import {
-  compileDynamic,
-  compileSession,
-  dropInapplicable,
-} from "../src/core/compile";
+import { compile } from "../src/core/compile";
 import {
   activatePreviousProfile,
   type StateDoc,
@@ -24,9 +20,8 @@ import {
   onChanged as onGrantsChanged,
 } from "../src/platform/permissions";
 import {
-  getReconcileError,
+  publishReconcileState,
   read as readSession,
-  setReconcileError,
   subscribe as subscribeSession,
   write as writeSession,
 } from "../src/platform/session-store";
@@ -38,11 +33,6 @@ import {
   write as writeState,
 } from "../src/platform/store";
 import { domainFromUrl } from "../src/platform/tabs";
-
-// Three attempts survive two consecutive transient DNR update failures. That
-// in-pass retry budget is required to pull back a revoked origin's installed
-// rule instead of leaving it live until an unrelated event retriggers reconcile.
-const MAX_RECONCILE_ATTEMPTS = 3;
 
 export default defineBackground(() => {
   // Wake-local coordination for the single-flight scheduler, not durable
@@ -92,20 +82,22 @@ export default defineBackground(() => {
     try {
       do {
         dirty = false;
-        let applied = false;
-        for (let attempt = 0; attempt < MAX_RECONCILE_ATTEMPTS; attempt += 1) {
-          if (await applyOnce()) {
-            applied = true;
+        let failures = 0;
+        // Three attempts survive two consecutive DNR update or readback
+        // failures, allowing a revoked origin's installed rule to be removed
+        // in the same pass.
+        while (!(await applyOnce())) {
+          if (++failures === 3) {
+            await publishReconcileState(true);
             break;
           }
         }
-        await flagReconcileError(!applied);
         await refreshBadge();
       } while (dirty);
     } catch {
       // A throw outside the update*Rules window must still fail closed and
       // visible rather than escape unhandled and leave state unreconciled.
-      await flagReconcileError(true).catch(noop);
+      await publishReconcileState(true).catch(noop);
       await refreshBadge().catch(noop);
     }
   }
@@ -113,6 +105,9 @@ export default defineBackground(() => {
   async function applyOnce(): Promise<boolean> {
     const doc = await loadDoc();
     if (doc === undefined) {
+      // This build cannot compile a newer store. Retain the last published
+      // identity while the health flag marks it unverified.
+      await publishReconcileState(true);
       return true;
     }
     // Resolve every enabled regex against the browser's RE2 and read the live
@@ -122,20 +117,24 @@ export default defineBackground(() => {
       grantSnapshot(),
       resolveRegexSupport(doc),
     ]);
-    const desiredDynamic = compileDynamic(
-      dropInapplicable(doc, isRegexSupported, granted),
-    );
-    const desiredSession = compileSession(
-      Object.values(session.tabs).flat(),
-      doc.settings.paused,
+    const batch = compile({
+      doc,
+      overrides: Object.values(session.tabs).flat(),
       granted,
-    );
-    const [actualDynamic, actualSession] = await Promise.all([
-      getDynamicRules(),
-      getSessionRules(),
-    ]);
-    const dynamicPlan = planReconcile(desiredDynamic, actualDynamic);
-    const sessionPlan = planReconcile(desiredSession, actualSession);
+      isRegexSupported,
+    });
+    const actual = await readRuleBands();
+    if (actual === undefined) {
+      return false;
+    }
+    const [actualDynamic, actualSession] = actual;
+    const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
+    const sessionPlan = planReconcile(batch.session, actualSession);
+    if (dynamicPlan === null && sessionPlan === null) {
+      await publishReconcileState(batch.overLimit);
+      return true;
+    }
+    await publishReconcileState(true);
     try {
       if (dynamicPlan !== null) {
         await updateDynamicRules(dynamicPlan);
@@ -144,18 +143,41 @@ export default defineBackground(() => {
         await updateSessionRules(sessionPlan);
       }
     } catch {
-      // Inputs are pre-validated, so a rejected update is unexpected — but
-      // storage has already changed, so the caller retries from a fresh read
-      // and raises the health flag rather than leaving stale rules live.
+      // Inputs are pre-validated, so a rejected update is unexpected, but
+      // storage has already changed. Retry from a fresh read and keep the
+      // health flag raised until both bands are verified.
       return false;
     }
+    const installed = await readRuleBands();
+    if (installed === undefined) {
+      return false;
+    }
+    if (
+      planReconcile(batch.dynamic, installed[0]) !== null ||
+      planReconcile(batch.session, installed[1]) !== null
+    ) {
+      return false;
+    }
+    await publishReconcileState(batch.overLimit);
     return true;
   }
 
-  async function flagReconcileError(value: boolean): Promise<void> {
-    if ((await getReconcileError()) !== value) {
-      await setReconcileError(value);
+  async function readRuleBands(): Promise<
+    | readonly [
+        Awaited<ReturnType<typeof getDynamicRules>>,
+        Awaited<ReturnType<typeof getSessionRules>>,
+      ]
+    | undefined
+  > {
+    for (const delay of [0, 50, 200]) {
+      if (delay !== 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      try {
+        return await Promise.all([getDynamicRules(), getSessionRules()]);
+      } catch {}
     }
+    return undefined;
   }
 
   async function loadDoc(): Promise<StateDoc | undefined> {
@@ -240,7 +262,7 @@ export default defineBackground(() => {
     // activeTab exposes tab.url exactly while its grant is alive; a missing,
     // empty, or cross-origin url means the override's lifetime ended (the rows
     // must be gone before the user can re-click the icon after an A→B→A trip).
-    // domainFromUrl parses defensively — an uncommitted tab hands back "".
+    // domainFromUrl parses defensively because an uncommitted tab hands back "".
     const host = domainFromUrl(url);
     return pruneOverrides((row, id) => id !== tabId || row.originHost === host);
   }

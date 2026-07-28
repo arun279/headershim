@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../entrypoints/popup/App";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
-import { setReconcileError } from "../platform/session-store";
+import { publishReconcileState } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import {
@@ -208,7 +208,7 @@ describe("popup readout", () => {
   });
 
   it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
-    await setReconcileError(true);
+    await publishReconcileState(true);
     const { root } = await mount(seededDoc([rule()]), true);
     const toggle = root.querySelector(
       '.change-line.out-of-sync [role="switch"]',

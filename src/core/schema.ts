@@ -1,8 +1,7 @@
 import { normalizeHeaderName } from "./headers";
 import {
   createDefaultProfile,
-  isStoredProfileNameValid,
-  normalizeBadgeText,
+  isNormalizedBadgeText,
   type Profile,
   type Rule,
   type Settings,
@@ -124,15 +123,14 @@ function isStateDoc(value: unknown): value is StateDoc {
   }
 
   const profileIds = profiles.map(({ id }) => id);
+  const profileNames = profiles.map(({ name }) => name.toLowerCase());
   const rules = profiles.flatMap(({ rules: profileRules }) => profileRules);
   const ruleIds = rules.map(({ id }) => id);
   const ruleNums = rules.map(({ num }) => num);
 
   return (
     hasUniqueValues(profileIds) &&
-    profiles.every((profile) =>
-      isStoredProfileNameValid(profiles, profile.name, profile.id),
-    ) &&
+    hasUniqueValues(profileNames) &&
     hasUniqueValues(ruleIds) &&
     hasUniqueValues(ruleNums) &&
     ruleNums.every((num) => num < nextRuleNum)
@@ -149,9 +147,9 @@ function isProfile(value: unknown): value is Profile {
     typeof id === "string" &&
     id.length > 0 &&
     typeof name === "string" &&
-    isStoredProfileNameValid([], name) &&
+    name.trim().length > 0 &&
     typeof badgeText === "string" &&
-    normalizeBadgeText(badgeText) === badgeText &&
+    isNormalizedBadgeText(badgeText) &&
     isOneOf(color, BADGE_COLORS) &&
     Array.isArray(rules) &&
     rules.every(isRule)

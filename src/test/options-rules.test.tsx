@@ -5,7 +5,7 @@ import { App } from "../../entrypoints/options/App";
 import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { Profile } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
-import { setReconcileError } from "../platform/session-store";
+import { publishReconcileState } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
 import { copy, siteAccessCopy } from "../ui/copy";
@@ -141,7 +141,7 @@ describe("all rules", () => {
 
   it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
     await seed(oneRule());
-    await setReconcileError(true);
+    await publishReconcileState(true);
     const root = await mount();
 
     const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');

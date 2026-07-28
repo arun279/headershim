@@ -150,11 +150,13 @@ export function createProfile(draft: ProfileDraft): Profile {
 export const DEFAULT_PROFILE_NAME = "Default";
 
 export function createDefaultProfile(): Profile {
-  return createProfile({
+  return {
+    id: crypto.randomUUID(),
     name: DEFAULT_PROFILE_NAME,
     badgeText: "DE",
     color: "indigo",
-  });
+    rules: [],
+  };
 }
 
 export function activeProfile(doc: StateDoc): Profile {
@@ -171,11 +173,10 @@ export function defaultProfileColor(profileCount: number): BadgeColor {
   return BADGE_COLORS[profileCount % BADGE_COLORS.length] ?? BADGE_COLORS[0];
 }
 
-// The one profile-activation transition. It remembers the profile it leaves in
+// A profile-activation transition. It remembers the profile it leaves in
 // previousProfileId, so the profile shortcut can flip back to it. A no-op when
 // the target is already active, absent, or over its enabled-rule caps (a profile
-// can grow past them while inactive), so the UI switch and the shortcut share
-// one guard and one bookkeeping rule.
+// can grow past them while inactive).
 export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   const profile = doc.profiles.find((candidate) => candidate.id === profileId);
   if (
@@ -250,6 +251,10 @@ export function normalizeBadgeText(text: string): string {
   return Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
     .slice(0, 2)
     .join("");
+}
+
+export function isNormalizedBadgeText(text: string): boolean {
+  return Array.from(graphemeSegmenter.segment(text)).length <= 2;
 }
 
 /**

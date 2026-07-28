@@ -79,8 +79,8 @@ export interface PlacedRef {
 }
 
 export interface Batch {
-  readonly installedRevision: string;
   readonly paused: boolean;
+  readonly overLimit: boolean;
   readonly dynamic: readonly ReadonlyDnrRule[];
   readonly session: readonly ReadonlyDnrRule[];
   readonly entries: readonly Entry[];

@@ -3,8 +3,8 @@ import { createV1Seed } from "../core/schema";
 import type { SessionState } from "./session-store";
 import {
   getReconcileError,
+  publishReconcileState,
   read as readSession,
-  setReconcileError,
   write as writeSession,
 } from "./session-store";
 import { read, subscribe, write } from "./store";
@@ -22,7 +22,7 @@ describe("platform storage", () => {
     unsubscribe();
   });
 
-  it("round-trips tab overrides and the reconcile error flag", async () => {
+  it("round-trips session state and reconcile health", async () => {
     const session: SessionState = {
       nextNum: 18,
       tabs: {
@@ -44,7 +44,11 @@ describe("platform storage", () => {
     expect(await readSession()).toEqual({ nextNum: 1, tabs: {} });
     expect(await getReconcileError()).toBe(false);
 
-    await Promise.all([writeSession(session), setReconcileError(true)]);
+    await Promise.all([
+      writeSession(session),
+      publishReconcileState(true),
+      publishReconcileState(true),
+    ]);
 
     expect(await readSession()).toEqual(session);
     expect(await getReconcileError()).toBe(true);

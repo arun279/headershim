@@ -20,8 +20,8 @@ export function computeStatus({
   if (doc.settings.paused) {
     return "paused";
   }
-  // A failed reconcile means even the granted picture may not be what Chrome is
-  // actually running, so nothing on screen can be trusted as live.
+  // A reconcile failure or omitted over-limit rule means the stored document
+  // is not fully represented by Chrome, so the system cannot report live.
   if (reconcileError) {
     return "out-of-sync";
   }

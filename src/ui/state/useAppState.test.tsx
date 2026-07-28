@@ -3,7 +3,7 @@ import { fakeBrowser } from "@webext-core/fake-browser";
 import { describe, expect, it, vi } from "vitest";
 import type { Profile, Rule, StateDoc } from "../../core/model";
 import {
-  setReconcileError,
+  publishReconcileState,
   write as writeSession,
 } from "../../platform/session-store";
 import { write } from "../../platform/store";
@@ -124,11 +124,11 @@ describe("useAppState", () => {
     await settle();
     expect(view.text()).toBe("live:0");
 
-    await setReconcileError(true);
+    await publishReconcileState(true);
     await settle();
     expect(view.text()).toBe("out-of-sync:0");
 
-    await setReconcileError(false);
+    await publishReconcileState(false);
     await settle();
     expect(view.text()).toBe("live:0");
   });

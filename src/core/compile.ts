@@ -16,7 +16,6 @@ import {
   MAX_SESSION_OVERRIDES,
 } from "./limits";
 import type { HeaderOp, Rule, StateDoc, TabOverride } from "./model";
-import { normalize } from "./reconcile";
 import {
   type DnrResourceType,
   expandResourceTypes,
@@ -61,6 +60,7 @@ interface DnrRuleCondition {
   readonly initiatorDomains?: string[];
   readonly urlFilter?: string;
   readonly regexFilter?: string;
+  readonly isUrlFilterCaseSensitive?: boolean;
   readonly resourceTypes?: DnrResourceType[];
   readonly tabIds?: number[];
 }
@@ -77,6 +77,7 @@ export interface ReadonlyDnrRuleCondition {
   readonly initiatorDomains?: readonly string[];
   readonly urlFilter?: string;
   readonly regexFilter?: string;
+  readonly isUrlFilterCaseSensitive?: boolean;
   readonly resourceTypes?: readonly DnrResourceType[];
   readonly tabIds?: readonly number[];
 }
@@ -101,22 +102,10 @@ export interface CompileInput {
   readonly isRegexSupported: (regex: string) => boolean;
 }
 
-export function installedRevisionOf(
-  dynamic: readonly DnrRule[],
-  session: readonly DnrRule[],
-): string {
-  const text = [
-    ...normalize([...dynamic]).map((rule) => `dynamic:${JSON.stringify(rule)}`),
-    ...normalize([...session]).map((rule) => `session:${JSON.stringify(rule)}`),
-  ]
-    .sort()
-    .join("\n");
-  const bytes = new TextEncoder().encode(text);
-  let hash = 0x811c9dc5;
-  for (const byte of bytes) {
-    hash = Math.imul(hash ^ byte, 0x01000193);
-  }
-  return `${(hash >>> 0).toString(16).padStart(8, "0")}:${bytes.length}:${dynamic.length + session.length}`;
+interface CompileOutput {
+  readonly dynamic: DnrRule[];
+  readonly session: DnrRule[];
+  readonly overLimit: boolean;
 }
 
 /**
@@ -152,32 +141,32 @@ export function dropInapplicable(
   isRegexSupported: (regex: string) => boolean,
   granted: GrantSnapshot,
 ): StateDoc {
-  let nextSyntheticNum = state.nextRuleNum;
+  const bySource = new Map<number, Rule[]>();
+  collectApplicableRules(
+    state,
+    granted,
+    isRegexSupported,
+    (sourceIndex, _narrowed, rule) => {
+      const rules = bySource.get(sourceIndex);
+      if (rules === undefined) {
+        bySource.set(sourceIndex, [rule]);
+      } else {
+        rules.push(rule);
+      }
+    },
+  );
   return {
     ...state,
     profiles: state.profiles.map((profile) =>
       profile.id === state.activeProfileId
         ? {
             ...profile,
-            rules: profile.rules.flatMap((rule) => {
-              if (!rule.enabled) {
-                return [rule];
-              }
-              return applicableNarrowings(rule, granted, isRegexSupported).map(
-                ({ narrowed, sourceIndex }) =>
-                  sourceIndex === 0
-                    ? narrowed.rule
-                    : { ...narrowed.rule, num: nextSyntheticNum++ },
-              );
-            }),
+            rules: profile.rules.flatMap((rule, index) =>
+              rule.enabled ? (bySource.get(index) ?? []) : [rule],
+            ),
           }
         : profile,
     ),
-    // Synthetic variants exist only in this compiler view. Advancing its
-    // allocator guarantees their DNR numeric ids cannot collide with authored
-    // rules; the shared authored id deliberately keeps projections attached to
-    // the one stored rule they represent.
-    nextRuleNum: nextSyntheticNum,
   };
 }
 
@@ -195,15 +184,17 @@ interface ApplicableNarrowing {
 // Narrow every scope that carries requestDomains. Pattern and regex scopes keep
 // their authored matcher and lose only ungranted hosts. A domains scope with no
 // fully covered host can still run under Chrome's observed toolbar grant: turn
-// that exact origin into a URL-anchored pattern. If no host survives, retain the
-// original requirement so missingGrants drops it instead of accidentally
-// turning an empty host list into broad access.
+// that exact origin into a URL-anchored pattern.
 function narrowToGranted(
   rule: Rule,
   granted: GrantSnapshot,
 ): readonly NarrowedRule[] {
-  if (rule.scope.type === "all") {
-    return [{ rule, targetSecured: false }];
+  if (
+    rule.scope.type === "all" ||
+    ((rule.scope.type === "pattern" || rule.scope.type === "regex") &&
+      rule.scope.hosts.length === 0)
+  ) {
+    return granted.allSites ? [{ rule, targetSecured: false }] : [];
   }
   const hosts =
     rule.scope.type === "domains" ? rule.scope.domains : rule.scope.hosts;
@@ -250,7 +241,7 @@ function narrowToGranted(
       }
     }
   }
-  return narrowed.length === 0 ? [{ rule, targetSecured: false }] : narrowed;
+  return narrowed;
 }
 
 function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
@@ -267,9 +258,7 @@ function applicableNarrowings(
 ): ApplicableNarrowing[] {
   return narrowToGranted(rule, granted).flatMap((narrowed, sourceIndex) =>
     uncompilableReason(narrowed.rule, isRegexSupported) === undefined &&
-    (narrowed.targetSecured
-      ? initiatorsGranted(narrowed.rule, granted)
-      : missingGrants(narrowed.rule, granted).length === 0)
+    initiatorsGranted(narrowed.rule, granted)
       ? [{ narrowed, sourceIndex }]
       : [],
   );
@@ -357,7 +346,7 @@ export function settlesPerRequest(rule: Rule): boolean {
 }
 
 interface DynamicCandidate {
-  readonly key: RuleKey;
+  readonly sourceIndex: number;
   readonly narrowed: boolean;
   readonly rule: Rule;
 }
@@ -368,7 +357,7 @@ interface SessionNarrowing {
 }
 
 interface SessionCandidate extends SessionNarrowing {
-  readonly key: RuleKey;
+  readonly sourceIndex: number;
 }
 
 interface KeyedRule {
@@ -399,52 +388,58 @@ function keyOverrides(overrides: readonly TabOverride[]): KeyedOverride[] {
   });
 }
 
-export function compile(input: CompileInput): Batch {
-  const { doc, granted, isRegexSupported, overrides } = input;
-  const dynamicCandidates = collectDynamicCandidates(
-    doc,
-    granted,
-    isRegexSupported,
-  );
-  const dynamicLimits = new Map<RuleKey, "dynamic" | "regex">();
-  const dynamicOverflow = dynamicCandidates.length > MAX_DYNAMIC_RULES;
-  const regexOverflow =
-    dynamicCandidates.filter(
-      (candidate) => candidate.rule.scope.type === "regex",
-    ).length > MAX_REGEX_RULES;
-  const eligibleDynamic = dynamicCandidates.filter((candidate) => {
-    if (dynamicOverflow) {
-      dynamicLimits.set(candidate.key, "dynamic");
-      return false;
-    }
-    if (regexOverflow && candidate.rule.scope.type === "regex") {
-      dynamicLimits.set(candidate.key, "regex");
-      return false;
-    }
-    return true;
-  });
-  const compiledDynamic = eligibleDynamic.map((candidate, index) => ({
-    id: candidate.rule.num,
-    priority: DYNAMIC_PRIORITY_TOP - index,
-    action: headerAction(candidate.rule),
-    condition: compileRuleCondition(candidate.rule),
-  }));
+interface CompiledInput {
+  readonly dynamicBand: DynamicBand;
+  readonly sessionBand: SessionBand;
+}
 
-  const keyedOverrides = keyOverrides(overrides);
-  const sessionCandidates = collectSessionCandidates(keyedOverrides, granted);
-  const sessionOverflow = sessionCandidates.length > MAX_SESSION_OVERRIDES;
-  const compiledSession = sessionOverflow
-    ? []
-    : compileSessionCandidates(sessionCandidates, overrides);
+export function compile(input: CompileInput): CompileOutput {
+  if (input.doc.settings.paused) {
+    return { dynamic: [], session: [], overLimit: false };
+  }
+  const applicable = collectApplicableRules(
+    input.doc,
+    input.granted,
+    input.isRegexSupported,
+  );
+  const eligibleDynamic = eligibleDynamicRules(applicable);
+  const sessionCandidates = collectSessionNarrowings(
+    input.overrides,
+    input.granted,
+  );
+  return {
+    overLimit:
+      eligibleDynamic.length < applicable.length ||
+      sessionCandidates.length > MAX_SESSION_OVERRIDES,
+    dynamic: emitDynamicRules(eligibleDynamic),
+    session: emitSessionRules(
+      sessionCandidates.slice(0, MAX_SESSION_OVERRIDES),
+      input.overrides,
+    ),
+  };
+}
+
+export function inspect(input: CompileInput): Batch {
+  const { doc, granted, isRegexSupported } = input;
+  const output = compile(input);
+  const { dynamicBand, sessionBand } = compileInput(input);
+  const activeKeys = keyRules(
+    doc.activeProfileId,
+    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.rules ??
+      [],
+  );
+  const keyedOverrides = keyOverrides(input.overrides);
   const placements = collectPlacements(
-    eligibleDynamic,
-    compiledDynamic,
-    sessionOverflow ? [] : sessionCandidates,
-    compiledSession,
+    dynamicBand.candidates,
+    dynamicBand.rules,
+    sessionBand.candidates,
+    sessionBand.rules,
+    activeKeys,
+    keyedOverrides,
   );
   const entries = [
     ...doc.profiles.flatMap((profile) => {
-      return keyRules(profile.id, profile.rules).map(({ key, rule }) =>
+      return keyRules(profile.id, profile.rules).map(({ key, rule }, index) =>
         storedEntry(
           key,
           profile.id,
@@ -454,57 +449,62 @@ export function compile(input: CompileInput): Batch {
           granted,
           isRegexSupported,
           placements.get(key) ?? [],
-          dynamicLimits.get(key),
+          profile.id === doc.activeProfileId
+            ? dynamicBand.limits[index]
+            : undefined,
         ),
       );
     }),
-    ...keyedOverrides.map(({ key, override }) =>
+    ...keyedOverrides.map(({ key, override }, index) =>
       overrideEntry(
         key,
         doc.activeProfileId,
         override,
         placements.get(key) ?? [],
-        sessionOverflow,
+        sessionBand.limits[index] === true,
       ),
     ),
   ];
-  const dynamic = doc.settings.paused ? [] : compiledDynamic;
-  const session = doc.settings.paused ? [] : compiledSession;
   return {
-    installedRevision: installedRevisionOf(dynamic, session),
+    ...output,
     paused: doc.settings.paused,
-    dynamic,
-    session,
     entries,
     slots: collectSlots(entries),
   };
 }
 
+function compileInput(input: CompileInput): CompiledInput {
+  const dynamicCandidates: DynamicCandidate[] = [];
+  collectApplicableRules(
+    input.doc,
+    input.granted,
+    input.isRegexSupported,
+    (sourceIndex, narrowed, rule) =>
+      dynamicCandidates.push({ sourceIndex, narrowed, rule }),
+  );
+  const sessionCandidates: SessionCandidate[] = [];
+  collectSessionNarrowings(
+    input.overrides,
+    input.granted,
+    (sourceIndex, candidate) =>
+      sessionCandidates.push({ sourceIndex, ...candidate }),
+  );
+  return {
+    dynamicBand: compileDynamicBand(dynamicCandidates),
+    sessionBand: compileSessionBand(sessionCandidates, input.overrides),
+  };
+}
+
 export function compileDynamic(state: StateDoc): DnrRule[] {
-  const enabledRules =
-    state.profiles
-      .find((profile) => profile.id === state.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled) ?? [];
-  if (enabledRules.length > MAX_DYNAMIC_RULES) {
-    throw new RangeError(
-      `Dynamic rules: ${enabledRules.length}/${MAX_DYNAMIC_RULES}`,
-    );
-  }
-  const regexCount = enabledRules.filter(
-    (rule) => rule.scope.type === "regex",
-  ).length;
-  if (regexCount > MAX_REGEX_RULES) {
-    throw new RangeError(`Regex rules: ${regexCount}/${MAX_REGEX_RULES}`);
-  }
-  if (state.settings.paused) {
-    return [];
-  }
-  return enabledRules.map((rule, index) => ({
-    id: rule.num,
-    priority: DYNAMIC_PRIORITY_TOP - index,
-    action: headerAction(rule),
-    condition: compileRuleCondition(rule),
-  }));
+  return state.settings.paused
+    ? []
+    : emitDynamicRules(
+        eligibleDynamicRules(
+          state.profiles
+            .find((profile) => profile.id === state.activeProfileId)
+            ?.rules.filter((rule) => rule.enabled) ?? [],
+        ),
+      );
 }
 
 /**
@@ -516,55 +516,111 @@ export function compileSession(
   paused: boolean,
   granted: GrantSnapshot,
 ): DnrRule[] {
-  const candidates = overrides.flatMap((override) =>
-    narrowOverride(override, granted),
-  );
-  if (candidates.length > MAX_SESSION_OVERRIDES) {
-    throw new RangeError(
-      `Session rules: ${candidates.length}/${MAX_SESSION_OVERRIDES}`,
-    );
-  }
-  return paused ? [] : compileSessionCandidates(candidates, overrides);
+  return paused
+    ? []
+    : emitSessionRules(
+        collectSessionNarrowings(overrides, granted).slice(
+          0,
+          MAX_SESSION_OVERRIDES,
+        ),
+        overrides,
+      );
 }
 
-function collectDynamicCandidates(
-  doc: StateDoc,
+interface DynamicBand {
+  readonly candidates: DynamicCandidate[];
+  readonly rules: DnrRule[];
+  readonly limits: readonly ("dynamic" | "regex" | undefined)[];
+}
+
+function compileDynamicBand(
+  candidates: readonly DynamicCandidate[],
+): DynamicBand {
+  const eligibleRules = eligibleDynamicRules(
+    candidates.map((candidate) => candidate.rule),
+  );
+  const eligible: DynamicCandidate[] = [];
+  const limits: ("dynamic" | "regex" | undefined)[] = [];
+  let eligibleIndex = 0;
+  let regexCount = 0;
+  for (const candidate of candidates) {
+    if (candidate.rule === eligibleRules[eligibleIndex]) {
+      eligible.push(candidate);
+      eligibleIndex += 1;
+      if (candidate.rule.scope.type === "regex") {
+        regexCount += 1;
+      }
+    } else {
+      limits[candidate.sourceIndex] =
+        candidate.rule.scope.type === "regex" && regexCount === MAX_REGEX_RULES
+          ? "regex"
+          : "dynamic";
+    }
+  }
+  return {
+    candidates: eligible,
+    rules: emitDynamicRules(eligible.map((candidate) => candidate.rule)),
+    limits,
+  };
+}
+
+function eligibleDynamicRules(rules: readonly Rule[]): Rule[] {
+  let regexCount = 0;
+  return rules
+    .filter(
+      (rule) => rule.scope.type !== "regex" || regexCount++ < MAX_REGEX_RULES,
+    )
+    .slice(0, MAX_DYNAMIC_RULES);
+}
+
+function emitDynamicRules(rules: readonly Rule[]): DnrRule[] {
+  return rules.map((rule, index) => ({
+    id: rule.num,
+    priority: DYNAMIC_PRIORITY_TOP - index,
+    action: headerAction(rule),
+    condition: compileRuleCondition(rule),
+  }));
+}
+
+function collectApplicableRules(
+  state: StateDoc,
   granted: GrantSnapshot,
   isRegexSupported: (regex: string) => boolean,
-): DynamicCandidate[] {
-  const profile = doc.profiles.find(
-    (candidate) => candidate.id === doc.activeProfileId,
-  );
-  if (profile === undefined) {
-    return [];
-  }
-  let nextSyntheticNum = doc.nextRuleNum;
-  return keyRules(profile.id, profile.rules).flatMap(({ key, rule }) => {
-    if (!rule.enabled) {
-      return [];
-    }
-    return applicableNarrowings(rule, granted, isRegexSupported).map(
-      ({ narrowed, sourceIndex }) => ({
-        key,
-        narrowed: narrowed.targetSecured,
-        rule:
-          sourceIndex === 0
+  observe?: (sourceIndex: number, narrowed: boolean, rule: Rule) => void,
+): Rule[] {
+  const rules: Rule[] = [];
+  let nextSyntheticNum = state.nextRuleNum;
+  state.profiles
+    .find((profile) => profile.id === state.activeProfileId)
+    ?.rules.forEach((rule, sourceIndex) => {
+      if (!rule.enabled) {
+        return;
+      }
+      for (const {
+        narrowed,
+        sourceIndex: projectionIndex,
+      } of applicableNarrowings(rule, granted, isRegexSupported)) {
+        const compiledRule =
+          projectionIndex === 0
             ? narrowed.rule
-            : { ...narrowed.rule, num: nextSyntheticNum++ },
-      }),
-    );
-  });
+            : { ...narrowed.rule, num: nextSyntheticNum++ };
+        rules.push(compiledRule);
+        observe?.(sourceIndex, narrowed.targetSecured, compiledRule);
+      }
+    });
+  return rules;
 }
 
-function collectSessionCandidates(
-  overrides: readonly KeyedOverride[],
+function collectSessionNarrowings(
+  overrides: readonly TabOverride[],
   granted: GrantSnapshot,
-): SessionCandidate[] {
-  return overrides.flatMap<SessionCandidate>(({ key, override }) =>
-    narrowOverride(override, granted).map((candidate) => ({
-      key,
-      ...candidate,
-    })),
+  observe?: (sourceIndex: number, candidate: SessionNarrowing) => void,
+): SessionNarrowing[] {
+  return overrides.flatMap((override, sourceIndex) =>
+    narrowOverride(override, granted).map((candidate) => {
+      observe?.(sourceIndex, candidate);
+      return candidate;
+    }),
   );
 }
 
@@ -583,7 +639,29 @@ function narrowOverride(
   );
 }
 
-function compileSessionCandidates(
+interface SessionBand {
+  readonly candidates: SessionCandidate[];
+  readonly rules: DnrRule[];
+  readonly limits: readonly (true | undefined)[];
+}
+
+function compileSessionBand(
+  candidates: readonly SessionCandidate[],
+  overrides: readonly TabOverride[],
+): SessionBand {
+  const eligible = candidates.slice(0, MAX_SESSION_OVERRIDES);
+  const limits: (true | undefined)[] = [];
+  for (const candidate of candidates.slice(MAX_SESSION_OVERRIDES)) {
+    limits[candidate.sourceIndex] = true;
+  }
+  return {
+    candidates: eligible,
+    rules: emitSessionRules(eligible, overrides),
+    limits,
+  };
+}
+
+function emitSessionRules(
   candidates: readonly SessionNarrowing[],
   overrides: readonly TabOverride[],
 ): DnrRule[] {
@@ -621,12 +699,18 @@ function collectPlacements(
   dynamic: readonly DnrRule[],
   sessionCandidates: readonly SessionCandidate[],
   session: readonly DnrRule[],
+  dynamicKeys: readonly KeyedRule[],
+  sessionKeys: readonly KeyedOverride[],
 ): Map<RuleKey, Placement[]> {
   const placements = new Map<RuleKey, Placement[]>();
   dynamic.forEach((rule, index) => {
     const candidate = dynamicCandidates[index];
-    if (candidate !== undefined) {
-      pushPlacement(placements, candidate.key, {
+    if (candidate === undefined) {
+      return;
+    }
+    const key = dynamicKeys[candidate.sourceIndex]?.key;
+    if (key !== undefined) {
+      pushPlacement(placements, key, {
         dnrId: rule.id,
         band: "dynamic",
         priority: rule.priority,
@@ -638,8 +722,12 @@ function collectPlacements(
   });
   session.forEach((rule, index) => {
     const candidate = sessionCandidates[index];
-    if (candidate !== undefined) {
-      pushPlacement(placements, candidate.key, {
+    if (candidate === undefined) {
+      return;
+    }
+    const key = sessionKeys[candidate.sourceIndex]?.key;
+    if (key !== undefined) {
+      pushPlacement(placements, key, {
         dnrId: rule.id,
         band: "session",
         priority: rule.priority,
@@ -760,11 +848,7 @@ function ungrantedReason(rule: Rule, granted: GrantSnapshot): AbsentReason {
         .filter((initiator) => !originGranted(initiator, granted))
         .map(originPatternForDomain)
     : [];
-  const targetReached = narrowToGranted(rule, granted).some(
-    ({ rule: narrowed, targetSecured }) =>
-      targetSecured ||
-      missingGrants({ ...narrowed, initiators: [] }, granted).length === 0,
-  );
+  const targetReached = narrowToGranted(rule, granted).length > 0;
   const initiatorReason = missingReason(
     "ungranted-initiator",
     missingInitiators,

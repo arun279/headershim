@@ -66,6 +66,13 @@ export async function getReconcileError(): Promise<boolean> {
   return stored.reconcileError ?? false;
 }
 
-export function setReconcileError(reconcileError: boolean): Promise<void> {
-  return browser.storage.session.set<StoredSession>({ reconcileError });
+export async function publishReconcileState(
+  reconcileError: boolean,
+): Promise<void> {
+  const stored = await browser.storage.session.get<StoredSession>({
+    reconcileError: false,
+  });
+  if (stored.reconcileError !== reconcileError) {
+    await browser.storage.session.set<StoredSession>({ reconcileError });
+  }
 }
