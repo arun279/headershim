@@ -46,7 +46,7 @@
     "@biomejs/biome": "^2.5.3",
     "@playwright/test": "1.61.1",
     "@resvg/resvg-js": "^2.6.2",
-    "@size-limit/file": "^12.1.0",
+    "@size-limit/file": "^13.0.1",
     "@tsconfig/strictest": "^2.0.8",
     "@vitest/coverage-v8": "^4.1.9",
     "@webext-core/fake-browser": "^1.5.2",
@@ -54,7 +54,7 @@
     "jscpd": "^5.0.11",
     "knip": "^6.24.0",
     "preact": "^10.29.7",
-    "size-limit": "^12.1.0",
+    "size-limit": "^13.0.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
     "wxt": "^0.20.27"
@@ -104,9 +104,14 @@
       "esbuild",
       "spawn-sync"
     ],
+    "//overrides": [
+      "TODO: each entry forces a transitive package past a published advisory and is a stopgap, not a decision. Remove one as soon as a plain upgrade reaches a fixed version; pnpm why <name> answers whether it still applies.",
+      "multimatch: web-ext-run pins it to exactly 6.0.0, which reaches brace-expansion 1 and GHSA-mh99-v99m-4gvg. Drop when web-ext-run unpins multimatch, or when the build no longer uses web-ext-run."
+    ],
     "overrides": {
       "adm-zip": ">=0.6.0",
       "esbuild": ">=0.28.1",
+      "multimatch": ">=8.0.0",
       "shell-quote": ">=1.8.4",
       "tmp": ">=0.2.6",
       "uuid": ">=11.1.1"
