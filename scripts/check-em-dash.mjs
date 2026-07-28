@@ -62,6 +62,15 @@ for (const file of copyFiles()) {
   });
 }
 
+const manifest = JSON.parse(
+  readFileSync(path.join(root, "package.json"), "utf8"),
+);
+for (const note of manifest.pnpm?.["//overrides"] ?? []) {
+  if (DASHES.test(note)) {
+    violations.push(`package.json pnpm.//overrides: ${note}`);
+  }
+}
+
 if (violations.length > 0) {
   for (const violation of violations) {
     console.error(violation);

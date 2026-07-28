@@ -22,10 +22,6 @@ function commitHash(): string {
 export default defineConfig({
   ...(e2eHostAccess ? { outDirTemplate: "chrome-mv3-e2e-hostaccess" } : {}),
   vite: () => ({
-    esbuild: {
-      jsx: "automatic",
-      jsxImportSource: "preact",
-    },
     define: {
       __COMMIT__: JSON.stringify(commitHash()),
     },
@@ -61,8 +57,6 @@ export default defineConfig({
       extension_pages:
         "script-src 'self'; object-src 'self'; connect-src 'none';",
     },
-    // The default tooltip; the badge state machine swaps in "HeaderShim — paused"
-    // while paused and clears back to this on exit.
     action: { default_title: BRAND_NAME },
     commands: {
       _execute_action: {
