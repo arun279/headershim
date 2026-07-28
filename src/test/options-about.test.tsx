@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
 import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
 import { read, write } from "../platform/store";
@@ -91,7 +92,7 @@ describe("options settings", () => {
     fire(() => link.click());
 
     expect(create).toHaveBeenCalledWith({
-      url: "about:addons",
+      url: "chrome://extensions/shortcuts",
     });
   });
 

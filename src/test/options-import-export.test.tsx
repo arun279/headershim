@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
 import { MAX_IMPORT_BYTES } from "../../entrypoints/options/pages/ImportExport";
 import modheaderFixture from "../core/codec/__fixtures__/modheader-profile.json";
