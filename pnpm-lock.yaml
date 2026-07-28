@@ -38,8 +38,8 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(vitest@4.1.10)
       '@webext-core/fake-browser':
-        specifier: ^1.5.2
-        version: 1.5.2
+        specifier: ^2.0.1
+        version: 2.0.1
       happy-dom:
         specifier: ^20.10.6
         version: 20.10.6
@@ -983,6 +983,9 @@ packages:
 
   '@webext-core/fake-browser@1.5.2':
     resolution: {integrity: sha512-nkDQwOJ23X5Q7cEtN6LRuBtVFf1KVOFi5GoQAro0lzqdh59F5E+K350j1isbnqYbzsXRh1NJtboudIcHfZtvOQ==}
+
+  '@webext-core/fake-browser@2.0.1':
+    resolution: {integrity: sha512-4x5z1z8F0KU8ShF4ForXJ8qnA8oZTy7HYjI91Mbpdzp3H3hU9HR6TNPUxfWtSpFz2FwgEircuJKQg0qFIn6RLg==}
 
   '@webext-core/isolated-element@1.1.5':
     resolution: {integrity: sha512-4m6oP8Vzm/68YO1QmkUOZqqUcmyBtA53tji2g00/nYXE3E3IceYgeub7eIqvXDV2Z7xU6cm6qO1IMt4XFVwtvQ==}
@@ -3212,6 +3215,11 @@ snapshots:
   '@webext-core/fake-browser@1.5.2':
     dependencies:
       '@types/webextension-polyfill': 0.12.5
+      lodash.merge: 4.6.2
+
+  '@webext-core/fake-browser@2.0.1':
+    dependencies:
+      '@wxt-dev/browser': 0.2.2
       lodash.merge: 4.6.2
 
   '@webext-core/isolated-element@1.1.5':
