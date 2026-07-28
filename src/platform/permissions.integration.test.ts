@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { onChanged, remove, request, snapshot } from "./permissions";
 
 describe("platform permissions", () => {
-  it.each([
-    "*://*/*",
-    "<all_urls>",
-  ])("marks %s as an all-sites grant", async (origin) => {
-    await request([origin]);
+  it.each(["*://*/*", "<all_urls>"])(
+    "marks %s as an all-sites grant",
+    async (origin) => {
+      await request([origin]);
 
-    expect(await snapshot()).toEqual({ origins: [origin], allSites: true });
-  });
+      expect(await snapshot()).toEqual({ origins: [origin], allSites: true });
+    },
+  );
 
   it("marshals a grant request, its change events, and removal", async () => {
     const origin = "*://*.example.com/*";

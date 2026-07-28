@@ -1,5 +1,5 @@
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { compileSession } from "../core/compile";
 import { createV1Seed } from "../core/schema";

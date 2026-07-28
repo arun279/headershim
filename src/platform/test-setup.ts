@@ -1,5 +1,5 @@
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { afterEach, beforeEach, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 
 interface TestPermissions {
   origins?: string[];

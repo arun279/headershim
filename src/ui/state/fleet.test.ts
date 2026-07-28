@@ -167,14 +167,17 @@ describe("projectFleet status ladder", () => {
         },
       },
     ],
-  ])("declines to claim a rule fires when %s decides it per request", (_label, changes) => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r", ...changes })] })],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("unconfirmed");
-  });
+  ])(
+    "declines to claim a rule fires when %s decides it per request",
+    (_label, changes) => {
+      const fleet = projectFleet({
+        profiles: [profile({ rules: [rule({ id: "r", ...changes })] })],
+        grants: ALL,
+        status: LIVE,
+      });
+      expect(byKey(fleet, "p1:r").status).toBe("unconfirmed");
+    },
+  );
 
   it("refuses a rule the compiler would drop from the batch", () => {
     const fleet = projectFleet({

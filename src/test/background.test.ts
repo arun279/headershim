@@ -1,6 +1,6 @@
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
 import {
@@ -99,7 +99,6 @@ describe("background lifecycle", () => {
 
     await fakeBrowser.runtime.onInstalled.trigger({
       reason: "install",
-      temporary: false,
     });
     await settle();
 
@@ -166,7 +165,6 @@ describe("background lifecycle", () => {
 
     await fakeBrowser.runtime.onInstalled.trigger({
       reason: "update",
-      temporary: false,
     });
     await settle();
 
@@ -332,7 +330,6 @@ describe("background lifecycle", () => {
     start();
     void fakeBrowser.runtime.onInstalled.trigger({
       reason: "install",
-      temporary: false,
     });
 
     for (const event of [

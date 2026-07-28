@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { fakeBrowser } from "@webext-core/fake-browser";
+
 import { describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import type { Profile, Rule, StateDoc } from "../../core/model";
 import {
   setReconcileError,

@@ -1,5 +1,5 @@
-import { fakeBrowser } from "@webext-core/fake-browser";
 import { vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import type { TabOverride } from "../core/model";
 import type { UpdateRulesOptions } from "../platform/dnr";
 import { FakeDnr } from "../platform/dnr.fake";
@@ -39,11 +39,14 @@ export function tabInfo(id: number, url?: string): FakeTab {
     index: 0,
     windowId: 1,
     highlighted: true,
+    selected: true,
     active: true,
     pinned: false,
     incognito: false,
     discarded: false,
+    frozen: false,
     autoDiscardable: true,
+    groupId: -1,
     ...(url === undefined ? {} : { url }),
   };
 }
