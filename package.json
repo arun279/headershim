@@ -31,9 +31,10 @@
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
+    "check:overrides": "node scripts/check-overrides.mjs",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:self-contained && pnpm check:em-dash",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && playwright test",
     "e2e:packed:pack": "pnpm build && node e2e/packed/pack.mjs",
     "e2e:packed:selfcheck": "node e2e/packed/selfcheck.mjs",
@@ -101,20 +102,21 @@
   ],
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
       "spawn-sync"
     ],
     "//overrides": [
-      "TODO: each entry forces a transitive package past a published advisory and is a stopgap, not a decision. Remove one as soon as a plain upgrade reaches a fixed version; pnpm why <name> answers whether it still applies.",
-      "multimatch: web-ext-run pins it to exactly 6.0.0, which reaches brace-expansion 1 and GHSA-mh99-v99m-4gvg. Drop when web-ext-run unpins multimatch, or when the build no longer uses web-ext-run."
+      "adm-zip: firefox-profile 4.7.0 restricts adm-zip to ~0.5.x, which triggers GHSA-xcpc-8h2w-3j85. Drop when firefox-profile accepts adm-zip 0.6.0 or later, or when WXT no longer reaches firefox-profile through web-ext-run.",
+      "multimatch: web-ext-run 0.2.4 pins multimatch to 6.0.0, which reaches brace-expansion 1 and GHSA-mh99-v99m-4gvg. Drop when web-ext-run accepts multimatch 8.0.0 or later, or when WXT no longer depends on web-ext-run.",
+      "shell-quote: fx-runner 1.4.0 pins shell-quote to 1.7.3, which triggers GHSA-395f-4hp3-45gv and GHSA-w7jw-789q-3m8p. Drop when fx-runner accepts shell-quote 1.9.0 or later, or when WXT no longer reaches fx-runner through web-ext-run.",
+      "tmp: web-ext-run 0.2.4 pins tmp to 0.2.5, which triggers GHSA-ph9p-34f9-6g65. Drop when web-ext-run accepts tmp 0.2.6 or later, or when WXT no longer depends on web-ext-run.",
+      "uuid: node-notifier 10.0.1 restricts uuid to ^8.3.2, which triggers GHSA-w5hq-g745-h8pq. Drop when node-notifier excludes the affected uuid ranges, or when WXT no longer reaches node-notifier through web-ext-run."
     ],
     "overrides": {
       "adm-zip": ">=0.6.0",
-      "esbuild": ">=0.28.1",
       "multimatch": ">=8.0.0",
-      "shell-quote": ">=1.8.4",
+      "shell-quote": ">=1.9.0",
       "tmp": ">=0.2.6",
-      "uuid": ">=11.1.1"
+      "uuid": ">=11.1.1 <12.0.0 || >=12.0.1 <13.0.0 || >=13.0.1"
     }
   }
 }
