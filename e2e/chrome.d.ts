@@ -26,8 +26,16 @@ declare const chrome: {
     };
   };
   declarativeNetRequest: {
+    MAX_NUMBER_OF_DYNAMIC_RULES: number;
+    MAX_NUMBER_OF_REGEX_RULES: number;
+    MAX_NUMBER_OF_SESSION_RULES: number;
+    MAX_NUMBER_OF_UNSAFE_DYNAMIC_RULES: number;
     getDynamicRules(): Promise<unknown[]>;
     getSessionRules(): Promise<unknown[]>;
+    isRegexSupported(options: { regex: string }): Promise<{
+      isSupported: boolean;
+      reason?: "memoryLimitExceeded" | "syntaxError";
+    }>;
     updateDynamicRules(options: {
       addRules?: unknown[];
       removeRuleIds?: number[];
