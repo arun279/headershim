@@ -32,9 +32,13 @@ function ruleDoc(domain: string): StateDoc {
   return { ...doc, profiles: [{ ...profile, rules: [rule] }] };
 }
 
-test("seeded rule reconciles into DNR and reads back normalized-equal", async ({
-  serviceWorker,
-}) => {
+// Both reconcile round-trips run on the static host-access build: grants are a
+// compile input, so only a build that holds one has a rule to install, read back
+// and repair. What the shipped build does with an ungranted rule (compile it to
+// nothing, leaving activeTab nothing to widen) is owned by grants.spec.ts.
+test("seeded rule reconciles into DNR and reads back normalized-equal", {
+  tag: "@host-access",
+}, async ({ serviceWorker }) => {
   const doc = ruleDoc("localhost");
   const desired = compileDynamic(doc);
 
@@ -71,9 +75,9 @@ test("seeded rule reconciles into DNR and reads back normalized-equal", async ({
   expect(settled).toEqual(readback);
 });
 
-test("reconcile repairs direct dynamic-rule corruption and converges", async ({
-  serviceWorker,
-}) => {
+test("reconcile repairs direct dynamic-rule corruption and converges", {
+  tag: "@host-access",
+}, async ({ serviceWorker }) => {
   const doc = ruleDoc("localhost");
   const desired = compileDynamic(doc);
   await seedState(serviceWorker, doc);

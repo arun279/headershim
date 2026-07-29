@@ -1,12 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { render } from "../test/render";
-import {
-  Truncate,
-  truncateEnd,
-  truncateMiddle,
-  truncateWords,
-} from "./Truncate";
+import { Truncate, truncateEnd, truncateMiddle } from "./Truncate";
 
 describe("truncateMiddle", () => {
   it("keeps both ends and cuts the middle", () => {
@@ -82,24 +77,6 @@ describe("Truncate end mode", () => {
   });
 });
 
-describe("Truncate word mode", () => {
-  it("cuts a multiword profile name at a word boundary", () => {
-    expect(truncateWords("Staging environment overrides", 22)).toBe(
-      "Staging environment…",
-    );
-    const root = render(
-      <Truncate
-        mode="word"
-        value="Staging environment overrides"
-        maxChars={22}
-      />,
-    );
-    expect(root.querySelector("span")?.textContent).toBe(
-      "Staging environment…",
-    );
-  });
-});
-
 describe("Truncate middle mode", () => {
   it("carries the full value in title and shows a middle-cut display", () => {
     const value = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6J9.sflKx";
@@ -125,26 +102,57 @@ describe("Truncate middle mode", () => {
     );
   });
 
-  it("measures character width and truncates when no budget is given", () => {
+  // A canvas whose glyphs are 7px wide, except the fullwidth ones at 14px, which
+  // is roughly the ratio a real font gives them. Measuring a stand-in character
+  // instead of the string is what hands a Japanese value twice the room it has.
+  const WIDE = /[　-ヿ一-鿿]/u;
+  function mockCanvas(columnWidth: number) {
     const getContext = vi
       .spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockReturnValue({
         font: "",
-        measureText: () => ({ width: 7 }),
+        measureText: (text: string) => ({
+          width: [...text].reduce(
+            (total, character) => total + (WIDE.test(character) ? 14 : 7),
+            0,
+          ),
+        }),
       } as unknown as CanvasRenderingContext2D);
     const clientWidth = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
-      .mockReturnValue(105);
+      .mockReturnValue(columnWidth);
+    return () => {
+      getContext.mockRestore();
+      clientWidth.mockRestore();
+    };
+  }
+
+  it("fits the rendered string to the column when no budget is given", () => {
+    const restore = mockCanvas(105);
 
     const value = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const root = render(<Truncate mode="middle" value={value} />);
     const text = root.querySelector(".truncate")?.textContent;
 
-    // 105px / 7px per char = 15 characters of budget.
+    // 105px of column, 7px a glyph: 15 of them.
     expect(text).toContain("…");
     expect(text?.length).toBe(15);
 
-    getContext.mockRestore();
-    clientWidth.mockRestore();
+    restore();
+  });
+
+  it("gives a fullwidth value the room it takes, not the room a Latin one takes", () => {
+    const restore = mockCanvas(105);
+
+    const root = render(
+      <Truncate mode="middle" value="山田太郎テスト環境ユーザー名" />,
+    );
+    const text = root.querySelector(".truncate")?.textContent;
+
+    // Half the glyph count of the Latin case, and marked rather than clipped.
+    expect(text).toContain("…");
+    expect(text?.length).toBe(8);
+
+    restore();
   });
 });

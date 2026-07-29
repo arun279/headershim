@@ -1,11 +1,13 @@
-import { headerSensitivity } from "../headers";
+import { headerSensitivity, normalizeHeaderName } from "../headers";
 import {
+  availableProfileName,
   type BadgeColor,
   createProfile,
   createRule,
   type Direction,
+  deriveBadgeText,
   type HeaderOp,
-  isProfileNameAvailable,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type ResourceGroup,
@@ -108,11 +110,6 @@ type EnvelopeMigrationError = Extract<
   ImportError,
   { kind: "newer-version" | "invalid-export" }
 >;
-type MigrationStep = (
-  envelope: unknown,
-) => Result<unknown, EnvelopeMigrationError>;
-
-export const migrations: Readonly<Partial<Record<number, MigrationStep>>> = {};
 
 export function createHeadershimEnvelope(
   source: StateDoc | Profile,
@@ -152,52 +149,20 @@ export function importHeadershim(
 export function migrate(
   envelope: unknown,
 ): Result<HeadershimEnvelope, EnvelopeMigrationError> {
-  const initialVersion = versionOf(envelope);
-  if (initialVersion === undefined) {
+  const version = versionOf(envelope);
+  if (version === undefined) {
     return err({ kind: "invalid-export" });
   }
-  if (initialVersion > CURRENT_SCHEMA_VERSION) {
+  if (version > CURRENT_SCHEMA_VERSION) {
     return err({
       kind: "newer-version",
-      foundVersion: initialVersion,
+      foundVersion: version,
       supportedVersion: CURRENT_SCHEMA_VERSION,
     });
   }
 
-  let migrated = envelope;
-  let version = initialVersion;
-  // The initial envelope schema has no predecessor that can exercise this chain yet.
-  /* v8 ignore start */
-  while (version < CURRENT_SCHEMA_VERSION) {
-    const step = migrations[version];
-    if (!step) {
-      return err({ kind: "invalid-export" });
-    }
-
-    const result = step(migrated);
-    if (!result.ok) {
-      return result;
-    }
-
-    const nextVersion = versionOf(result.value);
-    if (!(nextVersion !== undefined && nextVersion > version)) {
-      return err({ kind: "invalid-export" });
-    }
-    if (nextVersion > CURRENT_SCHEMA_VERSION) {
-      return err({
-        kind: "newer-version",
-        foundVersion: nextVersion,
-        supportedVersion: CURRENT_SCHEMA_VERSION,
-      });
-    }
-
-    migrated = result.value;
-    version = nextVersion;
-  }
-  /* v8 ignore stop */
-
-  return isHeadershimEnvelope(migrated)
-    ? ok(migrated)
+  return isHeadershimEnvelope(envelope)
+    ? ok(envelope)
     : err({ kind: "invalid-export" });
 }
 
@@ -205,9 +170,16 @@ export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
   let nextDoc = doc;
 
   for (const importedProfile of plan.profiles) {
+    // The badge is the only mark that tells one profile's rules from another's
+    // in the rule lists, so an imported one that a profile already wears is
+    // re-derived from the name the import landed under, the same way a created
+    // profile takes one.
+    const taken = nextDoc.profiles.map((profile) => profile.badgeText);
     const profile = createProfile({
       name: importedProfile.name,
-      badgeText: importedProfile.badgeText,
+      badgeText: taken.includes(importedProfile.badgeText)
+        ? deriveBadgeText(importedProfile.name, taken)
+        : importedProfile.badgeText,
       color: importedProfile.color,
     });
     const rules = [];
@@ -290,7 +262,11 @@ function createImportPlan(
 
   for (const exported of envelope.profiles) {
     profiles.push({
-      name: availableProfileName(exported.name, existingProfiles, profiles),
+      name: availableProfileName(
+        exported.name,
+        existingProfiles,
+        profiles.map((profile) => profile.name),
+      ),
       badgeText: exported.badge,
       color: exported.color,
       rules: exported.rules.map(importRuleDraft),
@@ -320,9 +296,13 @@ export function sensitiveRuleWarnings(
   );
 }
 
-/** The name a plan's rule is itemized under: its comment, else its header. */
-export function draftRuleName(rule: RuleDraft): string {
-  return rule.comment?.trim() || rule.header;
+/**
+ * The name a plan's rule is itemized under. The header is what the warning is
+ * about and is one short token; a comment is free text of any length and drops
+ * three lines of prose into a label slot.
+ */
+function draftRuleName(rule: RuleDraft): string {
+  return rule.header;
 }
 
 function importRuleDraft(rule: ExportedRule): RuleDraft {
@@ -361,38 +341,6 @@ function importScope(scope: ExportedScope): Scope {
     case "all":
       return { type: "all" };
   }
-}
-
-export function availableProfileName(
-  base: string,
-  existingProfiles: readonly Profile[],
-  plannedProfiles: readonly ImportedProfile[],
-): string {
-  if (isAvailable(base, existingProfiles, plannedProfiles)) {
-    return base;
-  }
-
-  for (let suffix = 2; ; suffix += 1) {
-    const ending = ` ${suffix}`;
-    const candidate = `${base.slice(0, 48 - ending.length).trimEnd()}${ending}`;
-    if (isAvailable(candidate, existingProfiles, plannedProfiles)) {
-      return candidate;
-    }
-  }
-}
-
-function isAvailable(
-  candidate: string,
-  existingProfiles: readonly Profile[],
-  plannedProfiles: readonly ImportedProfile[],
-): boolean {
-  const normalized = candidate.toLowerCase();
-  return (
-    isProfileNameAvailable(existingProfiles, candidate) &&
-    plannedProfiles.every(
-      (profile) => profile.name.toLowerCase() !== normalized,
-    )
-  );
 }
 
 function versionOf(value: unknown): number | undefined {
@@ -437,7 +385,7 @@ function isExportedProfile(value: unknown): value is ExportedProfile {
   const { name, badge, color, rules } = value;
   return (
     typeof name === "string" &&
-    isProfileNameAvailable([], name) &&
+    isStoredProfileNameValid([], name) &&
     typeof badge === "string" &&
     normalizeBadgeText(badge) === badge &&
     isOneOf(color, BADGE_COLORS) &&
@@ -466,7 +414,7 @@ function isExportedRule(value: unknown): value is ExportedRule {
     isOneOf(operation, HEADER_OPERATIONS) &&
     typeof header === "string" &&
     header.length > 0 &&
-    header === header.trim().toLowerCase() &&
+    header === normalizeHeaderName(header) &&
     hasValidHeaderValue(value) &&
     (comment === undefined || typeof comment === "string") &&
     typeof enabled === "boolean" &&

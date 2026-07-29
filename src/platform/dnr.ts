@@ -9,18 +9,12 @@ export interface UpdateRulesOptions {
   removeRuleIds?: number[];
 }
 
-export interface ExtensionActionOptions {
-  displayActionCountAsBadgeText?: boolean;
-  tabUpdate?: { increment: number; tabId: number };
-}
-
 export interface DnrAdapter {
   getDynamicRules(): Promise<DnrRule[]>;
   updateDynamicRules(options: UpdateRulesOptions): Promise<void>;
   getSessionRules(): Promise<DnrRule[]>;
   updateSessionRules(options: UpdateRulesOptions): Promise<void>;
   isRegexSupported: RegexValidator;
-  setExtensionActionOptions(options: ExtensionActionOptions): Promise<void>;
 }
 
 // The real DNR surface, bound to the same contract FakeDnr implements: the
@@ -51,9 +45,6 @@ const dnr = {
       ? ok(undefined)
       : err(result.reason ?? "unsupported");
   },
-  setExtensionActionOptions(options: ExtensionActionOptions): Promise<void> {
-    return browser.declarativeNetRequest.setExtensionActionOptions(options);
-  },
 } satisfies DnrAdapter;
 
 export const {
@@ -62,15 +53,17 @@ export const {
   getSessionRules,
   updateSessionRules,
   isRegexSupported,
-  setExtensionActionOptions,
 } = dnr;
 
 export async function resolveRegexSupport(
   doc: StateDoc,
+  profiles: "active" | "all" = "all",
 ): Promise<(regex: string) => boolean> {
   const regexes = new Set<string>();
   for (const profile of doc.profiles) {
-    if (profile.id !== doc.activeProfileId) continue;
+    if (profiles === "active" && profile.id !== doc.activeProfileId) {
+      continue;
+    }
     for (const rule of profile.rules) {
       if (rule.enabled && rule.scope.type === "regex") {
         regexes.add(rule.scope.regex);
@@ -80,7 +73,7 @@ export async function resolveRegexSupport(
   const supported = new Set<string>();
   await Promise.all(
     [...regexes].map(async (regex) => {
-      if ((await isRegexSupported(regex)).ok) {
+      if ((await isRegexSupported(regex).catch(() => undefined))?.ok) {
         supported.add(regex);
       }
     }),

@@ -7,7 +7,7 @@ const getSwitch = (root: HTMLElement) =>
   root.querySelector<HTMLButtonElement>('[role="switch"]') as HTMLButtonElement;
 
 describe("Toggle", () => {
-  it("exposes switch role, checked state, and object-naming label", () => {
+  it("exposes switch role, checked state, and an object-naming label on both channels", () => {
     const root = render(
       <Toggle checked label="Rule on: authorization" onChange={() => {}} />,
     );
@@ -15,6 +15,8 @@ describe("Toggle", () => {
     expect(sw.getAttribute("role")).toBe("switch");
     expect(sw.getAttribute("aria-checked")).toBe("true");
     expect(sw.getAttribute("aria-label")).toBe("Rule on: authorization");
+    // A bare knob has no other name, so the label is also its hover title.
+    expect(sw.getAttribute("title")).toBe("Rule on: authorization");
   });
 
   it("reflects the off state", () => {
@@ -28,7 +30,7 @@ describe("Toggle", () => {
     const root = render(
       <Toggle
         checked
-        label="Turn off: authorization"
+        label="Rule on: authorization"
         tone="paused"
         onChange={() => {}}
       />,

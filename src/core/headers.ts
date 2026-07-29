@@ -144,9 +144,8 @@ const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set([
   "api-key",
   "x-api-key",
 ]);
-// Response headers a site sends to constrain what its own pages may do. A rule
-// that sets or removes one of these takes the protection away for as far as the
-// rule reaches; an append can only add a further constraint.
+// Response headers whose value can change the browser's security policy for a
+// page.
 const SECURITY_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
   "access-control-allow-credentials",
   "access-control-allow-origin",
@@ -178,13 +177,31 @@ export function isSecretHeader(header: string): boolean {
   );
 }
 
+/**
+ * Whether a header is one a site sends on its own responses. The single source
+ * behind both directions of the response-header advisory: the protection this
+ * takes away when it is changed on the response side, and the nothing it does
+ * on the request side.
+ */
+export function isSecurityResponseHeader(header: string): boolean {
+  return SECURITY_RESPONSE_HEADERS.has(normalizeHeaderName(header));
+}
+
+/**
+ * Whether Chrome will append to this request header, given an already
+ * normalized name. Exposed on its own because the compiler wants this answer
+ * and nothing else: reaching it through classifyHeaderName pulls the advisory
+ * tables into the background bundle, which never reads one.
+ */
+export function allowsRequestAppend(normalizedHeader: string): boolean {
+  return REQUEST_APPEND_HEADER_SET.has(normalizedHeader);
+}
+
 export function classifyHeaderName(header: string): HeaderClassification {
   const normalized = normalizeHeaderName(header);
 
   return {
-    requestAppend: REQUEST_APPEND_HEADER_SET.has(normalized)
-      ? "allowed"
-      : "disallowed",
+    requestAppend: allowsRequestAppend(normalized) ? "allowed" : "disallowed",
     advisories: NETWORK_MANAGED_HEADERS.has(normalized)
       ? [
           {
@@ -204,10 +221,9 @@ export function classifyHeaderName(header: string): HeaderClassification {
 }
 
 /**
- * What a rule does to security, which the header name alone cannot answer:
- * writing a credential the request then carries, or taking away a protection the
- * site sent. `classifyHeaderName` answers the name-only half. Warn, never block:
- * calling an API and un-framing a page are both legitimate.
+ * Flags changes that carry credentials or alter a response security policy.
+ * Warn, never block: calling an API and changing a page policy are both
+ * legitimate.
  */
 export function headerSensitivity(
   input: HeaderInput,
@@ -221,11 +237,7 @@ export function headerSensitivity(
       copyId: HEADER_ADVISORY_COPY_IDS.credential,
     });
   }
-  if (
-    input.direction === "response" &&
-    input.operation !== "append" &&
-    SECURITY_RESPONSE_HEADERS.has(header)
-  ) {
+  if (input.direction === "response" && isSecurityResponseHeader(header)) {
     advisories.push({
       kind: "security-response",
       copyId: HEADER_ADVISORY_COPY_IDS["security-response"],
@@ -235,27 +247,43 @@ export function headerSensitivity(
   return advisories;
 }
 
+/**
+ * What is wrong with a header name, or nothing. The one authority the commit
+ * gate and the name field both read, so what the field flags as you type and
+ * what the save refuses can never be two different verdicts on the same name.
+ * Expects an already normalized name.
+ */
+export function validateHeaderName(
+  header: string,
+): HeaderValidationError | undefined {
+  if (header.length === 0) {
+    return {
+      kind: "name-required",
+      copyId: HEADER_ERROR_COPY_IDS["name-required"],
+    };
+  }
+  if (header.startsWith(":")) {
+    return {
+      kind: "name-not-modifiable",
+      copyId: HEADER_ERROR_COPY_IDS["name-not-modifiable"],
+    };
+  }
+  if (!HTTP_TOKEN.test(header)) {
+    return {
+      kind: "name-invalid",
+      copyId: HEADER_ERROR_COPY_IDS["name-invalid"],
+    };
+  }
+  return undefined;
+}
+
 export function validateHeader(
   input: HeaderInput,
 ): Result<ValidatedHeader, HeaderValidationError> {
   const header = normalizeHeaderName(input.header);
-  if (header.length === 0) {
-    return err({
-      kind: "name-required",
-      copyId: HEADER_ERROR_COPY_IDS["name-required"],
-    });
-  }
-  if (header.startsWith(":")) {
-    return err({
-      kind: "name-not-modifiable",
-      copyId: HEADER_ERROR_COPY_IDS["name-not-modifiable"],
-    });
-  }
-  if (!HTTP_TOKEN.test(header)) {
-    return err({
-      kind: "name-invalid",
-      copyId: HEADER_ERROR_COPY_IDS["name-invalid"],
-    });
+  const nameError = validateHeaderName(header);
+  if (nameError !== undefined) {
+    return err(nameError);
   }
   if (input.operation !== "remove" && input.value === undefined) {
     return err({

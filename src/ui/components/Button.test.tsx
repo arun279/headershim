@@ -28,30 +28,20 @@ describe("Button", () => {
     ).toBe("icon-btn");
     expect(
       button(render(<Button kind="destructive">Delete</Button>)).className,
-    ).toBe("menu-item destructive");
+    ).toBe("btn destructive");
   });
 
-  it("gives destructive buttons the menuitem role and others none", () => {
-    expect(
-      button(render(<Button kind="destructive">Delete</Button>)).getAttribute(
-        "role",
+  it("names an icon-only ghost button for assistive tech and on hover", () => {
+    const el = button(
+      render(
+        <Button kind="ghost" label="Options">
+          gear
+        </Button>,
       ),
-    ).toBe("menuitem");
-    expect(
-      button(render(<Button kind="primary">New</Button>)).getAttribute("role"),
-    ).toBeNull();
-  });
-
-  it("names an icon-only ghost button for assistive tech", () => {
-    expect(
-      button(
-        render(
-          <Button kind="ghost" label="Options">
-            gear
-          </Button>,
-        ),
-      ).getAttribute("aria-label"),
-    ).toBe("Options");
+    );
+    expect(el.getAttribute("aria-label")).toBe("Options");
+    // The one label feeds both channels, so hovering the bare icon names it too.
+    expect(el.getAttribute("title")).toBe("Options");
   });
 
   it("invokes onClick and defaults type to button", () => {

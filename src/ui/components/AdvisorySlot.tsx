@@ -2,9 +2,12 @@ import {
   classifyHeaderName,
   type HeaderAdvisoryClass,
   headerSensitivity,
+  isSecurityResponseHeader,
 } from "../../core/headers";
 import type { Direction, HeaderOp } from "../../core/model";
+import { isUnanchoredPattern } from "../../core/scope";
 import { copy } from "../copy";
+import { sentence } from "./sentence";
 import "./AdvisorySlot.css";
 
 /** A pinned caution band that occupies no space until an advisory applies. */
@@ -12,16 +15,22 @@ export function AdvisorySlot({
   header,
   direction,
   operation,
+  pattern,
 }: {
   header: string;
   direction: Direction;
   operation: HeaderOp;
+  /** The active URL pattern, when the scope is a URL pattern; absent otherwise. */
+  pattern?: string | undefined;
 }) {
   const advisories = [
     ...classifyHeaderName(header).advisories,
     ...headerSensitivity({ direction, operation, header }),
   ];
-  if (advisories.length === 0) {
+  const unanchored = pattern !== undefined && isUnanchoredPattern(pattern);
+  const responseOnRequest =
+    direction === "request" && isSecurityResponseHeader(header);
+  if (advisories.length === 0 && !unanchored && !responseOnRequest) {
     return null;
   }
 
@@ -35,6 +44,8 @@ export function AdvisorySlot({
         {advisories.map((advisory) => (
           <p key={advisory.kind}>{advisoryCopy(advisory.kind)}</p>
         ))}
+        {responseOnRequest && <p>{copy.advisories.responseOnRequest}</p>}
+        {unanchored && <p>{sentence(copy.advisories.unanchoredPattern)}</p>}
       </div>
     </aside>
   );

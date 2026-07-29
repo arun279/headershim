@@ -2,7 +2,6 @@
 
 import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { browser } from "wxt/browser";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { App } from "../../entrypoints/popup/App";
@@ -24,11 +23,8 @@ import { render, settle } from "../ui/test/render";
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: () => Promise.resolve("api.acme.dev"),
+  activeTabOrigin: () => Promise.resolve("https://api.acme.dev"),
 }));
-
-// The amber can't-run background the badge state machine paints for needs-access
-// and the indigo of the seeded Default profile in its live state.
-const AMBER = "#B07B00";
 
 function installDnr() {
   const fake = new FakeDnr();
@@ -84,22 +80,15 @@ function seed(scope: Scope): StateDoc {
   };
 }
 
-const LINE_STATUSES = [
-  "needs-access",
-  "live",
-  "unconfirmed",
-  "refused",
-  "out-of-sync",
-  "overridden",
-  "off",
-  "paused",
-] as const;
-
 // The one change reads its health straight off the severity spine.
 const state = (root: HTMLElement): string | undefined => {
   const line = root.querySelector(".change-line");
   if (line === null) return undefined;
-  return LINE_STATUSES.find((status) => line.classList.contains(status));
+  if (line.classList.contains("amber")) return "needs-access";
+  if (line.classList.contains("doubt")) return "unconfirmed";
+  if (line.classList.contains("stop")) return "refused";
+  if (line.classList.contains("live")) return "live";
+  return undefined;
 };
 
 async function grant(origin: string) {
@@ -149,8 +138,7 @@ const SCOPES: { name: string; scope: Scope; granted: string }[] = [
 ];
 
 describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
-  it("declines loud, grant clears every surface with zero DNR writes, revoke re-lights", async () => {
-    const setBadge = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+  it("holds the rule out of the ruleset until the grant, and pulls it back on revoke", async () => {
     background.main();
     await writeState(seed(scope));
     await settle();
@@ -158,47 +146,44 @@ describe.each(SCOPES)("grant flow — $name scope", ({ scope, granted }) => {
     const root = render(<App />);
     await settle();
 
-    // Ground truth first: the rule really did reach Chrome's ruleset. Every
-    // claim below is about a rule the engine holds, not one the compiler
-    // quietly dropped from the batch while a surface kept describing it.
+    // Ground truth first: needs-access is a state the product enforces, not a
+    // label printed over a rule the engine is holding. Nothing is installed, so
+    // the activeTab access that invoking the extension confers on this tab has
+    // nothing to widen.
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect(state(root)).toBe("needs-access");
+
+    // The grant is what compiles the rule in, in one write, and the line lights.
+    await grant(ORIGIN);
     expect(await dnr.fake.getDynamicRules()).toMatchObject([
       { action: { requestHeaders: [{ header: "x-env", value: "staging" }] } },
     ]);
-
-    // A rule the user believes is running but can't: loud on the spine and badge.
-    expect(state(root)).toBe("needs-access");
-    expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
-
-    dnr.updateDynamicRules.mockClear();
-    dnr.updateSessionRules.mockClear();
-    setBadge.mockClear();
-
-    // The grant clears the loud state without recompiling a single rule.
-    await grant(ORIGIN);
-    expect(state(root)).toBe(granted);
-    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
-    expect(setBadge).toHaveBeenCalled();
-    expect(setBadge).not.toHaveBeenCalledWith({ color: AMBER });
+    expect(state(root)).toBe(granted);
 
-    // A grant revoked from Chrome's own UI re-lights the loud state live — the
-    // spine returns to amber and so does the badge.
-    setBadge.mockClear();
+    // A grant revoked from Chrome's own UI takes the rule back out of the live
+    // ruleset, and the spine returns to needs-access with it.
     await revoke(ORIGIN);
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
     expect(state(root)).toBe("needs-access");
-    expect(setBadge).toHaveBeenCalledWith({ color: AMBER });
   });
 });
 
-describe("grant flow — persisting target hosts never recompiles", () => {
-  it("writes pattern target hosts to scope.hosts as a converged no-op", async () => {
+describe("grant flow — persisting target hosts bounds compiled reach", () => {
+  it("writes pattern target hosts to requestDomains", async () => {
     background.main();
     const doc = seed({
       type: "pattern",
       pattern: "||api.acme.dev^",
       hosts: [],
     });
+    // State is seeded before the grant, as it always is in the product (install
+    // and startup reconcile it), so the grant reconciles the stored doc rather
+    // than racing an empty store where a reconcile would seed a fresh default.
     await writeState(doc);
+    await settle();
+    await fakeBrowser.permissions.request({ origins: [ORIGIN] });
     await settle();
     dnr.updateDynamicRules.mockClear();
     dnr.updateSessionRules.mockClear();
@@ -208,10 +193,9 @@ describe("grant flow — persisting target hosts never recompiles", () => {
     if (profile === undefined || rule === undefined) {
       throw new Error("seed produced no rule");
     }
-    // scope.hosts records which concrete sites a pattern was granted for; it
-    // drives grant computation only and is never part of a DNR condition, so
-    // the reconcile after this write converges to a no-op. (Initiators, by
-    // contrast, compile to initiatorDomains and legitimately recompile.)
+    // scope.hosts records which concrete sites a pattern was granted for and
+    // compiles to requestDomains, keeping the filter bounded even if the
+    // extension later receives all-sites access.
     const outcome = await mutations.saveRule(profile.id, rule.id, {
       direction: rule.direction,
       operation: rule.operation,
@@ -229,8 +213,12 @@ describe("grant flow — persisting target hosts never recompiles", () => {
     await settle();
 
     expect(outcome.ok).toBe(true);
-    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
+    expect((await dnr.fake.getDynamicRules())[0]?.condition).toMatchObject({
+      requestDomains: ["api.acme.dev"],
+      urlFilter: "||api.acme.dev^",
+    });
 
     // Read storage back: the write landed and the pattern now records the site
     // it was granted for, so a later revoke has a host to relight against.

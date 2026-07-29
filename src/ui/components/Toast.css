@@ -1,12 +1,19 @@
-/* Slides up over the footer, one at a time, self-dismissing (no close control). */
+/* A bottom-centred overlay, one at a time, self-dismissing (no close control).
+   Fixed, not in-flow: in flow it is the surface's last row, so it breaks the
+   inset grid and resizes the popup document as it comes and goes. Inverted ink
+   on paper, since panel on panel is a 1.18:1 step that read as a field addon. */
 .toast {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-4);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  max-width: 376px;
+  max-width: min(376px, calc(100% - 2 * var(--sp-4)));
   padding: var(--sp-2) var(--sp-4);
-  background: var(--panel);
-  border: var(--hairline) solid var(--line);
+  background: var(--ink);
+  color: var(--paper);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-toast);
 }
@@ -20,9 +27,14 @@
   flex: none;
   min-height: 24px;
   padding: var(--sp-1) var(--sp-3);
-  border: var(--hairline) solid var(--line-strong);
+  border: var(--hairline) solid
+    color-mix(in srgb, currentColor 45%, transparent);
   border-radius: var(--r-chip);
-  color: var(--ink);
+  color: inherit;
   font-size: 12px;
   font-weight: 600;
+}
+
+.toast-action:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
 }

@@ -1,7 +1,25 @@
-import type { Rule, StateDoc } from "./model";
-import { expandResourceTypes, originPatternForDomain } from "./scope";
+import type { Rule } from "./model";
+import {
+  expandResourceTypes,
+  hostUnder,
+  originPatternForDomain,
+} from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
+
+/**
+ * The permissions the manifest declares, in the order it declares them. The
+ * manifest is built from this list and the About page keys its disclosure rows
+ * off it, so the two cannot drift: adding an entry here without a reason to
+ * show beside it does not compile.
+ */
+export const MANIFEST_PERMISSIONS = [
+  "declarativeNetRequestWithHostAccess",
+  "storage",
+  "activeTab",
+] as const;
+
+export type ManifestPermission = (typeof MANIFEST_PERMISSIONS)[number];
 
 export function isAllSitesOrigin(origin: string): boolean {
   return origin === ALL_SITES_ORIGIN || origin === "<all_urls>";
@@ -11,6 +29,8 @@ export interface GrantSnapshot {
   readonly origins: readonly string[];
   readonly allSites: boolean;
 }
+
+export type GrantCoverage = "full" | "partial" | "none";
 
 export function requiredOrigins(
   rule: Pick<Rule, "scope" | "resourceTypes" | "initiators">,
@@ -48,13 +68,49 @@ export function requiredOrigins(
 }
 
 export function originGranted(domain: string, granted: GrantSnapshot): boolean {
+  return originGrantCoverage(domain, granted) === "full";
+}
+
+function originGrantCoverage(
+  domain: string,
+  granted: GrantSnapshot,
+): GrantCoverage {
   if (granted.allSites) {
-    return true;
+    return "full";
   }
   const required = originPatternForDomain(domain);
-  return granted.origins.some((origin) =>
-    originPatternContains(origin, required),
+  return combinedCoverage(
+    granted.origins.map((origin) => originPatternCoverage(origin, required)),
   );
+}
+
+/**
+ * URL filters that confine a wider requestDomains condition to every partial
+ * grant Chrome actually holds. One stored pattern can require more than one
+ * filter: a wildcard-scheme bare host needs separate HTTP and HTTPS anchors,
+ * while a concrete-scheme subdomain grant needs apex and wildcard-host anchors.
+ * Keeping every intersection prevents grant ordering from deciding which
+ * origins run, and preserving each stored scheme/host/port subset prevents
+ * activeTab from widening it to the rest of the authored rule.
+ */
+export function narrowedGrantUrlFilters(
+  domain: string,
+  granted: GrantSnapshot,
+): string[] {
+  const required = originPatternForDomain(domain);
+  const filters = new Set<string>();
+  for (const origin of granted.origins) {
+    const pattern = parseOriginPattern(origin);
+    if (
+      pattern !== undefined &&
+      originPatternCoverage(origin, required) === "partial"
+    ) {
+      for (const filter of urlFiltersForPattern(pattern)) {
+        filters.add(filter);
+      }
+    }
+  }
+  return [...filters];
 }
 
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
@@ -64,113 +120,12 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
 
   return requiredOrigins(rule).filter(
     (origin) =>
-      !granted.origins.some((grantedOrigin) =>
-        originPatternContains(grantedOrigin, origin),
-      ),
-  );
-}
-
-export interface RuleGrantGap {
-  readonly profileId: string;
-  readonly ruleId: string;
-  readonly missing: readonly string[];
-}
-
-export function docMissingGrants(
-  doc: StateDoc,
-  granted: GrantSnapshot,
-): RuleGrantGap[] {
-  const profile = doc.profiles.find(
-    (candidate) => candidate.id === doc.activeProfileId,
-  );
-  return (
-    profile?.rules.flatMap((rule) => {
-      const missing = rule.enabled ? missingGrants(rule, granted) : [];
-      return missing.length === 0
-        ? []
-        : [{ profileId: profile.id, ruleId: rule.id, missing }];
-    }) ?? []
-  );
-}
-
-export interface SiteAccessEntry {
-  readonly origin: string;
-  readonly domain: string;
-  readonly ruleCount: number;
-}
-
-export interface SiteAccessView {
-  readonly needed: readonly SiteAccessEntry[];
-  readonly granted: readonly SiteAccessEntry[];
-  readonly initiatorNote: boolean;
-}
-
-/**
- * The Site access page's world: origins enabled rules still need, origins
- * already granted with the rules that reference them (pattern and regex rules
- * count through their persisted hosts, via requiredOrigins), and whether the
- * standing initiator note applies. Needed entries never include the broad
- * origin — the all-sites card is its only grant affordance, so broad access
- * stays behind its honest framing. Granted counts span all rules regardless of
- * enabled state, because grants outlive the rules that asked for them.
- */
-export function siteAccessView(
-  doc: StateDoc,
-  granted: GrantSnapshot,
-): SiteAccessView {
-  const needed = new Map<string, number>();
-  for (const gap of docMissingGrants(doc, granted)) {
-    for (const origin of gap.missing) {
-      if (!isAllSitesOrigin(origin)) {
-        needed.set(origin, (needed.get(origin) ?? 0) + 1);
-      }
-    }
-  }
-
-  const required = doc.profiles.flatMap((profile) =>
-    profile.rules.map(requiredOrigins),
-  );
-  return {
-    needed: [...needed]
-      .map(([origin, ruleCount]) => entry(origin, ruleCount))
-      .sort(byDomain),
-    granted: granted.origins
-      .filter((origin) => !isAllSitesOrigin(origin))
-      .map((origin) =>
-        entry(
-          origin,
-          required.filter((origins) =>
-            origins.some((candidate) =>
-              originPatternContains(origin, candidate),
-            ),
-          ).length,
+      combinedCoverage(
+        granted.origins.map((grantedOrigin) =>
+          originPatternCoverage(grantedOrigin, origin),
         ),
-      )
-      .sort(byDomain),
-    initiatorNote:
-      !granted.allSites &&
-      doc.profiles
-        .find((profile) => profile.id === doc.activeProfileId)
-        ?.rules.some(
-          (rule) =>
-            rule.enabled &&
-            rule.initiators.length === 0 &&
-            rule.scope.type !== "all" &&
-            subresourceScopedRule(rule),
-        ) === true,
-  };
-}
-
-function entry(origin: string, ruleCount: number): SiteAccessEntry {
-  return {
-    origin,
-    domain: domainFromOriginPattern(origin) ?? origin,
-    ruleCount,
-  };
-}
-
-function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
-  return a.domain.localeCompare(b.domain);
+      ) !== "full",
+  );
 }
 
 /**
@@ -178,42 +133,116 @@ function byDomain(a: SiteAccessEntry, b: SiteAccessEntry): number {
  * require the initiating page granted too, so only then can an unnamed
  * initiator be a silent gap worth a standing note.
  */
-function coversSubresourceTypes(rule: Pick<Rule, "resourceTypes">): boolean {
+export function coversSubresourceTypes(
+  rule: Pick<Rule, "resourceTypes">,
+): boolean {
   return expandResourceTypes(rule.resourceTypes).some(
     (resourceType) =>
       resourceType !== "main_frame" && resourceType !== "sub_frame",
   );
 }
 
-/**
- * When the standing initiator note is worth showing on a healthy rule:
- * the rule reaches subresources but NOT top-level page navigations, so its
- * requests are genuinely started by some *other* page and that page needs
- * granting too. A default all-types rule includes main_frame — the common
- * direct-navigation case the user is not surprised by — so it stays quiet.
- */
-function subresourceScopedRule(rule: Rule): boolean {
-  const expanded = expandResourceTypes(rule.resourceTypes);
-  return (
-    !expanded.includes("main_frame") &&
-    expanded.some((type) => type !== "main_frame" && type !== "sub_frame")
-  );
-}
-
-function originPatternContains(granted: string, required: string): boolean {
-  if (granted === required) {
-    return true;
+export function originPatternCoverage(
+  granted: string,
+  required: string,
+): GrantCoverage {
+  const grantedPattern = parseOriginPattern(granted);
+  const requiredPattern = parseOriginPattern(required);
+  if (grantedPattern === undefined || requiredPattern === undefined) {
+    return "none";
   }
 
-  const grantedDomain = domainFromOriginPattern(granted);
-  const requiredDomain = domainFromOriginPattern(required);
-  if (grantedDomain === undefined) {
-    return false;
+  if (!patternsIntersect(grantedPattern, requiredPattern)) {
+    return "none";
   }
-  return requiredDomain?.endsWith(`.${grantedDomain}`) ?? false;
+  return patternContains(grantedPattern, requiredPattern) ? "full" : "partial";
 }
 
 export function domainFromOriginPattern(pattern: string): string | undefined {
-  const match = /^\*:\/\/\*\.([^/]+)\/\*$/.exec(pattern);
-  return match?.[1];
+  return parseOriginPattern(pattern)?.host;
+}
+
+interface OriginPattern {
+  readonly scheme: "*" | "http" | "https";
+  readonly host: string;
+  readonly includesSubdomains: boolean;
+  /** Undefined means every port, as Chrome's containment oracle confirms. */
+  readonly port: string | undefined;
+}
+
+// Chrome returns extension-requested patterns byte-identically, while its
+// toolbar narrowing returns a concrete scheme, a bare host, and a non-default
+// port when present. Keep all three axes: Chrome enforces them independently.
+function parseOriginPattern(pattern: string): OriginPattern | undefined {
+  const match =
+    /^(\*|https?):\/\/(\*\.)?(\[[^\]]+\]|[^/:]+)(?::(\d+))?\/\*$/.exec(pattern);
+  const scheme = match?.[1] as OriginPattern["scheme"] | undefined;
+  const host = match?.[3];
+  if (scheme === undefined || host === undefined || host === "*") {
+    return undefined;
+  }
+  return {
+    scheme,
+    host,
+    includesSubdomains: match?.[2] !== undefined,
+    port: match?.[4],
+  };
+}
+
+function urlFiltersForPattern(pattern: OriginPattern): string[] {
+  if (pattern.scheme === "*" && pattern.includesSubdomains) {
+    return [
+      pattern.port === undefined
+        ? `||${pattern.host}^`
+        : `||${pattern.host}:${pattern.port}/`,
+    ];
+  }
+
+  const schemes =
+    pattern.scheme === "*" ? (["http", "https"] as const) : [pattern.scheme];
+  const hosts = pattern.includesSubdomains
+    ? [pattern.host, `*.${pattern.host}`]
+    : [pattern.host];
+  return schemes.flatMap((scheme) =>
+    hosts.map((host) =>
+      pattern.port === undefined
+        ? `|${scheme}://${host}^`
+        : `|${scheme}://${host}:${pattern.port}/`,
+    ),
+  );
+}
+
+function combinedCoverage(coverages: readonly GrantCoverage[]): GrantCoverage {
+  return coverages.includes("full")
+    ? "full"
+    : coverages.includes("partial")
+      ? "partial"
+      : "none";
+}
+
+function patternContains(
+  granted: OriginPattern,
+  required: OriginPattern,
+): boolean {
+  return (
+    (granted.scheme === "*" || granted.scheme === required.scheme) &&
+    (granted.port === undefined || granted.port === required.port) &&
+    (granted.includesSubdomains
+      ? hostUnder(required.host, granted.host)
+      : !required.includesSubdomains && granted.host === required.host)
+  );
+}
+
+function patternsIntersect(left: OriginPattern, right: OriginPattern): boolean {
+  const schemesIntersect =
+    left.scheme === "*" || right.scheme === "*" || left.scheme === right.scheme;
+  const portsIntersect =
+    left.port === undefined ||
+    right.port === undefined ||
+    left.port === right.port;
+  const hostsIntersect =
+    (left.includesSubdomains && hostUnder(right.host, left.host)) ||
+    (right.includesSubdomains && hostUnder(left.host, right.host)) ||
+    left.host === right.host;
+  return schemesIntersect && portsIntersect && hostsIntersect;
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
 import { compileSession } from "../core/compile";
+import type { GrantSnapshot } from "../core/grants";
 import { createV1Seed } from "../core/schema";
 import { read as readSession } from "../platform/session-store";
 import { write as writeState } from "../platform/store";
@@ -10,8 +11,16 @@ import { installDnr, settle, tabInfo } from "./dnr-harness";
 
 let dnr: ReturnType<typeof installDnr>;
 
-beforeEach(() => {
+// The popup asks for the tab's origin inside the click gesture and refuses to
+// write the row when that is declined, so the write path driven below starts
+// from the grants a real This-tab change leaves behind. The compiler reads the
+// same grants, so without them no row here would reach the session band.
+const GRANTED = ["*://*.app.example.com/*", "*://*.kept.example.com/*"];
+const GRANTS: GrantSnapshot = { origins: GRANTED, allSites: false };
+
+beforeEach(async () => {
   dnr = installDnr();
+  await fakeBrowser.permissions.request({ origins: GRANTED });
 });
 
 /**
@@ -39,7 +48,7 @@ describe("This-tab session overrides — end to end", () => {
     const rows = (await readSession()).tabs[5] ?? [];
     expect(dnr.updateSessionRules).toHaveBeenCalledExactlyOnceWith({
       removeRuleIds: [],
-      addRules: compileSession(rows, false),
+      addRules: compileSession(rows, false, GRANTS),
     });
     // The popup never touches the dynamic set for a session change.
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();

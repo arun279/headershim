@@ -1,6 +1,10 @@
 import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
-import type { ResourceGroup, Scope } from "../../core/model";
+import {
+  RESOURCE_GROUPS,
+  type ResourceGroup,
+  type Scope,
+} from "../../core/model";
 import { copy } from "../copy";
 import { ChipField } from "./ChipField";
 import { Segmented } from "./Segmented";
@@ -28,20 +32,12 @@ interface ScopeEditorProps {
   onResourceTypes: (types: ResourceGroup[] | "all") => void;
 }
 
-const SEGMENTS = ["domains", "pattern", "regex", "all"] as const;
-
-const GROUPS: readonly ResourceGroup[] = [
-  "pages",
-  "subframes",
-  "xhr",
-  "scripts",
-  "stylesheets",
-  "images",
-  "fonts",
-  "media",
-  "websockets",
-  "other",
-];
+const SEGMENTS = [
+  "domains",
+  "pattern",
+  "regex",
+  "all",
+] as const satisfies readonly Scope["type"][];
 
 /**
  * Scope = match type + resource types. The segmented control carries radio
@@ -52,6 +48,10 @@ const GROUPS: readonly ResourceGroup[] = [
 export function ScopeEditor(props: ScopeEditorProps) {
   const id = useId();
   const { scope } = props;
+  // A bad grant host and a bad pattern share one scope-error slot, so the shown
+  // error decides which field the refusal marks and lands focus on: the grant
+  // host when it is the mis-shaped one, the pattern otherwise.
+  const hostError = props.error === copy.errors.domainInvalid;
   const crossPageSubresources =
     props.resourceTypes !== "all" &&
     !props.resourceTypes.includes("pages") &&
@@ -92,8 +92,13 @@ export function ScopeEditor(props: ScopeEditorProps) {
             <UrlScopeField
               id={id}
               label={copy.editor.scopeType.pattern}
-              hint={sentence(copy.editor.patternHint)}
-              invalid={props.error !== undefined}
+              hint={copy.editor.patternHint.map((line, index) => (
+                <p class="editor-micro" key={index}>
+                  {sentence(line)}
+                </p>
+              ))}
+              invalid={props.error !== undefined && !hostError}
+              hostInvalid={hostError}
               value={scope.pattern}
               hosts={scope.hosts}
               onValue={(pattern) => props.onScope({ ...scope, pattern })}
@@ -104,8 +109,11 @@ export function ScopeEditor(props: ScopeEditorProps) {
             <UrlScopeField
               id={id}
               label={copy.editor.scopeType.regex}
-              hint={copy.editor.regexHint}
-              invalid={props.error !== undefined}
+              hint={
+                <p class="editor-micro">{sentence(copy.editor.regexHint)}</p>
+              }
+              invalid={props.error !== undefined && !hostError}
+              hostInvalid={hostError}
               value={scope.regex}
               hosts={scope.hosts}
               onValue={(regex) => props.onScope({ ...scope, regex })}
@@ -142,6 +150,7 @@ function UrlScopeField({
   label,
   hint,
   invalid,
+  hostInvalid,
   value,
   hosts,
   onValue,
@@ -151,6 +160,7 @@ function UrlScopeField({
   label: string;
   hint: ComponentChildren;
   invalid: boolean;
+  hostInvalid: boolean;
   value: string;
   hosts: string[];
   onValue: (value: string) => void;
@@ -166,8 +176,13 @@ function UrlScopeField({
         value={value}
         onInput={(event) => onValue(event.currentTarget.value)}
       />
-      <p class="editor-micro">{hint}</p>
-      <GrantHosts id={`${id}-hosts`} hosts={hosts} onChange={onHosts} />
+      {hint}
+      <GrantHosts
+        id={`${id}-hosts`}
+        hosts={hosts}
+        invalid={hostInvalid}
+        onChange={onHosts}
+      />
     </>
   );
 }
@@ -180,10 +195,12 @@ function UrlScopeField({
 function GrantHosts({
   id,
   hosts,
+  invalid,
   onChange,
 }: {
   id: string;
   hosts: string[];
+  invalid: boolean;
   onChange: (hosts: string[]) => void;
 }) {
   return (
@@ -195,6 +212,7 @@ function GrantHosts({
         placeholder={copy.editor.addDomain}
         values={hosts}
         variant="grant"
+        invalid={invalid}
         removeLabel={copy.editor.removeDomain}
         onChange={onChange}
       />
@@ -251,7 +269,7 @@ function ResourceTypes({
 }) {
   const id = useId();
   const [open, setOpen] = useState(defaultOpen);
-  const selected = resourceTypes === "all" ? GROUPS : resourceTypes;
+  const selected = resourceTypes === "all" ? RESOURCE_GROUPS : resourceTypes;
 
   const toggle = (group: ResourceGroup) => {
     const next = new Set(selected);
@@ -261,9 +279,9 @@ function ResourceTypes({
       next.add(group);
     }
     onResourceTypes(
-      next.size === GROUPS.length
+      next.size === RESOURCE_GROUPS.length
         ? "all"
-        : GROUPS.filter((candidate) => next.has(candidate)),
+        : RESOURCE_GROUPS.filter((candidate) => next.has(candidate)),
     );
   };
 
@@ -275,6 +293,7 @@ function ResourceTypes({
           class="disclosure"
           aria-expanded={open}
           aria-controls={open ? `${id}-panel` : undefined}
+          aria-invalid={error !== undefined ? true : undefined}
           onClick={() => setOpen((current) => !current)}
         >
           {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}
@@ -291,7 +310,7 @@ function ResourceTypes({
             id={`${id}-panel`}
             aria-label={copy.editor.labels.resourceTypes}
           >
-            {GROUPS.map((group) => (
+            {RESOURCE_GROUPS.map((group) => (
               <label class="rt-item" key={group}>
                 <input
                   type="checkbox"

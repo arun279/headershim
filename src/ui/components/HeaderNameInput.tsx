@@ -6,9 +6,11 @@ import {
   useState,
 } from "preact/hooks";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
-import { normalizeHeaderName } from "../../core/headers";
+import { normalizeHeaderName, validateHeaderName } from "../../core/headers";
+import type { Direction } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
+import { headerErrorMessage } from "../state/header-errors";
 import { closePopover, openPositionedPopover } from "./popover";
 import { sentence } from "./sentence";
 import "./HeaderNameInput.css";
@@ -17,6 +19,8 @@ import "./MenuSurface.css";
 interface HeaderNameInputProps {
   /** Raw text as typed; the editor echoes it and the store lowercases it. */
   value: string;
+  /** Picks the placeholder example so it names a header this side can carry. */
+  direction: Direction;
   /** Blocking commit error, rendered inline under the field. */
   error?: string | undefined;
   autoFocus?: boolean;
@@ -31,9 +35,11 @@ interface HeaderNameInputProps {
 }
 
 /**
- * Combobox over the bundled common-header list (never fetched). Typing
- * filters; ↓/↑ move the active option; Enter accepts it (a closed list lets
- * Enter bubble to commit the rule); Esc closes the list first and only then
+ * Combobox over the bundled common-header list (never fetched). The list opens
+ * on ↓ or the trailing chevron, never on a keystroke, so it cannot paint over
+ * the value field below; typing then filters an already-open list. ↑/↓ move the
+ * active option; Enter accepts it (a closed list lets Enter bubble to commit the
+ * rule); Esc closes the list first and only then
  * reaches the editor. Match counts are announced politely. Under the field:
  * the case-honesty microline. Header advisories render in the editor's pinned
  * caution band so they remain visible at the save decision. A pasted
@@ -56,6 +62,10 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     activeIndex === undefined
       ? undefined
       : Math.min(activeIndex, matches.length - 1);
+  // One source for "the list is on screen": intent to open, and matches to show.
+  // Every ARIA flag, the positioning effect and the render read it, so a query
+  // that matches nothing can never float an empty box over the field below.
+  const expanded = open && matches.length > 0;
 
   // Mount-time gesture: focus moves into the editor when it opens, never again.
   // Synchronous with the commit that mounts the editor, not a post-paint effect:
@@ -71,20 +81,20 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   }, []);
 
   useEffect(() => {
-    if (open) {
+    if (expanded) {
       announce(copy.editor.suggestions(matches.length));
     }
-  }, [open, matches.length, announce]);
+  }, [expanded, matches.length, announce]);
 
   useLayoutEffect(() => {
     const list = listRef.current;
     const input = inputRef.current;
-    if (!open || list === null || input === null) {
+    if (!expanded || list === null || input === null) {
       return;
     }
     openPositionedPopover(list, input);
     return () => closePopover(list);
-  }, [open, matches.length]);
+  }, [expanded, matches.length]);
 
   const select = (name: string) => {
     props.onInput(name);
@@ -94,12 +104,18 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   const listId = `${id}-list`;
   const errorId = `${id}-error`;
   const caseId = `${id}-case`;
+  // The same verdict the commit runs, one keystroke early: an illegal name puts
+  // its error where the case line would sit, so the field never reassures about
+  // a name the save will refuse. A commit that got further raises props.error.
+  const nameError =
+    props.value.trim() === "" ? undefined : validateHeaderName(normalized);
+  const message =
+    nameError === undefined ? props.error : headerErrorMessage(nameError);
   const showCase =
-    props.value.trim() !== "" && props.value.trim() !== normalized;
-  const describedBy = [
-    ...(showCase ? [caseId] : []),
-    ...(props.error === undefined ? [] : [errorId]),
-  ].join(" ");
+    message === undefined &&
+    props.value.trim() !== "" &&
+    props.value.trim() !== normalized;
+  const describedBy = message !== undefined ? errorId : showCase ? caseId : "";
 
   return (
     <div class="editor-field">
@@ -114,26 +130,23 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             props.inputRef?.(element);
           }}
           class="field mono"
-          placeholder={copy.editor.placeholders.headerName}
+          placeholder={copy.editor.placeholders.headerName[props.direction]}
           type="text"
+          spellcheck={false}
+          autocomplete="off"
           role="combobox"
-          aria-expanded={open}
-          aria-controls={open ? listId : undefined}
+          aria-expanded={expanded}
+          aria-controls={expanded ? listId : undefined}
           aria-autocomplete="list"
           aria-activedescendant={
-            open && active !== undefined ? `${id}-opt-${active}` : undefined
+            expanded && active !== undefined ? `${id}-opt-${active}` : undefined
           }
-          aria-invalid={props.error !== undefined ? true : undefined}
+          aria-invalid={message !== undefined ? true : undefined}
           aria-describedby={describedBy === "" ? undefined : describedBy}
           value={props.value}
           onInput={(event) => {
-            const raw = event.currentTarget.value;
-            props.onInput(raw);
+            props.onInput(event.currentTarget.value);
             setActiveIndex(undefined);
-            setOpen(
-              raw.trim() !== "" &&
-                matchesFor(normalizeHeaderName(raw)).length > 0,
-            );
           }}
           onKeyDown={(event) => {
             switch (event.key) {
@@ -168,7 +181,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
                 return;
               }
               case "Escape":
-                if (open) {
+                if (expanded) {
                   event.preventDefault();
                   setOpen(false);
                 }
@@ -187,7 +200,22 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             setActiveIndex(undefined);
           }}
         />
-        {open && (
+        <button
+          type="button"
+          class="combo-toggle"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={matches.length === 0}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setActiveIndex(undefined);
+            setOpen((current) => !current);
+            inputRef.current?.focus();
+          }}
+        >
+          ▾
+        </button>
+        {expanded && (
           <div
             class="combo-list"
             role="listbox"
@@ -217,17 +245,18 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             ))}
           </div>
         )}
-        {showCase && (
+      </div>
+      {message !== undefined ? (
+        <p class="editor-error" role="alert" id={errorId}>
+          {message}
+        </p>
+      ) : (
+        showCase && (
           <p class="editor-micro" id={caseId}>
             {sentence(copy.editor.savedAs(normalized))}
           </p>
-        )}
-        {props.error !== undefined && (
-          <p class="editor-error" role="alert" id={errorId}>
-            {props.error}
-          </p>
-        )}
-      </div>
+        )
+      )}
     </div>
   );
 }

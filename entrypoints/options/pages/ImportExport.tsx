@@ -2,7 +2,6 @@ import type { JSX } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { detectImportFormat } from "../../../src/core/codec/detect";
 import {
-  draftRuleName,
   exportHeadershim,
   type ImportError,
   type ImportPlan,
@@ -13,12 +12,13 @@ import { MAX_DOC_BYTES } from "../../../src/core/limits";
 import type { RuleDraft, StateDoc } from "../../../src/core/model";
 import { err, type Result } from "../../../src/core/result";
 import { isRegexSupported } from "../../../src/platform/dnr";
-import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { ImportSummary } from "../../../src/ui/components/ImportSummary";
+import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
+import { useToast } from "../../../src/ui/state/useToast";
 import "./ImportExport.css";
 
 type Plan = ImportPlan<ImportPlanWarning>;
@@ -33,7 +33,7 @@ export const MAX_IMPORT_BYTES = 4 * MAX_DOC_BYTES;
  * Import & export. A picked file is detected, decoded, and shown as a pre-apply
  * summary; nothing is written until Import is confirmed, and every
  * parse/format/version/budget failure renders its error copy and changes
- * nothing. Export writes the golden-stable envelope for everything or one
+ * nothing. Export writes the golden-stable envelope for all profiles or one
  * profile.
  */
 export function ImportExportPage({
@@ -43,9 +43,10 @@ export function ImportExportPage({
   doc: StateDoc;
   mutations: Mutations;
 }) {
-  const announce = useAnnounce();
+  const { toast, show, dismiss } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
   const [plan, setPlan] = useState<Plan | undefined>(undefined);
+  const [fileName, setFileName] = useState("");
   const [importError, setImportError] = useState<string | undefined>(undefined);
   const [applyError, setApplyError] = useState<string | undefined>(undefined);
   const [exportId, setExportId] = useState(doc.profiles[0]?.id ?? "");
@@ -53,6 +54,7 @@ export function ImportExportPage({
 
   const clear = () => {
     setPlan(undefined);
+    setFileName("");
     setImportError(undefined);
     setApplyError(undefined);
     if (fileInput.current !== null) {
@@ -81,6 +83,7 @@ export function ImportExportPage({
     const built = await buildPlan(raw, doc);
     if (built.ok) {
       setPlan(built.value);
+      setFileName(file.name);
     } else {
       setImportError(importErrorCopy(built.error));
     }
@@ -93,21 +96,28 @@ export function ImportExportPage({
     const count = plan.profiles.length;
     void mutations.applyImport(plan).then((outcome) => {
       if (outcome.ok) {
+        // The summary that named the import is gone the moment it applies, so
+        // the write says so where every other write on these pages does. That
+        // the profiles landed turned off is the part the reader has to act on.
         clear();
-        announce(text.imported(count));
+        show(text.imported(count));
       } else {
         setApplyError(blockedCommitCopy(outcome.error));
       }
     });
   };
 
+  const exportAll = () => {
+    download(text.exportFilename, exportHeadershim(doc));
+    show(text.exported(text.exportFilename));
+  };
+
   const exportProfile = () => {
     const profile = doc.profiles.find((candidate) => candidate.id === exportId);
     if (profile !== undefined) {
-      download(
-        text.profileFilename(slug(profile.name)),
-        exportHeadershim(profile),
-      );
+      const filename = text.profileFilename(slug(profile.name));
+      download(filename, exportHeadershim(profile));
+      show(text.exported(filename));
     }
   };
 
@@ -147,6 +157,7 @@ export function ImportExportPage({
         {plan !== undefined && (
           <ImportSummary
             plan={plan}
+            fileName={fileName}
             applyError={applyError}
             onConvert={(index) => setPlan(convert(plan, index))}
             onImport={onImport}
@@ -157,14 +168,12 @@ export function ImportExportPage({
 
       <div class="ie-block">
         <h2 class="silk ie-block-label">{text.exportHeading}</h2>
+        {/* Above the buttons: what the file holds is what decides whether to
+            press one, so reading order puts it before the press. */}
+        <p class="ie-hint">{text.secretsReminder}</p>
         <div class="ie-export-row">
-          <Button
-            kind="quiet"
-            onClick={() =>
-              download(text.everythingFilename, exportHeadershim(doc))
-            }
-          >
-            {text.exportEverything}
+          <Button kind="quiet" onClick={exportAll}>
+            {text.exportAll}
           </Button>
           <label class="ie-export-choice">
             <span class="sr-only">{text.exportChoiceLabel}</span>
@@ -184,8 +193,9 @@ export function ImportExportPage({
             {text.exportOne}
           </Button>
         </div>
-        <p class="ie-hint">{text.secretsReminder}</p>
       </div>
+
+      <ToastHost toast={toast} onDismiss={dismiss} />
     </section>
   );
 }
@@ -248,23 +258,16 @@ function convert(plan: Plan, warningIndex: number): Plan {
   }
   const convertible = new Set<string>(warning.conversionOffer.tokens);
 
-  let frozen = false;
-  const profiles = plan.profiles.map((profile) => ({
+  const profiles = plan.profiles.map((profile, profileIndex) => ({
     ...profile,
-    rules: profile.rules.map((rule) => {
+    rules: profile.rules.map((rule, ruleIndex) => {
       if (
-        frozen ||
-        draftRuleName(rule) !== warning.ruleName ||
+        profileIndex !== warning.profileIndex ||
+        ruleIndex !== warning.ruleIndex ||
         rule.value === undefined
       ) {
         return rule;
       }
-      if (
-        ![...convertible].some((token) => rule.value?.includes(`{{${token}}}`))
-      ) {
-        return rule;
-      }
-      frozen = true;
       return freezeTokens(rule, convertible);
     }),
   }));
@@ -278,6 +281,8 @@ function convert(plan: Plan, warningIndex: number): Plan {
             ? {
                 kind: "dynamic-token" as const,
                 ruleName: warning.ruleName,
+                profileIndex: warning.profileIndex,
+                ruleIndex: warning.ruleIndex,
                 tokens: remaining,
               }
             : entry,

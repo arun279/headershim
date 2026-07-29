@@ -20,8 +20,8 @@ describe("headerValueSummary", () => {
     expect(headerValueSummary("authorization", undefined)).toBeUndefined();
   });
 
-  it("does not redact an empty value, which withholds nothing", () => {
-    expect(headerValueSummary("authorization", "")).toBe("");
+  it("names an empty value without exposing a credential", () => {
+    expect(headerValueSummary("authorization", "")).toBe(copy.rules.emptyValue);
   });
 
   it("labels generated metadata when its literal value is absent", () => {

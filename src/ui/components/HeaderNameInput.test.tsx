@@ -6,11 +6,15 @@ import { copy } from "../copy";
 import { fire, press, render, typeInto } from "../test/render";
 import { HeaderNameInput } from "./HeaderNameInput";
 
-function Harness() {
+function Harness({
+  direction = "request",
+}: {
+  direction?: "request" | "response";
+}) {
   const [value, setValue] = useState("");
   return (
     <LiveRegionProvider>
-      <HeaderNameInput value={value} onInput={setValue} />
+      <HeaderNameInput value={value} direction={direction} onInput={setValue} />
     </LiveRegionProvider>
   );
 }
@@ -20,6 +24,7 @@ function mount() {
   return {
     root,
     input: () => root.querySelector('[role="combobox"]') as HTMLInputElement,
+    toggle: () => root.querySelector(".combo-toggle") as HTMLButtonElement,
     listbox: () => root.querySelector('[role="listbox"]'),
     options: () => [...root.querySelectorAll('[role="option"]')],
     liveRegion: () =>
@@ -28,12 +33,18 @@ function mount() {
 }
 
 describe("HeaderNameInput combobox contract", () => {
-  it("wires the full ARIA contract: expanded, controls, options", () => {
+  it("stays shut while typing and opens on the chevron, wiring the ARIA contract", () => {
     const ctx = mount();
     expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
     expect(ctx.input().getAttribute("aria-autocomplete")).toBe("list");
 
+    // The defect: the list opened on every keystroke and painted over the value
+    // field below, so a click meant for the value selected a suggestion instead.
     typeInto(ctx.input(), "auth");
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
+    expect(ctx.listbox()).toBeNull();
+
+    fire(() => ctx.toggle().click());
     expect(ctx.input().getAttribute("aria-expanded")).toBe("true");
     expect(ctx.input().getAttribute("aria-controls")).toBe(
       ctx.listbox()?.getAttribute("id"),
@@ -82,6 +93,7 @@ describe("HeaderNameInput combobox contract", () => {
     ctx.root.appendChild(next);
     fire(() => ctx.input().focus());
     typeInto(ctx.input(), "auth");
+    fire(() => ctx.toggle().click());
     expect(ctx.listbox()).not.toBeNull();
 
     fire(() => next.focus());
@@ -93,6 +105,7 @@ describe("HeaderNameInput combobox contract", () => {
   it("announces the match count politely, singular and plural", () => {
     const ctx = mount();
     typeInto(ctx.input(), "auth");
+    fire(() => ctx.toggle().click());
     expect(ctx.liveRegion().textContent).toBe(copy.editor.suggestions(4));
     typeInto(ctx.input(), "www-auth");
     expect(ctx.liveRegion().textContent).toBe("1 suggestion");
@@ -101,6 +114,7 @@ describe("HeaderNameInput combobox contract", () => {
   it("shows the option hint in the mute face", () => {
     const ctx = mount();
     typeInto(ctx.input(), "authorization");
+    fire(() => ctx.toggle().click());
     expect(ctx.options()[0]?.textContent).toBe("authorization: credentials");
   });
 
@@ -112,5 +126,42 @@ describe("HeaderNameInput combobox contract", () => {
     );
     typeInto(ctx.input(), "x-feature-override");
     expect(ctx.root.querySelector(".editor-micro")).toBeNull();
+  });
+
+  it("replaces the case line with the refusal when the name is illegal", () => {
+    const ctx = mount();
+    // "saved as x bad header" once reassured about a name the save then refused;
+    // the field now shows that refusal in the case line's place, not both.
+    typeInto(ctx.input(), "X Bad Header");
+    expect(ctx.root.querySelector(".editor-micro")).toBeNull();
+    expect(ctx.root.querySelector(".editor-error")?.textContent).toBe(
+      copy.errors.headerNameInvalid,
+    );
+    expect(ctx.input().getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("names an HTTP/2 pseudo-header as unmodifiable, not merely illegal", () => {
+    const ctx = mount();
+    typeInto(ctx.input(), ":authority");
+    expect(ctx.root.querySelector(".editor-error")?.textContent).toBe(
+      copy.errors.headerNotModifiable,
+    );
+  });
+
+  // The example must belong to the direction: a request header on the request
+  // side, a response header on the response side, never one constant the wrong
+  // side can't carry.
+  it("shows a direction-appropriate placeholder example", () => {
+    const request = render(<Harness direction="request" />);
+    expect(
+      (request.querySelector('[role="combobox"]') as HTMLInputElement)
+        .placeholder,
+    ).toBe(copy.editor.placeholders.headerName.request);
+
+    const response = render(<Harness direction="response" />);
+    expect(
+      (response.querySelector('[role="combobox"]') as HTMLInputElement)
+        .placeholder,
+    ).toBe(copy.editor.placeholders.headerName.response);
   });
 });

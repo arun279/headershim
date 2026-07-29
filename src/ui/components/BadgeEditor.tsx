@@ -1,33 +1,36 @@
-import { useId, useState } from "preact/hooks";
-import {
-  BADGE_COLORS,
-  type BadgeColor,
-  normalizeBadgeText,
-} from "../../core/model";
+import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { BADGE_COLORS, type BadgeColor } from "../../core/model";
 import { copy } from "../copy";
 import "./BadgeEditor.css";
 
 interface BadgeEditorProps {
   badgeText: string;
   color: BadgeColor;
-  /** Commits badge text (on blur/Enter) and colour (on selection) together. */
+  /** Commits badge text and colour together as either changes. */
   onChange: (badgeText: string, color: BadgeColor) => void;
 }
 
 /**
  * The per-profile badge editor: a two-character text field and the fixed
  * eight-colour palette as a native radiogroup (the browser handles arrow-key
- * selection and roving tabindex). Colour commits on selection; text commits on
- * blur or Enter so a keystroke never spams the lock.
+ * selection and roving tabindex). The field caps its own length and commits on
+ * every keystroke, so what it shows is always what the badge will carry.
  */
 export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
   const [text, setText] = useState(badgeText);
+  const input = useRef<HTMLInputElement>(null);
   const groupName = useId();
 
-  const commitText = () => {
-    if (text !== badgeText) {
-      onChange(text, color);
-    }
+  // A rename re-derives the badge; follow it in the field and preview, but never
+  // over the value the user is mid-way through typing (that is their own commit
+  // echoing back through the store).
+  useEffect(() => {
+    if (input.current !== document.activeElement) setText(badgeText);
+  }, [badgeText]);
+
+  const editText = (next: string) => {
+    setText(next);
+    onChange(next, color);
   };
 
   return (
@@ -42,19 +45,12 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
       <label class="badge-text-field">
         <span class="silk">{copy.options.badge.textLabel}</span>
         <input
+          ref={input}
           class="badge-text-input inset-field mono"
           type="text"
+          maxLength={2}
           value={text}
-          onInput={(event) =>
-            setText(normalizeBadgeText(event.currentTarget.value))
-          }
-          onBlur={commitText}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitText();
-            }
-          }}
+          onInput={(event) => editText(event.currentTarget.value)}
         />
       </label>
       <div

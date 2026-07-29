@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { copy } from "../copy";
+import { copy, sentenceText } from "../copy";
 import { render } from "../test/render";
 import { AdvisorySlot } from "./AdvisorySlot";
 
@@ -44,7 +44,7 @@ describe("AdvisorySlot", () => {
     expect(root.children).toHaveLength(0);
   });
 
-  it("cautions that removing a response protection disarms it", () => {
+  it("notes a removal from a response security policy", () => {
     const root = render(
       <AdvisorySlot
         header="content-security-policy"
@@ -55,7 +55,7 @@ describe("AdvisorySlot", () => {
     expect(root.textContent).toContain(copy.advisories.securityResponse);
   });
 
-  it("stays quiet for an append, which can only add a further constraint", () => {
+  it("notes an append to a response security policy", () => {
     const root = render(
       <AdvisorySlot
         header="content-security-policy"
@@ -63,7 +63,19 @@ describe("AdvisorySlot", () => {
         operation="append"
       />,
     );
-    expect(root.children).toHaveLength(0);
+    expect(root.textContent).toContain(copy.advisories.securityResponse);
+  });
+
+  it("names the side when a response header is set on the request direction", () => {
+    const root = render(
+      <AdvisorySlot
+        header="content-security-policy"
+        direction="request"
+        operation="set"
+      />,
+    );
+    expect(root.textContent).toContain(copy.advisories.responseOnRequest);
+    expect(root.textContent).not.toContain(copy.advisories.securityResponse);
   });
 
   it("cautions on a credential planted by a response, not just sent by a request", () => {
@@ -71,5 +83,31 @@ describe("AdvisorySlot", () => {
       <AdvisorySlot header="set-cookie" direction="response" operation="set" />,
     );
     expect(root.textContent).toContain(copy.advisories.credential);
+  });
+
+  it("warns while a URL pattern carries no || host anchor", () => {
+    const root = render(
+      <AdvisorySlot
+        header="x-debug"
+        direction="request"
+        operation="set"
+        pattern="example.com/"
+      />,
+    );
+    expect(root.textContent).toContain(
+      sentenceText(copy.advisories.unanchoredPattern),
+    );
+  });
+
+  it("stays quiet once the pattern is anchored with ||", () => {
+    const root = render(
+      <AdvisorySlot
+        header="x-debug"
+        direction="request"
+        operation="set"
+        pattern="||example.com/"
+      />,
+    );
+    expect(root.children).toHaveLength(0);
   });
 });

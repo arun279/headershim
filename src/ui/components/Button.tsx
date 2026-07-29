@@ -23,7 +23,7 @@ const CLASS: Record<Kind, string> = {
   quiet: "btn quiet",
   caution: "btn caution",
   ghost: "icon-btn",
-  destructive: "menu-item destructive",
+  destructive: "btn destructive",
 };
 
 export function Button({
@@ -39,7 +39,7 @@ export function Button({
       type={type}
       class={CLASS[kind]}
       aria-label={label}
-      role={kind === "destructive" ? "menuitem" : undefined}
+      title={label}
       disabled={disabled}
       onClick={onClick}
     >

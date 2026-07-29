@@ -8,7 +8,7 @@ import {
   type StateDoc,
 } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
-import { copy } from "../../src/ui/copy";
+import { copy, siteAccessCopy } from "../../src/ui/copy";
 import {
   expect,
   seedState,
@@ -310,7 +310,7 @@ test("every options page passes axe in both themes", async ({
   const sections = [
     { hash: "rules", title: copy.options.allRules.title },
     { hash: "profiles", title: copy.options.profiles.title },
-    { hash: "site-access", title: copy.options.siteAccess.title },
+    { hash: "site-access", title: siteAccessCopy.title },
     { hash: "traffic", title: copy.options.traffic.title },
     { hash: "import-export", title: copy.options.importExport.title },
     { hash: "settings", title: copy.options.settings.title },

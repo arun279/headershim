@@ -1,14 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { copy } from "../copy";
 import { render } from "../test/render";
 import { EmptyState } from "./EmptyState";
 
 describe("EmptyState", () => {
   it("shows the message and omits the action row when none is given", () => {
-    const root = render(
-      <EmptyState message={copy.emptyState.profile("Staging")} />,
-    );
+    const root = render(<EmptyState message="Staging has no rules yet." />);
     expect(root.querySelector(".empty-message")?.textContent).toBe(
       "Staging has no rules yet.",
     );
@@ -30,8 +27,8 @@ describe("EmptyState", () => {
   it("renders reassurance without forcing resting focus", () => {
     const root = render(
       <EmptyState
-        message={copy.emptyState.profile("Staging")}
-        detail={copy.emptyState.otherProfilesUnchanged}
+        message="Staging has no rules yet."
+        detail="Your other profiles are unchanged."
         actions={<button type="button">Create a rule</button>}
       />,
     );

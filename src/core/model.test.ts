@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { MAX_ENABLED_RULES } from "./limits";
 import {
-  activateNextProfile,
+  activatePreviousProfile,
   activateProfile,
+  activeProfile,
   allocateRuleNum,
-  cloneRule,
   createProfile,
   createRule,
-  isProfileNameAvailable,
+  deriveBadgeText,
+  isDerivedBadgeText,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type Rule,
@@ -18,7 +21,7 @@ function emptyDoc(nextRuleNum = 1): StateDoc {
   return {
     v: 1,
     profiles: [],
-    activeProfileId: undefined,
+    activeProfileId: "",
     nextRuleNum,
     settings: { paused: false, theme: "system" },
   };
@@ -34,7 +37,7 @@ function profile(id: string, name: string): Profile {
   };
 }
 
-function docWith(profiles: Profile[], activeProfileId?: string): StateDoc {
+function docWith(profiles: Profile[], activeProfileId = ""): StateDoc {
   return { ...emptyDoc(), profiles, activeProfileId };
 }
 
@@ -82,7 +85,7 @@ describe("rule allocation", () => {
       initiators: [],
       enabled: false,
     });
-    const [cloned, afterClone] = cloneRule(afterSecond, first);
+    const [cloned, afterClone] = createRule(afterSecond, first);
     const [imported, afterImport] = createRule(afterClone, {
       ...baseDraft,
       scope: {
@@ -127,17 +130,16 @@ describe("rule allocation", () => {
 });
 
 describe("profile invariants", () => {
-  it("requires a nonblank 1-48 character name unique without case", () => {
+  it("requires a nonblank name unique without case, of any length", () => {
     const profiles = [profile("one", "Default"), profile("two", "Staging")];
 
-    expect(isProfileNameAvailable(profiles, "Production")).toBe(true);
-    expect(isProfileNameAvailable(profiles, "D")).toBe(true);
-    expect(isProfileNameAvailable(profiles, "x".repeat(48))).toBe(true);
-    expect(isProfileNameAvailable(profiles, "")).toBe(false);
-    expect(isProfileNameAvailable(profiles, "   ")).toBe(false);
-    expect(isProfileNameAvailable(profiles, "x".repeat(49))).toBe(false);
-    expect(isProfileNameAvailable(profiles, "default")).toBe(false);
-    expect(isProfileNameAvailable(profiles, "DEFAULT", "one")).toBe(true);
+    expect(isStoredProfileNameValid(profiles, "Production")).toBe(true);
+    expect(isStoredProfileNameValid(profiles, "D")).toBe(true);
+    expect(isStoredProfileNameValid(profiles, "x".repeat(200))).toBe(true);
+    expect(isStoredProfileNameValid(profiles, "")).toBe(false);
+    expect(isStoredProfileNameValid(profiles, "   ")).toBe(false);
+    expect(isStoredProfileNameValid(profiles, "default")).toBe(false);
+    expect(isStoredProfileNameValid(profiles, "DEFAULT", "one")).toBe(true);
   });
 
   it("truncates badge text to two graphemes when constructing a profile", () => {
@@ -155,6 +157,41 @@ describe("profile invariants", () => {
     expect(created.rules).toEqual([]);
     expect(created.id).not.toBe("");
   });
+
+  it("walks the name for a badge no other profile is already wearing", () => {
+    expect(deriveBadgeText("Netlify", [])).toBe("NE");
+    expect(deriveBadgeText("Nexus", ["NE"])).toBe("NX");
+    expect(deriveBadgeText("Nexus", ["NE", "NX", "NU"])).toBe("NS");
+    // Nothing left to offer: the best candidate stands rather than inventing a
+    // badge the name cannot account for.
+    expect(deriveBadgeText("No", ["NO"])).toBe("NO");
+    expect(deriveBadgeText("", [])).toBe("");
+    expect(deriveBadgeText("staging  east", [])).toBe("ST");
+  });
+
+  it("separates a badge the name produced from one the user typed", () => {
+    expect(isDerivedBadgeText("Default", "DE")).toBe(true);
+    expect(isDerivedBadgeText("Default", "DT")).toBe(true);
+    expect(isDerivedBadgeText("Default", "QA")).toBe(false);
+    expect(isDerivedBadgeText("", "DE")).toBe(false);
+  });
+});
+
+describe("activeProfile", () => {
+  it("returns the profile the active id names", () => {
+    const doc = docWith(
+      [profile("one", "Default"), profile("two", "QA")],
+      "two",
+    );
+
+    expect(activeProfile(doc).id).toBe("two");
+  });
+
+  it("throws when the active id names no profile", () => {
+    expect(() =>
+      activeProfile(docWith([profile("one", "Default")], "gone")),
+    ).toThrow(RangeError);
+  });
 });
 
 describe("activateProfile", () => {
@@ -171,10 +208,23 @@ describe("activateProfile", () => {
     const next = activateProfile(doc, "two");
 
     expect(next.activeProfileId).toBe("two");
+    expect(next.previousProfileId).toBe("one");
     expect(next.profiles).toBe(doc.profiles);
     expect(next.profiles.every((candidate) => !("enabled" in candidate))).toBe(
       true,
     );
+  });
+
+  it("leaves the document unchanged when the target is already active", () => {
+    const doc = {
+      ...docWith([profile("one", "Default"), profile("two", "QA")], "one"),
+      previousProfileId: "two",
+    };
+
+    const next = activateProfile(doc, "one");
+
+    expect(next).toBe(doc);
+    expect(next.previousProfileId).toBe("two");
   });
 
   it("returns the document unchanged for an unknown profile", () => {
@@ -190,7 +240,7 @@ describe("activateProfile", () => {
   });
 
   it("refuses a profile whose enabled rules exceed the live caps", () => {
-    const oversized = bulkProfile("two", "Bulk", 4_501);
+    const oversized = bulkProfile("two", "Bulk", MAX_ENABLED_RULES + 1);
     const doc = docWith(
       [profile("one", "Default"), oversized, profile("three", "QA")],
       "one",
@@ -212,27 +262,56 @@ describe("activateProfile", () => {
   });
 });
 
-describe("activateNextProfile", () => {
-  it("skips a profile whose enabled rules exceed the live caps", () => {
-    const oversized = bulkProfile("two", "Bulk", 4_501);
-    const doc = docWith(
-      [profile("one", "Default"), oversized, profile("three", "QA")],
-      "one",
-    );
+describe("activatePreviousProfile", () => {
+  it("flips between the two most recently active profiles", () => {
+    const doc = {
+      ...docWith(
+        [
+          profile("one", "Default"),
+          profile("two", "Staging"),
+          profile("three", "QA"),
+        ],
+        "two",
+      ),
+      previousProfileId: "one",
+    };
 
-    const next = activateNextProfile(doc);
+    const back = activatePreviousProfile(doc);
+    expect(back.activeProfileId).toBe("one");
+    expect(back.previousProfileId).toBe("two");
 
-    expect(next.activeProfileId).toBe("three");
-    expect(next.profiles).toBe(doc.profiles);
+    // A second press toggles back, never walking on to "three".
+    const forward = activatePreviousProfile(back);
+    expect(forward.activeProfileId).toBe("two");
+    expect(forward.previousProfileId).toBe("one");
   });
 
-  it("returns the document unchanged when every candidate exceeds the caps", () => {
+  it("returns the document unchanged when no previous profile is set", () => {
     const doc = docWith(
-      [{ ...profile("one", "Default"), rules: bulkRegexRules(1_001) }],
+      [profile("one", "Default"), profile("two", "QA")],
       "one",
     );
 
-    expect(activateNextProfile(doc)).toBe(doc);
+    expect(activatePreviousProfile(doc)).toBe(doc);
+  });
+
+  it("returns the document unchanged when the previous profile was deleted", () => {
+    const doc = {
+      ...docWith([profile("one", "Default")], "one"),
+      previousProfileId: "gone",
+    };
+
+    expect(activatePreviousProfile(doc)).toBe(doc);
+  });
+
+  it("refuses to flip to a previous profile now over the live caps", () => {
+    const oversized = bulkProfile("two", "Bulk", MAX_ENABLED_RULES + 1);
+    const doc = {
+      ...docWith([profile("one", "Default"), oversized], "one"),
+      previousProfileId: "two",
+    };
+
+    expect(activatePreviousProfile(doc)).toBe(doc);
   });
 });
 

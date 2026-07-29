@@ -1,10 +1,16 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { copy } from "../../copy";
-import { grantLabel } from "../../grantLabel";
+import {
+  caveatNote,
+  controlTone,
+  displayTone,
+  grantAction,
+  outcomeReason,
+  verb,
+} from "../../dispositionCopy";
 import type { TabChange } from "../../state/readout";
 import { Toggle } from "../Toggle";
-import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
-import { toneForStatus } from "../toggleTone";
+import { HeaderValue, Truncate } from "../Truncate";
 import { OpGlyph } from "./glyphs";
 
 interface ChangeLineProps {
@@ -17,9 +23,11 @@ interface ChangeLineProps {
 
 /**
  * One change, in the one grammar: a severity spine (teal live, amber a grant
- * away, managed, or not applied yet, red refused, faint where only Chrome can
- * settle the match, grey-dashed at rest), the operation glyph, and the wire
- * bytes. A live line is silent; only an exception adds a reason, said once.
+ * away, managed, or not applied yet, red refused, grey-dashed at rest), the
+ * operation glyph, and the wire bytes. A running line adds no reason unless
+ * only Chrome can settle its match; the other things that speak are an
+ * exception, said once, and a reach past this tab, because the switch on the row
+ * is the rule's switch and turning it off here turns it off there.
  */
 export function ChangeLine({
   change,
@@ -30,126 +38,123 @@ export function ChangeLine({
 }: ChangeLineProps) {
   const [editing, setEditing] = useState(false);
   const canEdit = change.operation !== "remove" && change.value !== undefined;
+  const lineVerb = verb(change.outcome, change.operation, change.paused);
+  const reason =
+    change.outcome.kind === "runs-if-matched"
+      ? undefined
+      : outcomeReason(change.outcome, change.source === "override");
+  const caveat = caveatNote(change.caveats, change.header, change.operation);
+  const grant = grantAction(change.outcome);
+  const tone = displayTone(change.outcome, change.caveats);
+  const toggleTone = controlTone(change.outcome, change.paused);
+  const reach =
+    change.widerReach === undefined
+      ? undefined
+      : change.widerReach === "broad"
+        ? copy.readout.widerReach.broad
+        : copy.readout.widerReach.sites(change.widerReach);
   const toggleLabel =
     change.source === "override"
       ? copy.readout.overrideToggle(change.header, change.enabled)
-      : copy.readout.ruleToggle(change.header, change.enabled);
+      : copy.rules.switchLabel(change.header, change.enabled);
 
   return (
-    <div class={`change-line ${change.status}`} data-key={change.key}>
+    <div
+      class={`change-line ${tone}${toggleTone === "paused" ? " paused" : ""}`}
+      data-key={change.key}
+    >
       <span class="spine" aria-hidden="true" />
       <span class="op">
         <OpGlyph operation={change.operation} />
       </span>
       <div class="line-body">
-        {editing && canEdit ? (
-          <ValueEdit
-            header={change.header}
-            secret={change.secret}
-            initial={change.value ?? ""}
-            onCommit={async (value) => {
-              const outcome = await onEditValue(value);
-              if (outcome !== false) setEditing(false);
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        ) : (
-          <p class="say">
-            <span class="verb">{copy.readout.verb[change.operation]}</span>{" "}
-            <Truncate mode="end" value={change.header} class="k" />
-            {change.display !== undefined && (
-              <>
-                {" "}
-                <span class="to" aria-hidden="true">
-                  {copy.readout.to}
-                </span>{" "}
-                {canEdit ? (
-                  <button
-                    type="button"
-                    class="v-edit"
-                    aria-label={copy.readout.editValue(change.header)}
-                    onClick={() => setEditing(true)}
-                  >
-                    <ValueText value={change.display} />
-                  </button>
-                ) : (
-                  <ValueText value={change.display} />
-                )}
-              </>
-            )}
-          </p>
-        )}
-        {change.status === "overridden" &&
-          change.overriddenBy !== undefined && (
-            <p class="why rest">
-              <span class="dot" aria-hidden="true" />
-              {copy.readout.overriddenBy(change.overriddenBy)}
-            </p>
+        <p class="say">
+          <span class="verb">{lineVerb}</span>{" "}
+          <Truncate mode="end" value={change.header} class="k" />
+          {change.display !== undefined && (
+            <>
+              {" "}
+              <span class="to" aria-hidden="true">
+                {copy.readout.to}
+              </span>{" "}
+              {editing && canEdit ? (
+                <ValueEdit
+                  header={change.header}
+                  secret={change.secret}
+                  initial={change.value ?? ""}
+                  onCommit={async (value) => {
+                    if (await onEditValue(value)) setEditing(false);
+                  }}
+                  onCancel={() => setEditing(false)}
+                />
+              ) : canEdit ? (
+                <button
+                  type="button"
+                  class="v-edit"
+                  aria-label={copy.readout.editValue(change.header)}
+                  onClick={() => setEditing(true)}
+                >
+                  <HeaderValue
+                    value={change.display}
+                    secret={change.secret}
+                    class="v"
+                  />
+                </button>
+              ) : (
+                <HeaderValue
+                  value={change.display}
+                  secret={change.secret}
+                  class="v"
+                />
+              )}
+            </>
           )}
-        {change.status === "refused" && change.refused !== undefined && (
-          <p class="why stop">
+        </p>
+        {editing && <p class="edit-hint">{copy.rules.editValueHint}</p>}
+        {reason !== undefined && (
+          <p class={`why ${reason.tone}`}>
             <span class="dot" aria-hidden="true" />
-            {copy.readout.refusedReason[change.refused]}
+            {reason.label}
           </p>
         )}
-        {change.status === "managed" && (
+        {caveat !== undefined && (
           <p class="why amber">
             <span class="dot" aria-hidden="true" />
-            {copy.readout.managedReason}
+            {caveat}
           </p>
         )}
-        {change.status === "out-of-sync" && (
-          <p class="why amber">
-            <span class="dot" aria-hidden="true" />
-            {copy.readout.outOfSyncReason}
-          </p>
-        )}
-        {change.status === "unconfirmed" && (
+        {reach !== undefined && (
           <p class="why rest">
             <span class="dot" aria-hidden="true" />
-            {copy.readout.unconfirmedReason}
+            {reach}
           </p>
         )}
       </div>
       <div class="line-control">
-        {change.status === "needs-access" ? (
+        {onRemove !== undefined && (
+          <button
+            type="button"
+            class="line-remove"
+            aria-label={copy.readout.removeOverride(change.header)}
+            onClick={onRemove}
+          >
+            <RemoveGlyph />
+          </button>
+        )}
+        {grant !== undefined ? (
           <button type="button" class="grant" onClick={onGrant}>
-            {grantLabel(change.missing)}
+            {grant.label}
           </button>
         ) : (
-          <>
-            {onRemove !== undefined && (
-              <button
-                type="button"
-                class="line-remove"
-                aria-label={copy.readout.removeOverride(change.header)}
-                onClick={onRemove}
-              >
-                <RemoveGlyph />
-              </button>
-            )}
-            <Toggle
-              checked={change.enabled}
-              label={toggleLabel}
-              tone={toneForStatus(change.status)}
-              onChange={onToggle}
-            />
-          </>
+          <Toggle
+            checked={change.enabled}
+            label={toggleLabel}
+            tone={toggleTone}
+            onChange={onToggle}
+          />
         )}
       </div>
     </div>
-  );
-}
-
-/** Middle mode: the tail is what tells one value from another. */
-function ValueText({ value }: { value: string }) {
-  return (
-    <Truncate
-      mode="middle"
-      value={value}
-      maxChars={TRUNCATION_LIMITS.value}
-      class="v"
-    />
   );
 }
 
@@ -169,20 +174,22 @@ function ValueEdit({
   // A secret opens empty and masked so its current bytes are never echoed to a
   // shoulder-surfer; a plain value opens prefilled for a quick tweak.
   const [value, setValue] = useState(secret ? "" : initial);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
   return (
     <input
+      ref={input}
       class="v-input mono"
       type={secret ? "password" : "text"}
       value={value}
       spellcheck={false}
       autocomplete="off"
       aria-label={copy.readout.editValue(header)}
-      autofocus
       onInput={(event) => setValue(event.currentTarget.value)}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
-          onCommit(value);
+          if (!secret || value !== "") onCommit(value);
         } else if (event.key === "Escape") {
           event.preventDefault();
           onCancel();

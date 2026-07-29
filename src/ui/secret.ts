@@ -19,7 +19,8 @@ export function headerValueSummary(
 ): string | undefined {
   // An empty value has nothing to withhold, and a redaction marker there would
   // draw a secret that does not exist.
-  if (value === undefined || value === "" || !isSecretHeader(header)) {
+  if (value !== undefined && value.trim() === "") return copy.rules.emptyValue;
+  if (value === undefined || !isSecretHeader(header)) {
     return value;
   }
   const scheme = SCHEME.exec(value)?.[1];

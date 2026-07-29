@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { isHostnameShaped } from "../../core/scope";
 import { focusOnRemoval } from "../a11y/focus";
 import { copy } from "../copy";
 import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
@@ -44,32 +45,42 @@ export function ChipField(props: ChipFieldProps) {
         </span>
       )}
       <div class={`chip-field ${props.variant}-chips`}>
-        {props.values.map((value) => (
-          <span class={`chip-field-chip ${props.variant}-chip`} key={value}>
-            <Truncate
-              mode="end"
-              value={value}
-              maxChars={TRUNCATION_LIMITS.domain}
-              class="mono"
-            />
-            <button
-              type="button"
-              class={`chip-field-x ${props.variant}-chip-x`}
-              aria-label={props.removeLabel(value)}
-              onClick={(event) => {
-                focusOnRemoval(event.currentTarget);
-                remove(value);
-              }}
+        {props.values.map((value) => {
+          const invalid = !isHostnameShaped(value);
+          return (
+            <span
+              class={`chip-field-chip ${props.variant}-chip${
+                invalid ? " invalid" : ""
+              }`}
+              key={value}
             >
-              ✕
-            </button>
-          </span>
-        ))}
+              <Truncate
+                mode="end"
+                value={value}
+                maxChars={TRUNCATION_LIMITS.domain}
+                class="mono"
+              />
+              <button
+                type="button"
+                class={`chip-field-x ${props.variant}-chip-x`}
+                aria-label={props.removeLabel(value)}
+                onClick={(event) => {
+                  focusOnRemoval(event.currentTarget);
+                  remove(value);
+                }}
+              >
+                ✕
+              </button>
+            </span>
+          );
+        })}
         <input
           class={`chip-field-input ${props.variant}-chip-input mono${
             props.onEnter === undefined ? "" : " editor-commit-field"
           }`}
           type="text"
+          spellcheck={false}
+          autocomplete="off"
           aria-label={props.inputLabel}
           aria-describedby={describedBy}
           aria-invalid={props.invalid === true ? true : undefined}
@@ -106,7 +117,10 @@ export function ChipField(props: ChipFieldProps) {
           }}
           onBlur={() => commit(pending)}
         />
-        <span class="chip-field-hint" id={hintId}>
+        {/* The placeholder already offers the add; this only names the key, for
+            a reader who cannot see the placeholder. Printed, it repeats the
+            placeholder from the far edge of a field with no room to hold it. */}
+        <span class="sr-only" id={hintId}>
           {copy.editor.addChipHint}
         </span>
       </div>

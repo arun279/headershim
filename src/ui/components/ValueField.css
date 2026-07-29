@@ -10,23 +10,25 @@
 }
 
 /* Grows with the value so a long credential reads from its first character,
-   and scrolls rather than growing without bound. The native resize grabber is
-   dropped with it: the field already sizes itself. */
+   and scrolls rather than growing without bound. The cap is nine whole line
+   boxes plus the field's own padding and border, so it never clips a line in
+   half; em resolves against the field's own size, so it holds if that changes.
+   The native resize grabber is dropped with it: the field already sizes itself. */
 .value-input {
   field-sizing: content;
   min-height: 44px;
-  max-height: 168px;
+  max-height: calc(9 * 1.45em + 10px);
   line-height: 1.45;
   resize: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.insert {
+.generate {
   flex: none;
 }
 
-.insert-btn {
+.generate-btn {
   min-height: 24px;
   padding: 2px var(--sp-3);
   font-size: 12px;
@@ -36,6 +38,6 @@
   border-radius: var(--r-ctl);
 }
 
-.insert-menu {
+.generate-menu {
   min-width: 168px;
 }

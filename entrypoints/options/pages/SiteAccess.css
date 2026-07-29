@@ -1,4 +1,5 @@
-/* Base card recipe lives in App.css. */
+/* Base card recipe lives in App.css. It carries no specificity, so this one
+   class lays the all-on card out as a row rather than inheriting its column. */
 .sa-all-on {
   flex-direction: row;
   align-items: center;
@@ -49,7 +50,7 @@
 }
 .sa-count {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink3);
   white-space: nowrap;
 }
@@ -57,7 +58,7 @@
 .sa-empty,
 .sa-note {
   color: var(--ink3);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .sa-all-heading {
@@ -67,7 +68,7 @@
 }
 .sa-all-body {
   color: var(--ink2);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .sa-disclosure {
@@ -75,7 +76,7 @@
   min-height: 28px;
   color: var(--live-ink);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .sa-all-details {
@@ -89,12 +90,12 @@
 }
 .sa-all-warning {
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .sa-all-caution {
   color: var(--ink);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
 }

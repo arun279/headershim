@@ -1,6 +1,5 @@
 import {
   applyImportPlan,
-  availableProfileName,
   type ImportedProfile,
   type ImportPlan,
 } from "../../core/codec/headershim";
@@ -10,13 +9,19 @@ import {
   checkEnabledRuleLimits,
   checkStateDocByteLimit,
   type LimitError,
+  projectedDynamicRuleCount,
 } from "../../core/limits";
 import {
+  activeProfile,
+  availableProfileName,
   type BadgeColor,
   createProfile as buildProfile,
-  cloneRule,
+  createDefaultProfile,
   createRule,
-  isProfileNameAvailable,
+  defaultProfileColor,
+  deriveBadgeText,
+  isDerivedBadgeText,
+  isStoredProfileNameValid,
   normalizeBadgeText,
   type Profile,
   type Rule,
@@ -56,6 +61,13 @@ type Step<T> = Result<readonly [StateDoc, T], MutationError>;
 
 export interface MutationDeps {
   readonly validateRegex: RegexValidator;
+}
+
+export interface DeletedProfile {
+  readonly profile: Profile;
+  readonly index: number;
+  readonly wasActive: boolean;
+  readonly placeholderProfileId?: string;
 }
 
 /** The write API surface shared by the popup and options entrypoints. */
@@ -101,7 +113,9 @@ export function createMutations({ validateRegex }: MutationDeps) {
     const nextEnabled = enabledRules(next);
     if (
       nextEnabled.length > prevEnabled.length ||
-      regexCount(nextEnabled) > regexCount(prevEnabled)
+      regexCount(nextEnabled) > regexCount(prevEnabled) ||
+      projectedDynamicRuleCount(nextEnabled) >
+        projectedDynamicRuleCount(prevEnabled)
     ) {
       const limits = checkEnabledRuleLimits(nextEnabled);
       if (!limits.ok) {
@@ -145,49 +159,93 @@ export function createMutations({ validateRegex }: MutationDeps) {
     return checkStateDocByteLimit(next);
   }
 
+  async function saveRuleStep(
+    doc: StateDoc,
+    profileId: string,
+    ruleId: string | undefined,
+    draft: RuleDraft,
+  ): Promise<Step<Rule>> {
+    const profile = findProfile(doc, profileId);
+    if (profile === undefined) {
+      return notFound();
+    }
+    const sanitized = await sanitizeDraft(draft, validateRegex);
+    if (!sanitized.ok) {
+      return sanitized;
+    }
+
+    if (ruleId === undefined) {
+      const [rule, next] = createRule(doc, sanitized.value);
+      return ok([withRules(next, profileId, (list) => [...list, rule]), rule]);
+    }
+
+    const existing = profile.rules.find((rule) => rule.id === ruleId);
+    if (existing === undefined) {
+      return notFound();
+    }
+    const rule: Rule = {
+      id: existing.id,
+      num: existing.num,
+      ...sanitized.value,
+    };
+    return ok([
+      withRules(doc, profileId, (list) =>
+        list.map((candidate) => (candidate.id === ruleId ? rule : candidate)),
+      ),
+      rule,
+    ]);
+  }
+
+  function moveRuleStep(
+    doc: StateDoc,
+    fromProfileId: string,
+    ruleId: string,
+    toProfileId: string,
+  ): Step<void> {
+    const rule = findRule(doc, fromProfileId, ruleId);
+    if (rule === undefined || findProfile(doc, toProfileId) === undefined) {
+      return notFound();
+    }
+    if (fromProfileId === toProfileId) {
+      return ok([doc, undefined]);
+    }
+    const removed = withRules(doc, fromProfileId, (list) =>
+      list.filter((candidate) => candidate.id !== ruleId),
+    );
+    return ok([
+      withRules(removed, toProfileId, (list) => [...list, rule]),
+      undefined,
+    ]);
+  }
+
   return {
     saveRule(
       profileId: string,
       ruleId: string | undefined,
       draft: RuleDraft,
     ): MutationResult<Rule> {
+      return commit((doc) => saveRuleStep(doc, profileId, ruleId, draft));
+    },
+
+    saveRuleToProfile(
+      fromProfileId: string,
+      ruleId: string,
+      draft: RuleDraft,
+      toProfileId: string,
+    ): MutationResult<Rule> {
       return commit(async (doc) => {
-        const profile = findProfile(doc, profileId);
-        if (profile === undefined) {
-          return notFound();
+        const saved = await saveRuleStep(doc, fromProfileId, ruleId, draft);
+        if (!saved.ok) {
+          return saved;
         }
-        const sanitized = await sanitizeDraft(draft, validateRegex);
-        if (!sanitized.ok) {
-          return sanitized;
-        }
-
-        if (ruleId === undefined) {
-          const [rule, next] = createRule(doc, sanitized.value);
-          return ok([
-            withRules(next, profileId, (list) => [...list, rule]),
-            rule,
-          ]);
-        }
-
-        const existing = profile.rules.find((rule) => rule.id === ruleId);
-        if (existing === undefined) {
-          return notFound();
-        }
-        // Edits keep the rule's identity: the stable num is what match
-        // attribution and undo bookkeeping hang on to.
-        const rule: Rule = {
-          id: existing.id,
-          num: existing.num,
-          ...sanitized.value,
-        };
-        return ok([
-          withRules(doc, profileId, (list) =>
-            list.map((candidate) =>
-              candidate.id === ruleId ? rule : candidate,
-            ),
-          ),
-          rule,
-        ]);
+        const [savedDoc, rule] = saved.value;
+        const moved = moveRuleStep(
+          savedDoc,
+          fromProfileId,
+          ruleId,
+          toProfileId,
+        );
+        return moved.ok ? ok([moved.value[0], rule]) : moved;
       });
     },
 
@@ -260,49 +318,25 @@ export function createMutations({ validateRegex }: MutationDeps) {
       ruleId: string,
       toProfileId: string,
     ): MutationResult<void> {
-      return commit((doc) => {
-        const rule = findRule(doc, fromProfileId, ruleId);
-        if (rule === undefined || findProfile(doc, toProfileId) === undefined) {
-          return notFound();
-        }
-        if (fromProfileId === toProfileId) {
-          return ok([doc, undefined]);
-        }
-        const removed = withRules(doc, fromProfileId, (list) =>
-          list.filter((candidate) => candidate.id !== ruleId),
-        );
-        return ok([
-          withRules(removed, toProfileId, (list) => [...list, rule]),
-          undefined,
-        ]);
-      });
+      return commit((doc) =>
+        moveRuleStep(doc, fromProfileId, ruleId, toProfileId),
+      );
     },
 
-    createProfile(input: {
-      name: string;
-      badgeText?: string;
-      color: BadgeColor;
-      enabled: boolean;
-    }): MutationResult<Profile> {
+    createProfile(name: string): MutationResult<Profile> {
       return commit((doc) => {
-        const available = availableName(doc, input.name);
+        const available = availableName(doc, name);
         if (!available.ok) return available;
-        const name = available.value;
-        const profile: Profile = {
-          ...buildProfile({
-            name,
-            badgeText: input.badgeText ?? defaultBadgeText(name),
-            color: input.color,
-          }),
-        };
-        return ok([
-          {
-            ...doc,
-            profiles: [...doc.profiles, profile],
-            ...(input.enabled ? { activeProfileId: profile.id } : {}),
-          },
-          profile,
-        ]);
+        // A new profile is added, never activated: this mutation leaves what is
+        // running alone, and each caller decides whether to switch to it. Its
+        // badge and colour, the two marks that tell one profile's rules from
+        // another's, are derived here from the name and the palette position.
+        const profile = buildProfile({
+          name: available.value,
+          badgeText: deriveBadgeText(available.value, badges(doc)),
+          color: defaultProfileColor(doc.profiles.length),
+        });
+        return ok([{ ...doc, profiles: [...doc.profiles, profile] }, profile]);
       });
     },
 
@@ -314,9 +348,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
         const available = availableName(doc, name, profileId);
         if (!available.ok) return available;
         return ok([
+          // A badge still following the old name follows the new one; a badge
+          // the user typed is theirs and stays.
           withProfile(doc, profileId, (profile) => ({
             ...profile,
             name: available.value,
+            ...(isDerivedBadgeText(profile.name, profile.badgeText)
+              ? {
+                  badgeText: deriveBadgeText(
+                    available.value,
+                    badges(doc, profileId),
+                  ),
+                }
+              : {}),
           })),
           undefined,
         ]);
@@ -332,15 +376,19 @@ export function createMutations({ validateRegex }: MutationDeps) {
         if (source === undefined) {
           return notFound();
         }
+        // The copy takes its own badge and colour: two profiles wearing one
+        // mark make the per-rule provenance signal and the toolbar colour
+        // useless, so the clone is derived the same way a fresh profile is.
+        const name = cloneName(source.name, doc.profiles);
         const shell = buildProfile({
-          name: cloneName(source.name, doc.profiles),
-          badgeText: source.badgeText,
-          color: source.color,
+          name,
+          badgeText: deriveBadgeText(name, badges(doc)),
+          color: defaultProfileColor(doc.profiles.length),
         });
         let next = doc;
         const copies: Rule[] = [];
         for (const rule of source.rules) {
-          const [copy, allocated] = cloneRule(next, rule);
+          const [copy, allocated] = createRule(next, rule);
           copies.push(copy);
           next = allocated;
         }
@@ -352,9 +400,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    deleteProfile(
-      profileId: string,
-    ): MutationResult<{ profile: Profile; index: number }> {
+    deleteProfile(profileId: string): MutationResult<DeletedProfile> {
       return commit((doc) => {
         const index = doc.profiles.findIndex(
           (profile) => profile.id === profileId,
@@ -368,37 +414,64 @@ export function createMutations({ validateRegex }: MutationDeps) {
         );
         // The product never has zero profiles: deleting the last one
         // immediately recreates an empty Default.
-        const profiles =
-          remaining.length > 0
-            ? remaining
-            : [
-                buildProfile({
-                  name: "Default",
-                  badgeText: "DE",
-                  color: "indigo",
-                }),
-              ];
+        const placeholder =
+          remaining.length > 0 ? undefined : createDefaultProfile();
+        const profiles = placeholder === undefined ? remaining : [placeholder];
+        const wasActive = doc.activeProfileId === profileId;
+        // Deleting the active profile hands activation to the profile that takes
+        // its slot (the previous one when it was last), so one is always active.
+        const heir = profiles[Math.min(index, profiles.length - 1)];
+        const activeProfileId =
+          wasActive && heir !== undefined ? heir.id : doc.activeProfileId;
+        // Deleting the active profile hands its slot to the heir, which can be the
+        // very profile the shortcut flips back to; drop the flip target then, so
+        // it never points at the row that is now active.
+        const { previousProfileId, ...rest } = doc;
         const next: StateDoc = {
-          ...doc,
+          ...rest,
           profiles,
-          activeProfileId:
-            doc.activeProfileId === profileId ? undefined : doc.activeProfileId,
+          activeProfileId,
+          ...(previousProfileId !== undefined &&
+          previousProfileId !== activeProfileId
+            ? { previousProfileId }
+            : {}),
         };
-        return ok([next, { profile: removed, index }]);
+        return ok([
+          next,
+          {
+            profile: removed,
+            index,
+            wasActive,
+            ...(placeholder === undefined
+              ? {}
+              : { placeholderProfileId: placeholder.id }),
+          },
+        ]);
       });
     },
 
-    restoreProfile(profile: Profile, index: number): MutationResult<void> {
+    restoreProfile(deleted: DeletedProfile): MutationResult<void> {
       return commit((doc) => {
+        const { profile, index, placeholderProfileId, wasActive } = deleted;
         if (doc.profiles.some((candidate) => candidate.id === profile.id)) {
           return ok([doc, undefined]);
         }
+        const profiles =
+          placeholderProfileId === undefined
+            ? doc.profiles
+            : doc.profiles.filter(
+                (candidate) => candidate.id !== placeholderProfileId,
+              );
         const restored: Profile = {
           ...profile,
-          name: availableProfileName(profile.name, doc.profiles, []),
+          name: availableProfileName(profile.name, profiles),
         };
         return ok([
-          { ...doc, profiles: insertAt(doc.profiles, restored, index) },
+          {
+            ...doc,
+            profiles: insertAt(profiles, restored, index),
+            ...(wasActive ? { activeProfileId: restored.id } : {}),
+          },
           undefined,
         ]);
       });
@@ -424,22 +497,28 @@ export function createMutations({ validateRegex }: MutationDeps) {
       });
     },
 
-    activateProfile(profileId: string | undefined): MutationResult<void> {
+    activateProfile(profileId: string): MutationResult<void> {
       return commit((doc) => {
-        if (profileId === undefined) {
-          return ok([{ ...doc, activeProfileId: undefined }, undefined]);
-        }
-        const profile = findProfile(doc, profileId);
-        if (profile === undefined) {
+        if (findProfile(doc, profileId) === undefined) {
           return notFound();
         }
-        const limits = checkEnabledRuleLimits(
-          profile.rules.filter((rule) => rule.enabled),
-        );
-        if (!limits.ok) {
-          return limits;
+        // Re-selecting the active profile keeps the flip target it already holds.
+        if (profileId === doc.activeProfileId) {
+          return ok([doc, undefined]);
         }
-        return ok([{ ...doc, activeProfileId: profileId }, undefined]);
+        // The enabled-rule caps are the commit guard's job: switching to a target
+        // over a cap grows the active enabled set past it, which the guard already
+        // rejects, so there is no separate check here.
+        // Remember the profile being left, so the profile shortcut can flip back
+        // to it; the shortcut path (model.activateProfile) does the same.
+        return ok([
+          {
+            ...doc,
+            activeProfileId: profileId,
+            previousProfileId: doc.activeProfileId,
+          },
+          undefined,
+        ]);
       });
     },
 
@@ -470,6 +549,14 @@ export function createMutations({ validateRegex }: MutationDeps) {
       return updateSettings({ theme });
     },
 
+    // Overwrites the whole document and hands back the one it replaced. Erase
+    // resets to the first-run seed and keeps the prior doc for its undo; the
+    // undo replays this with that doc. The commit guard re-checks the incoming
+    // doc's enabled set, so a restore of a once-valid doc passes on its own.
+    replaceDoc(next: StateDoc): MutationResult<StateDoc> {
+      return commit((doc) => ok([next, doc]));
+    },
+
     applyImport(plan: ImportPlan): MutationResult<void> {
       return commit((doc) => {
         // The plan's names were reserved against the doc at plan time; another
@@ -478,7 +565,11 @@ export function createMutations({ validateRegex }: MutationDeps) {
         for (const profile of plan.profiles) {
           profiles.push({
             ...profile,
-            name: availableProfileName(profile.name, doc.profiles, profiles),
+            name: availableProfileName(
+              profile.name,
+              doc.profiles,
+              profiles.map((planned) => planned.name),
+            ),
           });
         }
         return ok([applyImportPlan(doc, { ...plan, profiles }), undefined]);
@@ -605,11 +696,7 @@ function normalizeHosts(hosts: readonly string[]): string[] {
 }
 
 function enabledRules(doc: StateDoc): Rule[] {
-  return (
-    doc.profiles
-      .find((profile) => profile.id === doc.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled) ?? []
-  );
+  return activeProfile(doc).rules.filter((rule) => rule.enabled);
 }
 
 function regexCount(rules: readonly Rule[]): number {
@@ -626,7 +713,7 @@ function availableName(
   excludedProfileId?: string,
 ): Result<string, MutationError> {
   const name = candidate.trim();
-  return isProfileNameAvailable(doc.profiles, name, excludedProfileId)
+  return isStoredProfileNameValid(doc.profiles, name, excludedProfileId)
     ? ok(name)
     : err({ kind: "profile-name-unavailable", name } as const);
 }
@@ -669,17 +756,18 @@ function insertAt<T>(list: readonly T[], item: T, index: number): T[] {
   return next;
 }
 
-function defaultBadgeText(name: string): string {
-  // Default badge text is the name's first two significant characters,
-  // uppercased to match the seeded Default profile's initials style.
-  return normalizeBadgeText(name.replace(/\s+/g, "")).toUpperCase();
+/** The badges already in use, so a derived one can avoid them. */
+function badges(doc: StateDoc, excludedProfileId?: string): string[] {
+  return doc.profiles
+    .filter((profile) => profile.id !== excludedProfileId)
+    .map((profile) => profile.badgeText);
 }
 
 function cloneName(base: string, profiles: readonly Profile[]): string {
   for (let n = 1; ; n += 1) {
     const suffix = n === 1 ? " copy" : ` copy ${n}`;
-    const candidate = `${base.slice(0, 48 - suffix.length)}${suffix}`;
-    if (isProfileNameAvailable(profiles, candidate)) {
+    const candidate = `${base}${suffix}`;
+    if (isStoredProfileNameValid(profiles, candidate)) {
       return candidate;
     }
   }

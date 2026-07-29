@@ -149,9 +149,12 @@ const h2Drafts: readonly RuleDraft[] = [
   },
 ];
 
-test("header operations reconcile into accepted browser rules", async ({
-  serviceWorker,
-}) => {
+// Runs on the static host-access build: the shipped artifact holds no grant for
+// localhost, and an ungranted rule is compiled out, so there would be no
+// installed rule to read back. Acceptance is a property of the shape, not the build.
+test("header operations reconcile into accepted browser rules", {
+  tag: "@host-access",
+}, async ({ serviceWorker }) => {
   for (const row of headerCases) {
     await seedStateAndWait(serviceWorker, stateWithRules([row.draft]));
     // Inspect the rule Chrome actually accepted and hands back, not the compile

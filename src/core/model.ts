@@ -1,19 +1,24 @@
-import { checkEnabledRuleLimits } from "./limits";
+import { enabledRulesFit } from "./limits";
 
-export type Direction = "request" | "response";
-export type HeaderOp = "set" | "append" | "remove";
+export const DIRECTIONS = ["request", "response"] as const;
+export type Direction = (typeof DIRECTIONS)[number];
 
-export type ResourceGroup =
-  | "pages"
-  | "subframes"
-  | "xhr"
-  | "scripts"
-  | "stylesheets"
-  | "images"
-  | "fonts"
-  | "media"
-  | "websockets"
-  | "other";
+export const HEADER_OPERATIONS = ["set", "append", "remove"] as const;
+export type HeaderOp = (typeof HEADER_OPERATIONS)[number];
+
+export const RESOURCE_GROUPS = [
+  "pages",
+  "subframes",
+  "xhr",
+  "scripts",
+  "stylesheets",
+  "images",
+  "fonts",
+  "media",
+  "websockets",
+  "other",
+] as const;
+export type ResourceGroup = (typeof RESOURCE_GROUPS)[number];
 
 export type Scope =
   | { type: "domains"; domains: string[] }
@@ -67,7 +72,10 @@ export interface Settings {
 export interface StateDoc {
   v: 1;
   profiles: Profile[];
-  activeProfileId: string | undefined;
+  activeProfileId: string;
+  /** The profile active just before this one, so the profile shortcut can flip
+   *  back to it. Absent until a first switch establishes the pair. */
+  previousProfileId?: string;
   nextRuleNum: number;
   settings: Settings;
 }
@@ -127,10 +135,6 @@ export function createRule(doc: StateDoc, draft: RuleDraft): [Rule, StateDoc] {
   ];
 }
 
-export function cloneRule(doc: StateDoc, rule: Rule): [Rule, StateDoc] {
-  return createRule(doc, rule);
-}
-
 export function createProfile(draft: ProfileDraft): Profile {
   return {
     id: crypto.randomUUID(),
@@ -141,43 +145,59 @@ export function createProfile(draft: ProfileDraft): Profile {
   };
 }
 
+/** The profile the product falls back to: the first-run seed, and the empty one
+ *  that takes the last profile's place when it is deleted. */
+export const DEFAULT_PROFILE_NAME = "Default";
+
+export function createDefaultProfile(): Profile {
+  return {
+    id: crypto.randomUUID(),
+    name: DEFAULT_PROFILE_NAME,
+    badgeText: "DE",
+    color: "indigo",
+    rules: [],
+  };
+}
+
+export function activeProfile(doc: StateDoc): Profile {
+  const active = doc.profiles.find(
+    (profile) => profile.id === doc.activeProfileId,
+  );
+  if (active === undefined) {
+    throw new RangeError("active profile missing");
+  }
+  return active;
+}
+
+export function defaultProfileColor(profileCount: number): BadgeColor {
+  return BADGE_COLORS[profileCount % BADGE_COLORS.length] ?? BADGE_COLORS[0];
+}
+
+// A profile-activation transition. It remembers the profile it leaves in
+// previousProfileId, so the profile shortcut can flip back to it. A no-op when
+// the target is already active, absent, or over its enabled-rule caps (a profile
+// can grow past them while inactive).
 export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   const profile = doc.profiles.find((candidate) => candidate.id === profileId);
   if (
     profile === undefined ||
-    !checkEnabledRuleLimits(profile.rules.filter((rule) => rule.enabled)).ok
+    profileId === doc.activeProfileId ||
+    !enabledRulesFit(profile.rules.filter((rule) => rule.enabled))
   ) {
     return doc;
   }
-  return { ...doc, activeProfileId: profileId };
+  return {
+    ...doc,
+    activeProfileId: profileId,
+    previousProfileId: doc.activeProfileId,
+  };
 }
 
-export function activateNextProfile(doc: StateDoc): StateDoc {
-  const activeIndex = doc.profiles.findIndex(
-    (profile) => profile.id === doc.activeProfileId,
-  );
-  for (let step = 1; step <= doc.profiles.length; step += 1) {
-    const next = doc.profiles[(activeIndex + step) % doc.profiles.length];
-    if (next === undefined) {
-      continue;
-    }
-    const activated = activateProfile(doc, next.id);
-    if (activated.activeProfileId === next.id) {
-      return activated;
-    }
-  }
-  return doc;
-}
-
-export function isProfileNameAvailable(
-  profiles: readonly Profile[],
-  candidate: string,
-  excludedProfileId?: string,
-): boolean {
-  return (
-    candidate.length <= 48 &&
-    isStoredProfileNameValid(profiles, candidate, excludedProfileId)
-  );
+// The profile shortcut: flip to the profile that was active just before this
+// one. Repeated presses toggle between the two, so a two-environment user stays
+// on their pair and never lands on an empty profile they did not pick.
+export function activatePreviousProfile(doc: StateDoc): StateDoc {
+  return activateProfile(doc, doc.previousProfileId ?? doc.activeProfileId);
 }
 
 export function isStoredProfileNameValid(
@@ -195,6 +215,32 @@ export function isStoredProfileNameValid(
   );
 }
 
+/**
+ * A profile name free of both the stored profiles and any name reserved earlier
+ * in the same batch: the base when it is available, otherwise the base with the
+ * lowest " N" suffix that is. Creating a profile and importing a batch both name
+ * new profiles this way, so a collision resolves the same however it arose.
+ */
+export function availableProfileName(
+  base: string,
+  profiles: readonly Profile[],
+  takenNames: readonly string[] = [],
+): string {
+  const available = (candidate: string) =>
+    isStoredProfileNameValid(profiles, candidate) &&
+    !takenNames.some((name) => name.toLowerCase() === candidate.toLowerCase());
+
+  if (available(base)) {
+    return base;
+  }
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base} ${suffix}`;
+    if (available(candidate)) {
+      return candidate;
+    }
+  }
+}
+
 const graphemeSegmenter = new Intl.Segmenter(undefined, {
   granularity: "grapheme",
 });
@@ -203,6 +249,57 @@ export function normalizeBadgeText(text: string): string {
   return Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
     .slice(0, 2)
     .join("");
+}
+
+export function isNormalizedBadgeText(text: string): boolean {
+  return Array.from(graphemeSegmenter.segment(text)).length <= 2;
+}
+
+/**
+ * The badges a name can produce, best first: its first two significant
+ * characters, then the first paired with each later one. Uppercased to match the
+ * seeded Default profile's initials style.
+ */
+function badgeCandidates(name: string): string[] {
+  const characters = Array.from(
+    graphemeSegmenter.segment(name.replace(/\s+/g, "")),
+    ({ segment }) => segment.toUpperCase(),
+  );
+  const first = characters[0];
+  if (first === undefined) {
+    return [];
+  }
+  return [
+    characters.slice(0, 2).join(""),
+    ...characters.slice(2).map((character) => first + character),
+  ];
+}
+
+/**
+ * The badge a profile takes from its name. The badge is the only mark that tells
+ * one profile's rules from another's in the rule lists and on the toolbar, so a
+ * candidate another profile already carries is passed over for the next one the
+ * name offers.
+ */
+export function deriveBadgeText(
+  name: string,
+  taken: readonly string[],
+): string {
+  const candidates = badgeCandidates(name);
+  return (
+    candidates.find((candidate) => !taken.includes(candidate)) ??
+    candidates[0] ??
+    ""
+  );
+}
+
+/**
+ * Whether a badge is one its name could have produced, which is what separates a
+ * badge still following the name from one the user typed. A rename re-derives
+ * the first and leaves the second alone.
+ */
+export function isDerivedBadgeText(name: string, badgeText: string): boolean {
+  return badgeCandidates(name).includes(badgeText);
 }
 
 function copyScope(scope: Scope): Scope {

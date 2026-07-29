@@ -9,6 +9,7 @@ import "./ImportSummary.css";
 
 interface ImportSummaryProps {
   readonly plan: ImportPlan<ImportPlanWarning>;
+  readonly fileName: string;
   readonly applyError?: string | undefined;
   readonly onConvert: (warningIndex: number) => void;
   readonly onImport: () => void;
@@ -16,12 +17,14 @@ interface ImportSummaryProps {
 }
 
 /**
- * The pre-apply review screen: counts, every itemized mapping warning naming
- * its rule, and the one-click frozen-value conversion — shown before anything
- * is written. Confirming here is the only path that applies.
+ * The pre-apply review screen: the picked file, the profiles the import will
+ * create named as they will land, every itemized mapping warning naming its
+ * rule, and the one-click frozen-value conversion — shown before anything is
+ * written. Confirming here is the only path that applies.
  */
 export function ImportSummary({
   plan,
+  fileName,
   applyError,
   onConvert,
   onImport,
@@ -29,19 +32,21 @@ export function ImportSummary({
 }: ImportSummaryProps) {
   const headingId = useId();
   const text = copy.options.importExport;
-  const ruleCount = plan.profiles.reduce(
-    (total, profile) => total + profile.rules.length,
-    0,
-  );
 
   return (
     <section class="import-summary" aria-labelledby={headingId}>
       <h3 class="silk" id={headingId}>
         {text.summaryHeading}
       </h3>
-      <p class="import-counts">
-        {sentence(text.counts(plan.profiles.length, ruleCount))}
-      </p>
+      <p class="import-source mono">{fileName}</p>
+      <p>{text.addsLead}</p>
+      <ul class="import-profiles">
+        {plan.profiles.map((profile) => (
+          <li key={profile.name} class="import-profile mono">
+            {profile.name}
+          </li>
+        ))}
+      </ul>
 
       {plan.warnings.length > 0 && (
         <>

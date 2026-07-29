@@ -7,6 +7,7 @@ import {
 } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
+  coversSubresourceTypes,
   type GrantSnapshot,
   isAllSitesOrigin,
   originGranted,
@@ -21,7 +22,7 @@ import type {
   Scope,
 } from "../../core/model";
 import type { Result } from "../../core/result";
-import { originPatternForDomain } from "../../core/scope";
+import { isHostnameShaped, originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
 import {
   headerErrorToFieldError,
@@ -34,9 +35,9 @@ import { handleEditorCommitKey } from "./editorKeys";
 import { HeaderFields } from "./HeaderFields";
 import { HeaderNameInput } from "./HeaderNameInput";
 import { parseHeaderLine } from "./headerLine";
-import { CloseGlyph } from "./readout/glyphs";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
+import { Truncate } from "./Truncate";
 import { useDraftState } from "./useDraftState";
 import { ValueField } from "./ValueField";
 import "./RuleEditor.css";
@@ -67,7 +68,7 @@ interface RuleEditorProps {
   prefill?: RuleDraft | undefined;
   /** Live grant snapshot, so the grant moment fires only when needed. */
   grants: GrantSnapshot;
-  /** Origin of the tab the popup opened on: the inferred initiator. */
+  /** Origin of the tab the popup opened on, used to plan subresource access. */
   tabDomain?: string | undefined;
   /** `profileId` is the picked profile, or undefined where no choice is offered. */
   onSave: (
@@ -82,11 +83,16 @@ interface RuleEditorProps {
   onDelete?: (() => void) | undefined;
   /** Fires the permission prompt after a successful save. */
   onRequestGrant: (origins: string[]) => Promise<boolean>;
-  /** A grant landed: the sites named by the result message. */
-  onGranted?: (sites: readonly string[]) => void;
+  /** A grant landed. */
+  onGranted?: () => void;
   /** The rule was saved, but the permission prompt was declined. */
   onGrantDeclined?: (host: string) => void;
-  onCommitted?: (kind: "create" | "edit") => void;
+  /** A save landed: the host announces it, reading the saved rule's own row. */
+  onCommitted?: (commit: {
+    kind: "create" | "edit";
+    rule: Rule;
+    profileId: string | undefined;
+  }) => void;
   /** Collapse: after a successful commit, or reverting via Esc. */
   onClose: () => void;
   /** Options hosts the same editor inline instead of as a modal popup mode. */
@@ -95,6 +101,19 @@ interface RuleEditorProps {
   closeRequest?: number | undefined;
   /** The requested close was cancelled in the dirty-draft confirmation. */
   onCloseRequestCancelled?: (() => void) | undefined;
+}
+
+function CloseGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="m2.5 2.5 7 7m0-7-7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+      />
+    </svg>
+  );
 }
 
 interface Draft {
@@ -118,11 +137,12 @@ interface FieldErrors {
   editor?: string;
 }
 
+/** A commit only asks for a grant when it has at least one site to ask about. */
+export type GrantSites = readonly [string, ...string[]];
+
 interface CommitGrant {
-  draft: RuleDraft;
-  host: string;
   origins: string[];
-  sites: string[];
+  sites: GrantSites;
 }
 
 /** Full-popup rule editor with explicit save and guarded discard. */
@@ -152,9 +172,9 @@ export function RuleEditor(props: RuleEditorProps) {
       return;
     }
     const current = draftRef.current;
-    const empties = emptyErrors(current);
-    if (empties !== undefined) {
-      setErrors(empties);
+    const gaps = preCommitErrors(current);
+    if (gaps !== undefined) {
+      setErrors(gaps);
       return;
     }
     const ruleDraft = toRuleDraft(current, props.rule);
@@ -164,7 +184,7 @@ export function RuleEditor(props: RuleEditorProps) {
     try {
       const outcome = await props.onSave(
         props.rule?.id,
-        grant?.draft ?? ruleDraft,
+        ruleDraft,
         current.profileId,
       );
       if (!outcome.ok) {
@@ -184,12 +204,16 @@ export function RuleEditor(props: RuleEditorProps) {
           granted = false;
         }
       }
-      props.onCommitted?.(props.rule === undefined ? "create" : "edit");
+      props.onCommitted?.({
+        kind: props.rule === undefined ? "create" : "edit",
+        rule: outcome.value,
+        profileId: current.profileId,
+      });
       if (grant !== undefined) {
         if (granted === true) {
-          props.onGranted?.(grant.sites);
+          props.onGranted?.();
         } else {
-          props.onGrantDeclined?.(grant.host);
+          props.onGrantDeclined?.(copy.actions.andSites(grant.sites));
         }
       }
       props.onClose();
@@ -224,21 +248,27 @@ export function RuleEditor(props: RuleEditorProps) {
     requestClose();
   }, [props.closeRequest]);
 
-  useEffect(() => {
+  // Placed in the commit that paints the guard, not after it: the guard asks a
+  // question, and a key struck before focus lands answers it with whichever
+  // control the browser was left on rather than with the safe default.
+  useLayoutEffect(() => {
     if (confirmDiscard) {
       keepEditingRef.current?.focus();
     }
   }, [confirmDiscard]);
 
-  // A rejected commit leaves focus on the button that was rejected. Every field
-  // already marks itself aria-invalid, so the first one in document order is the
-  // first one on screen.
+  // A rejected commit leaves focus on the button that raised it, which reads as
+  // a dead click. A field error exposes its offending control as aria-invalid; a
+  // form-level error has no field, so its banner is the target. Either way the
+  // first match in document order is the first on screen.
   useLayoutEffect(() => {
     if (Object.keys(errors).length === 0) {
       return;
     }
     fieldsRef.current
-      ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      ?.querySelector<HTMLElement>(
+        '[aria-invalid="true"], .editor-error-global',
+      )
       ?.focus();
   }, [errors]);
 
@@ -282,8 +312,12 @@ export function RuleEditor(props: RuleEditorProps) {
         ? copy.actions.createRule
         : copy.actions.saveChanges
       : mode === "new"
-        ? copy.actions.createRuleAndAllow(commitGrant.host)
-        : copy.actions.saveChangesAndAllow(commitGrant.host);
+        ? copy.actions.createRuleAndAllow(
+            copy.actions.andSites(commitGrant.sites),
+          )
+        : copy.actions.saveChangesAndAllow(
+            copy.actions.andSites(commitGrant.sites),
+          );
 
   return (
     <Sheet
@@ -306,6 +340,9 @@ export function RuleEditor(props: RuleEditorProps) {
             header={draft.header}
             direction={draft.direction}
             operation={draft.operation}
+            pattern={
+              draft.scope.type === "pattern" ? draft.scope.pattern : undefined
+            }
           />
           <div class="editor-actions">
             {confirmDiscard ? (
@@ -313,31 +350,38 @@ export function RuleEditor(props: RuleEditorProps) {
                 <strong class="discard-title">
                   {copy.editor.discardConfirm.title}
                 </strong>
+                {/* Losing the draft is the outcome that cannot be taken back,
+                    so keeping it is the drawn button and discarding is the bare
+                    word beside it. The drawn one also takes the focus, so it is
+                    what Enter answers with. */}
                 <button
                   type="button"
                   class="editor-cancel"
+                  onClick={props.onClose}
+                >
+                  {copy.editor.discardConfirm.discard}
+                </button>
+                <button
+                  type="button"
+                  class="btn quiet"
                   ref={keepEditingRef}
                   onClick={keepEditing}
                 >
                   {copy.editor.discardConfirm.keepEditing}
                 </button>
-                <Button kind="quiet" onClick={props.onClose}>
-                  {copy.editor.discardConfirm.discard}
-                </Button>
               </>
             ) : (
               <>
                 {/* A draft that was never saved has nothing to delete; Cancel
                     already discards it. */}
                 {props.onDelete !== undefined && props.rule !== undefined && (
-                  <button
-                    type="button"
-                    class="editor-delete"
+                  <Button
+                    kind="destructive"
                     disabled={busy}
                     onClick={props.onDelete}
                   >
                     {copy.editor.delete}
-                  </button>
+                  </Button>
                 )}
                 <button
                   type="button"
@@ -369,6 +413,7 @@ export function RuleEditor(props: RuleEditorProps) {
 
         <HeaderNameInput
           value={draft.header}
+          direction={draft.direction}
           error={errors.name}
           autoFocus
           inputRef={(element) => {
@@ -404,12 +449,6 @@ export function RuleEditor(props: RuleEditorProps) {
           <ValueField
             value={draft.value}
             generated={draft.generated}
-            frozenAt={
-              draft.generated !== undefined &&
-              draft.generated.at === props.rule?.generated?.at
-                ? formatFrozenAt(draft.generated.at)
-                : undefined
-            }
             error={errors.value}
             onInput={(value) =>
               update((current) => ({
@@ -454,7 +493,11 @@ export function RuleEditor(props: RuleEditorProps) {
         />
 
         {errors.editor !== undefined && (
-          <p class="editor-error editor-error-global" role="alert">
+          <p
+            class="editor-error editor-error-global"
+            role="alert"
+            tabIndex={-1}
+          >
             {errors.editor}
           </p>
         )}
@@ -484,9 +527,21 @@ function CommentDisclosure({
         title={summary === "" ? undefined : summary}
         onClick={() => setOpen((current) => !current)}
       >
-        <span>
+        {/* The summary stands in for a comment that is not on screen. Once the
+            panel is open the field below prints it in full, so the summary would
+            be the same words twice, 30px apart. Free text of any length, so it
+            goes through the truncation primitive and ends on a marker rather
+            than mid-word; the separator travels with it so it cannot be left
+            hanging on a line of its own. */}
+        <span class="disclosure-label">
           {copy.editor.labels.comment}
-          {summary === "" ? "" : ` · ${summary}`}
+          {!open && summary !== "" && (
+            <Truncate
+              mode="end"
+              value={` · ${summary}`}
+              class="disclosure-note"
+            />
+          )}
         </span>
         <span
           class={open ? "disclosure-chevron open" : "disclosure-chevron"}
@@ -546,7 +601,6 @@ function ProfileField({
           </option>
         ))}
       </select>
-      <p class="editor-micro">{copy.editor.profileHelper}</p>
     </div>
   );
 }
@@ -600,23 +654,47 @@ function initialDraft(
   };
 }
 
-/** Required-field gaps get their message before the store is even asked. */
-function emptyErrors(draft: Draft): FieldErrors | undefined {
+/** Field gaps and mis-shapes get their message before the store is even asked. */
+function preCommitErrors(draft: Draft): FieldErrors | undefined {
   const errors: FieldErrors = { ...headerValueEmptyErrors(draft) };
-  if (draft.scope.type === "domains" && draft.scope.domains.length === 0) {
-    errors.scope = copy.errors.scopeEmpty.domains;
-  } else if (
-    draft.scope.type === "pattern" &&
-    draft.scope.pattern.trim() === ""
-  ) {
-    errors.scope = copy.errors.scopeEmpty.pattern;
-  } else if (draft.scope.type === "regex" && draft.scope.regex.trim() === "") {
-    errors.scope = copy.errors.scopeEmpty.regex;
+  const scope = scopeError(draft.scope);
+  if (scope !== undefined) {
+    errors.scope = scope;
   }
   if (draft.resourceTypes !== "all" && draft.resourceTypes.length === 0) {
     errors.types = copy.errors.scopeEmpty.resourceTypes;
   }
   return Object.keys(errors).length === 0 ? undefined : errors;
+}
+
+/**
+ * Why the scope cannot commit, or nothing. The host list feeds Chrome's
+ * requestDomains whether it is the Domains field or a pattern/regex rule's grant
+ * hosts, so one entry Chrome stores but never matches leaves the rule live and
+ * dead either way: the same shape check guards both.
+ */
+function scopeError(scope: ScopeDraft): string | undefined {
+  const hosts = scope.type === "domains" ? scope.domains : scope.hosts;
+  switch (scope.type) {
+    case "domains":
+      if (scope.domains.length === 0) {
+        return copy.errors.scopeEmpty.domains;
+      }
+      break;
+    case "pattern":
+      if (scope.pattern.trim() === "") {
+        return copy.errors.scopeEmpty.pattern;
+      }
+      break;
+    case "regex":
+      if (scope.regex.trim() === "") {
+        return copy.errors.scopeEmpty.regex;
+      }
+      break;
+    case "all":
+      return undefined;
+  }
+  return hosts.every(isHostnameShaped) ? undefined : copy.errors.domainInvalid;
 }
 
 function mapError(
@@ -646,6 +724,8 @@ function mapError(
       return { scope: copy.errors.scopeEmpty[scopeType] };
     case "enabled-rule-limit-exceeded":
       return { editor: copy.errors.ruleCap };
+    case "dynamic-rule-limit-exceeded":
+      return { editor: copy.errors.dynamicRuleCap };
     case "regex-rule-limit-exceeded":
       return { editor: copy.errors.regexRuleCap };
     case "doc-byte-limit-exceeded":
@@ -695,7 +775,7 @@ function toScope(scope: ScopeDraft): Scope {
   }
 }
 
-/** Builds the permission request and the rule metadata committed with it. */
+/** Builds the permission request needed by the authored rule. */
 function planCommitGrant(
   draft: RuleDraft,
   grants: GrantSnapshot,
@@ -712,8 +792,6 @@ function planCommitGrant(
   // no host is inferred from the expression behind the user's back.
   if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
-      draft,
-      host: copy.scopeSummary.allSites,
       origins: [ALL_SITES_ORIGIN],
       sites: [copy.scopeSummary.allSites],
     };
@@ -722,11 +800,7 @@ function planCommitGrant(
   if (targets.length === 0) {
     return undefined;
   }
-  const reachesSubresources =
-    draft.resourceTypes === "all" ||
-    draft.resourceTypes.some(
-      (group) => group !== "pages" && group !== "subframes",
-    );
+  const reachesSubresources = coversSubresourceTypes(draft);
   const inferredInitiator =
     reachesSubresources &&
     tabDomain !== undefined &&
@@ -741,14 +815,12 @@ function planCommitGrant(
     ...targets,
     ...(reachesSubresources ? initiators : []),
   ]);
-  const missing = sites.filter((site) => !originGranted(site, grants));
-  if (missing.length === 0) {
+  const [first, ...rest] = sites.filter((site) => !originGranted(site, grants));
+  if (first === undefined) {
     return undefined;
   }
-  const firstTarget = targets.find((target) => missing.includes(target));
+  const missing: GrantSites = [first, ...rest];
   return {
-    draft: { ...draft, initiators },
-    host: firstTarget ?? (missing[0] as string),
     origins: missing.map(originPatternForDomain),
     sites: missing,
   };
@@ -768,9 +840,4 @@ function targetHosts(scope: Scope): string[] {
 
 function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
-}
-
-/** "2026-07-12T14:03:27.000Z" → "2026-07-12 14:03 UTC" (the designed reading). */
-function formatFrozenAt(iso: string): string {
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }

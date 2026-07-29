@@ -16,3 +16,11 @@
 .truncate-end {
   text-overflow: ellipsis;
 }
+
+/* Shown whole: fixed text that a cut would turn into something reading as a
+   fragment of a real value. It keeps its width and its neighbours give up
+   theirs, and max-width does not apply because there is nothing to clip to. */
+.truncate-whole {
+  flex: none;
+  max-width: none;
+}

@@ -1,6 +1,9 @@
 import { execSync } from "node:child_process";
 import { defineConfig } from "wxt";
+import { NARROWED_ORIGIN } from "./e2e/echo-ports.mjs";
 import { BRAND_NAME } from "./src/brand";
+import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "./src/core/grants";
+import { MINIMUM_CHROME_VERSION } from "./src/core/limits";
 
 // E2E traffic checks need a host grant that Chromium cannot grant through its
 // native optional-permission prompt in headless mode. This flag produces a
@@ -8,6 +11,8 @@ import { BRAND_NAME } from "./src/brand";
 // keeps its optional-only permission posture.
 // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
 const e2eHostAccess = process.env["E2E_HOST_ACCESS"] === "1";
+// biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
+const e2eNarrowHostAccess = process.env["E2E_NARROW_HOST_ACCESS"] === "1";
 
 // The trust page displays the commit each build came from; a
 // release build is always a git checkout, so the working tree is the source.
@@ -20,7 +25,11 @@ function commitHash(): string {
 }
 
 export default defineConfig({
-  ...(e2eHostAccess ? { outDirTemplate: "chrome-mv3-e2e-hostaccess" } : {}),
+  ...(e2eHostAccess
+    ? { outDirTemplate: "chrome-mv3-e2e-hostaccess" }
+    : e2eNarrowHostAccess
+      ? { outDirTemplate: "chrome-mv3-e2e-narrow-hostaccess" }
+      : {}),
   vite: () => ({
     define: {
       __COMMIT__: JSON.stringify(commitHash()),
@@ -34,29 +43,33 @@ export default defineConfig({
     // The single display name (chrome://extensions, the install prompt, the
     // store card); without it WXT falls back to the lowercase package id.
     name: BRAND_NAME,
-    // The highest-versioned API the extension actually calls is
-    // action.setBadgeTextColor (Chrome 110); every other version-gated API it
-    // uses lands earlier (requestDomains/initiatorDomains 101, storage.session
-    // 102, displayActionCountAsBadgeText 88, isRegexSupported 87, modifyHeaders
-    // 86). The larger session-rule cap and storage.session quota are platform
-    // values HeaderShim stays well under, so they don't raise the floor.
-    minimum_chrome_version: "110",
-    permissions: [
-      "declarativeNetRequestWithHostAccess",
-      "storage",
-      "activeTab",
-    ],
-    ...(e2eHostAccess ? { host_permissions: ["*://*/*"] } : {}),
-    optional_host_permissions: ["*://*/*"],
+    // Chrome 120 split dynamic and session rules into separate limits. Earlier
+    // versions share a 5,000-rule cap that cannot hold both product maxima.
+    minimum_chrome_version: String(MINIMUM_CHROME_VERSION),
+    // The same list the About page draws its disclosure rows from, so the
+    // product cannot declare a permission it does not explain.
+    permissions: [...MANIFEST_PERMISSIONS],
+    ...(e2eHostAccess
+      ? { host_permissions: [ALL_SITES_ORIGIN] }
+      : e2eNarrowHostAccess
+        ? { host_permissions: [NARROWED_ORIGIN] }
+        : {}),
+    optional_host_permissions: [ALL_SITES_ORIGIN],
     // HeaderShim reads and writes headers through declarativeNetRequest and
-    // never talks to a network endpoint itself. connect-src 'none' is the
-    // browser-enforced form of that: it blocks fetch, XHR, WebSocket,
-    // EventSource, and sendBeacon from every extension page and the worker.
+    // opens no connection of its own. connect-src 'none' is the
+    // browser-enforced half of that: it blocks fetch, XHR, WebSocket,
+    // EventSource, and sendBeacon from every extension page and the worker, and
+    // says nothing about images, media, fonts, frames, forms, or navigations.
+    // The other half is the built files, which carry no call written to any of
+    // them; scripts/check-no-network.mjs holds that half against the artifact,
+    // and states there what a call-shape scan does and does not cover.
     // The rest matches Chrome's default extension_pages policy.
     content_security_policy: {
       extension_pages:
         "script-src 'self'; object-src 'self'; connect-src 'none';",
     },
+    // The default tooltip; the badge state machine swaps in its paused title
+    // while paused and clears back to this on exit.
     action: { default_title: BRAND_NAME },
     commands: {
       _execute_action: {
@@ -67,9 +80,9 @@ export default defineConfig({
         suggested_key: { default: "Alt+Shift+P" },
         description: "Toggle global pause",
       },
-      "next-profile": {
+      "previous-profile": {
         suggested_key: { default: "Alt+Shift+K" },
-        description: "Switch to next profile",
+        description: "Switch to the previous profile",
       },
     },
     icons: {
