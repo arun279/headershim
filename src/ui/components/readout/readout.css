@@ -278,16 +278,13 @@
   border-radius: 0 3px 3px 0;
   background: var(--live);
 }
-.change-line.needs-access .spine,
-.change-line.managed .spine,
-.change-line.out-of-sync .spine {
+.change-line.amber .spine {
   background: var(--amber);
 }
-.change-line.refused .spine {
+.change-line.stop .spine {
   background: var(--stop);
 }
-.change-line.off .spine,
-.change-line.overridden .spine,
+.change-line.rest .spine,
 .change-line.paused .spine {
   background: transparent;
   border-left: 3px dashed var(--faint);
@@ -305,16 +302,13 @@
   width: 16px;
   height: 16px;
 }
-.change-line.needs-access .op,
-.change-line.managed .op,
-.change-line.out-of-sync .op {
+.change-line.amber .op {
   color: var(--amber);
 }
-.change-line.refused .op {
+.change-line.stop .op {
   color: var(--stop);
 }
-.change-line.off .op,
-.change-line.overridden .op,
+.change-line.rest .op,
 .change-line.paused .op {
   color: var(--faint);
 }
@@ -338,6 +332,10 @@
 .change-line .say :is(.k, .v) {
   font-size: 13px;
 }
+.change-line .say .k {
+  flex: 0 1 auto;
+  min-width: 16ch;
+}
 /* The edit button is a wrapper around the shrinkable value, so it gives way the
    same way: the same flex and floor the value itself carries, since a button
    wrapping nowrap text will not shrink on the child's floor alone. */
@@ -358,15 +356,26 @@
   border-bottom-color: var(--line-strong);
 }
 .v-input {
-  width: 100%;
+  flex: 1 8 auto;
+  min-width: 6ch;
+  width: 0;
   font-size: 13px;
   color: var(--ink);
   background: var(--paper);
   border: 1.5px solid var(--live-fill);
   border-radius: var(--r-chip);
   padding: 4px 8px;
-  outline: none;
   box-shadow: 0 0 0 3px var(--live-soft);
+}
+.edit-hint {
+  margin-top: 3px;
+  color: var(--ink3);
+  font-size: 10px;
+}
+.v-input:focus-visible,
+.swapfield input:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: 2px;
 }
 .why {
   font-size: 11px;
@@ -628,7 +637,6 @@
   border: 1.5px solid var(--live-fill);
   border-radius: var(--r-ctl);
   padding: 10px 11px;
-  outline: none;
   box-shadow: 0 0 0 3px var(--live-soft);
   word-break: break-all;
 }

@@ -1,16 +1,13 @@
 import { browser } from "wxt/browser";
-import type { BadgeState } from "../core/badge";
+import type { BadgePlan } from "../core/badge";
 
-export async function applyBadge(
-  state: BadgeState,
-  title: string,
-): Promise<void> {
+export async function applyBadge(plan: BadgePlan): Promise<void> {
   // An empty title resets the button to its manifest default_title; only the
   // paused state carries its own tooltip.
   await Promise.all([
-    browser.action.setTitle({ title }),
-    browser.action.setBadgeText({ text: state.text }),
-    browser.action.setBadgeBackgroundColor({ color: state.backgroundColor }),
-    browser.action.setBadgeTextColor({ color: state.textColor }),
+    browser.action.setTitle({ title: plan.title }),
+    browser.action.setBadgeText({ text: plan.text }),
+    browser.action.setBadgeBackgroundColor({ color: plan.backgroundColor }),
+    browser.action.setBadgeTextColor({ color: plan.textColor }),
   ]);
 }

@@ -1,8 +1,9 @@
 import { type Browser, browser } from "wxt/browser";
 import type { TabOverride } from "../core/model";
+import type { RulesRevision } from "../core/revision";
 
 const SESSION_KEY = "sessionState";
-const RECONCILE_ERROR_KEY = "reconcileError";
+const APPLIED_KEY = "appliedRules";
 
 export interface SessionState {
   nextNum: number;
@@ -11,7 +12,7 @@ export interface SessionState {
 
 interface StoredSession {
   sessionState?: SessionState;
-  reconcileError?: boolean;
+  appliedRules?: RulesRevision;
 }
 
 export async function read(): Promise<SessionState> {
@@ -46,8 +47,8 @@ export function subscribe(callback: () => void): () => void {
   return subscribeKey(SESSION_KEY, callback);
 }
 
-export function subscribeReconcileError(callback: () => void): () => void {
-  return subscribeKey(RECONCILE_ERROR_KEY, callback);
+export function subscribeAppliedRevision(callback: () => void): () => void {
+  return subscribeKey(APPLIED_KEY, callback);
 }
 
 function subscribeKey(key: string, callback: () => void): () => void {
@@ -60,19 +61,17 @@ function subscribeKey(key: string, callback: () => void): () => void {
   return () => browser.storage.session.onChanged.removeListener(listener);
 }
 
-export async function getReconcileError(): Promise<boolean> {
-  const stored =
-    await browser.storage.session.get<StoredSession>(RECONCILE_ERROR_KEY);
-  return stored.reconcileError ?? false;
+export async function getAppliedRevision(): Promise<RulesRevision | undefined> {
+  const stored = await browser.storage.session.get<StoredSession>(APPLIED_KEY);
+  return stored.appliedRules;
 }
 
-export async function publishReconcileState(
-  reconcileError: boolean,
-): Promise<void> {
-  const stored = await browser.storage.session.get<StoredSession>({
-    reconcileError: false,
+export function setAppliedRevision(revision: RulesRevision): Promise<void> {
+  return browser.storage.session.set<StoredSession>({
+    appliedRules: revision,
   });
-  if (stored.reconcileError !== reconcileError) {
-    await browser.storage.session.set<StoredSession>({ reconcileError });
-  }
+}
+
+export function clearAppliedRevision(): Promise<void> {
+  return browser.storage.session.remove(APPLIED_KEY);
 }

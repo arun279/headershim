@@ -1,4 +1,4 @@
-import { checkEnabledRuleLimits } from "./limits";
+import { enabledRulesFit } from "./limits";
 
 export const DIRECTIONS = ["request", "response"] as const;
 export type Direction = (typeof DIRECTIONS)[number];
@@ -164,7 +164,7 @@ export function activeProfile(doc: StateDoc): Profile {
     (profile) => profile.id === doc.activeProfileId,
   );
   if (active === undefined) {
-    throw new RangeError("activeProfileId names no profile");
+    throw new RangeError("active profile missing");
   }
   return active;
 }
@@ -182,7 +182,7 @@ export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
   if (
     profile === undefined ||
     profileId === doc.activeProfileId ||
-    !checkEnabledRuleLimits(profile.rules.filter((rule) => rule.enabled)).ok
+    !enabledRulesFit(profile.rules.filter((rule) => rule.enabled))
   ) {
     return doc;
   }
@@ -197,9 +197,7 @@ export function activateProfile(doc: StateDoc, profileId: string): StateDoc {
 // one. Repeated presses toggle between the two, so a two-environment user stays
 // on their pair and never lands on an empty profile they did not pick.
 export function activatePreviousProfile(doc: StateDoc): StateDoc {
-  return doc.previousProfileId === undefined
-    ? doc
-    : activateProfile(doc, doc.previousProfileId);
+  return activateProfile(doc, doc.previousProfileId ?? doc.activeProfileId);
 }
 
 export function isStoredProfileNameValid(

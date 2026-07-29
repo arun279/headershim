@@ -4,14 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
 import { ALL_SITES_ORIGIN } from "../core/grants";
-import type { Profile } from "../core/model";
+import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
-import { publishReconcileState } from "../platform/session-store";
+import { setAppliedRevision } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
 import { copy, siteAccessCopy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
+import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 const text = copy.options.allRules;
 
@@ -22,12 +23,17 @@ function oneRule(): Profile[] {
   ];
 }
 
+function domainScope(domain: string): Rule["scope"] {
+  return { type: "domains", domains: [domain] };
+}
+
 async function seed(profiles: Profile[]): Promise<void> {
   await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id ?? "" }));
 }
 
-async function mount(hash = "#rules") {
+async function mount(hash = "#rules", publish = true) {
   window.location.hash = hash;
+  if (publish) await followCurrentBatch();
   const root = render(<App />);
   await settle();
   return root;
@@ -48,6 +54,7 @@ function findButton(root: ParentNode, label: string): HTMLButtonElement {
 }
 
 beforeEach(() => {
+  stopFollowingCurrentBatch();
   resetFixtures();
   window.location.hash = "";
 });
@@ -66,19 +73,19 @@ async function seedOneOfEachSeverity(): Promise<void> {
       rules: [
         rule({
           header: "x-live",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          scope: domainScope("api.example.com"),
         }),
         rule({
           header: "x-blocked",
-          scope: { type: "domains", domains: ["other.example.com"] },
+          scope: domainScope("other.example.com"),
         }),
         rule({
-          header: "host",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          header: ":authority",
+          scope: domainScope("api.example.com"),
         }),
         rule({
           header: "connection",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          scope: domainScope("api.example.com"),
         }),
       ],
     }),
@@ -99,14 +106,21 @@ describe("all rules", () => {
     expect(hosts).toContain("api.example.com");
     expect(hosts).toContain("other.example.com");
 
-    // A granted rule is live; the Host rule is refused; the managed rule is
-    // inert; the ungranted rule needs access and offers a Grant.
+    // A granted rule is live; the invalid header is refused; the managed rule
+    // carries its caveat; the ungranted rule offers a Grant.
     expect(root.querySelector(".fleet-row.live")).not.toBeNull();
-    expect(root.querySelector(".fleet-row.refused")).not.toBeNull();
+    expect(root.querySelector(".fleet-row.stop")).not.toBeNull();
     expect(
-      root.querySelector(".fleet-row.managed .why")?.textContent,
+      [...root.querySelectorAll(".fleet-row")]
+        .find((row) => row.textContent?.includes("connection"))
+        ?.querySelector(".why")?.textContent,
     ).toContain(copy.readout.managedReason);
-    const blocked = within(root, ".fleet-row.needs-access");
+    const blocked = [...root.querySelectorAll(".fleet-row.amber")].find(
+      (row) => row.querySelector(".grant") !== null,
+    );
+    if (!(blocked instanceof HTMLElement)) {
+      throw new Error("missing grantable rule");
+    }
     expect(blocked.querySelector(".grant")?.textContent).toBe(
       copy.readout.grant,
     );
@@ -122,32 +136,42 @@ describe("all rules", () => {
     await seedOneOfEachSeverity();
     const root = await mount();
 
-    // Every rule here is switched on, but only the live one is running. A
-    // stopped-but-on rule must not wear the live hue, and must not fall to the
-    // grey that also paints an off rule: it wears the amber blocked tone so its
-    // switch reads as on-but-stopped, matching the amber spine beside it.
+    // Every rule here is switched on. Refused and ungranted rules use the
+    // blocked control tone, while a running rule keeps the live control tone
+    // even when it carries a network caveat.
     const live = within(root, '.fleet-row.live [role="switch"]');
-    const refused = within(root, '.fleet-row.refused [role="switch"]');
-    const managed = within(root, '.fleet-row.managed [role="switch"]');
-    const needsAccess = within(root, '.fleet-row.needs-access [role="switch"]');
+    const refused = within(root, '.fleet-row.stop [role="switch"]');
+    const managedRow = [...root.querySelectorAll(".fleet-row")].find((row) =>
+      row.textContent?.includes("connection"),
+    );
+    const managed = managedRow?.querySelector('[role="switch"]');
+    if (!(managed instanceof HTMLElement)) {
+      throw new Error("missing managed switch");
+    }
+    const needsAccessRow = [...root.querySelectorAll(".fleet-row.amber")].find(
+      (row) => row.querySelector(".grant") !== null,
+    );
+    const needsAccess = needsAccessRow?.querySelector('[role="switch"]');
+    if (!(needsAccess instanceof HTMLElement)) {
+      throw new Error("missing needs-access switch");
+    }
     expect(live.getAttribute("aria-checked")).toBe("true");
     expect(refused.getAttribute("aria-checked")).toBe("true");
     expect(managed.getAttribute("aria-checked")).toBe("true");
     expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
-    expect(managed.className).toBe("sw sw-blocked");
+    expect(managed.className).toBe("sw");
     expect(needsAccess.className).toBe("sw sw-blocked");
   });
 
-  it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
+  it("does not project an out-of-sync ruleset", async () => {
     await seed(oneRule());
-    await publishReconcileState(true);
-    const root = await mount();
-
-    const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.className).toBe("sw sw-blocked");
+    await setAppliedRevision({ dynamic: "different", session: "different" });
+    const root = await mount("#rules", false);
+    expect(root.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(root.querySelector(".fleet-row")).not.toBeNull();
+    expect(root.textContent).toContain(copy.readout.outOfSync);
   });
 
   it("keeps the scope beside the profile note for a rule in an inactive profile", async () => {
@@ -166,7 +190,7 @@ describe("all rules", () => {
 
     // The off-profile row states both what it matches and why it is at rest;
     // the reason must not take the scope's line.
-    const row = within(root, ".fleet-row.off");
+    const row = within(root, ".fleet-row.rest");
     expect(row.querySelector(".fleet-scope")?.textContent).toBe(
       "held.example.com",
     );
@@ -365,6 +389,12 @@ describe("all rules", () => {
   // groupBySite draws one row per rule x domain, so a two-domain rule is two
   // rows whose switches are the same switch. The row has to own up to its reach.
   it("says how far a rule reaches when one rule is drawn under several sites", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [
+        originPatternForDomain("api.stripe.com"),
+        originPatternForDomain("api.github.com"),
+      ],
+    });
     await seed([
       profile("p1", {
         name: "Staging",
@@ -461,13 +491,16 @@ describe("active changes", () => {
           rule({
             header: "authorization",
             value: "Bearer super-secret",
-            scope: { type: "domains", domains: ["api.example.com"] },
+            scope: domainScope("api.example.com"),
           }),
           rule({
-            header: "host",
-            scope: { type: "domains", domains: ["api.example.com"] },
+            header: ":authority",
+            scope: domainScope("api.example.com"),
           }),
-          rule({ header: "connection", scope: { type: "all" } }),
+          rule({
+            header: "connection",
+            scope: domainScope("api.example.com"),
+          }),
           rule({ header: "x-off", enabled: false }),
         ],
       }),
@@ -479,17 +512,16 @@ describe("active changes", () => {
     );
     const rows = [...root.querySelectorAll(".tape-row")];
     expect(rows.length).toBe(3);
-    expect(root.querySelector(".tape-row.refused")).not.toBeNull();
-    expect(root.querySelector(".tape-row.managed")).not.toBeNull();
+    expect(root.querySelector(".tape-row.stop")).not.toBeNull();
     expect(root.querySelector(".tape-row.live")).not.toBeNull();
-    expect(
-      root.querySelector(".tape-row.managed .tape-status")?.textContent,
-    ).toBe(copy.options.traffic.status.managed);
-    // The status cell is one state word, not the refusal sentence the detailed
-    // surfaces spell out, so a long reason cannot dictate the column's width.
-    expect(
-      root.querySelector(".tape-row.refused .tape-status")?.textContent,
-    ).toBe(copy.options.traffic.status.refused);
+    const managed = rows.find((row) => row.textContent?.includes("connection"));
+    expect(managed?.classList.contains("amber")).toBe(true);
+    expect(managed?.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.managed,
+    );
+    expect(root.querySelector(".tape-row.stop .tape-status")?.textContent).toBe(
+      copy.options.traffic.status.refused,
+    );
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
   });
@@ -506,7 +538,7 @@ describe("active changes", () => {
       }),
     ]);
     const root = await mount("#traffic");
-    const row = within(root, ".tape-row.needs-access");
+    const row = within(root, ".tape-row.amber");
 
     expect(row.querySelector(".tape-verb")?.textContent).toBe(
       copy.readout.heldVerb.set,
@@ -514,6 +546,133 @@ describe("active changes", () => {
     expect(row.querySelector(".tape-status")?.textContent).toBe(
       siteAccessCopy.grant,
     );
+  });
+
+  it("names and requests the projected initiator grant", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "x-subresource",
+            scope: { type: "domains", domains: ["api.example.com"] },
+            resourceTypes: ["xhr"],
+            initiators: ["app.example.com"],
+          }),
+        ],
+      }),
+    ]);
+    const request = vi.spyOn(fakeBrowser.permissions, "request");
+    const root = await mount("#traffic");
+    const grant = root.querySelector(".tape-row .grant");
+    if (!(grant instanceof HTMLButtonElement)) {
+      throw new Error("missing Traffic grant");
+    }
+    const origins = [originPatternForDomain("app.example.com")];
+
+    expect(grant.getAttribute("aria-label")).toBe(
+      siteAccessCopy.grantOriginsLabel(origins),
+    );
+    fire(() => grant.click());
+    expect(request).toHaveBeenCalledWith({ origins });
+    request.mockRestore();
+  });
+
+  it("names shadowed and security-header rows", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await write(
+      stateDoc(
+        [
+          profile("p1", {
+            rules: [
+              rule({
+                id: "winner",
+                num: 1,
+                direction: "response",
+                header: "strict-transport-security",
+                value: "max-age=63072000",
+                scope: { type: "domains", domains: ["api.example.com"] },
+              }),
+              {
+                id: "lower",
+                num: 2,
+                direction: "response",
+                operation: "remove",
+                header: "strict-transport-security",
+                scope: { type: "domains", domains: ["api.example.com"] },
+                resourceTypes: "all",
+                initiators: [],
+                enabled: true,
+              },
+            ],
+          }),
+        ],
+        { nextRuleNum: 3 },
+      ),
+    );
+    const root = await mount("#traffic");
+    const rows = [...root.querySelectorAll(".tape-row")];
+    const statuses = rows.map(
+      (row) => row.querySelector(".tape-status")?.textContent,
+    );
+
+    expect(statuses).toContain(copy.options.traffic.status.live);
+    expect(statuses).toContain(copy.options.traffic.status.overridden);
+  });
+
+  it("reports a refused security header as refused", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            direction: "response",
+            header: "content-security-policy",
+            value: "default-src 'none'\nbad",
+            scope: {
+              type: "domains",
+              domains: ["api.example.com"],
+            },
+          }),
+        ],
+      }),
+    ]);
+
+    const root = await mount("#traffic");
+    const row = root.querySelector(".tape-row");
+    expect(row?.classList.contains("stop")).toBe(true);
+    expect(row?.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.refused,
+    );
+  });
+
+  it("keeps the needs-access glyph while paused", async () => {
+    await write(
+      stateDoc(
+        [
+          profile("p1", {
+            rules: [
+              rule({
+                header: "x-blocked",
+                scope: { type: "domains", domains: ["api.example.com"] },
+              }),
+            ],
+          }),
+        ],
+        { settings: { paused: true, theme: "system" } },
+      ),
+    );
+    const root = await mount("#traffic");
+    const row = within(root, ".tape-row.amber");
+
+    expect(row.querySelector(".tape-mark circle")).not.toBeNull();
+    expect(row.querySelector(".tape-mark rect")).toBeNull();
   });
 
   // The page is the active profile's switched-on changes, so an enabled rule in

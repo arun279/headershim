@@ -1,14 +1,13 @@
 import { BRAND_NAME } from "../brand";
 import { activeProfile, type BadgeColor, type StateDoc } from "./model";
 
-export interface BadgeState {
+interface BadgeState {
   readonly text: string;
   readonly backgroundColor: string;
   readonly textColor: string;
 }
 
-export interface BadgePlan {
-  readonly state: BadgeState;
+export interface BadgePlan extends BadgeState {
   // The toolbar button's tooltip. Only the paused state names itself;
   // every other state clears back to the manifest default_title. Lives
   // here beside the badge glyphs, not in copy.ts, so the service worker never
@@ -38,11 +37,11 @@ const PAUSED_TITLE = `${BRAND_NAME}: paused`;
 // popup and options, where they can name the site the global badge cannot.
 export function planBadge(doc: StateDoc): BadgePlan {
   if (doc.settings.paused) {
-    return { state: paint("II", NEUTRAL_FILL), title: PAUSED_TITLE };
+    return { ...paint("II", NEUTRAL_FILL), title: PAUSED_TITLE };
   }
   const active = activeProfile(doc);
   return {
-    state: paint(active.badgeText, BADGE_PALETTE[active.color]),
+    ...paint(active.badgeText, BADGE_PALETTE[active.color]),
     title: "",
   };
 }

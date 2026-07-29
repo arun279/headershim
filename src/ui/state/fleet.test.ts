@@ -1,539 +1,309 @@
 import { describe, expect, it } from "vitest";
+import type { Applied } from "../../core/applied";
 import type { GrantSnapshot } from "../../core/grants";
 import type { Profile, Rule, StateDoc } from "../../core/model";
-import { LIVE, OUT_OF_SYNC, PAUSED } from "../test/fixtures";
-import {
-  type FleetInput,
-  type FleetRule,
-  groupByHeader,
-  groupBySite,
-  projectFleet as projectFleetWithActive,
-  tapeRows,
-} from "./fleet";
+import { ruleKey } from "../../core/verdict";
+import { confirmedBatch } from "../test/fixtures";
+import { fleetRules, groupByHeader, groupBySite, tapeRows } from "./fleet";
 
-const ALL: GrantSnapshot = { origins: [], allSites: true };
-const NONE: GrantSnapshot = { origins: [], allSites: false };
-const SUPPORT_ALL = () => true;
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
 
-let seq = 0;
-const baseRule: Omit<Rule, "id" | "num"> = {
+const BASE_RULE: Omit<Rule, "id" | "num"> = {
   direction: "request",
   operation: "set",
   header: "x-flag",
   value: "on",
-  scope: { type: "domains", domains: ["svc.test"] },
+  scope: { type: "domains", domains: ["api.example.com"] },
   resourceTypes: "all",
   initiators: [],
   enabled: true,
 };
-const rule = (overrides: Partial<Rule> = {}): Rule => {
-  seq += 1;
-  return { ...baseRule, id: `rule-${seq}`, num: seq, ...overrides };
-};
-const profile = (overrides: Partial<Profile> = {}): Profile => ({
-  id: "p1",
-  name: "Staging",
-  badgeText: "ST",
-  color: "blue",
-  rules: [],
-  ...overrides,
-});
 
-function projectFleet(
-  input: Omit<FleetInput, "doc" | "isRegexSupported"> & {
-    profiles: readonly Profile[];
-    activeProfileId?: string | undefined;
-    isRegexSupported?: (regex: string) => boolean;
-  },
-): FleetRule[] {
-  const activeProfileId = input.activeProfileId ?? input.profiles[0]?.id ?? "";
-  const doc: StateDoc = {
+function rule(id: string, num: number, changes: Partial<Rule> = {}): Rule {
+  return { ...BASE_RULE, id, num, ...changes };
+}
+
+function profile(
+  id: string,
+  rules: Rule[],
+  changes: Partial<Profile> = {},
+): Profile {
+  return {
+    id,
+    name: id === "staging" ? "Staging" : "Inactive",
+    badgeText: id === "staging" ? "ST" : "IN",
+    color: id === "staging" ? "blue" : "slate",
+    rules,
+    ...changes,
+  };
+}
+
+function document(
+  profiles: Profile[],
+  activeProfileId = profiles[0]?.id ?? "",
+): StateDoc {
+  return {
     v: 1,
-    profiles: [...input.profiles],
+    profiles,
     activeProfileId,
     nextRuleNum: 100,
     settings: { paused: false, theme: "system" },
   };
-  return projectFleetWithActive({
+}
+
+function compileApplied(
+  doc: StateDoc,
+  granted: GrantSnapshot = ALL_SITES,
+): Applied {
+  return confirmedBatch({
     doc,
-    grants: input.grants,
-    status: input.status,
-    isRegexSupported: input.isRegexSupported ?? SUPPORT_ALL,
-  });
+    overrides: [],
+    granted,
+    isRegexSupported: () => true,
+  }).applied;
 }
 
-function byKey(fleet: readonly FleetRule[], key: string): FleetRule {
-  const found = fleet.find((entry) => entry.key === key);
-  if (found === undefined) throw new Error(`no fleet rule ${key}`);
-  return found;
-}
-
-describe("projectFleet status ladder", () => {
-  it("marks a granted enabled rule live and carries provenance", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r" })] })],
-      grants: ALL,
-      status: LIVE,
-    });
-    const entry = byKey(fleet, "p1:r");
-    expect(entry.status).toBe("live");
-    expect(entry.provenance).toMatchObject({ name: "Staging", color: "blue" });
-    expect(entry.siteCount).toBe(1);
-    expect(entry.crossSite).toBe(false);
-  });
-
-  it("marks an ungranted rule needs-access with the missing origin", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r" })] })],
-      grants: NONE,
-      status: LIVE,
-    });
-    const entry = byKey(fleet, "p1:r");
-    expect(entry.status).toBe("needs-access");
-    expect(entry.missing).toEqual(["*://*.svc.test/*"]);
-  });
-
-  it("does not call a wider rule live under Chrome's exact-origin grant", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r" })] })],
-      grants: {
-        origins: ["https://svc.test/*"],
-        allSites: false,
+describe("fleetRules", () => {
+  it("combines authored metadata with the installed scope", () => {
+    const credential = rule("credential", 1, {
+      header: "Authorization",
+      value: "Bearer abc123",
+      scope: {
+        type: "domains",
+        domains: ["api.example.com", "other.example.com"],
       },
-      status: LIVE,
+      comment: "API credential",
+    });
+    const doc = document([profile("staging", [credential])]);
+    const applied = compileApplied(doc, {
+      origins: ["https://api.example.com/*"],
+      allSites: false,
     });
 
-    const entry = byKey(fleet, "p1:r");
-    expect(entry.status).toBe("needs-access");
-    expect(entry.missing).toEqual(["*://*.svc.test/*"]);
-  });
-
-  it("marks a Host rule refused even when granted", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r", header: "host" })] })],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("refused");
-    expect(byKey(fleet, "p1:r").refused).toBe("host");
-  });
-
-  it("marks a network-managed rule managed rather than live", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r", header: "connection" })] })],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("managed");
-  });
-
-  it("lets compiler refusal outrank network-managed classification", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "r",
-              operation: "append",
-              header: "content-length",
-            }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    const entry = byKey(fleet, "p1:r");
-    expect(entry.status).toBe("refused");
-    expect(entry.refused).toBe("append");
-    expect(fleet.filter((rule) => rule.status === "managed")).toHaveLength(0);
-    expect(
-      fleet.filter(
-        (rule) => rule.status === "live" || rule.status === "unconfirmed",
-      ),
-    ).toHaveLength(0);
-  });
-
-  it("never reads live while Chrome has not taken the ruleset", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "r" })] })],
-      grants: ALL,
-      status: OUT_OF_SYNC,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("out-of-sync");
-  });
-
-  // Chrome settles each of these inside its own matcher, against a request URL
-  // no projection sees. The Workbench reads them the same way the popup does,
-  // so a rule can never be unconfirmed on one surface and live on the other.
-  it.each([
-    ["initiators", { initiators: ["app.test"] }],
-    [
-      "a pattern",
-      { scope: { type: "pattern" as const, pattern: "||x.test/", hosts: [] } },
-    ],
-    [
-      "a regex",
-      {
-        scope: {
-          type: "regex" as const,
-          regex: "^https://x\\.test/",
-          hosts: [],
+    expect(fleetRules(applied, doc)).toEqual([
+      expect.objectContaining({
+        key: ruleKey("staging", "credential", 0),
+        profileId: "staging",
+        ruleId: "credential",
+        provenance: {
+          profileId: "staging",
+          name: "Staging",
+          badgeText: "ST",
+          color: "blue",
         },
-      },
-    ],
-  ])(
-    "declines to claim a rule fires when %s decides it per request",
-    (_label, changes) => {
-      const fleet = projectFleet({
-        profiles: [profile({ rules: [rule({ id: "r", ...changes })] })],
-        grants: ALL,
-        status: LIVE,
-      });
-      expect(byKey(fleet, "p1:r").status).toBe("unconfirmed");
-    },
-  );
-
-  it("refuses a rule the compiler would drop from the batch", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "r",
-              scope: { type: "domains", domains: ["sürvice.test"] },
-            }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("refused");
-    expect(byKey(fleet, "p1:r").refused).toBe("domains");
-  });
-
-  it("reads a disabled rule off, and pause never shows off as paused", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [rule({ id: "on" }), rule({ id: "off", enabled: false })],
-        }),
-      ],
-      grants: ALL,
-      status: PAUSED,
-    });
-    expect(byKey(fleet, "p1:on").status).toBe("paused");
-    expect(byKey(fleet, "p1:off").status).toBe("off");
-  });
-
-  it("keeps an ungranted stored rule paused rather than actionable", () => {
-    const fleet = projectFleet({
-      profiles: [profile({ rules: [rule({ id: "held" })] })],
-      grants: NONE,
-      status: PAUSED,
-    });
-
-    expect(byKey(fleet, "p1:held").status).toBe("paused");
-  });
-
-  it("reads every rule in an inactive profile as off", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({ id: "active", name: "Active" }),
-        profile({ rules: [rule({ id: "r" })] }),
-      ],
-      activeProfileId: "active",
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:r").status).toBe("off");
-  });
-
-  it("never reports a collision across an inactive profile", () => {
-    const winner = profile({
-      id: "p1",
-      name: "Base",
-      rules: [rule({ id: "w", header: "x-env", scope: { type: "all" } })],
-    });
-    const loser = profile({
-      id: "p2",
-      name: "Extra",
-      rules: [rule({ id: "l", header: "x-env" })],
-    });
-    const fleet = projectFleet({
-      profiles: [winner, loser],
-      grants: ALL,
-      status: LIVE,
-    });
-    const entry = byKey(fleet, "p2:l");
-    expect(entry.status).toBe("off");
-    expect(entry.overriddenBy).toBeUndefined();
-  });
-
-  it("names the winning same-profile rule", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "w",
-              header: "x-env",
-              comment: "environment default",
-              scope: { type: "all" },
-            }),
-            rule({ id: "l", header: "x-env" }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:l").overriddenBy).toBe("environment default");
-  });
-
-  it("does not let a compiler-dropped rule override a compiled rule", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({ id: "dropped", header: "x-env", value: "bad\nvalue" }),
-            rule({ id: "compiled", header: "x-env", value: "prod" }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-
-    expect(byKey(fleet, "p1:dropped").status).toBe("refused");
-    expect(byKey(fleet, "p1:compiled").status).toBe("live");
-    expect(tapeRows(groupBySite(fleet)).map((row) => row.header)).toEqual([
-      "x-env",
-      "x-env",
+        headerKey: "authorization",
+        direction: "request",
+        operation: "set",
+        header: "Authorization",
+        display: "Bearer [hidden]",
+        secret: true,
+        enabled: true,
+        paused: false,
+        outcome: {
+          kind: "partial",
+          scope: {
+            kind: "sites",
+            domains: ["api.example.com"],
+            origins: ["https://api.example.com"],
+          },
+          reason: {
+            kind: "ungranted",
+            missing: ["*://*.api.example.com/*", "*://*.other.example.com/*"],
+          },
+        },
+        scope: {
+          type: "domains",
+          domains: ["api.example.com", "other.example.com"],
+        },
+        crossSite: false,
+        comment: "API credential",
+      }),
     ]);
-  });
-
-  it("resolves collisions over the narrowed rules the compiler installs", () => {
-    // A domains rule granted on only one of its sites is installed there,
-    // narrowed, at full priority, so it shadows a lower same-header rule exactly
-    // as it does on the wire; its own row still reads needs-access.
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "partly",
-              header: "x-env",
-              scope: { type: "domains", domains: ["svc.test", "other.test"] },
-            }),
-            rule({ id: "lower", header: "x-env" }),
-          ],
-        }),
-      ],
-      grants: { origins: ["*://*.svc.test/*"], allSites: false },
-      status: LIVE,
-    });
-
-    expect(byKey(fleet, "p1:partly").status).toBe("needs-access");
-    expect(byKey(fleet, "p1:lower").status).toBe("overridden");
-    expect(byKey(fleet, "p1:lower").overriddenBy).toBe("x-env rule");
-  });
-
-  it("redacts secret values and drops the value for a remove", () => {
-    const { value: _drop, ...removeRule } = rule({
-      id: "d",
-      operation: "remove",
-    });
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({ id: "s", header: "authorization", value: "Bearer abc123" }),
-            removeRule,
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    expect(byKey(fleet, "p1:s").display).toBe("Bearer [hidden]");
-    expect(byKey(fleet, "p1:d").display).toBeUndefined();
   });
 });
 
-describe("groupBySite", () => {
-  it("lists a multi-domain rule under each domain, sorted", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "r",
-              scope: { type: "domains", domains: ["b.com", "a.com"] },
-            }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    const groups = groupBySite(fleet);
-    expect(groups.map((group) => group.host)).toEqual(["a.com", "b.com"]);
-    expect(byKey(fleet, "p1:r").siteCount).toBe(2);
-  });
+describe("fleet grouping", () => {
+  it("groups authored sites and projected header reach independently", () => {
+    const rules = [
+      rule("multi-site", 1, {
+        header: "X-Env",
+        scope: { type: "domains", domains: ["b.test", "a.test"] },
+      }),
+      rule("third-site", 2, {
+        header: "x-env",
+        scope: { type: "domains", domains: ["c.test"] },
+      }),
+      rule("cross-site", 3, {
+        header: "X-Global",
+        scope: { type: "all" },
+      }),
+    ];
+    const doc = document([profile("staging", rules)]);
+    const fleet = fleetRules(compileApplied(doc), doc);
 
-  it("collects all-sites, pattern, and regex rules into one cross-site group", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({ id: "d" }),
-            rule({ id: "a", scope: { type: "all" } }),
-            rule({
-              id: "p",
-              scope: { type: "pattern", pattern: "||x.com/", hosts: [] },
-            }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    const groups = groupBySite(fleet);
-    const cross = groups.find((group) => group.kind === "cross-site");
-    expect(cross?.rules.map((entry) => entry.ruleId)).toEqual(["a", "p"]);
-  });
-});
-
-describe("groupByHeader", () => {
-  it("gathers one header across sites and reports the blast radius", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "1",
-              header: "X-Env",
-              scope: { type: "domains", domains: ["a.com"] },
-            }),
-            rule({
-              id: "2",
-              header: "x-env",
-              scope: { type: "domains", domains: ["b.com"] },
-            }),
-            rule({ id: "3", header: "Cache-Control" }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
-    });
-    const groups = groupByHeader(fleet);
-    expect(groups.map((group) => group.header)).toEqual([
-      "Cache-Control",
-      "X-Env",
+    const sites = groupBySite(fleet);
+    expect(sites.map((group) => group.host)).toEqual([
+      "a.test",
+      "b.test",
+      "c.test",
+      "*",
     ]);
-    const env = groups.find((group) => group.headerKey === "x-env");
-    expect(env?.rules).toHaveLength(2);
-    expect(env?.siteCount).toBe(2);
-    expect(env?.broad).toBe(false);
+    expect(sites[0]?.rules.map((entry) => entry.ruleId)).toEqual([
+      "multi-site",
+    ]);
+    expect(sites[3]).toMatchObject({
+      kind: "cross-site",
+      rules: [expect.objectContaining({ ruleId: "cross-site" })],
+    });
+
+    const headers = groupByHeader(fleet);
+    expect(headers.map((group) => group.headerKey)).toEqual([
+      "x-env",
+      "x-global",
+    ]);
+    expect(headers[0]).toMatchObject({
+      siteCount: 3,
+      broad: false,
+      allSites: false,
+    });
+    expect(headers[1]).toMatchObject({
+      siteCount: 0,
+      broad: true,
+      allSites: true,
+    });
   });
 
-  it("marks a header broad when any rule reaches beyond named sites", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({ rules: [rule({ id: "r", scope: { type: "all" } })] }),
-      ],
-      grants: ALL,
-      status: LIVE,
+  it("counts only installed domains in a header's reach", () => {
+    const live = rule("live", 1, {
+      header: "x-env",
+      scope: { type: "domains", domains: ["a.test"] },
     });
-    expect(groupByHeader(fleet)[0]?.broad).toBe(true);
-  });
+    const off = rule("off", 2, {
+      header: "x-env",
+      enabled: false,
+      scope: { type: "domains", domains: ["b.test"] },
+    });
+    const doc = document([profile("staging", [live, off])]);
 
-  it("counts the blast radius from the running rules only", () => {
-    // The caption reads present-tense, so a rule that is off, or one waiting on
-    // a grant, must not add to the sites it says the header reaches.
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "live",
-              header: "x-env",
-              scope: { type: "domains", domains: ["a.com"] },
-            }),
-            rule({
-              id: "off",
-              header: "x-env",
-              enabled: false,
-              scope: { type: "domains", domains: ["b.com"] },
-            }),
-            rule({
-              id: "broad-off",
-              header: "x-env",
-              enabled: false,
-              scope: { type: "all" },
-            }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
+    expect(
+      groupByHeader(fleetRules(compileApplied(doc), doc))[0],
+    ).toMatchObject({
+      siteCount: 1,
+      broad: false,
     });
-    const env = groupByHeader(fleet).find(
-      (group) => group.headerKey === "x-env",
-    );
-    expect(env?.siteCount).toBe(1);
-    expect(env?.broad).toBe(false);
-    expect(env?.allSites).toBe(false);
   });
 });
 
 describe("tapeRows", () => {
-  it("carries live, skipped, and refused stamps but never off or overridden", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({
-              id: "live",
-              scope: { type: "domains", domains: ["a.com"] },
-            }),
-            rule({ id: "off", enabled: false }),
-            rule({ id: "host", header: "host" }),
-            rule({ id: "managed", header: "connection" }),
-          ],
-        }),
-      ],
-      grants: ALL,
-      status: LIVE,
+  it("keeps an exact-origin site partial and names the missing site", () => {
+    const partial = rule("partial", 1, {
+      scope: {
+        type: "domains",
+        domains: ["api.example.com", "other.example.com"],
+      },
     });
-    const rows = tapeRows(groupBySite(fleet));
-    const statuses = rows.map((row) => row.status);
-    expect(statuses).toContain("live");
-    expect(statuses).toContain("refused");
-    expect(statuses).toContain("managed");
-    expect(rows.some((row) => row.header === "host")).toBe(true);
-    // The off rule is not traffic and never reaches the tape.
-    expect(rows).toHaveLength(3);
-    // Refused sorts ahead of live.
-    expect(rows[0]?.status).toBe("refused");
+    const doc = document([profile("staging", [partial])]);
+    const applied = compileApplied(doc, {
+      origins: ["https://api.example.com/*"],
+      allSites: false,
+    });
+    const rows = tapeRows(groupBySite(fleetRules(applied, doc)), applied);
+
+    expect(
+      rows.find((row) => row.host === "api.example.com")?.outcome.kind,
+    ).toBe("partial");
+    expect(
+      rows.find((row) => row.host === "other.example.com")?.outcome,
+    ).toEqual({
+      kind: "absent",
+      reason: {
+        kind: "ungranted",
+        missing: ["*://*.other.example.com/*"],
+      },
+    });
   });
 
-  it("skips ungranted rules and orders skipped ahead of live", () => {
-    const fleet = projectFleet({
-      profiles: [
-        profile({
-          rules: [
-            rule({ id: "g", scope: { type: "domains", domains: ["a.com"] } }),
-          ],
-        }),
-      ],
-      grants: NONE,
-      status: LIVE,
+  it("includes every placed key and filters only off or other-profile rows", () => {
+    const active = profile("staging", [
+      rule("placed", 1, {
+        scope: { type: "domains", domains: ["a.test", "b.test"] },
+      }),
+      rule("off", 2, {
+        enabled: false,
+        scope: { type: "domains", domains: ["a.test"] },
+      }),
+      rule("refused", 3, {
+        header: ":authority",
+        scope: { type: "domains", domains: ["a.test"] },
+      }),
+      rule("ungranted", 4, {
+        scope: { type: "domains", domains: ["missing.test"] },
+      }),
+    ]);
+    const inactive = profile("inactive", [
+      rule("other-profile", 5, {
+        scope: { type: "domains", domains: ["a.test"] },
+      }),
+    ]);
+    const doc = document([active, inactive], active.id);
+    const applied = compileApplied(doc, {
+      origins: ["*://*.a.test/*", "*://*.b.test/*"],
+      allSites: false,
     });
-    const rows = tapeRows(groupBySite(fleet));
-    expect(rows[0]?.status).toBe("needs-access");
+    const fleet = fleetRules(applied, doc);
+    const groups = groupBySite(fleet);
+    const rows = tapeRows(groups, applied);
+
+    const expectedRows = groups
+      .flatMap((group) =>
+        group.rules.flatMap((entry) =>
+          entry.outcome.kind === "absent" &&
+          (entry.outcome.reason.kind === "off" ||
+            entry.outcome.reason.kind === "other-profile")
+            ? []
+            : [`${group.host}:${entry.key}`],
+        ),
+      )
+      .toSorted();
+    expect(rows.map((row) => row.key)).toEqual(
+      expect.arrayContaining(expectedRows),
+    );
+    expect(rows).toHaveLength(expectedRows.length);
+
+    const placedKeys = fleet
+      .filter((entry) => entry.outcome.kind === "placed")
+      .map((entry) => entry.key)
+      .toSorted();
+    expect(
+      placedKeys.filter((key) =>
+        rows.some((row) => row.key.endsWith(`:${key}`)),
+      ),
+    ).toEqual(placedKeys);
+
+    const omittedReasons = groups.flatMap((group) =>
+      group.rules.flatMap((entry) => {
+        if (rows.some((row) => row.key === `${group.host}:${entry.key}`)) {
+          return [];
+        }
+        return entry.outcome.kind === "absent"
+          ? [entry.outcome.reason.kind]
+          : [];
+      }),
+    );
+    expect(new Set(omittedReasons)).toEqual(new Set(["off", "other-profile"]));
+    expect(
+      rows.some(
+        (row) =>
+          row.outcome.kind === "absent" &&
+          row.outcome.reason.kind === "refused",
+      ),
+    ).toBe(true);
+    expect(
+      rows.some(
+        (row) =>
+          row.outcome.kind === "absent" &&
+          row.outcome.reason.kind === "ungranted",
+      ),
+    ).toBe(true);
   });
 });

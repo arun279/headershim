@@ -1,10 +1,6 @@
+import { type Applied, confirm } from "../../core/applied";
+import { type CompileInput, compile } from "../../core/compile";
 import type { Profile, Rule, StateDoc } from "../../core/model";
-import type { SystemStatus } from "../../core/status";
-
-/** The system states the popup and Workbench projections branch on. */
-export const LIVE: SystemStatus = "live";
-export const PAUSED: SystemStatus = "paused";
-export const OUT_OF_SYNC: SystemStatus = "out-of-sync";
 
 let seq = 0;
 
@@ -57,4 +53,17 @@ export function stateDoc(
     settings: { paused: false, theme: "system" },
     ...overrides,
   };
+}
+
+export function confirmedBatch(input: CompileInput): {
+  readonly applied: Applied;
+  readonly batch: ReturnType<typeof compile>;
+} {
+  const batch = compile(input);
+  const revision = { dynamic: "dynamic", session: "session" };
+  const live = confirm(batch, revision, revision);
+  if (live.confirmation !== "applied") {
+    throw new Error("matching compiled revision was not confirmed");
+  }
+  return { applied: live, batch };
 }

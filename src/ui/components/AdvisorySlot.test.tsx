@@ -44,7 +44,7 @@ describe("AdvisorySlot", () => {
     expect(root.children).toHaveLength(0);
   });
 
-  it("cautions that removing a response protection disarms it", () => {
+  it("notes a removal from a response security policy", () => {
     const root = render(
       <AdvisorySlot
         header="content-security-policy"
@@ -55,7 +55,7 @@ describe("AdvisorySlot", () => {
     expect(root.textContent).toContain(copy.advisories.securityResponse);
   });
 
-  it("stays quiet for an append, which can only add a further constraint", () => {
+  it("notes an append to a response security policy", () => {
     const root = render(
       <AdvisorySlot
         header="content-security-policy"
@@ -63,7 +63,7 @@ describe("AdvisorySlot", () => {
         operation="append"
       />,
     );
-    expect(root.children).toHaveLength(0);
+    expect(root.textContent).toContain(copy.advisories.securityResponse);
   });
 
   it("names the side when a response header is set on the request direction", () => {

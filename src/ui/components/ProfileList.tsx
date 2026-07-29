@@ -6,7 +6,7 @@ import { copy } from "../copy";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
 import { InlineRename } from "./InlineRename";
-import { ProfileName } from "./Truncate";
+import { Truncate as ProfileName } from "./Truncate";
 import "./ProfileList.css";
 
 interface ProfileListProps {

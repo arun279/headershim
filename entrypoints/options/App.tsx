@@ -1,4 +1,4 @@
-import type { JSX } from "preact";
+import type { ComponentType, JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { browser } from "wxt/browser";
 import { CURRENT } from "../../src/core/schema";
@@ -7,30 +7,19 @@ import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { copy } from "../../src/ui/copy";
+import { loadDeferred } from "../../src/ui/deferred";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
 import { applyTheme } from "../../src/ui/theme";
-import { AboutPage } from "./pages/About";
-import { ImportExportPage } from "./pages/ImportExport";
-import { ProfilesPage } from "./pages/Profiles";
+import type { DeferredPageProps, DeferredSection } from "./DeferredPage";
 import { RulesPage } from "./pages/Rules";
-import { SettingsPage } from "./pages/Settings";
-import { SiteAccessPage } from "./pages/SiteAccess";
-import { TrafficPage } from "./pages/Traffic";
 import { Wordmark } from "./Wordmark";
 import "./App.css";
 
 const mutations = createMutations({ validateRegex: isRegexSupported });
 const VERSION = browser.runtime.getManifest().version;
 
-type SectionId =
-  | "rules"
-  | "profiles"
-  | "site-access"
-  | "traffic"
-  | "import-export"
-  | "settings"
-  | "about";
+type SectionId = "rules" | DeferredSection;
 
 interface NavSection {
   readonly id: SectionId;
@@ -68,6 +57,9 @@ const SECTIONS: readonly NavSection[] = GROUPS.flatMap(
 export function App() {
   const app = useAppState();
   const section = useHashRoute();
+  const [DeferredPage, setDeferredPage] =
+    useState<ComponentType<DeferredPageProps>>();
+  const [deferredFailed, setDeferredFailed] = useState(false);
   const previousSection = useRef(section);
   const theme = app.phase === "ready" ? app.doc.settings.theme : undefined;
   useEffect(() => {
@@ -77,14 +69,27 @@ export function App() {
   }, [theme]);
   useEffect(() => {
     const changed = previousSection.current !== section;
-    previousSection.current = section;
-    if (!changed || app.phase !== "ready") {
+    if (
+      !changed ||
+      app.phase !== "ready" ||
+      (section !== "rules" && DeferredPage === undefined)
+    ) {
       return;
     }
+    previousSection.current = section;
     queueMicrotask(() => {
       document.getElementById(`${section}-title`)?.focus();
     });
-  }, [section, app.phase]);
+  }, [section, app.phase, DeferredPage]);
+  useEffect(() => {
+    if (section !== "rules" && DeferredPage === undefined) {
+      setDeferredFailed(false);
+      void loadDeferred(() => import("./DeferredPage")).then(
+        (module) => setDeferredPage(() => module.DeferredPage),
+        () => setDeferredFailed(true),
+      );
+    }
+  }, [section, DeferredPage]);
 
   return (
     <LiveRegionProvider>
@@ -97,7 +102,7 @@ export function App() {
           <SectionNav current={section} />
         </div>
         <main class="wb-main">
-          {app.phase === "ready" && app.status === "paused" && <PauseBanner />}
+          {app.phase === "ready" && app.doc.settings.paused && <PauseBanner />}
           {app.phase === "initializing" ? (
             <div aria-busy="true" />
           ) : app.phase === "newer-store" ? (
@@ -109,36 +114,24 @@ export function App() {
           ) : section === "rules" ? (
             <RulesPage
               doc={app.doc}
-              grants={app.grants}
-              status={app.status}
-              isRegexSupported={app.isRegexSupported}
-              mutations={mutations}
-            />
-          ) : section === "profiles" ? (
-            <ProfilesPage
-              doc={app.doc}
-              status={app.status}
-              mutations={mutations}
-            />
-          ) : section === "site-access" ? (
-            <SiteAccessPage doc={app.doc} grants={app.grants} />
-          ) : section === "traffic" ? (
-            <TrafficPage
-              doc={app.doc}
-              grants={app.grants}
-              status={app.status}
-              isRegexSupported={app.isRegexSupported}
-            />
-          ) : section === "import-export" ? (
-            <ImportExportPage doc={app.doc} mutations={mutations} />
-          ) : section === "settings" ? (
-            <SettingsPage
-              doc={app.doc}
+              projection={app.live}
               grants={app.grants}
               mutations={mutations}
             />
+          ) : deferredFailed ? (
+            <div class="wb-page">
+              <EmptyState message={copy.errors.pageLoad} />
+            </div>
+          ) : DeferredPage === undefined ? (
+            <div aria-busy="true" />
           ) : (
-            <AboutPage />
+            <DeferredPage
+              section={section}
+              doc={app.doc}
+              projection={app.live}
+              grants={app.grants}
+              mutations={mutations}
+            />
           )}
         </main>
       </div>

@@ -1,33 +1,35 @@
 import { useEffect, useState } from "preact/hooks";
+import type { Projection } from "../../../src/core/applied";
 import type { GrantSnapshot } from "../../../src/core/grants";
 import { activeProfile, type StateDoc } from "../../../src/core/model";
-import type { SystemStatus } from "../../../src/core/status";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
-import { changeVerb } from "../../../src/ui/components/readout/changeVerb";
-import {
-  DirectionGlyph,
-  PlusGlyph,
-} from "../../../src/ui/components/readout/glyphs";
+import { DirectionGlyph } from "../../../src/ui/components/readout/fleetGlyphs";
+import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { ProfileBadge } from "../../../src/ui/components/readout/ProfileBadge";
 import { Segmented } from "../../../src/ui/components/Segmented";
 import { sentence } from "../../../src/ui/components/sentence";
 import { ToastHost } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
 import { HeaderValue, Truncate } from "../../../src/ui/components/Truncate";
-import { toneForStatus } from "../../../src/ui/components/toggleTone";
 import { copy } from "../../../src/ui/copy";
-import { grantLabel } from "../../../src/ui/grantLabel";
+import {
+  caveatNote,
+  controlTone,
+  displayTone,
+  grantAction,
+  outcomeReason,
+  verb,
+} from "../../../src/ui/dispositionCopy";
 import {
   type FleetRule,
+  fleetRules,
   groupByHeader,
   groupBySite,
-  projectFleet,
 } from "../../../src/ui/state/fleet";
 import type { Mutations } from "../../../src/ui/state/mutations";
-import { createdRuleToast } from "../../../src/ui/state/overridden";
 import { useToast } from "../../../src/ui/state/useToast";
 import "./Rules.css";
 
@@ -44,15 +46,13 @@ type Editing = { profileId: string; ruleId: string | undefined };
  */
 export function RulesPage({
   doc,
+  projection,
   grants,
-  status,
-  isRegexSupported,
   mutations,
 }: {
   doc: StateDoc;
+  projection: Projection;
   grants: GrantSnapshot;
-  status: SystemStatus;
-  isRegexSupported: (regex: string) => boolean;
   mutations: Mutations;
 }) {
   const announce = useAnnounce();
@@ -71,12 +71,7 @@ export function RulesPage({
     );
   }, []);
 
-  const fleet = projectFleet({
-    doc,
-    grants,
-    isRegexSupported,
-    status,
-  });
+  const fleet = fleetRules(projection, doc);
 
   const editProfile =
     editing === undefined
@@ -133,7 +128,9 @@ export function RulesPage({
     });
 
   const grant = (rule: FleetRule) => {
-    void requestPermissions([...(rule.missing ?? [])]).then((allowed) => {
+    const action = grantAction(rule.outcome);
+    if (action === undefined) return;
+    void requestPermissions([...action.origins]).then((allowed) => {
       if (allowed) announce(copy.toast.accessGranted);
     });
   };
@@ -152,6 +149,9 @@ export function RulesPage({
         <h1 class="wb-title" id="rules-title" tabIndex={-1}>
           {text.title}
         </h1>
+        {projection.confirmation === "pending" && (
+          <p role="status">{copy.readout.outOfSync}</p>
+        )}
         {Editor === undefined ? (
           <div class="editor-loading" role="status" aria-busy="true">
             {copy.options.rules.loadingEditor}
@@ -178,16 +178,10 @@ export function RulesPage({
               showToast(copy.errors.grantDeclined(host))
             }
             onGranted={() => showToast(copy.toast.accessGranted)}
-            onCommitted={({ kind, rule, profileId }) =>
+            onCommitted={({ kind }) =>
               showToast(
                 kind === "create"
-                  ? createdRuleToast(
-                      doc,
-                      profileId ?? editProfile.id,
-                      rule,
-                      grants,
-                      isRegexSupported,
-                    )
+                  ? copy.toast.ruleCreated
                   : copy.toast.changesSaved,
               )
             }
@@ -202,7 +196,11 @@ export function RulesPage({
   const empty = fleet.length === 0;
 
   return (
-    <section class="wb-page" aria-labelledby="rules-title">
+    <section
+      class="wb-page"
+      aria-labelledby="rules-title"
+      aria-busy={projection.confirmation === "pending" ? "true" : undefined}
+    >
       <div class="wb-head">
         <h1 class="wb-title" id="rules-title" tabIndex={-1}>
           {text.title}
@@ -228,6 +226,9 @@ export function RulesPage({
           </div>
         )}
       </div>
+      {projection.confirmation === "pending" && (
+        <p role="status">{copy.readout.outOfSync}</p>
+      )}
 
       {empty ? (
         <div class="rules-card rules-card-empty">
@@ -299,8 +300,11 @@ function BySite({ fleet, onToggle, onGrant, onEdit }: LensProps) {
                 rule={rule}
                 showScope={group.kind === "cross-site"}
                 sharedSites={
-                  group.kind === "domain" && rule.siteCount > 1
-                    ? rule.siteCount
+                  group.kind === "domain" &&
+                  rule.outcome.kind === "placed" &&
+                  rule.outcome.scope.kind === "sites" &&
+                  rule.outcome.scope.domains.length > 1
+                    ? rule.outcome.scope.domains.length
                     : undefined
                 }
                 onToggle={onToggle}
@@ -373,8 +377,13 @@ function FleetRow({
   onGrant: (rule: FleetRule) => void;
   onEdit: (editing: Editing) => void;
 }) {
+  const tone = displayTone(rule.outcome, rule.caveats);
+  const grant = grantAction(rule.outcome);
   return (
-    <div class={`fleet-row ${rule.status}`} data-key={rule.key}>
+    <div
+      class={`fleet-row ${tone}${rule.paused ? " paused" : ""}`}
+      data-key={rule.key}
+    >
       <span class="spine" aria-hidden="true" />
       <span class="op">
         <DirectionGlyph direction={rule.direction} />
@@ -396,7 +405,9 @@ function FleetRow({
             color={rule.provenance.color}
             size={15}
           />
-          <span class="verb">{changeVerb(rule.status, rule.operation)}</span>{" "}
+          <span class="verb">
+            {verb(rule.outcome, rule.operation, rule.paused)}
+          </span>{" "}
           <Truncate mode="end" value={rule.header} class="k" />
           {rule.display !== undefined && (
             <>
@@ -420,58 +431,20 @@ function FleetRow({
         )}
       </button>
       <div class="line-control">
-        {rule.status === "needs-access" && (
+        {grant !== undefined && (
           <button type="button" class="grant" onClick={() => onGrant(rule)}>
-            {grantLabel(rule.missing)}
+            {grant.label}
           </button>
         )}
         <Toggle
           checked={rule.enabled}
           label={copy.rules.switchLabel(rule.header, rule.enabled)}
-          tone={toneForStatus(rule.status)}
+          tone={controlTone(rule.outcome, rule.paused)}
           onChange={(next) => onToggle(rule, next)}
         />
       </div>
     </div>
   );
-}
-
-type ReasonTone = "rest" | "stop" | "amber";
-
-// Why a rule is not running as authored, or nothing when it is. This is the
-// state cell, independent of the scope cell that says what the rule matches.
-function fleetReason(
-  rule: FleetRule,
-): { readonly tone: ReasonTone; readonly label: string } | undefined {
-  switch (rule.status) {
-    case "overridden":
-      return rule.overriddenBy === undefined
-        ? undefined
-        : {
-            tone: "rest",
-            label: copy.readout.overriddenBy(rule.overriddenBy),
-          };
-    case "refused":
-      return rule.refused === undefined
-        ? undefined
-        : { tone: "stop", label: copy.readout.refusedReason[rule.refused] };
-    case "managed":
-      return { tone: "amber", label: copy.readout.managedReason };
-    case "out-of-sync":
-      return { tone: "amber", label: copy.readout.outOfSyncReason };
-    case "unconfirmed":
-      return { tone: "rest", label: copy.readout.unconfirmedReason };
-    case "needs-access":
-      return { tone: "amber", label: copy.readout.needsAccessReason(false) };
-    // A rule in a profile that is not the active one reads as at-rest; the row
-    // names the profile it lives in so its own colour glyph is not the only clue.
-    case "off":
-      return rule.profileEnabled
-        ? undefined
-        : { tone: "rest", label: text.notActiveProfile(rule.provenance.name) };
-    default:
-      return undefined;
-  }
 }
 
 function FleetWhy({
@@ -487,7 +460,14 @@ function FleetWhy({
   // They never share a slot, so a cross-site rule keeps the pattern that tells
   // it from its neighbour even while a status reason sits beneath it.
   const scope = showScope ? scopeLabel(rule) : undefined;
-  const reason = fleetReason(rule);
+  const reason =
+    rule.outcome.kind === "runs-if-matched"
+      ? {
+          tone: "doubt" as const,
+          label: copy.options.traffic.status.unconfirmed,
+        }
+      : outcomeReason(rule.outcome, false);
+  const caveat = caveatNote(rule.caveats, rule.header, rule.operation);
   return (
     <>
       {scope !== undefined && (
@@ -502,6 +482,12 @@ function FleetWhy({
         <span class={`why ${reason.tone}`}>
           <span class="dot" aria-hidden="true" />
           {reason.label}
+        </span>
+      )}
+      {caveat !== undefined && (
+        <span class="why amber">
+          <span class="dot" aria-hidden="true" />
+          {caveat}
         </span>
       )}
     </>

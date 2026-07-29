@@ -113,40 +113,6 @@ export function narrowedGrantUrlFilters(
   return [...filters];
 }
 
-/** Whether that exact narrowed grant admits requests from this tab origin. */
-export function narrowedGrantCoversOrigin(
-  domain: string,
-  granted: GrantSnapshot,
-  origin: string | undefined,
-): boolean {
-  if (origin === undefined) {
-    return false;
-  }
-  let url: URL;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-  const scheme = url.protocol.slice(0, -1);
-  if (scheme !== "http" && scheme !== "https") {
-    return false;
-  }
-  const required = originPatternForDomain(domain);
-  return granted.origins.some((grantedOrigin) => {
-    const pattern = parseOriginPattern(grantedOrigin);
-    return (
-      pattern !== undefined &&
-      (pattern.scheme === "*" || pattern.scheme === scheme) &&
-      (pattern.includesSubdomains
-        ? hostUnder(url.hostname, pattern.host)
-        : pattern.host === url.hostname) &&
-      (pattern.port === undefined || pattern.port === url.port) &&
-      originPatternCoverage(grantedOrigin, required) === "partial"
-    );
-  });
-}
-
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
   if (granted.allSites) {
     return [];

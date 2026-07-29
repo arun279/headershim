@@ -45,8 +45,6 @@ const rules = (n: number) => (n === 1 ? "rule" : "rules");
 const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
 const changes = (n: number) => (n === 1 ? "change" : "changes");
 const sites = (n: number) => (n === 1 ? "site" : "sites");
-const overriddenByPhrase = (winner: string) => `overridden by ${winner}`;
-
 // Kept outside `copy.options` so popup builds that need other options wording
 // do not carry this page-only copy.
 export const siteAccessCopy = {
@@ -62,6 +60,8 @@ export const siteAccessCopy = {
   tabCount: (count: number) => `${count} tab ${changes(count)}`,
   grant: "Grant",
   grantLabel: (domain: string) => `Grant access to ${domain}`,
+  grantOriginsLabel: (origins: readonly string[]) =>
+    `Grant access to ${andList(origins)}`,
   revoke: "Revoke",
   revokeLabel: (domain: string) => `Revoke access to ${domain}`,
   revoked: (domain: string) => `Access to ${domain} revoked`,
@@ -165,7 +165,6 @@ function duration(ms: number): string {
 export const copy = {
   app: {
     name: BRAND_NAME,
-    tagline: "Add, change, and remove HTTP headers on the sites you choose.",
   },
 
   // The popup readout: the tab-scoped answer and the one exception grammar.
@@ -189,12 +188,12 @@ export const copy = {
       count === 1 ? "1 needs attention" : `${count} need attention`,
     managed: (count: number) =>
       count === 1 ? "1 managed by Chrome" : `${count} managed by Chrome`,
+    security: (count: number) =>
+      `${count} security-sensitive ${changes(count)}`,
     overridden: (count: number) =>
       count === 1
         ? "1 overridden by another rule"
         : `${count} overridden by another rule`,
-    liveLabel: "Running",
-    attentionLabel: "Needs attention",
     direction: { request: "Request", response: "Response" },
     verb: { set: "Set", append: "Append", remove: "Remove" },
     // A change that pause or missing access prevents states what it would do,
@@ -205,7 +204,7 @@ export const copy = {
       remove: "Would remove",
     },
     to: "→",
-    overriddenBy: overriddenByPhrase,
+    overriddenBy: (winner: string) => `overridden by ${winner}`,
     refusedReason: {
       host: "Chrome won't let extensions change the Host header on HTTP/2, but it can on HTTP/1.1",
       header: "Chrome won't accept this header name",
@@ -220,11 +219,8 @@ export const copy = {
     // A rule whose match Chrome settles per request, against a URL this popup
     // never sees. Saying "live" here would draw a fact it cannot know.
     unconfirmedReason: "Only Chrome can tell whether this matches here",
-    // The ruleset Chrome is running is not the one on screen, so no line can
-    // claim to be live until the two agree again.
-    outOfSyncReason: "Chrome hasn't taken this rule yet",
     unconfirmed: (count: number) => `${count} confirmable only by Chrome`,
-    outOfSync: (count: number) => `${count} not applied yet`,
+    outOfSync: "Header changes are not applied yet",
     grant: "Grant",
     // A rule Chrome can only run with broad access says so on the button, so the
     // click is honest before Chrome's own all-sites dialog appears.
@@ -265,7 +261,8 @@ export const copy = {
     needsAccessReason: (temporary: boolean) =>
       temporary
         ? "Not running. Grant access to run it on this tab."
-        : "Not running.",
+        : "Not running. Grant access to run it here.",
+    partiallyRunning: "Running where access is granted.",
     removeOverride: (header: string) => `Remove this-tab change: ${header}`,
     overrideToggle: (header: string, on: boolean) =>
       `This-tab change ${on ? "on" : "off"}: ${header}`,
@@ -306,7 +303,6 @@ export const copy = {
     // name or a screen reader gets more than a bare verb on the one control that
     // can overwrite a live credential.
     swap: "Replace token",
-    swapOn: (host: string): Sentence => ["on ", data(host)],
     // Pause has to reach the hero in words, the way it reaches every line: a
     // dimmed card beside a live-looking button says nothing on its own.
     held: "held while header changes are paused",
@@ -383,6 +379,8 @@ export const copy = {
         unconfirmed: "confirmable only by Chrome",
         needsAccess: "needs access",
         refused: "refused by Chrome",
+        overLimit: "rule limit reached",
+        overridden: "overridden",
         managed: "managed by Chrome",
         outOfSync: "not applied yet",
         paused: "paused",
@@ -578,7 +576,6 @@ export const copy = {
   },
 
   actions: {
-    newRule: "+ New rule",
     createRule: "Create rule",
     createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
     saveChanges: "Save changes",
@@ -586,27 +583,17 @@ export const copy = {
     // The sites a commit will ask Chrome for, named in full. The permission
     // prompt closes the popup, so this is the last disclosure the user reads.
     andSites: andList,
-    resume: "Resume",
-    grantAccess: "Grant access",
     // activeTab reload handed to the user after a grant lands; there is no
     // automatic reload (locus of control).
     reloadTab: "Reload tab",
-    grant: "Grant",
-    addOverride: "Add override",
     cancel: "Cancel",
     undo: "Undo",
     regenerate: "Regenerate",
     options: "Options",
-    pause: "Pause",
-    globalPause: "Global pause",
   },
 
   toast: {
     ruleCreated: "Rule created",
-    // A duplicate of a rule already above it is inert the moment it lands, so
-    // its success names the rule that wins over it rather than claiming it runs.
-    ruleCreatedOverridden: (winner: string) =>
-      `Rule created, but ${overriddenByPhrase(winner)}`,
     changesSaved: "Changes saved",
     // Confirms a grant landed, and says only that: a grant means the host is
     // permitted, while whether a rule runs there turns on pause, the active
@@ -616,7 +603,6 @@ export const copy = {
     accessGranted: "Access granted",
     // "· Undo" is the toast's action button, not part of the message.
     ruleDeleted: "Rule deleted",
-    rulesDeleted: (count: number) => `${count} ${rules(count)} deleted`,
     profileDeleted: (name: string) => `Profile '${name}' deleted`,
     // Deleting the last profile leaves one behind: a fresh empty Default takes
     // its place, so the toast says so rather than reading as a no-op.
@@ -625,46 +611,23 @@ export const copy = {
   },
 
   rules: {
-    listLabel: "Rules",
     switchLabel: (header: string, on: boolean) =>
       `Rule ${on ? "on" : "off"}: ${header}`,
-    menuLabel: (header: string) => `Rule actions: ${header}`,
-    direction: { request: "request", response: "response" },
-    operation: { set: "set", append: "append", remove: "remove" },
     // Withheld, not elided: the ellipsis is the truncation primitive's mark for
     // a value that was cut, so a value being held back cannot borrow it.
     redacted: "[hidden]",
+    emptyValue: "(empty)",
     generated: (kind: string) => `${kind} · generated`,
-    needsAccess: (host: string, moreSites: number): Sentence => [
-      "Needs access · ",
-      data(host),
-      ...(moreSites > 0 ? [" +", data(moreSites)] : []),
-    ],
     editValueHint: "Enter saves · Esc cancels",
-    pasteNewValue: "Paste new value",
-    invalidRegex: "Invalid regex. Edit the scope to enable",
-    // Announced after the ⋯ menu copies a (possibly truncated) value in full.
-    valueCopied: "Value copied",
-    overridden: "overridden by a rule above",
-    initiatorNote:
-      "requests started by other pages also need those pages granted",
   },
 
   emptyState: {
-    profile: (name: string) => `${name} has no rules yet.`,
-    otherProfilesUnchanged: "Your other profiles are unchanged.",
     siteAccess:
       "No sites granted yet. Grants appear here when a rule asks for one.",
   },
 
   scopeSummary: {
     allSites: "all sites",
-    pattern: "pattern",
-    regex: "regex",
-    domains: (first: string, more: number): Sentence => [
-      data(first),
-      ...(more > 0 ? [" +", data(more)] : []),
-    ],
   },
 
   resourceTypes: {
@@ -680,7 +643,6 @@ export const copy = {
       websockets: "WebSockets",
       other: "Other",
     } satisfies Record<ResourceGroup, string>,
-    only: (group: string) => `${group} only`,
     count: (n: number) => `${n} types`,
   },
 
@@ -807,6 +769,8 @@ export const copy = {
   },
 
   errors: {
+    pageLoad:
+      "This page could not be loaded. Reload the extension to try again.",
     saveFailed: "Couldn't save this change. Try again.",
     regexInvalid:
       "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses. RE2 has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
@@ -868,7 +832,11 @@ export const copy = {
     credential:
       "This header carries a credential. This rule writes it on everything its scope reaches, so keep the scope as narrow as the job needs.",
     securityResponse:
-      "Sites send this header to protect the pages they serve. Changing it turns that protection off wherever this rule reaches, for as long as it's on.",
+      "Changes a response header that can affect page security.",
+    removesSecurityResponse: (header: string) =>
+      `Removes the protection ${header} gives this page.`,
+    changesSecurityResponse: (header: string) =>
+      `Changes ${header}, which can affect page security.`,
     // A response header on the request side: Chrome sends it and the server
     // ignores it, so the rule does nothing. The header is right and the side is
     // wrong, so the line names the side rather than the header.

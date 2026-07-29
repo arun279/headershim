@@ -1,5 +1,6 @@
 import { normalizeHeaderName } from "./headers";
 import {
+  BADGE_COLORS,
   createDefaultProfile,
   isNormalizedBadgeText,
   type Profile,
@@ -9,7 +10,6 @@ import {
 } from "./model";
 import { err, ok, type Result } from "./result";
 import {
-  BADGE_COLORS,
   DIRECTIONS,
   HEADER_OPERATIONS,
   hasValidHeaderValue,

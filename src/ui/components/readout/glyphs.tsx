@@ -1,19 +1,4 @@
-import type { Direction, HeaderOp } from "../../../core/model";
-import type { TapeRow } from "../../state/fleet";
-
-/**
- * Which way a change points, in the two characters the popup's direction
- * headings already use. The list surfaces spend their one glyph slot on this
- * rather than on the operation: two rules can be identical but for direction,
- * while the operation is spelled out in the row's own sentence.
- */
-export function DirectionGlyph({ direction }: { direction: Direction }) {
-  return (
-    <span class="mono" aria-hidden="true">
-      {direction === "request" ? "→" : "←"}
-    </span>
-  );
-}
+import type { HeaderOp } from "../../../core/model";
 
 /**
  * The readout's shape vocabulary. The operation glyph says what a change does
@@ -110,61 +95,6 @@ export function TriangleGlyph() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M6 1 11.2 10.5H0.8Z" fill="currentColor" />
-    </svg>
-  );
-}
-
-export function CloseGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-      <path
-        d="m2.5 2.5 7 7m0-7-7 7"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-      />
-    </svg>
-  );
-}
-
-export function StatusGlyph({ status }: { status: TapeRow["status"] }) {
-  if (status === "refused" || status === "out-of-sync") {
-    return (
-      <svg
-        viewBox="0 0 12 12"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.6"
-        aria-hidden="true"
-      >
-        <path d="M3 3l6 6m0-6l-6 6" />
-      </svg>
-    );
-  }
-  if (status === "paused") {
-    return (
-      <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-        <rect x="3" y="2.5" width="2" height="7" rx="0.6" />
-        <rect x="7" y="2.5" width="2" height="7" rx="0.6" />
-      </svg>
-    );
-  }
-  if (status === "needs-access" || status === "managed") {
-    return (
-      <svg
-        viewBox="0 0 12 12"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        aria-hidden="true"
-      >
-        <circle cx="6" cy="6" r="4" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-      <circle cx="6" cy="6" r="4" />
     </svg>
   );
 }

@@ -38,11 +38,9 @@ describe("planBadge", () => {
     });
 
     expect(planBadge(active)).toEqual({
-      state: {
-        text: "PR",
-        backgroundColor: BADGE_PALETTE.crimson,
-        textColor: WHITE,
-      },
+      text: "PR",
+      backgroundColor: BADGE_PALETTE.crimson,
+      textColor: WHITE,
       title: "",
     });
   });
@@ -51,7 +49,9 @@ describe("planBadge", () => {
     const paused = doc({ settings: settings({ paused: true }) });
 
     expect(planBadge(paused)).toEqual({
-      state: { text: "II", backgroundColor: NEUTRAL_GREY, textColor: WHITE },
+      text: "II",
+      backgroundColor: NEUTRAL_GREY,
+      textColor: WHITE,
       title: "HeaderShim: paused",
     });
   });

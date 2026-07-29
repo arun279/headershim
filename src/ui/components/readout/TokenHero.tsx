@@ -1,16 +1,14 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { copy } from "../../copy";
-import { grantLabel } from "../../grantLabel";
+import { grantAction } from "../../dispositionCopy";
 import type { TabChange } from "../../state/readout";
 import { maskToken, tokenFreshness } from "../../token";
 import { Button } from "../Button";
-import { sentence } from "../sentence";
 import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
 import { ClockGlyph, KeyGlyph } from "./glyphs";
 
 interface TokenHeroProps {
   change: TabChange;
-  host: string | undefined;
   now: number;
   onSwap: (value: string) => Promise<boolean>;
   onGrant: () => void;
@@ -22,19 +20,14 @@ interface TokenHeroProps {
  * states nothing more for an opaque token than that it has no expiry. Swap
  * opens an inline masked field that is never echoed back on the resting card.
  */
-export function TokenHero({
-  change,
-  host,
-  now,
-  onSwap,
-  onGrant,
-}: TokenHeroProps) {
+export function TokenHero({ change, now, onSwap, onGrant }: TokenHeroProps) {
   const [swapping, setSwapping] = useState(false);
   const value = change.value ?? "";
   const masked = maskToken(value);
   const fresh = tokenFreshness(value, now);
-  const needsAccess = change.status === "needs-access";
-  const atRest = change.status === "off" || change.status === "paused";
+  const grant = grantAction(change.outcome);
+  const needsAccess = grant !== undefined;
+  const atRest = change.paused;
 
   return (
     <section
@@ -53,11 +46,7 @@ export function TokenHero({
               maxChars={TRUNCATION_LIMITS.header}
             />
           </div>
-          {swapping ? (
-            <div class="tk-swaptarget">
-              {host !== undefined && sentence(copy.token.swapOn(host))}
-            </div>
-          ) : (
+          {!swapping && (
             <div class="tk-val mono" aria-hidden="true">
               {masked.scheme !== undefined && (
                 <span class="pre">{masked.scheme}</span>
@@ -76,14 +65,14 @@ export function TokenHero({
               )}
             </span>
           )}
-          {!swapping && change.status === "paused" && (
+          {!swapping && change.paused && (
             <p class="tk-held">{copy.token.held}</p>
           )}
         </div>
         {!swapping &&
           (needsAccess ? (
             <button type="button" class="grant tk-action" onClick={onGrant}>
-              {grantLabel(change.missing)}
+              {grant.label}
             </button>
           ) : (
             <button
@@ -106,36 +95,45 @@ export function TokenHero({
           onCancel={() => setSwapping(false)}
         />
       ) : (
-        <div class="fresh">
-          {fresh.kind === "countdown" ? (
-            <>
-              {/* An empty track is a bar that reports no share of a life left.
-                  When none is left the words beside it already say "expired". */}
-              {fresh.fraction !== undefined && fresh.fraction > 0 && (
-                <div class="fresh-track" aria-hidden="true">
-                  <div
-                    class={`fresh-fill${fresh.warn ? " warn" : ""}`}
-                    style={{ width: `${Math.round(fresh.fraction * 100)}%` }}
-                  />
-                </div>
-              )}
-              <div class="fresh-lab">
-                <span class="tag mono">{copy.token.jwtTag}</span>
-                <span class={`lead${fresh.warn ? " warn" : ""}`}>
-                  {copy.token.expiresIn(fresh.remainingMs)}
-                </span>
-                {fresh.warn && !fresh.expired && (
-                  <span class="rt">{copy.token.warnNote}</span>
-                )}
-              </div>
-            </>
-          ) : (
-            <div class="age">
-              <ClockGlyph />
-              <span class="lead">{copy.token.opaque}</span>
-            </div>
+        <>
+          {change.widerReach !== undefined && (
+            <p class="tk-held">
+              {change.widerReach === "broad"
+                ? copy.readout.widerReach.broad
+                : copy.readout.widerReach.sites(change.widerReach)}
+            </p>
           )}
-        </div>
+          <div class="fresh">
+            {fresh.kind === "countdown" ? (
+              <>
+                {/* An empty track is a bar that reports no share of a life left.
+                  When none is left the words beside it already say "expired". */}
+                {fresh.fraction !== undefined && fresh.fraction > 0 && (
+                  <div class="fresh-track" aria-hidden="true">
+                    <div
+                      class={`fresh-fill${fresh.warn ? " warn" : ""}`}
+                      style={{ width: `${Math.round(fresh.fraction * 100)}%` }}
+                    />
+                  </div>
+                )}
+                <div class="fresh-lab">
+                  <span class="tag mono">{copy.token.jwtTag}</span>
+                  <span class={`lead${fresh.warn ? " warn" : ""}`}>
+                    {copy.token.expiresIn(fresh.remainingMs)}
+                  </span>
+                  {fresh.warn && !fresh.expired && (
+                    <span class="rt">{copy.token.warnNote}</span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div class="age">
+                <ClockGlyph />
+                <span class="lead">{copy.token.opaque}</span>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </section>
   );
@@ -151,6 +149,9 @@ function SwapField({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
+  const empty = value.length === 0;
   return (
     <div class="swapfield">
       <div class="lab">
@@ -158,18 +159,18 @@ function SwapField({
         <span class="r">{copy.token.pasteReplaces}</span>
       </div>
       <input
+        ref={input}
         class="mono"
         type="password"
         value={value}
         spellcheck={false}
         autocomplete="off"
         aria-label={copy.token.pasteAria}
-        autofocus
         onInput={(event) => setValue(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            onReplace(value);
+            if (!empty) onReplace(value);
           } else if (event.key === "Escape") {
             event.preventDefault();
             onCancel();
@@ -177,7 +178,11 @@ function SwapField({
         }}
       />
       <div class="actions">
-        <Button kind="primary" onClick={() => onReplace(value)}>
+        <Button
+          kind="primary"
+          disabled={empty}
+          onClick={() => onReplace(value)}
+        >
           {copy.token.replace} <span class="kbd mono">↵</span>
         </Button>
         <button type="button" class="btng" onClick={onCancel}>

@@ -32,8 +32,8 @@ function serializedHeaders(
   ]);
 }
 
-function normalize(rules: readonly ReadonlyDnrRule[]): string {
-  return `${rules
+export function normalize(rules: readonly ReadonlyDnrRule[]): string {
+  return rules
     .map(
       ({ id, priority, action, condition }): SerializedConditionResult =>
         JSON.stringify([
@@ -51,11 +51,11 @@ function normalize(rules: readonly ReadonlyDnrRule[]): string {
         ]),
     )
     .sort()
-    .join()}|`;
+    .join();
 }
 
 export function planReconcile(
-  desired: DnrRule[],
+  desired: readonly DnrRule[],
   actual: readonly ReadonlyDnrRule[],
 ): ReconcilePlan | null {
   if (normalize(desired) === normalize(actual)) {
@@ -64,6 +64,6 @@ export function planReconcile(
 
   return {
     removeRuleIds: actual.map((rule) => rule.id),
-    addRules: desired,
+    addRules: [...desired],
   };
 }

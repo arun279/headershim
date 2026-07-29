@@ -14,6 +14,7 @@ body {
 }
 
 .popup-body {
+  order: 2;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -21,8 +22,17 @@ body {
   padding-bottom: 6px;
 }
 
+.pending-receipt {
+  padding: 7px 14px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 /* ---------------- footer ---------------- */
 .foot {
+  order: 3;
   display: flex;
   align-items: center;
   gap: 10px;

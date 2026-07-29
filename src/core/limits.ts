@@ -70,6 +70,17 @@ export function checkEnabledRuleLimits(
   return ok(undefined);
 }
 
+export function enabledRulesFit(
+  candidateEnabledRules: readonly Rule[],
+): boolean {
+  return (
+    candidateEnabledRules.length <= MAX_ENABLED_RULES &&
+    projectedDynamicRuleCount(candidateEnabledRules) <= MAX_DYNAMIC_RULES &&
+    candidateEnabledRules.filter((rule) => rule.scope.type === "regex")
+      .length <= MAX_REGEX_RULES
+  );
+}
+
 /**
  * A domains rule can produce one installed projection per named domain: either
  * that domain joins the fully granted projection or it needs its own narrowed

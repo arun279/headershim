@@ -64,7 +64,7 @@ test("@host-access a per-request rule wears the running spine, not the at-rest g
 
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
-  await expect(page.locator(".fleet-row.unconfirmed")).toBeVisible();
+  await expect(page.locator(".fleet-row.doubt")).toBeVisible();
 
   const spineOf = (state: string) =>
     page
@@ -74,7 +74,7 @@ test("@host-access a per-request rule wears the running spine, not the at-rest g
 
   // A rule Chrome settles per request is running, not at rest: its spine wears
   // the live hue, never the grey the file used to share with the at-rest rows.
-  expect(await spineOf("unconfirmed")).toBe(await spineOf("live"));
+  expect(await spineOf("doubt")).toBe(await spineOf("live"));
 });
 
 // A popup change row carries only the controls it truly has: a value-edit

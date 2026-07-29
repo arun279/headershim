@@ -159,7 +159,6 @@ describe("planReconcile", () => {
       removeRuleIds: [91, 92, 93],
       addRules: desired,
     });
-    expect(plan?.addRules).toBe(desired);
   });
 
   it("removes an installed rule that omits resourceTypes", () => {

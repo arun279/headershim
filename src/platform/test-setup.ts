@@ -1,5 +1,25 @@
+import { createHash, webcrypto } from "node:crypto";
 import { afterEach, beforeEach, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
+
+Object.defineProperty(globalThis, "crypto", {
+  configurable: true,
+  value: {
+    randomUUID: () => webcrypto.randomUUID(),
+    subtle: {
+      digest: async (
+        _algorithm: AlgorithmIdentifier,
+        data: BufferSource,
+      ): Promise<ArrayBuffer> => {
+        const bytes = ArrayBuffer.isView(data)
+          ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+          : new Uint8Array(data);
+        return Uint8Array.from(createHash("sha256").update(bytes).digest())
+          .buffer;
+      },
+    },
+  },
+});
 
 interface TestPermissions {
   origins?: string[];

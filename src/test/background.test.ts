@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
-import { compileDynamic, compileSession, type DnrRule } from "../core/compile";
+import {
+  compileDynamic,
+  compileSession,
+  type DnrRule,
+  revisionOf,
+} from "../core/compile";
 import type { GrantSnapshot } from "../core/grants";
 import { MAX_DYNAMIC_RULES } from "../core/limits";
 import {
@@ -15,10 +20,10 @@ import {
 } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import {
-  getReconcileError,
-  publishReconcileState,
+  getAppliedRevision,
   read as readSessionState,
   type SessionState,
+  setAppliedRevision,
   write as writeSession,
 } from "../platform/session-store";
 import {
@@ -111,6 +116,19 @@ function quarantinedValue(): Promise<unknown> {
   return storedValue("state_quarantine");
 }
 
+async function expectPublishedRevision(): Promise<void> {
+  await vi.waitFor(async () => {
+    const [dynamic, session] = await Promise.all([
+      dnr.fake.getDynamicRules(),
+      dnr.fake.getSessionRules(),
+    ]);
+    expect(await getAppliedRevision()).toEqual(
+      await revisionOf(dynamic, session),
+    );
+  });
+  await settle();
+}
+
 function uiMutate(update: (doc: StateDoc) => StateDoc): Promise<void> {
   return locked(async () => {
     const doc = await readState();
@@ -153,10 +171,73 @@ describe("background lifecycle", () => {
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
   });
 
-  it("marks the rules unverified before changing a rule band", async () => {
+  it("checks regex support only for the active profile", async () => {
+    const seed = createV1Seed();
+    const active = seed.profiles[0];
+    if (active === undefined) {
+      throw new Error("missing seeded profile");
+    }
+    const activeRegex = "^https://api\\.example\\.com/";
+    const inactiveRegex = "^https://admin\\.example\\.com/";
+    await writeState({
+      ...seed,
+      profiles: [
+        {
+          ...active,
+          rules: [
+            {
+              id: "active-regex",
+              num: 1,
+              ...baseDraft,
+              scope: {
+                type: "regex",
+                regex: activeRegex,
+                hosts: ["example.com"],
+              },
+            },
+          ],
+        },
+        {
+          ...createProfile({
+            name: "Inactive",
+            badgeText: "IN",
+            color: "slate",
+          }),
+          rules: [
+            {
+              id: "inactive-regex",
+              num: 2,
+              ...baseDraft,
+              scope: {
+                type: "regex",
+                regex: inactiveRegex,
+                hosts: ["example.com"],
+              },
+            },
+          ],
+        },
+      ],
+      nextRuleNum: 3,
+    });
+
+    start();
+    await settle();
+
+    expect(dnr.isRegexSupported).toHaveBeenCalledExactlyOnceWith({
+      regex: activeRegex,
+    });
+    expect(dnr.isRegexSupported).not.toHaveBeenCalledWith({
+      regex: inactiveRegex,
+    });
+  });
+
+  it("invalidates a band before replacing its rules", async () => {
     const doc = withRule(createV1Seed(), "x-one");
+    await setAppliedRevision({ dynamic: "stale", session: "unchanged" });
     dnr.updateDynamicRules.mockImplementation(async (options) => {
-      expect(await getReconcileError()).toBe(true);
+      const revision = await getAppliedRevision();
+      expect(revision?.dynamic).toBeUndefined();
+      expect(revision?.session).toBeDefined();
       await dnr.fake.updateDynamicRules(options);
     });
 
@@ -165,7 +246,37 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
+  });
+
+  it("finishes revision invalidation before replacing rules", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await setAppliedRevision({ dynamic: "stale", session: "unchanged" });
+    const setSession = fakeBrowser.storage.session.set.bind(
+      fakeBrowser.storage.session,
+    );
+    let finishInvalidation = () => {};
+    const sessionWrites = vi.spyOn(fakeBrowser.storage.session, "set");
+    sessionWrites.mockImplementationOnce(async (values) => {
+      await new Promise<void>((resolve) => {
+        finishInvalidation = resolve;
+      });
+      await setSession(values);
+    });
+
+    await writeState(doc);
+    start();
+    await vi.waitFor(() => {
+      expect(sessionWrites).toHaveBeenCalled();
+    });
+    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+
+    finishInvalidation();
+    await settle();
+
+    expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
+    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
   });
 
   it("makes no DNR writes when already converged", async () => {
@@ -180,6 +291,18 @@ describe("background lifecycle", () => {
 
     expect(dnr.getDynamicRules).toHaveBeenCalledOnce();
     expect(dnr.getSessionRules).toHaveBeenCalledOnce();
+    expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
+    expect(dnr.updateSessionRules).not.toHaveBeenCalled();
+  });
+
+  it("restores missing metadata for a converged session band", async () => {
+    const revision = await revisionOf([], []);
+    await setAppliedRevision({ dynamic: revision.dynamic });
+
+    start();
+    await settle();
+
+    expect(await getAppliedRevision()).toEqual(revision);
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
   });
@@ -210,7 +333,7 @@ describe("background lifecycle", () => {
     });
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 
   it("retries a transient post-update readback", async () => {
@@ -226,7 +349,7 @@ describe("background lifecycle", () => {
       expect(dnr.getDynamicRules).toHaveBeenCalledTimes(3);
     });
     expect(dnr.getDynamicRules).toHaveBeenCalledTimes(3);
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 
   it("retries a transient readback before planning an update", async () => {
@@ -242,45 +365,106 @@ describe("background lifecycle", () => {
       expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
     });
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 
-  it("does not report a transient read of converged rules as unhealthy", async () => {
+  it("keeps a converged revision through a transient read failure", async () => {
     const doc = withRule(createV1Seed(), "x-one");
     await writeState(doc);
     dnr.fake.dynamicRules = compileDynamic(doc);
     dnr.getDynamicRules.mockRejectedValueOnce(new Error("transient readback"));
-    const sessionWrites = vi.spyOn(fakeBrowser.storage.session, "set");
-
     start();
     await vi.waitFor(() => {
       expect(dnr.getDynamicRules).toHaveBeenCalledTimes(2);
     });
 
-    expect(
-      sessionWrites.mock.calls.some(
-        ([value]) => Reflect.get(value, "reconcileError") === true,
-      ),
-    ).toBe(false);
+    await expectPublishedRevision();
   });
 
-  it("reports exhausted readback retries", async () => {
+  it("retains the readable band after exhausted readback retries", async () => {
     const doc = withRule(createV1Seed(), "x-one");
     await writeState(doc);
     start();
-    await settle();
+    await expectPublishedRevision();
     dnr.getDynamicRules.mockClear();
     dnr.getDynamicRules.mockRejectedValue(new Error("readback failed"));
 
     await fakeBrowser.runtime.onStartup.trigger();
 
     await vi.waitFor(
-      async () => {
-        expect(await getReconcileError()).toBe(true);
+      () => {
+        expect(dnr.getDynamicRules).toHaveBeenCalledTimes(9);
       },
       { timeout: 2_000 },
     );
-    expect(dnr.getDynamicRules).toHaveBeenCalledTimes(9);
+    expect(await getAppliedRevision()).toEqual({
+      session: (await revisionOf([], [])).session,
+    });
+  });
+
+  it("retries after transient revision invalidation failure", async () => {
+    start();
+    await expectPublishedRevision();
+    const stray: DnrRule = {
+      id: 99,
+      priority: 1,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [{ header: "x-stray", operation: "remove" }],
+      },
+      condition: { resourceTypes: ["main_frame"] },
+    };
+    dnr.fake.dynamicRules = [stray];
+    vi.spyOn(fakeBrowser.storage.session, "set").mockRejectedValueOnce(
+      new Error("storage unavailable"),
+    );
+
+    await fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(async () => {
+      expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    });
+    await expectPublishedRevision();
+  });
+
+  it("retains a verified dynamic revision when session reads fail", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await writeState(doc);
+    start();
+    await expectPublishedRevision();
+    const expected = await getAppliedRevision();
+    dnr.getSessionRules.mockRejectedValue(new Error("unreadable"));
+
+    await fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(() => {
+      expect(dnr.getSessionRules.mock.calls.length).toBeGreaterThanOrEqual(10);
+    });
+    await vi.waitFor(async () => {
+      expect(await getAppliedRevision()).toEqual({
+        dynamic: expected?.dynamic,
+      });
+    });
+  });
+
+  it("invalidates both bands when inputs stay unreadable", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await writeState(doc);
+    start();
+    await expectPublishedRevision();
+    dnr.fake.dynamicRules = [];
+    dnr.getDynamicRules.mockClear();
+    const localGet = vi
+      .spyOn(fakeBrowser.storage.local, "get")
+      .mockRejectedValue(new Error("storage unreadable"));
+
+    await fakeBrowser.runtime.onStartup.trigger();
+    await vi.waitFor(async () => {
+      expect(await getAppliedRevision()).toEqual({});
+    });
+    await vi.waitFor(() => {
+      expect(localGet).toHaveBeenCalledTimes(4);
+    });
+
+    expect(dnr.getDynamicRules).not.toHaveBeenCalled();
   });
 
   it("self-heals drifted rule sets on profile startup", async () => {
@@ -435,12 +619,13 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
+    await expectPublishedRevision();
   });
 
   it("retries a rejected update from a fresh read", async () => {
     start();
-    await settle();
-    const sessionWrites = vi.spyOn(fakeBrowser.storage.session, "set");
+    await expectPublishedRevision();
+    const removeSession = vi.spyOn(fakeBrowser.storage.session, "remove");
     const doc = withRule(createV1Seed(), "x-one");
     dnr.updateDynamicRules.mockRejectedValueOnce(new Error("rejected"));
 
@@ -449,15 +634,14 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(2);
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
-    expect(await getReconcileError()).toBe(false);
-    expect(sessionWrites.mock.calls[0]?.[0]).toEqual({
-      reconcileError: true,
-    });
+    await expectPublishedRevision();
+    expect(removeSession).not.toHaveBeenCalledWith("appliedRules");
   });
 
-  it("raises the health flag after bounded retries and clears it on convergence", async () => {
+  it("keeps only converged bands after bounded failures", async () => {
     start();
-    await settle();
+    await expectPublishedRevision();
+    const previousRevision = await getAppliedRevision();
     const doc = withRule(createV1Seed(), "x-one");
     dnr.updateDynamicRules.mockRejectedValue(new Error("rejected"));
 
@@ -465,7 +649,9 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(3);
-    expect(await getReconcileError()).toBe(true);
+    expect(await getAppliedRevision()).toEqual({
+      session: previousRevision?.session,
+    });
 
     dnr.updateDynamicRules.mockImplementation((options) =>
       dnr.fake.updateDynamicRules(options),
@@ -476,10 +662,89 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 
-  it("keeps the admissible rules and reports overflow without escaping the pass", async () => {
+  it("publishes a successful dynamic band when the session update fails", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await seedRows(override(5, "app.example.com"));
+    await writeState(doc);
+    dnr.updateSessionRules.mockRejectedValue(new Error("rejected"));
+
+    start();
+    await settle();
+
+    const dynamic = compileDynamic(doc);
+    expect(await dnr.fake.getDynamicRules()).toEqual(dynamic);
+    expect(await dnr.fake.getSessionRules()).toEqual([]);
+    expect(dnr.updateSessionRules).toHaveBeenCalledTimes(3);
+    expect(await getAppliedRevision()).toEqual({
+      dynamic: (await revisionOf(dynamic, [])).dynamic,
+    });
+  });
+
+  it("publishes a successful session band when the dynamic update fails", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await seedRows(override(5, "app.example.com"));
+    await writeState(doc);
+    dnr.updateDynamicRules.mockRejectedValue(new Error("rejected"));
+
+    start();
+    await settle();
+
+    const session = compileSession(
+      (await readSessionState()).tabs[5] ?? [],
+      false,
+      RULE_GRANT,
+    );
+    expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(3);
+    expect(dnr.updateSessionRules).toHaveBeenCalledOnce();
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect(await dnr.fake.getSessionRules()).toEqual(session);
+    expect(await getAppliedRevision()).toEqual({
+      session: (await revisionOf([], session)).session,
+    });
+  });
+
+  it("does not publish an updated band before readback confirms it", async () => {
+    const doc = withRule(createV1Seed(), "x-one");
+    await seedRows(override(5, "app.example.com"));
+    await writeState(doc);
+    dnr.getDynamicRules.mockResolvedValue([]);
+    dnr.updateDynamicRules.mockResolvedValue();
+    dnr.updateSessionRules.mockRejectedValue(new Error("rejected"));
+
+    start();
+    await vi.waitFor(() => {
+      expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(3);
+      expect(dnr.updateSessionRules).toHaveBeenCalledTimes(3);
+    });
+    await vi.waitFor(async () => {
+      expect(await getAppliedRevision()).toEqual({});
+    });
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+  });
+
+  it("publishes only the band confirmed by post-update readback", async () => {
+    start();
+    await expectPublishedRevision();
+    const previousRevision = await getAppliedRevision();
+    const doc = withRule(createV1Seed(), "x-one");
+    dnr.getDynamicRules.mockResolvedValue([]);
+    dnr.updateDynamicRules.mockResolvedValue();
+
+    await writeState(doc);
+    await settle();
+
+    expect(await dnr.fake.getDynamicRules()).toEqual([]);
+    expect(await getAppliedRevision()).toEqual({
+      session: previousRevision?.session,
+    });
+  });
+
+  it("installs the admissible rules and drops overflow", async () => {
     const seed = createV1Seed();
     const active = seed.profiles[0];
     if (active === undefined) {
@@ -511,7 +776,6 @@ describe("background lifecycle", () => {
     dnr.fake.dynamicRules = [installed];
 
     await writeState(overflow);
-    const sessionWrites = vi.spyOn(fakeBrowser.storage.session, "set");
     start();
     await settle();
 
@@ -521,10 +785,7 @@ describe("background lifecycle", () => {
       removeRuleIds: [installed.id],
       addRules: expected,
     });
-    expect(await getReconcileError()).toBe(true);
-    expect(
-      sessionWrites.mock.calls.map(([value]) => Object.keys(value)),
-    ).toEqual([["reconcileError"]]);
+    await expectPublishedRevision();
   });
 
   it("removes a revoked session rule after two rejected removals", async () => {
@@ -546,7 +807,7 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateSessionRules).toHaveBeenCalledTimes(3);
     expect(await dnr.fake.getSessionRules()).toEqual([]);
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 
   it("registers every listener before any init promise resolves", () => {
@@ -697,7 +958,8 @@ describe("background lifecycle", () => {
     const newer = { v: 2, unknownShape: true };
 
     await fakeBrowser.storage.local.set({ state: newer });
-    await publishReconcileState(false);
+    const published = await revisionOf([stray], []);
+    await setAppliedRevision(published);
     start();
     await settle();
 
@@ -706,10 +968,10 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getDynamicRules()).toEqual([stray]);
     expect(await storedValue("state")).toEqual(newer);
     expect(await quarantinedValue()).toBeUndefined();
-    expect(await getReconcileError()).toBe(true);
+    expect(await getAppliedRevision()).toEqual(published);
   });
 
-  it("reports an unreadable newer store as unhealthy", async () => {
+  it("leaves an unreadable newer store unprojectable without a prior revision", async () => {
     await fakeBrowser.storage.local.set({
       state: { v: 2, unknownShape: true },
     });
@@ -719,7 +981,7 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
-    expect(await getReconcileError()).toBe(true);
+    expect(await getAppliedRevision()).toBeUndefined();
   });
 
   it("empties both rule sets on pause and restores them on resume", async () => {
@@ -924,6 +1186,6 @@ describe("background lifecycle", () => {
     expect((await dnr.fake.getDynamicRules()).map((rule) => rule.id)).toEqual([
       good.num,
     ]);
-    expect(await getReconcileError()).toBe(false);
+    await expectPublishedRevision();
   });
 });

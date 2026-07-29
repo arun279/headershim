@@ -77,9 +77,7 @@ describe("copy", () => {
     // The one state only Chrome can settle names Chrome at the count, not a
     // bare "unconfirmed".
     expect(copy.readout.unconfirmed(2)).toBe("2 confirmable only by Chrome");
-    expect(copy.readout.overriddenBy("Staging auth")).toBe(
-      "overridden by Staging auth",
-    );
+    expect(copy.readout.overriddenBy("staging")).toBe("overridden by staging");
     expect(copy.readout.needsAccessReason(true)).toBe(
       "Not running. Grant access to run it on this tab.",
     );
@@ -111,17 +109,11 @@ describe("copy", () => {
     expect(copy.toast.lastProfileDeleted("Only")).toBe(
       "Profile 'Only' deleted; a new empty Default replaces it",
     );
-    expect(copy.toast.ruleCreatedOverridden("x-env rule")).toBe(
-      "Rule created, but overridden by x-env rule",
-    );
     expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
       "Create rule and allow api.example.com",
     );
     expect(copy.actions.saveChangesAndAllow("api.example.com")).toBe(
       "Save changes and allow api.example.com",
-    );
-    expect(copy.emptyState.profile("Staging")).toBe(
-      "Staging has no rules yet.",
     );
     expect(copy.errors.grantDeclined("api.example.com")).toContain(
       "You declined access to api.example.com",
@@ -156,9 +148,6 @@ describe("copy", () => {
     // appears on any surface.
     expect(copy.readout.pausedBanner).toBe(
       "Everything paused. Switching back on restores this exact state.",
-    );
-    expect(copy.app.tagline).toBe(
-      "Add, change, and remove HTTP headers on the sites you choose.",
     );
     expect(copy.errors.headerNotModifiable).toMatch(
       /^Header names starting with ':'/,

@@ -2,6 +2,7 @@ import type { VNode } from "preact";
 import { render as preactRender } from "preact";
 import { act } from "preact/test-utils";
 import { afterEach } from "vitest";
+import { settleDeferred } from "../deferred";
 
 let container: HTMLDivElement | null = null;
 const watching = new Set<MutationObserver>();
@@ -61,7 +62,11 @@ export function atPaint<T>(
       resolve(observe());
     });
     watching.add(observer);
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
   });
 }
 
@@ -126,7 +131,11 @@ export async function settle(): Promise<void> {
   await act(async () => {
     for (let round = 0; round < 3; round += 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
+      await settleDeferred();
     }
+  });
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 

@@ -79,23 +79,6 @@ export function scopeCondition(scope: Scope): ScopeCondition {
   }
 }
 
-/**
- * Whether the compiled condition can reach this host, before Chrome's matcher
- * gets its say. Only requestDomains rules a host out from here: a urlFilter or
- * regexFilter narrows further, which only Chrome can settle per request. Reading
- * the same list the compiler hands Chrome is what keeps a surface from deriving
- * reach a second way from the authored scope.
- */
-export function conditionReaches(
-  condition: ScopeCondition,
-  host: string,
-): boolean {
-  return (
-    condition.requestDomains === undefined ||
-    condition.requestDomains.some((domain) => hostUnder(host, domain))
-  );
-}
-
 /** Whether a host is the domain itself or one of its subdomains. */
 export function hostUnder(host: string, domain: string): boolean {
   return host === domain || host.endsWith(`.${domain}`);

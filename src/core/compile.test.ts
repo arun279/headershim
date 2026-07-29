@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  inspect as compileCore,
+  compile as compileCore,
   compileDynamic,
-  compile as compileOutput,
   compileSession,
   type DnrRule,
   DYNAMIC_PRIORITY_TOP,
   dropInapplicable,
+  emitRules,
+  revisionOf,
   SESSION_PRIORITY_TOP,
   uncompilableReason,
 } from "./compile";
@@ -119,10 +120,10 @@ function compile(
   input: Parameters<typeof compileCore>[0],
 ): ReturnType<typeof compileCore> {
   const batch = compileCore(input);
-  const output = compileOutput(input);
-  expect(output.dynamic).toEqual(batch.dynamic);
-  expect(output.session).toEqual(batch.session);
-  expect(output.overLimit).toBe(batch.overLimit);
+  expect({
+    dynamic: batch.dynamic,
+    session: batch.session,
+  }).toEqual(emitRules(input));
   if (batch.paused) {
     expect(batch.dynamic).toEqual([]);
     expect(batch.session).toEqual([]);
@@ -356,8 +357,7 @@ describe("batch compilation", () => {
             },
           ],
         },
-        uncoveredSchemes: ["ws", "wss"],
-        initiatorUnnamed: true,
+        grantGap: undefined,
       },
     ]);
     expect(batch.slots.get("response:x-trace")).toEqual([
@@ -377,17 +377,6 @@ describe("batch compilation", () => {
         batch.dynamic[0]?.condition,
       );
     }
-  });
-
-  it("uses the header label when a stored comment is empty", () => {
-    expect(
-      compile({
-        doc: state([profile("active", [storedRule(1, { comment: "   " })])]),
-        overrides: [],
-        granted: ALL_SITES,
-        isRegexSupported: () => true,
-      }).entries[0]?.label,
-    ).toBe("x-debug rule");
   });
 
   it("distinguishes missing target and initiator grants", () => {
@@ -482,8 +471,7 @@ describe("batch compilation", () => {
             },
           ],
         },
-        uncoveredSchemes: [],
-        initiatorUnnamed: false,
+        grantGap: undefined,
       },
     ]);
   });
@@ -549,6 +537,70 @@ describe("batch compilation", () => {
       running.entries.map(({ key, standing }) => [key, standing]),
     );
     expect(paused.slots).toEqual(running.slots);
+  });
+
+  it("compiles the maximum stored rules within one second", () => {
+    const rules = Array.from({ length: MAX_ENABLED_RULES }, (_, index) =>
+      storedRule(index + 1),
+    );
+    const started = performance.now();
+
+    expect(
+      compileCore({
+        doc: state([profile("full", rules)]),
+        overrides: [],
+        granted: ALL_SITES,
+        isRegexSupported: () => true,
+      }).dynamic,
+    ).toHaveLength(MAX_ENABLED_RULES);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("hashes rule bands while ignoring order within each band", async () => {
+    const first = goldenRequestRule(1, 5_000, "x-first", "a", {
+      resourceTypes: ["xmlhttprequest"],
+    });
+    const second = goldenRequestRule(2, 4_999, "x-second", "b", {
+      resourceTypes: ["xmlhttprequest"],
+    });
+
+    expect(await revisionOf([first], [second])).not.toEqual(
+      await revisionOf([first, second], []),
+    );
+    expect(await revisionOf([first, second], [])).toEqual(
+      await revisionOf([second, first], []),
+    );
+  });
+
+  it("distinguishes rulesets that collide under a 32-bit digest", async () => {
+    const condition: DnrRule["condition"] = {
+      requestDomains: ["example.com"],
+      resourceTypes: ["main_frame"],
+    };
+    const first = goldenRequestRule(
+      1,
+      5_000,
+      "x-collision",
+      "d8wbavskvs",
+      condition,
+    );
+    const second = goldenRequestRule(
+      1,
+      5_000,
+      "x-collision",
+      "1wzuny4hqf",
+      condition,
+    );
+
+    expect(await revisionOf([first], [])).not.toEqual(
+      await revisionOf([second], []),
+    );
+  });
+
+  it("uses fixed-width revisions for both bands", async () => {
+    const revision = await revisionOf([], []);
+    expect(revision.dynamic).toHaveLength(44);
+    expect(revision.session).toHaveLength(44);
   });
 });
 
@@ -950,7 +1002,7 @@ describe("dynamic rule compilation", () => {
       isRegexSupported: () => true,
     });
     expect(pausedOverflow.dynamic).toEqual([]);
-    expect(pausedOverflow.overLimit).toBe(false);
+    expect(pausedOverflow.entries).toEqual(dynamicOverflow.entries);
   });
 });
 
@@ -1423,7 +1475,6 @@ describe("session rule compilation", () => {
       isRegexSupported: () => true,
     });
 
-    expect(batch.overLimit).toBe(true);
     expect(batch.session).toHaveLength(MAX_SESSION_OVERRIDES);
     expect(compileSession(overrides, false, granted)).toHaveLength(
       MAX_SESSION_OVERRIDES,

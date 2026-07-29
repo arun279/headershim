@@ -57,10 +57,13 @@ export const {
 
 export async function resolveRegexSupport(
   doc: StateDoc,
+  profiles: "active" | "all" = "all",
 ): Promise<(regex: string) => boolean> {
   const regexes = new Set<string>();
   for (const profile of doc.profiles) {
-    if (profile.id !== doc.activeProfileId) continue;
+    if (profiles === "active" && profile.id !== doc.activeProfileId) {
+      continue;
+    }
     for (const rule of profile.rules) {
       if (rule.enabled && rule.scope.type === "regex") {
         regexes.add(rule.scope.regex);
@@ -70,7 +73,7 @@ export async function resolveRegexSupport(
   const supported = new Set<string>();
   await Promise.all(
     [...regexes].map(async (regex) => {
-      if ((await isRegexSupported(regex)).ok) {
+      if ((await isRegexSupported(regex).catch(() => undefined))?.ok) {
         supported.add(regex);
       }
     }),

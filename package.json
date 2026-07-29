@@ -28,7 +28,7 @@
     "check:knip:production": "knip --production --include files",
     "check:fake-browser": "node scripts/check-fake-browser.mjs",
     "check:dup": "jscpd",
-    "check:size": "pnpm build && size-limit",
+    "check:size": "pnpm build && node scripts/check-size-coverage.mjs && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
     "check:no-network": "pnpm build && node scripts/check-no-network.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
@@ -37,7 +37,7 @@
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check:test-classes": "node scripts/check-test-classes.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
+    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
@@ -69,41 +69,57 @@
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/readout-*.js",
-      "limit": "26 kB"
+      "path": [
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/InlineRename-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/brand-*.js",
+        "!.output/chrome-mv3/chunks/focus-*.js",
+        "!.output/chrome-mv3/chunks/headerLine-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/options-*.js",
+        "!.output/chrome-mv3/chunks/popup-*.js"
+      ],
+      "limit": "27.217 kB"
     },
     {
       "name": "Popup initial load",
       "path": [
         ".output/chrome-mv3/popup.html",
         ".output/chrome-mv3/theme-bootstrap.js",
-        ".output/chrome-mv3/chunks/popup-*.js",
-        ".output/chrome-mv3/chunks/brand-*.js",
-        ".output/chrome-mv3/chunks/Segmented-*.js",
-        ".output/chrome-mv3/chunks/RuleEditor-*.js",
-        ".output/chrome-mv3/chunks/headershim-*.js",
-        ".output/chrome-mv3/chunks/readout-*.js",
-        ".output/chrome-mv3/assets/Segmented-*.css",
-        ".output/chrome-mv3/assets/RuleEditor-*.css",
-        ".output/chrome-mv3/assets/readout-*.css",
-        ".output/chrome-mv3/assets/popup-*.css"
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/options-*.js",
+        ".output/chrome-mv3/assets/*.css",
+        "!.output/chrome-mv3/assets/DeferredPage-*.css",
+        "!.output/chrome-mv3/assets/RuleEditor-*.css",
+        "!.output/chrome-mv3/assets/options-*.css"
       ],
-      "limit": "49 kB"
+      "limit": "44.689 kB"
     },
     {
       "name": "Options initial load",
       "path": [
         ".output/chrome-mv3/options.html",
         ".output/chrome-mv3/theme-bootstrap.js",
-        ".output/chrome-mv3/chunks/options-*.js",
-        ".output/chrome-mv3/chunks/readout-*.js",
-        ".output/chrome-mv3/chunks/Segmented-*.js",
-        ".output/chrome-mv3/chunks/headers-*.js",
-        ".output/chrome-mv3/assets/readout-*.css",
-        ".output/chrome-mv3/assets/Segmented-*.css",
-        ".output/chrome-mv3/assets/options-*.css"
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/InlineRename-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/focus-*.js",
+        "!.output/chrome-mv3/chunks/headerLine-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/popup-*.js",
+        ".output/chrome-mv3/assets/*.css",
+        "!.output/chrome-mv3/assets/DeferredPage-*.css",
+        "!.output/chrome-mv3/assets/RuleEditor-*.css",
+        "!.output/chrome-mv3/assets/headerLine-*.css",
+        "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "45 kB"
+      "limit": "39.141 kB"
     },
     {
       "name": "Options rule editor",
@@ -112,6 +128,19 @@
         ".output/chrome-mv3/assets/RuleEditor-*.css"
       ],
       "limit": "12 kB"
+    },
+    {
+      "name": "Options deferred pages",
+      "path": [
+        ".output/chrome-mv3/chunks/DeferredPage-*.js",
+        ".output/chrome-mv3/assets/DeferredPage-*.css"
+      ],
+      "limit": "9.172 kB"
+    },
+    {
+      "name": "ModHeader import",
+      "path": ".output/chrome-mv3/chunks/modheader-*.js",
+      "limit": "2.256 kB"
     }
   ],
   "pnpm": {

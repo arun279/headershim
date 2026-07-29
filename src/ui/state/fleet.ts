@@ -1,40 +1,26 @@
-/**
- * The Workbench's fleet: every rule across every profile, projected once into
- * the same severity ladder the popup readout uses, then grouped two ways. "By
- * site" answers "what does HeaderShim do to this domain"; "by header" answers
- * "where does this one header reach" and is the home for cross-site rules. The
- * traffic receipt is the same projection flattened to the stamps live, managed,
- * skipped, or refused right now. Nothing here recomputes match behavior: the
- * severity ladder, the refused classifier and the per-request test are the same
- * ones the popup readout reads, so a rule cannot carry one state here and another
- * there.
- */
-
-import { settlesPerRequest } from "../../core/compile";
-import { type GrantSnapshot, missingGrants } from "../../core/grants";
+import type { Projection } from "../../core/applied";
 import { normalizeHeaderName } from "../../core/headers";
-import {
-  activeProfile,
-  type BadgeColor,
-  type Direction,
-  type HeaderOp,
-  type Profile,
-  type Rule,
-  type Scope,
-  type StateDoc,
+import type {
+  BadgeColor,
+  Direction,
+  HeaderOp,
+  Profile,
+  Rule,
+  Scope,
+  StateDoc,
 } from "../../core/model";
-import { scopeCondition } from "../../core/scope";
-import type { SystemStatus } from "../../core/status";
-import { overriddenLabels } from "./overridden";
+import { originPatternForDomain } from "../../core/scope";
+import { type RuleKey, ruleKey } from "../../core/verdict";
+import { isSecretHeader, ruleValueSummary } from "../secret";
+import { projectFleet } from "./fleet-project";
 import {
-  isNetworkManagedHeader,
-  type LineCore,
-  type LineStatus,
-  lineCore,
-  lineStatus,
-  refusedReason,
-  ruleDisplay,
-} from "./readout";
+  type Caveat,
+  type FleetOutcome,
+  type InstalledScope,
+  type Line,
+  projectTab,
+  type TabOutcome,
+} from "./project";
 
 interface FleetProvenance {
   readonly profileId: string;
@@ -43,84 +29,51 @@ interface FleetProvenance {
   readonly color: BadgeColor;
 }
 
-export interface FleetRule extends LineCore {
-  /** Stable key for rendering, focus, and tests. */
-  readonly key: string;
+export interface FleetRule {
+  readonly key: RuleKey;
   readonly profileId: string;
   readonly ruleId: string;
   readonly provenance: FleetProvenance;
-  /** Normalized header, the grouping key for the by-header lens. */
   readonly headerKey: string;
-  readonly profileEnabled: boolean;
+  readonly direction: Direction;
+  readonly operation: HeaderOp;
+  readonly header: string;
+  readonly display?: string;
+  readonly secret: boolean;
+  readonly enabled: boolean;
+  readonly paused: boolean;
+  readonly outcome: FleetOutcome;
+  readonly caveats: readonly Caveat[];
   readonly scope: Scope;
-  /** How many distinct sites this rule names; 0 when its reach is broad. */
-  readonly siteCount: number;
-  /** True when the scope is not a concrete domain list (all / pattern / regex). */
   readonly crossSite: boolean;
-  /** The author's own note on the rule, when they left one. */
   readonly comment?: string;
 }
 
-export interface FleetInput {
-  readonly doc: StateDoc;
-  readonly grants: GrantSnapshot;
-  readonly isRegexSupported: (regex: string) => boolean;
-  /** The one system-status ladder, so no row disagrees with the badge. */
-  readonly status: SystemStatus;
-}
-
-/** Every rule in every profile, in profile then rule order, projected once. */
-export function projectFleet({
-  doc,
-  grants,
-  isRegexSupported,
-  status,
-}: FleetInput): FleetRule[] {
-  const active = activeProfile(doc);
-  const overriddenBy = overriddenLabels(doc, grants, isRegexSupported);
-
+export function fleetRules(projection: Projection, doc: StateDoc): FleetRule[] {
+  const projected = projectFleet(projection);
   return doc.profiles.flatMap((profile) =>
-    profile.rules.map((rule) =>
-      fleetRule(profile, rule, {
-        grants,
-        paused: status === "paused",
-        outOfSync: status === "out-of-sync",
-        active: profile.id === active.id,
-        overriddenBy: overriddenBy.get(rule.id),
-        isRegexSupported,
-      }),
-    ),
+    profile.rules.flatMap((rule, index) => {
+      const occurrence = profile.rules
+        .slice(0, index)
+        .filter((candidate) => candidate.id === rule.id).length;
+      const line = projected.get(ruleKey(profile.id, rule.id, occurrence));
+      return line === undefined
+        ? []
+        : [fleetRule(profile, rule, line, projection.batch.paused)];
+    }),
   );
 }
 
 function fleetRule(
   profile: Profile,
   rule: Rule,
-  context: {
-    grants: GrantSnapshot;
-    paused: boolean;
-    outOfSync: boolean;
-    active: boolean;
-    overriddenBy: string | undefined;
-    isRegexSupported: (regex: string) => boolean;
-  },
+  line: Line<FleetOutcome>,
+  paused: boolean,
 ): FleetRule {
-  const refused = refusedReason(rule, context.isRegexSupported);
-  const running = context.active && rule.enabled;
-  const missing = running ? missingGrants(rule, context.grants) : [];
-  const status = lineStatus({
-    running,
-    paused: context.paused,
-    promoteNeedsAccessWhilePaused: false,
-    outOfSync: context.outOfSync,
-    overridden: context.overriddenBy !== undefined,
-    refused: refused !== undefined,
-    managed: isNetworkManagedHeader(rule.header),
-    needsAccess: missing.length > 0,
-    perRequest: settlesPerRequest(rule),
-  });
+  const display =
+    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
   return {
-    key: `${profile.id}:${rule.id}`,
+    key: line.key,
     profileId: profile.id,
     ruleId: rule.id,
     provenance: {
@@ -129,58 +82,66 @@ function fleetRule(
       badgeText: profile.badgeText,
       color: profile.color,
     },
+    direction: rule.direction,
+    operation: rule.operation,
+    scope: rule.scope,
+    header: rule.header,
     headerKey: normalizeHeaderName(rule.header),
-    ...lineCore({
-      direction: rule.direction,
-      operation: rule.operation,
-      header: rule.header,
-      display: ruleDisplay(rule),
-      enabled: rule.enabled,
-      status,
-      overriddenBy: context.overriddenBy,
-      refused,
-      missing,
-    }),
-    profileEnabled: context.active,
+    ...(display === undefined ? {} : { display }),
+    secret: isSecretHeader(rule.header),
     ...(rule.comment === undefined || rule.comment === ""
       ? {}
       : { comment: rule.comment }),
-    scope: rule.scope,
-    siteCount: siteCount(rule),
-    crossSite: rule.scope.type !== "domains",
+    enabled: rule.enabled,
+    paused,
+    outcome: line.outcome,
+    caveats: line.caveats,
+    crossSite:
+      line.outcome.kind === "placed" ||
+      line.outcome.kind === "partial" ||
+      line.outcome.kind === "pending" ||
+      line.outcome.kind === "shadowed" ||
+      line.outcome.kind === "runs-if-matched"
+        ? line.outcome.scope.kind === "broad"
+        : rule.scope.type !== "domains",
   };
-}
-
-function siteCount(rule: Rule): number {
-  return scopeCondition(rule.scope).requestDomains?.length ?? 0;
 }
 
 export interface SiteGroup {
   readonly kind: "domain" | "cross-site";
-  /** The domain, or a stable sentinel ("*") for the cross-site bucket. */
   readonly host: string;
   readonly rules: readonly FleetRule[];
 }
 
-/**
- * By site: a rule that names domains appears under each; every broad rule (all
- * sites, pattern, regex) collects into one trailing cross-site group, since its
- * true home is the by-header lens where its reach is legible.
- */
 export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
   const domains = new Map<string, FleetRule[]>();
   const crossSite: FleetRule[] = [];
   for (const rule of fleet) {
     if (rule.scope.type === "domains") {
-      for (const domain of rule.scope.domains) {
-        push(domains, domain, rule);
+      const installed = installedScope(rule.outcome);
+      const installedDomains = new Set<string>();
+      if (installed?.kind === "sites") {
+        for (const domain of installed.domains) {
+          installedDomains.add(domain);
+          push(domains, domain, rule);
+        }
+      }
+      if (rule.outcome.kind === "absent" || rule.outcome.kind === "partial") {
+        for (const domain of rule.scope.domains) {
+          if (!installedDomains.has(domain)) push(domains, domain, rule);
+        }
       }
     } else {
-      crossSite.push(rule);
+      const installed = installedScope(rule.outcome);
+      if (installed?.kind === "sites") {
+        for (const domain of installed.domains) push(domains, domain, rule);
+      } else {
+        crossSite.push(rule);
+      }
     }
   }
   const groups: SiteGroup[] = [...domains.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([left], [right]) => left.localeCompare(right))
     .map(([host, rules]) => ({ kind: "domain" as const, host, rules }));
   if (crossSite.length > 0) {
     groups.push({ kind: "cross-site", host: "*", rules: crossSite });
@@ -190,22 +151,13 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
 
 export interface HeaderGroup {
   readonly headerKey: string;
-  /** The header as first authored, for display. */
   readonly header: string;
   readonly rules: readonly FleetRule[];
-  /** Distinct named sites this header reaches; the blast radius. */
   readonly siteCount: number;
-  /** True when any rule for this header reaches beyond named sites. */
   readonly broad: boolean;
-  /** True when any rule for this header reaches every site unconditionally. */
   readonly allSites: boolean;
 }
 
-/**
- * By header: every rule touching one header name, across sites and profiles, in
- * one place. The blast radius (distinct sites, plus whether any rule is broad)
- * makes a one-edit change legible before it is made.
- */
 export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
   const groups = new Map<string, FleetRule[]>();
   for (const rule of fleet) push(groups, rule.headerKey, rule);
@@ -214,17 +166,14 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
       const sites = new Set<string>();
       let broad = false;
       let allSites = false;
-      // The blast radius counts only the rules Chrome is actually running, so a
-      // rule that is off, waiting on a grant, or refused never inflates a count
-      // the caption states in the present tense.
       for (const rule of rules) {
-        if (!isReaching(rule)) continue;
-        if (rule.scope.type === "domains") {
-          for (const domain of rule.scope.domains) sites.add(domain);
-        } else {
+        const installed = installedScope(rule.outcome);
+        if (installed === undefined) continue;
+        if (installed.kind === "broad") {
           broad = true;
-          if (rule.scope.type === "all") allSites = true;
-          for (const host of hostsOf(rule)) sites.add(host);
+          allSites ||= rule.scope.type === "all";
+        } else {
+          for (const domain of installed.domains) sites.add(domain);
         }
       }
       return {
@@ -236,7 +185,7 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
         allSites,
       };
     })
-    .sort((a, b) => a.header.localeCompare(b.header));
+    .sort((left, right) => left.header.localeCompare(right.header));
 }
 
 export interface TapeRow {
@@ -246,32 +195,25 @@ export interface TapeRow {
   readonly direction: Direction;
   readonly operation: HeaderOp;
   readonly header: string;
-  readonly provenance: FleetProvenance;
-  /** Only enabled active-profile states reach the tape. */
-  readonly status: Exclude<LineStatus, "off" | "overridden">;
+  readonly outcome:
+    | FleetOutcome
+    | Extract<TabOutcome, { readonly kind: "shadowed" }>;
+  readonly caveats: readonly Caveat[];
+  readonly paused: boolean;
 }
 
-const TAPE_ORDER: Record<TapeRow["status"], number> = {
-  refused: 0,
-  managed: 1,
-  "out-of-sync": 2,
-  "needs-access": 3,
-  unconfirmed: 4,
-  live: 5,
-  paused: 6,
-};
-
-/**
- * The receipt: every stamp HeaderShim is set to apply right now, grouped by the
- * site it lands on, plus the ones it is skipping, Chrome manages, or Chrome
- * refuses. Off rules are not traffic and never appear; values are never carried,
- * so a secret is categorically absent from the record.
- */
-export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
+export function tapeRows(
+  groups: readonly SiteGroup[],
+  projection: Projection,
+): TapeRow[] {
   const rows: TapeRow[] = [];
   for (const group of groups) {
     for (const rule of group.rules) {
-      if (rule.status === "off" || rule.status === "overridden") {
+      if (
+        rule.outcome.kind === "absent" &&
+        (rule.outcome.reason.kind === "off" ||
+          rule.outcome.reason.kind === "other-profile")
+      ) {
         continue;
       }
       rows.push({
@@ -281,33 +223,75 @@ export function tapeRows(groups: readonly SiteGroup[]): TapeRow[] {
         direction: rule.direction,
         operation: rule.operation,
         header: rule.header,
-        provenance: rule.provenance,
-        status: rule.status,
+        outcome: outcomeAtSite(rule, group, projection),
+        caveats: rule.caveats,
+        paused: rule.paused,
       });
     }
   }
   return rows.sort(
-    (a, b) =>
-      TAPE_ORDER[a.status] - TAPE_ORDER[b.status] || a.key.localeCompare(b.key),
+    (left, right) =>
+      left.host.localeCompare(right.host) ||
+      left.header.localeCompare(right.header) ||
+      left.key.localeCompare(right.key),
   );
 }
 
-/** A rule Chrome is running now: installed, granted, and not shadowed. */
-function isReaching(rule: FleetRule): boolean {
-  return rule.status === "live" || rule.status === "unconfirmed";
+function installedScope(outcome: FleetOutcome): InstalledScope | undefined {
+  return outcome.kind === "absent" ? undefined : outcome.scope;
 }
 
-function hostsOf(rule: FleetRule): readonly string[] {
-  return rule.scope.type === "pattern" || rule.scope.type === "regex"
-    ? rule.scope.hosts
-    : [];
+function outcomeAtSite(
+  rule: FleetRule,
+  group: SiteGroup,
+  projection: Projection,
+): TapeRow["outcome"] {
+  if (group.kind === "domain") {
+    const projected = projectTab(projection, {
+      tabId: undefined,
+      host: group.host,
+      origin: undefined,
+    }).get(rule.key)?.outcome;
+    if (projected?.kind === "shadowed") return projected;
+  }
+  if (
+    group.kind !== "domain" ||
+    (rule.outcome.kind !== "partial" && rule.outcome.kind !== "pending") ||
+    rule.outcome.scope.kind === "broad" ||
+    rule.outcome.scope.origins?.some(
+      (origin) => new URL(origin).hostname === group.host,
+    ) === true ||
+    rule.outcome.scope.domains.some(
+      (domain) => group.host === domain || group.host.endsWith(`.${domain}`),
+    )
+  ) {
+    if (
+      rule.outcome.kind === "partial" &&
+      rule.outcome.scope.kind === "sites" &&
+      rule.outcome.scope.origins?.some(
+        (origin) => new URL(origin).hostname === group.host,
+      ) === true
+    ) {
+      return rule.outcome;
+    }
+    return rule.outcome.kind === "partial"
+      ? { kind: "placed", scope: rule.outcome.scope }
+      : rule.outcome;
+  }
+  return {
+    kind: "absent",
+    reason: {
+      kind: "ungranted",
+      missing: [originPatternForDomain(group.host)],
+    },
+  };
 }
 
 function push<T>(map: Map<string, T[]>, key: string, value: T): void {
-  const list = map.get(key);
-  if (list === undefined) {
+  const current = map.get(key);
+  if (current === undefined) {
     map.set(key, [value]);
   } else {
-    list.push(value);
+    current.push(value);
   }
 }

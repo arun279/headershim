@@ -144,9 +144,8 @@ const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set([
   "api-key",
   "x-api-key",
 ]);
-// Response headers a site sends to constrain what its own pages may do. A rule
-// that sets or removes one of these takes the protection away for as far as the
-// rule reaches; an append can only add a further constraint.
+// Response headers whose value can change the browser's security policy for a
+// page.
 const SECURITY_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
   "access-control-allow-credentials",
   "access-control-allow-origin",
@@ -222,10 +221,9 @@ export function classifyHeaderName(header: string): HeaderClassification {
 }
 
 /**
- * What a rule does to security, which the header name alone cannot answer:
- * writing a credential the request then carries, or taking away a protection the
- * site sent. `classifyHeaderName` answers the name-only half. Warn, never block:
- * calling an API and un-framing a page are both legitimate.
+ * Flags changes that carry credentials or alter a response security policy.
+ * Warn, never block: calling an API and changing a page policy are both
+ * legitimate.
  */
 export function headerSensitivity(
   input: HeaderInput,
@@ -239,11 +237,7 @@ export function headerSensitivity(
       copyId: HEADER_ADVISORY_COPY_IDS.credential,
     });
   }
-  if (
-    input.direction === "response" &&
-    input.operation !== "append" &&
-    isSecurityResponseHeader(header)
-  ) {
+  if (input.direction === "response" && isSecurityResponseHeader(header)) {
     advisories.push({
       kind: "security-response",
       copyId: HEADER_ADVISORY_COPY_IDS["security-response"],

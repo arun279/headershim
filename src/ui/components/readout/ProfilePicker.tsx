@@ -1,22 +1,29 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { Profile } from "../../../core/model";
+import type { Projection } from "../../../core/applied";
+import type { GrantSnapshot } from "../../../core/grants";
+import type { Profile, TabOverride } from "../../../core/model";
 import { copy, type Sentence, sentenceText } from "../../copy";
+import type { TabContext } from "../../state/project";
 import { previewSwitch, type SwitchPreview } from "../../state/readout";
 import { InlineRename } from "../InlineRename";
 import { sentence } from "../sentence";
-import { ProfileName } from "../Truncate";
+import { Truncate as ProfileName } from "../Truncate";
 import { usePopoverDismiss } from "../usePopoverDismiss";
 import { CheckGlyph, ChevronGlyph, PlusGlyph } from "./glyphs";
 import { ProfileBadge } from "./ProfileBadge";
 
-interface ProfilePickerProps {
+export interface ProfilePickerProps {
   profiles: readonly Profile[];
   activeProfile: Profile;
   /** The profile the shortcut would flip to, when one has been established. */
   previousProfileId: string | undefined;
   /** The resolved profile-shortcut accelerator, absent when it is unbound. */
   switchShortcut: string | undefined;
-  host: string | undefined;
+  projection: Projection;
+  tab: TabContext;
+  grants: GrantSnapshot;
+  overrides: readonly TabOverride[];
+  isRegexSupported: (regex: string) => boolean;
   onSwitch: (profileId: string) => void;
   onNewProfile: () => Promise<string | undefined>;
   onRenameProfile: (profileId: string, name: string) => void;
@@ -35,7 +42,11 @@ export function ProfilePicker({
   activeProfile,
   previousProfileId,
   switchShortcut,
-  host,
+  projection,
+  tab,
+  grants,
+  overrides,
+  isRegexSupported,
   onSwitch,
   onNewProfile,
   onRenameProfile,
@@ -96,7 +107,14 @@ export function ProfilePicker({
   const switchHint =
     flipTarget === undefined
       ? undefined
-      : switchHintText(activeProfile, flipTarget, host);
+      : switchHintText(
+          projection,
+          flipTarget,
+          tab,
+          grants,
+          isRegexSupported,
+          overrides,
+        );
 
   return (
     <div class="picker">
@@ -172,8 +190,8 @@ export function ProfilePicker({
                   }}
                   aria-current={on ? "true" : undefined}
                   class={`popt${on ? " sel" : ""}`}
-                  onMouseEnter={() => setPreviewId(profile.id)}
-                  onFocus={() => setPreviewId(profile.id)}
+                  onMouseEnter={() => setPreviewId(on ? undefined : profile.id)}
+                  onFocus={() => setPreviewId(on ? undefined : profile.id)}
                   onClick={() => {
                     onSwitch(profile.id);
                     setPickerOpen(false);
@@ -200,7 +218,14 @@ export function ProfilePicker({
             })}
           </div>
           {preview !== undefined && (
-            <SwitchPreviewPanel from={activeProfile} to={preview} host={host} />
+            <SwitchPreviewPanel
+              projection={projection}
+              to={preview}
+              tab={tab}
+              grants={grants}
+              overrides={overrides}
+              isRegexSupported={isRegexSupported}
+            />
           )}
           <button
             type="button"
@@ -221,13 +246,12 @@ export function ProfilePicker({
 
 interface SwitchDiff {
   empty: boolean;
-  lead: string;
   drop: Sentence | undefined;
   add: Sentence | undefined;
 }
 
 /** The lead, first drop and first add of a switch, in the copy the panel reads. */
-function switchDiff(to: Profile, preview: SwitchPreview): SwitchDiff {
+function switchDiff(preview: SwitchPreview): SwitchDiff {
   const { drops, adds } = preview;
   const firstDrop = drops[0];
   const firstAdd = adds[0];
@@ -239,7 +263,6 @@ function switchDiff(to: Profile, preview: SwitchPreview): SwitchDiff {
         : `${firstAdd.header}: ${firstAdd.display}`;
   return {
     empty: drops.length === 0 && adds.length === 0,
-    lead: copy.readout.switcher.previewLead(to.name),
     drop:
       firstDrop === undefined
         ? undefined
@@ -253,34 +276,47 @@ function switchDiff(to: Profile, preview: SwitchPreview): SwitchDiff {
 
 /** The switch consequence as one plain line, for the closed chip's description. */
 function switchHintText(
-  from: Profile,
+  projection: Projection,
   to: Profile,
-  host: string | undefined,
+  tab: TabContext,
+  grants: GrantSnapshot,
+  isRegexSupported: (regex: string) => boolean,
+  overrides: readonly TabOverride[],
 ): string | undefined {
-  const diff = switchDiff(to, previewSwitch(from, to, host));
+  const diff = switchDiff(
+    previewSwitch(projection, to, tab, grants, isRegexSupported, overrides),
+  );
   if (diff.empty) return undefined;
-  const parts = [diff.lead];
+  const parts = [copy.readout.switcher.previewLead(to.name)];
   if (diff.drop !== undefined) parts.push(sentenceText(diff.drop));
   if (diff.add !== undefined) parts.push(sentenceText(diff.add));
   return parts.join(", ");
 }
 
 function SwitchPreviewPanel({
-  from,
+  projection,
   to,
-  host,
+  tab,
+  grants,
+  overrides,
+  isRegexSupported,
 }: {
-  from: Profile;
+  projection: Projection;
   to: Profile;
-  host: string | undefined;
+  tab: TabContext;
+  grants: GrantSnapshot;
+  overrides: readonly TabOverride[];
+  isRegexSupported: (regex: string) => boolean;
 }) {
-  const diff = switchDiff(to, previewSwitch(from, to, host));
+  const diff = switchDiff(
+    previewSwitch(projection, to, tab, grants, isRegexSupported, overrides),
+  );
   if (diff.empty) {
     return null;
   }
   return (
     <div class="preview">
-      <div class="pl silk">{diff.lead}</div>
+      <div class="pl silk">{copy.readout.switcher.previewLead(to.name)}</div>
       {diff.drop !== undefined && (
         <p class="d drops">
           <MinusGlyph />

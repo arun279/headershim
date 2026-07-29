@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
-import type { BadgeState } from "../core/badge";
+import type { BadgePlan } from "../core/badge";
 import { applyBadge } from "./badge";
 
-function state(text: string): BadgeState {
-  return { text, backgroundColor: "#3344aa", textColor: "#ffffff" };
+function plan(text: string, title: string): BadgePlan {
+  return {
+    text,
+    backgroundColor: "#3344aa",
+    textColor: "#ffffff",
+    title,
+  };
 }
 
 describe("badge adapter", () => {
@@ -13,7 +18,7 @@ describe("badge adapter", () => {
     const setTextColor = vi.spyOn(browser.action, "setBadgeTextColor");
     const setTitle = vi.spyOn(browser.action, "setTitle");
 
-    await applyBadge(state("PR"), "HeaderShim: paused");
+    await applyBadge(plan("PR", "HeaderShim: paused"));
 
     expect(await browser.action.getBadgeText({})).toBe("PR");
     expect(setBackground).toHaveBeenCalledWith({ color: "#3344aa" });
@@ -24,7 +29,7 @@ describe("badge adapter", () => {
   it("clears the tooltip back to the default title", async () => {
     const setTitle = vi.spyOn(browser.action, "setTitle");
 
-    await applyBadge(state(""), "");
+    await applyBadge(plan("", ""));
 
     expect(setTitle).toHaveBeenCalledWith({ title: "" });
     expect(await browser.action.getBadgeText({})).toBe("");

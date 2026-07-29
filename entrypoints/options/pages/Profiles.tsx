@@ -7,7 +7,6 @@ import {
   type StateDoc,
 } from "../../../src/core/model";
 import type { Result } from "../../../src/core/result";
-import type { SystemStatus } from "../../../src/core/status";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
@@ -27,11 +26,11 @@ const text = copy.options.profiles;
  */
 export function ProfilesPage({
   doc,
-  status,
+  paused,
   mutations,
 }: {
   doc: StateDoc;
-  status: SystemStatus;
+  paused: boolean;
   mutations: Mutations;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -119,7 +118,7 @@ export function ProfilesPage({
         <ProfileList
           profiles={doc.profiles}
           activeProfileId={doc.activeProfileId}
-          paused={status === "paused"}
+          paused={paused}
           openProfileId={openId}
           onOpen={setOpenId}
           onActivate={(id) => run(mutations.activateProfile(id))}

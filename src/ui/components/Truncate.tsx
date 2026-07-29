@@ -67,27 +67,8 @@ export function HeaderValue({
     </span>
   ) : (
     <Truncate
-      mode="end"
       value={value}
       maxChars={TRUNCATION_LIMITS.value}
-      {...(className === undefined ? {} : { class: className })}
-    />
-  );
-}
-
-/**
- * A profile name, clipped to whatever column each surface gives it: the wide
- * Profiles row shows the whole name, the pill and the menu row cut it to the
- * room they have. The container fills its column so the CSS ellipsis has a width
- * to clip against.
- */
-export function ProfileName({
-  value,
-  class: className,
-}: Pick<TruncateProps, "value" | "class">) {
-  return (
-    <Truncate
-      value={value}
       {...(className === undefined ? {} : { class: className })}
     />
   );
@@ -118,7 +99,7 @@ export function Truncate({
         value={value}
         maxChars={maxChars}
         cut={truncateMiddle}
-        class={className}
+        {...(className === undefined ? {} : { class: className })}
       />
     );
   }
@@ -190,7 +171,7 @@ function Measured({
   value: string;
   maxChars: number | undefined;
   cut: Cut;
-  class: string | undefined;
+  class?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [display, setDisplay] = useState(() =>

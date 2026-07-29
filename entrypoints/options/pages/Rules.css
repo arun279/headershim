@@ -81,16 +81,13 @@
   border-radius: 0 3px 3px 0;
   background: var(--live);
 }
-.fleet-row.needs-access .spine,
-.fleet-row.managed .spine,
-.fleet-row.out-of-sync .spine {
+.fleet-row.amber .spine {
   background: var(--amber);
 }
-.fleet-row.refused .spine {
+.fleet-row.stop .spine {
   background: var(--stop);
 }
-.fleet-row.off .spine,
-.fleet-row.overridden .spine,
+.fleet-row.rest .spine,
 .fleet-row.paused .spine {
   background: transparent;
   border-left: 3px dashed var(--faint);
@@ -107,16 +104,13 @@
   width: 16px;
   height: 16px;
 }
-.fleet-row.needs-access .op,
-.fleet-row.managed .op,
-.fleet-row.out-of-sync .op {
+.fleet-row.amber .op {
   color: var(--amber);
 }
-.fleet-row.refused .op {
+.fleet-row.stop .op {
   color: var(--stop);
 }
-.fleet-row.off .op,
-.fleet-row.overridden .op,
+.fleet-row.rest .op,
 .fleet-row.paused .op {
   color: var(--faint);
 }

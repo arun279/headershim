@@ -21,6 +21,7 @@ import {
   settle,
   typeInto,
 } from "../ui/test/render";
+import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 // The popup's tab is pinned so This-tab writes bind to a known origin.
 vi.mock("../platform/tabs", () => ({
@@ -35,6 +36,7 @@ vi.mock("../platform/tabs", () => ({
 const TAB_ORIGIN = "*://*.app.example.com/*";
 
 beforeEach(async () => {
+  stopFollowingCurrentBatch();
   fakeBrowser.reset();
   await fakeBrowser.permissions.request({ origins: [TAB_ORIGIN] });
 });
@@ -59,6 +61,7 @@ async function mount(
 ) {
   await write(doc);
   if (session !== undefined) await writeSession(session);
+  await followCurrentBatch();
   const root = render(<App />);
   await settle();
   return root;
@@ -280,7 +283,7 @@ describe("popup This-tab overrides", () => {
     await act(async () => toggle.click());
     await settle();
     expect((await readSession()).tabs[5]?.[0]?.enabled).toBe(false);
-    expect(root.querySelector(".thistab .change-line.off")).not.toBeNull();
+    expect(root.querySelector(".thistab .change-line.rest")).not.toBeNull();
     expect(
       root.querySelector(
         '[aria-label="Remove this-tab change: x-debug-trace"]',
@@ -312,7 +315,7 @@ describe("popup This-tab overrides", () => {
 
     expect(root.querySelector(".token")).toBeNull();
     const line = root.querySelector(
-      ".thistab .change-line.needs-access",
+      ".thistab .change-line.amber",
     ) as HTMLElement;
     expect(line.querySelector("button.grant")).not.toBeNull();
     expect(
@@ -347,7 +350,7 @@ describe("popup This-tab overrides", () => {
     });
 
     const line = root.querySelector(
-      ".thistab .change-line.needs-access",
+      ".thistab .change-line.amber",
     ) as HTMLElement;
     expect(line.textContent).toContain(copy.readout.needsAccessReason(true));
     expect(line.textContent).not.toContain("value you typed");
@@ -367,7 +370,7 @@ describe("popup This-tab overrides", () => {
       },
     );
 
-    expect(root.querySelector(".change-line.needs-access")).not.toBeNull();
+    expect(root.querySelector(".change-line.amber")).not.toBeNull();
     expect(root.querySelector(".change-line.paused")).toBeNull();
     expect(root.querySelector(".change-line .verb")?.textContent).toBe(
       copy.readout.heldVerb.set,
@@ -461,13 +464,11 @@ describe("popup This-tab overrides", () => {
     );
     const field = line.querySelector(".v-input") as HTMLInputElement;
     typeInto(field, "Bearer replacement-5678");
-    const get = vi
-      .spyOn(fakeBrowser.storage.session, "get")
-      .mockImplementationOnce(
-        async (): Promise<{ sessionState: SessionState }> => ({
-          sessionState: { nextNum: 2, tabs: {} },
-        }),
-      );
+    const get = vi.spyOn(fakeBrowser.storage.session, "get").mockImplementation(
+      async (): Promise<{ sessionState: SessionState }> => ({
+        sessionState: { nextNum: 2, tabs: {} },
+      }),
+    );
 
     press(field, "Enter");
     await settle();

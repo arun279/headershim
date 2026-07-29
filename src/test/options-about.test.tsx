@@ -151,7 +151,6 @@ describe("options about", () => {
     );
     expect(root.querySelectorAll(".about-description")).toHaveLength(1);
     expect(root.textContent).toContain(text.license);
-    expect(root.textContent).not.toContain(copy.app.tagline);
     expect(
       root.querySelectorAll(".about-card h2, .about-card h3"),
     ).toHaveLength(0);

@@ -6,7 +6,7 @@ import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/popup/App";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
-import { publishReconcileState } from "../platform/session-store";
+import { setAppliedRevision } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import {
@@ -18,6 +18,7 @@ import {
   settle,
   typeInto,
 } from "../ui/test/render";
+import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
 // activeTabDomain is a spy: a tab with no web origin is its own popup state.
@@ -33,6 +34,7 @@ vi.mock("../platform/tabs", async (importOriginal) => ({
 const ORIGIN = "*://*.api.example.com/*";
 
 beforeEach(() => {
+  stopFollowingCurrentBatch();
   fakeBrowser.reset();
 });
 
@@ -70,11 +72,15 @@ function tokenDoc(): StateDoc {
   return seededDoc([rule({ header: "authorization", value: SWAP_FROM })]);
 }
 
+function openTokenSwap(root: ParentNode): HTMLInputElement {
+  fire(() => (root.querySelector(".token .swap") as HTMLButtonElement).click());
+  return root.querySelector(".swapfield input") as HTMLInputElement;
+}
+
 /** A popup whose hero is a live token, with the swap already committed. */
 async function mountSwapped() {
   const { root } = await mount(tokenDoc(), true);
-  fire(() => (root.querySelector(".token .swap") as HTMLButtonElement).click());
-  const field = root.querySelector(".swapfield input") as HTMLInputElement;
+  const field = openTokenSwap(root);
   typeInto(field, SWAP_TO);
   press(field, "Enter");
   await settle();
@@ -106,6 +112,7 @@ async function mount(doc?: StateDoc, granted = false) {
     await fakeBrowser.permissions.request({ origins: [ORIGIN] });
   }
   if (doc !== undefined) await write(doc);
+  await followCurrentBatch();
   const root = render(<App />);
   await settle();
   return {
@@ -113,6 +120,14 @@ async function mount(doc?: StateDoc, granted = false) {
     status: () => root.querySelector(".status") as HTMLElement,
     lines: () => [...root.querySelectorAll(".change-line")],
   };
+}
+
+function expectWarningCaveat(root: ParentNode, reason: string): HTMLElement {
+  const line = root.querySelector<HTMLElement>(".change-line");
+  if (line === null) throw new Error("change line was not rendered");
+  expect(line.classList.contains("amber")).toBe(true);
+  expect(line.querySelector(".why.amber")?.textContent).toContain(reason);
+  return line;
 }
 
 const twoRules = () =>
@@ -148,7 +163,7 @@ describe("popup readout", () => {
     expect(root.querySelector(".substatus")).toBeNull();
   });
 
-  it("renders a live change as a silent teal-spine line with a toggle", async () => {
+  it("renders a live change without a universal initiator warning", async () => {
     const { lines } = await mount(seededDoc([rule()]), true);
     expect(lines()).toHaveLength(1);
     const line = lines()[0] as HTMLElement;
@@ -156,8 +171,7 @@ describe("popup readout", () => {
     expect(line.querySelector(".k")?.textContent).toBe("x-env");
     expect(line.querySelector(".v")?.textContent).toBe("staging");
     expect(line.querySelector('[aria-label="Rule on: x-env"]')).not.toBeNull();
-    // A live line adds no reason.
-    expect(line.querySelector(".why")).toBeNull();
+    expect(line.textContent).not.toContain("Requests started by other pages");
   });
 
   it("shows a hollow doubt lamp when any counted line is unconfirmed", async () => {
@@ -177,7 +191,7 @@ describe("popup readout", () => {
       ]),
       true,
     );
-    expect(root.querySelector(".change-line.unconfirmed")).not.toBeNull();
+    expect(root.querySelector(".change-line.doubt")).not.toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
       "2 changes on this tab",
     );
@@ -185,17 +199,12 @@ describe("popup readout", () => {
     expect(root.querySelector(".lamp.live")).toBeNull();
   });
 
-  it("renders a network-managed line as managed, never live or counted", async () => {
+  it("does not count a network-managed rule as running", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "connection", value: "keep-alive" })]),
       true,
     );
-    const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("managed")).toBe(true);
-    expect(line.classList.contains("live")).toBe(false);
-    expect(line.querySelector(".why.amber")?.textContent).toContain(
-      copy.readout.managedReason,
-    );
+    const line = expectWarningCaveat(root, copy.readout.managedReason);
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
     );
@@ -203,19 +212,20 @@ describe("popup readout", () => {
       "1 managed by Chrome",
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
-    expect(line.querySelector('[role="switch"]')?.className).toBe(
-      "sw sw-blocked",
-    );
+    expect(line.querySelector('[role="switch"]')?.className).toBe("sw");
   });
 
-  it("wears the blocked tone, not the grey off tone, on an out-of-sync rule toggle", async () => {
-    await publishReconcileState(true);
-    const { root } = await mount(seededDoc([rule()]), true);
-    const toggle = root.querySelector(
-      '.change-line.out-of-sync [role="switch"]',
+  it("does not project an out-of-sync ruleset", async () => {
+    const doc = seededDoc([rule()]);
+    await write(doc);
+    await setAppliedRevision({ dynamic: "different", session: "different" });
+    const root = render(<App />);
+    await settle();
+    expect(root.querySelector(".popup")?.getAttribute("aria-busy")).toBe(
+      "true",
     );
-    expect(toggle?.getAttribute("aria-checked")).toBe("true");
-    expect(toggle?.className).toBe("sw sw-blocked");
+    expect(root.querySelector(".change-line")).not.toBeNull();
+    expect(root.textContent).toContain(copy.readout.outOfSync);
   });
 
   it("renders generated metadata in place of an absent literal value", async () => {
@@ -273,6 +283,23 @@ describe("popup readout", () => {
     expect(token.textContent).toContain(copy.token.opaque);
     // Never repeated as a plain request line.
     expect(root.querySelectorAll(".change-line")).toHaveLength(0);
+  });
+
+  it("keeps a credential rule's wider reach in the hero", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule({
+          header: "authorization",
+          value: SWAP_FROM,
+          scope: { type: "all" },
+        }),
+      ]),
+      true,
+    );
+
+    expect(root.querySelector(".token")?.textContent).toContain(
+      copy.readout.widerReach.broad,
+    );
   });
 
   it("draws a real countdown for a decodable JWT", async () => {
@@ -336,7 +363,7 @@ describe("popup readout", () => {
     expect(
       root.querySelector(".swapfield .btn.primary")?.textContent,
     ).toContain(copy.token.replace);
-    // The resting masked value yields to a bare "on <host>" while swapping.
+    expect(root.querySelector(".tk-swaptarget")).toBeNull();
     expect(root.querySelector(".tk-val")).toBeNull();
 
     typeInto(field, SWAP_TO);
@@ -352,12 +379,23 @@ describe("popup readout", () => {
     expect(session.tabs[5]).toBeUndefined();
   });
 
+  it("does not replace a token with an empty value", async () => {
+    const { root } = await mount(tokenDoc(), true);
+    const field = openTokenSwap(root);
+    const replace = root.querySelector(
+      ".swapfield .btn.primary",
+    ) as HTMLButtonElement;
+
+    expect(replace.disabled).toBe(true);
+    press(field, "Enter");
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe(SWAP_FROM);
+    expect(root.querySelector(".swapfield input")).not.toBeNull();
+  });
+
   it("reports a token swap that cannot reach the current store", async () => {
     const { root } = await mount(tokenDoc(), true);
-    fire(() =>
-      (root.querySelector(".token .swap") as HTMLButtonElement).click(),
-    );
-    const field = root.querySelector(".swapfield input") as HTMLInputElement;
+    const field = openTokenSwap(root);
     typeInto(field, SWAP_TO);
     const get = vi
       .spyOn(fakeBrowser.storage.local, "get")
@@ -442,7 +480,7 @@ describe("popup readout", () => {
       "0 changes on this tab",
     );
     expect(root.querySelector(".empty")).toBeNull();
-    expect(root.querySelector(".change-line.off")).not.toBeNull();
+    expect(root.querySelector(".change-line.rest")).not.toBeNull();
     expect(enable).not.toBeNull();
     expect(document.activeElement).toBe(enable);
 
@@ -455,7 +493,7 @@ describe("popup readout", () => {
   it("shows an ungranted rule amber with a Grant that clears every surface", async () => {
     const { root, status } = await mount(seededDoc([rule()]));
     const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("needs-access")).toBe(true);
+    expect(line.classList.contains("amber")).toBe(true);
     expect(root.querySelector(".substatus .amber")?.textContent).toBe(
       "1 needs access",
     );
@@ -492,26 +530,23 @@ describe("popup readout", () => {
       ]),
     );
     const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("needs-access")).toBe(true);
+    expect(line.classList.contains("amber")).toBe(true);
     const grant = root.querySelector(
       ".change-line .grant",
     ) as HTMLButtonElement;
     expect(grant.textContent).toBe(copy.readout.grantAllSites);
   });
 
-  it("states the honest refused reason for a Host rule and stays enabled", async () => {
+  it("states the Host transport caveat without counting it as running", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "host", value: "internal.example.com" })]),
       true,
     );
-    const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("refused")).toBe(true);
-    expect(line.querySelector(".why.stop")?.textContent).toContain(
+    const line = root.querySelector(".change-line.amber");
+    expect(line?.querySelector(".why.amber")?.textContent).toContain(
       "Chrome won't let extensions change the Host header",
     );
-    expect(root.querySelector(".substatus .stop")?.textContent).toBe(
-      "1 needs attention",
-    );
+    expect(root.querySelector(".substatus .stop")).toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
     );
@@ -540,7 +575,7 @@ describe("popup readout", () => {
       true,
     );
     const overridden = [...root.querySelectorAll(".change-line")].find((line) =>
-      line.classList.contains("overridden"),
+      line.classList.contains("rest"),
     );
     expect(overridden?.querySelector(".why.rest")?.textContent).toContain(
       "overridden by staging environment",
@@ -555,6 +590,8 @@ describe("popup readout", () => {
     const input = root.querySelector(".v-input") as HTMLInputElement;
     expect(input.type).toBe("text");
     expect(input.value).toBe("staging");
+    expect(root.textContent).toContain("x-env");
+    expect(root.textContent).toContain(copy.rules.editValueHint);
     typeInto(input, "production");
     press(input, "Enter");
     await settle();
@@ -570,6 +607,9 @@ describe("popup readout", () => {
     const input = root.querySelector(".v-input") as HTMLInputElement;
     expect(input.type).toBe("password");
     expect(input.value).toBe("");
+    press(input, "Enter");
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe("sk_live_secret");
   });
 
   it("shows the empty state when nothing reaches this site", async () => {
@@ -690,20 +730,21 @@ describe("popup readout", () => {
     expect((await read()).settings.paused).toBe(false);
   });
 
-  it("holds an ungranted stored rule while paused without offering Grant", async () => {
+  it("keeps an ungranted reason actionable while paused", async () => {
     const seed = seededDoc([rule()]);
     const { root } = await mount(
       { ...seed, settings: { ...seed.settings, paused: true } },
       false,
     );
 
-    const line = root.querySelector(".change-line.paused") as HTMLElement;
+    const line = root.querySelector(".change-line.amber") as HTMLElement;
     expect(line).not.toBeNull();
+    expect(line.classList.contains("paused")).toBe(false);
     expect(line.querySelector(".verb")?.textContent).toBe("Would set");
-    expect(line.querySelector(".grant")).toBeNull();
-    expect(line.querySelector('[role="switch"]')).not.toBeNull();
+    expect(line.querySelector(".grant")).not.toBeNull();
+    expect(line.querySelector('[role="switch"]')).toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
-      "1 change held on this tab",
+      "0 changes held on this tab",
     );
   });
 
@@ -1033,10 +1074,7 @@ describe("popup authoring entry points", () => {
     expect(root.querySelector(".pausebar")).not.toBeNull();
   });
 
-  // The whole point of the created toast is that a duplicate does not pass off
-  // as running: authoring a second rule the product can already see is inert has
-  // to say so at this surface, not only where the string is derived.
-  it("says a rule authored on top of an equal one lands overridden", async () => {
+  it("confirms a rule was created without certifying its live outcome", async () => {
     const { root } = await mount(tokenDoc(), true);
     press(root.querySelector(".popup") as HTMLElement, "n");
     await settle();
@@ -1055,7 +1093,7 @@ describe("popup authoring entry points", () => {
     );
     await settle();
     expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.toast.ruleCreatedOverridden("authorization rule"),
+      copy.toast.ruleCreated,
     );
   });
 
@@ -1120,6 +1158,7 @@ describe("popup lifecycle", () => {
   // always draws, and the run that paints it is the run that binds the commands.
   it("hears a command key struck the instant the readout head lands", async () => {
     await write(seededDoc([rule()]));
+    await followCurrentBatch();
     const heard = atPaint(
       () => document.querySelector(".prof") !== null,
       () => {

@@ -1,11 +1,12 @@
 import { planBadge } from "../src/core/badge";
-import { compile } from "../src/core/compile";
+import { emitRules } from "../src/core/compile";
 import {
   activatePreviousProfile,
   type StateDoc,
   type TabOverride,
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
+import { type RulesRevision, revisionOf } from "../src/core/revision";
 import { createV1Seed, migrate } from "../src/core/schema";
 import { applyBadge } from "../src/platform/badge";
 import {
@@ -20,8 +21,9 @@ import {
   onChanged as onGrantsChanged,
 } from "../src/platform/permissions";
 import {
-  publishReconcileState,
+  getAppliedRevision,
   read as readSession,
+  setAppliedRevision,
   subscribe as subscribeSession,
   write as writeSession,
 } from "../src/platform/session-store";
@@ -35,19 +37,18 @@ import {
 import { domainFromUrl } from "../src/platform/tabs";
 
 export default defineBackground(() => {
-  // Wake-local coordination for the single-flight scheduler, not durable
-  // state: a service-worker death mid-write self-heals on the next trigger.
   let running: Promise<void> | undefined;
   let dirty = false;
 
   // Every listener registers synchronously at wake time; one registered after
   // an await would be silently dropped on event-driven service-worker wakes.
-  subscribeState(() => void reconcile());
-  subscribeSession(() => void reconcile());
+  const queueReconcile = () => reconcile();
+  subscribeState(queueReconcile);
+  subscribeSession(queueReconcile);
   // Grants are a compile input, so a grant change is a reconcile: it installs
   // the rules a grant was waiting on and pulls back the ones a revoke covered,
   // stored and This-tab alike.
-  onGrantsChanged(() => void reconcile());
+  onGrantsChanged(queueReconcile);
   browser.tabs.onRemoved.addListener((tabId) =>
     pruneOverrides((_row, id) => id !== tabId).catch(noop),
   );
@@ -57,8 +58,12 @@ export default defineBackground(() => {
   browser.commands.onCommand.addListener((command) =>
     handleCommand(command)?.catch(noop),
   );
-  browser.runtime.onStartup.addListener(() => void reconcile());
-  browser.runtime.onInstalled.addListener(() => void reconcile());
+  for (const event of [
+    browser.runtime.onStartup,
+    browser.runtime.onInstalled,
+  ]) {
+    event.addListener(queueReconcile);
+  }
   // A worker wake is itself a reconciliation trigger. Browser events are not
   // durable, so this also retries a stale rule left by a failed update before
   // the previous worker stopped.
@@ -79,105 +84,122 @@ export default defineBackground(() => {
   }
 
   async function runUntilSettled(): Promise<void> {
-    try {
-      do {
-        dirty = false;
-        let failures = 0;
-        // Three attempts survive two consecutive DNR update or readback
-        // failures, allowing a revoked origin's installed rule to be removed
-        // in the same pass.
-        while (!(await applyOnce())) {
-          if (++failures === 3) {
-            await publishReconcileState(true);
-            break;
-          }
+    do {
+      dirty = false;
+      // Three attempts survive two consecutive DNR or storage failures.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (await applyOnce()) {
+          break;
         }
-        await refreshBadge();
-      } while (dirty);
-    } catch {
-      // A throw outside the update*Rules window must still fail closed and
-      // visible rather than escape unhandled and leave state unreconciled.
-      await publishReconcileState(true).catch(noop);
+      }
       await refreshBadge().catch(noop);
-    }
+    } while (dirty);
   }
 
   async function applyOnce(): Promise<boolean> {
-    const doc = await loadDoc();
-    if (doc === undefined) {
-      // This build cannot compile a newer store. Retain the last published
-      // identity while the health flag marks it unverified.
-      await publishReconcileState(true);
-      return true;
-    }
-    // Resolve every enabled regex against the browser's RE2 and read the live
-    // grants before compiling both bands.
-    const [session, granted, isRegexSupported] = await Promise.all([
-      readSession(),
-      grantSnapshot(),
-      resolveRegexSupport(doc),
-    ]);
-    const batch = compile({
-      doc,
-      overrides: Object.values(session.tabs).flat(),
-      granted,
-      isRegexSupported,
-    });
-    const actual = await readRuleBands();
-    if (actual === undefined) {
-      return false;
-    }
-    const [actualDynamic, actualSession] = actual;
-    const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
-    const sessionPlan = planReconcile(batch.session, actualSession);
-    if (dynamicPlan === null && sessionPlan === null) {
-      await publishReconcileState(batch.overLimit);
-      return true;
-    }
-    await publishReconcileState(true);
     try {
+      const doc = await loadDoc();
+      if (doc === undefined) {
+        return true;
+      }
+      // Resolve every enabled regex against the browser's RE2 and read the live
+      // grants before compiling both bands.
+      const [session, granted, isRegexSupported] = await Promise.all([
+        readSession(),
+        grantSnapshot(),
+        resolveRegexSupport(doc, "active"),
+      ]);
+      const batch = emitRules({
+        doc,
+        overrides: Object.values(session.tabs).flat(),
+        granted,
+        isRegexSupported,
+      });
+      const [actualDynamic, actualSession] = await readRuleBands();
+      const desiredRevision = await revisionOf(batch.dynamic, batch.session);
+      if (actualDynamic === undefined || actualSession === undefined) {
+        await publishRevision(
+          actualDynamic === undefined ||
+            planReconcile(batch.dynamic, actualDynamic) !== null,
+          actualSession === undefined ||
+            planReconcile(batch.session, actualSession) !== null,
+          desiredRevision,
+        );
+        return false;
+      }
+      const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
+      const sessionPlan = planReconcile(batch.session, actualSession);
+      if (dynamicPlan === null && sessionPlan === null) {
+        const applied = await getAppliedRevision();
+        if (
+          applied?.dynamic !== desiredRevision.dynamic ||
+          applied?.session !== desiredRevision.session
+        ) {
+          await setAppliedRevision(desiredRevision);
+        }
+        return true;
+      }
+      await publishRevision(
+        dynamicPlan !== null,
+        sessionPlan !== null,
+        desiredRevision,
+      );
       if (dynamicPlan !== null) {
-        await updateDynamicRules(dynamicPlan);
+        await updateDynamicRules(dynamicPlan).catch(noop);
       }
       if (sessionPlan !== null) {
-        await updateSessionRules(sessionPlan);
+        await updateSessionRules(sessionPlan).catch(noop);
       }
+      const [installedDynamic, installedSession] = await readRuleBands();
+      const dynamicMismatch =
+        installedDynamic === undefined ||
+        planReconcile(batch.dynamic, installedDynamic) !== null;
+      const sessionMismatch =
+        installedSession === undefined ||
+        planReconcile(batch.session, installedSession) !== null;
+      await publishRevision(dynamicMismatch, sessionMismatch, desiredRevision);
+      return !dynamicMismatch && !sessionMismatch;
     } catch {
-      // Inputs are pre-validated, so a rejected update is unexpected, but
-      // storage has already changed. Retry from a fresh read and keep the
-      // health flag raised until both bands are verified.
+      await setAppliedRevision({}).catch(noop);
       return false;
     }
-    const installed = await readRuleBands();
-    if (installed === undefined) {
-      return false;
-    }
-    if (
-      planReconcile(batch.dynamic, installed[0]) !== null ||
-      planReconcile(batch.session, installed[1]) !== null
-    ) {
-      return false;
-    }
-    await publishReconcileState(batch.overLimit);
-    return true;
   }
 
   async function readRuleBands(): Promise<
-    | readonly [
-        Awaited<ReturnType<typeof getDynamicRules>>,
-        Awaited<ReturnType<typeof getSessionRules>>,
-      ]
-    | undefined
+    readonly [
+      Awaited<ReturnType<typeof getDynamicRules>> | undefined,
+      Awaited<ReturnType<typeof getSessionRules>> | undefined,
+    ]
   > {
+    return Promise.all([readBand(getDynamicRules), readBand(getSessionRules)]);
+  }
+
+  async function readBand<T>(read: () => Promise<T>): Promise<T | undefined> {
     for (const delay of [0, 50, 200]) {
-      if (delay !== 0) {
+      if (delay) {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
       try {
-        return await Promise.all([getDynamicRules(), getSessionRules()]);
+        return await read();
       } catch {}
     }
     return undefined;
+  }
+
+  function publishRevision(
+    dynamicMismatch: boolean,
+    sessionMismatch: boolean,
+    desired: Required<RulesRevision>,
+  ): Promise<void> {
+    return setAppliedRevision(
+      dynamicMismatch
+        ? sessionMismatch
+          ? {}
+          : { session: desired.session }
+        : sessionMismatch
+          ? { dynamic: desired.dynamic }
+          : desired,
+    );
   }
 
   async function loadDoc(): Promise<StateDoc | undefined> {
@@ -226,8 +248,7 @@ export default defineBackground(() => {
   async function refreshBadge(): Promise<void> {
     const outcome = migrate(await readRaw());
     if (outcome.ok) {
-      const { state, title } = planBadge(outcome.value);
-      await applyBadge(state, title);
+      await applyBadge(planBadge(outcome.value));
     }
   }
 

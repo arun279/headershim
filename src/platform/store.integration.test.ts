@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createV1Seed } from "../core/schema";
 import type { SessionState } from "./session-store";
 import {
-  getReconcileError,
-  publishReconcileState,
+  clearAppliedRevision,
+  getAppliedRevision,
   read as readSession,
+  setAppliedRevision,
   write as writeSession,
 } from "./session-store";
 import { read, subscribe, write } from "./store";
@@ -22,7 +23,7 @@ describe("platform storage", () => {
     unsubscribe();
   });
 
-  it("round-trips session state and reconcile health", async () => {
+  it("round-trips session state and the applied revision", async () => {
     const session: SessionState = {
       nextNum: 18,
       tabs: {
@@ -42,15 +43,20 @@ describe("platform storage", () => {
     };
 
     expect(await readSession()).toEqual({ nextNum: 1, tabs: {} });
-    expect(await getReconcileError()).toBe(false);
+    expect(await getAppliedRevision()).toBeUndefined();
 
     await Promise.all([
       writeSession(session),
-      publishReconcileState(true),
-      publishReconcileState(true),
+      setAppliedRevision({ dynamic: "abc", session: "123" }),
+      setAppliedRevision({ dynamic: "abc", session: "123" }),
     ]);
 
     expect(await readSession()).toEqual(session);
-    expect(await getReconcileError()).toBe(true);
+    expect(await getAppliedRevision()).toEqual({
+      dynamic: "abc",
+      session: "123",
+    });
+    await clearAppliedRevision();
+    expect(await getAppliedRevision()).toBeUndefined();
   });
 });

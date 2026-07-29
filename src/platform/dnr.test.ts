@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import type { DnrRule } from "../core/compile";
+import type { Rule, StateDoc } from "../core/model";
 import {
   getDynamicRules,
   getSessionRules,
   isRegexSupported,
+  resolveRegexSupport,
   updateDynamicRules,
   updateSessionRules,
 } from "./dnr";
@@ -19,6 +21,53 @@ const rule: DnrRule = {
   },
   condition: { resourceTypes: ["xmlhttprequest"] },
 };
+
+function regexDoc(active: boolean): StateDoc {
+  const regexRule: Rule = {
+    id: "regex",
+    num: 1,
+    direction: "request",
+    operation: "set",
+    header: "x-regex",
+    value: "on",
+    scope: {
+      type: "regex",
+      regex: "^https://example\\.com/",
+      hosts: ["example.com"],
+    },
+    resourceTypes: "all",
+    initiators: [],
+    enabled: true,
+  };
+  return {
+    v: 1,
+    profiles: [
+      {
+        id: "active",
+        name: "Active",
+        badgeText: "AC",
+        color: "blue",
+        rules: active ? [regexRule] : [],
+      },
+      {
+        id: "inactive",
+        name: "Inactive",
+        badgeText: "IN",
+        color: "slate",
+        rules: active ? [] : [regexRule],
+      },
+    ],
+    activeProfileId: "active",
+    nextRuleNum: 2,
+    settings: { paused: false, theme: "system" },
+  };
+}
+
+function acceptRegexes() {
+  return vi
+    .spyOn(browser.declarativeNetRequest, "isRegexSupported")
+    .mockImplementation(async () => ({ isSupported: true }));
+}
 
 describe("DNR adapter", () => {
   it("forwards rule operations and converts regex support results", async () => {
@@ -60,6 +109,34 @@ describe("DNR adapter", () => {
       error: "syntaxError",
     });
     expect(regex).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves regex support for inactive profiles", async () => {
+    const regex = acceptRegexes();
+    const supported = await resolveRegexSupport(regexDoc(false));
+
+    expect(supported("^https://example\\.com/")).toBe(true);
+    expect(regex).toHaveBeenCalledWith({
+      regex: "^https://example\\.com/",
+    });
+  });
+
+  it("limits background support checks to the active profile", async () => {
+    const regex = acceptRegexes();
+    const supported = await resolveRegexSupport(regexDoc(false), "active");
+
+    expect(supported("^https://example\\.com/")).toBe(false);
+    expect(regex).not.toHaveBeenCalled();
+  });
+
+  it("treats a failed support check as unsupported", async () => {
+    vi.spyOn(
+      browser.declarativeNetRequest,
+      "isRegexSupported",
+    ).mockRejectedValue(new Error("unavailable"));
+    const supported = await resolveRegexSupport(regexDoc(true));
+
+    expect(supported("^https://example\\.com/")).toBe(false);
   });
 });
 

@@ -80,22 +80,15 @@ function seed(scope: Scope): StateDoc {
   };
 }
 
-const LINE_STATUSES = [
-  "needs-access",
-  "live",
-  "unconfirmed",
-  "refused",
-  "out-of-sync",
-  "overridden",
-  "off",
-  "paused",
-] as const;
-
 // The one change reads its health straight off the severity spine.
 const state = (root: HTMLElement): string | undefined => {
   const line = root.querySelector(".change-line");
   if (line === null) return undefined;
-  return LINE_STATUSES.find((status) => line.classList.contains(status));
+  if (line.classList.contains("amber")) return "needs-access";
+  if (line.classList.contains("doubt")) return "unconfirmed";
+  if (line.classList.contains("stop")) return "refused";
+  if (line.classList.contains("live")) return "live";
+  return undefined;
 };
 
 async function grant(origin: string) {

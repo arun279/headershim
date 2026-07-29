@@ -35,7 +35,6 @@ import { handleEditorCommitKey } from "./editorKeys";
 import { HeaderFields } from "./HeaderFields";
 import { HeaderNameInput } from "./HeaderNameInput";
 import { parseHeaderLine } from "./headerLine";
-import { CloseGlyph } from "./readout/glyphs";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 import { Sheet } from "./Sheet";
 import { Truncate } from "./Truncate";
@@ -102,6 +101,19 @@ interface RuleEditorProps {
   closeRequest?: number | undefined;
   /** The requested close was cancelled in the dirty-draft confirmation. */
   onCloseRequestCancelled?: (() => void) | undefined;
+}
+
+function CloseGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="m2.5 2.5 7 7m0-7-7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+      />
+    </svg>
+  );
 }
 
 interface Draft {

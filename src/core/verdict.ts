@@ -68,8 +68,7 @@ export interface Entry {
   readonly operation: HeaderOp;
   readonly authored: ReadonlyDnrRuleCondition;
   readonly standing: Standing;
-  readonly uncoveredSchemes: readonly ("ws" | "wss")[];
-  readonly initiatorUnnamed: boolean;
+  readonly grantGap: AbsentReason | undefined;
 }
 
 export interface PlacedRef {
@@ -80,7 +79,6 @@ export interface PlacedRef {
 
 export interface Batch {
   readonly paused: boolean;
-  readonly overLimit: boolean;
   readonly dynamic: readonly ReadonlyDnrRule[];
   readonly session: readonly ReadonlyDnrRule[];
   readonly entries: readonly Entry[];

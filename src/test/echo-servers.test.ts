@@ -1,12 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NARROW_H1_PORT } from "../../e2e/echo-ports.mjs";
 import { echoServerEnvironment } from "../../e2e/echo-servers";
 
-// The floor this kernel draws port 0 from. Both platforms the harness runs on
-// publish it and both are reconfigurable, so the guarantee the harness needs
-// comes from the running host and not from a documented default.
+// Read the running host where the sandbox permits it. The fallback is the start
+// of the IANA dynamic range, so the assertion still executes in restricted CI.
 function ephemeralFloor(): number {
   if (process.platform === "linux") {
     const range = readFileSync(
@@ -15,11 +14,12 @@ function ephemeralFloor(): number {
     );
     return Number(range.split(/\s+/)[0]);
   }
-  return Number(
-    execFileSync("sysctl", ["-n", "net.inet.ip.portrange.first"], {
-      encoding: "utf8",
-    }),
+  const result = spawnSync(
+    "/usr/sbin/sysctl",
+    ["-n", "net.inet.ip.portrange.first"],
+    { encoding: "utf8" },
   );
+  return result.status === 0 ? Number(result.stdout) : 49_152;
 }
 
 describe("narrow-host-access echo servers", () => {

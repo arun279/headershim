@@ -38,6 +38,8 @@ import {
   type UncompilableReason,
 } from "./verdict";
 
+export { revisionOf } from "./revision";
+
 export type { UncompilableReason } from "./verdict";
 
 export const DYNAMIC_PRIORITY_TOP = 5_000;
@@ -102,12 +104,6 @@ export interface CompileInput {
   readonly isRegexSupported: (regex: string) => boolean;
 }
 
-interface CompileOutput {
-  readonly dynamic: DnrRule[];
-  readonly session: DnrRule[];
-  readonly overLimit: boolean;
-}
-
 /**
  * The compiler's view of the stored doc: only the rules that will actually be
  * applied. Two things keep a rule out, and both have to be settled here.
@@ -142,19 +138,18 @@ export function dropInapplicable(
   granted: GrantSnapshot,
 ): StateDoc {
   const bySource = new Map<number, Rule[]>();
-  collectApplicableRules(
+  for (const { sourceIndex, rule } of collectApplicableRules(
     state,
     granted,
     isRegexSupported,
-    (sourceIndex, _narrowed, rule) => {
-      const rules = bySource.get(sourceIndex);
-      if (rules === undefined) {
-        bySource.set(sourceIndex, [rule]);
-      } else {
-        rules.push(rule);
-      }
-    },
-  );
+  )) {
+    const rules = bySource.get(sourceIndex);
+    if (rules === undefined) {
+      bySource.set(sourceIndex, [rule]);
+    } else {
+      rules.push(rule);
+    }
+  }
   return {
     ...state,
     profiles: state.profiles.map((profile) =>
@@ -336,15 +331,6 @@ function compileRuleCondition(rule: Rule): DnrRuleCondition {
   };
 }
 
-export function settlesPerRequest(rule: Rule): boolean {
-  const condition = compileRuleCondition(rule);
-  return (
-    condition.urlFilter !== undefined ||
-    condition.regexFilter !== undefined ||
-    condition.initiatorDomains !== undefined
-  );
-}
-
 interface DynamicCandidate {
   readonly sourceIndex: number;
   readonly narrowed: boolean;
@@ -393,50 +379,42 @@ interface CompiledInput {
   readonly sessionBand: SessionBand;
 }
 
-export function compile(input: CompileInput): CompileOutput {
-  if (input.doc.settings.paused) {
-    return { dynamic: [], session: [], overLimit: false };
-  }
-  const applicable = collectApplicableRules(
-    input.doc,
-    input.granted,
-    input.isRegexSupported,
-  );
-  const eligibleDynamic = eligibleDynamicRules(applicable);
-  const sessionCandidates = collectSessionNarrowings(
-    input.overrides,
-    input.granted,
-  );
-  return {
-    overLimit:
-      eligibleDynamic.length < applicable.length ||
-      sessionCandidates.length > MAX_SESSION_OVERRIDES,
-    dynamic: emitDynamicRules(eligibleDynamic),
-    session: emitSessionRules(
-      sessionCandidates.slice(0, MAX_SESSION_OVERRIDES),
-      input.overrides,
-    ),
-  };
-}
-
-export function inspect(input: CompileInput): Batch {
+export function compile(input: CompileInput): Batch {
   const { doc, granted, isRegexSupported } = input;
-  const output = compile(input);
   const { dynamicBand, sessionBand } = compileInput(input);
-  const activeKeys = keyRules(
-    doc.activeProfileId,
-    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.rules ??
-      [],
-  );
+  const dynamic = doc.settings.paused ? [] : dynamicBand.rules;
+  const session = doc.settings.paused ? [] : sessionBand.rules;
+  const dynamicPlacements: Placement[][] = [];
+  for (let index = 0; index < dynamicBand.rules.length; index += 1) {
+    const rule = dynamicBand.rules[index];
+    const candidate = dynamicBand.candidates[index];
+    if (rule !== undefined && candidate !== undefined) {
+      pushPlacement(dynamicPlacements, candidate.sourceIndex, {
+        dnrId: rule.id,
+        band: "dynamic",
+        priority: rule.priority,
+        condition: copyCondition(rule.condition),
+        narrowed: candidate.narrowed,
+        tabId: undefined,
+      });
+    }
+  }
+  const sessionPlacements: Placement[][] = [];
+  for (let index = 0; index < sessionBand.rules.length; index += 1) {
+    const rule = sessionBand.rules[index];
+    const candidate = sessionBand.candidates[index];
+    if (rule !== undefined && candidate !== undefined) {
+      pushPlacement(sessionPlacements, candidate.sourceIndex, {
+        dnrId: rule.id,
+        band: "session",
+        priority: rule.priority,
+        condition: copyCondition(rule.condition),
+        narrowed: candidate.urlFilter !== undefined,
+        tabId: candidate.override.tabId,
+      });
+    }
+  }
   const keyedOverrides = keyOverrides(input.overrides);
-  const placements = collectPlacements(
-    dynamicBand.candidates,
-    dynamicBand.rules,
-    sessionBand.candidates,
-    sessionBand.rules,
-    activeKeys,
-    keyedOverrides,
-  );
   const entries = [
     ...doc.profiles.flatMap((profile) => {
       return keyRules(profile.id, profile.rules).map(({ key, rule }, index) =>
@@ -448,7 +426,9 @@ export function inspect(input: CompileInput): Batch {
           rule,
           granted,
           isRegexSupported,
-          placements.get(key) ?? [],
+          profile.id === doc.activeProfileId
+            ? (dynamicPlacements[index] ?? [])
+            : [],
           profile.id === doc.activeProfileId
             ? dynamicBand.limits[index]
             : undefined,
@@ -460,34 +440,56 @@ export function inspect(input: CompileInput): Batch {
         key,
         doc.activeProfileId,
         override,
-        placements.get(key) ?? [],
+        sessionPlacements[index] ?? [],
         sessionBand.limits[index] === true,
       ),
     ),
   ];
   return {
-    ...output,
     paused: doc.settings.paused,
+    dynamic,
+    session,
     entries,
     slots: collectSlots(entries),
   };
 }
 
+export function emitRules(input: CompileInput): {
+  readonly dynamic: DnrRule[];
+  readonly session: DnrRule[];
+} {
+  if (input.doc.settings.paused) {
+    return { dynamic: [], session: [] };
+  }
+  return {
+    dynamic: emitDynamicRules(
+      eligibleDynamicRules(
+        collectApplicableRules(
+          input.doc,
+          input.granted,
+          input.isRegexSupported,
+        ).map((candidate) => candidate.rule),
+      ),
+    ),
+    session: emitSessionRules(
+      collectSessionNarrowings(input.overrides, input.granted).slice(
+        0,
+        MAX_SESSION_OVERRIDES,
+      ),
+      input.overrides,
+    ),
+  };
+}
+
 function compileInput(input: CompileInput): CompiledInput {
-  const dynamicCandidates: DynamicCandidate[] = [];
-  collectApplicableRules(
+  const dynamicCandidates = collectApplicableRules(
     input.doc,
     input.granted,
     input.isRegexSupported,
-    (sourceIndex, narrowed, rule) =>
-      dynamicCandidates.push({ sourceIndex, narrowed, rule }),
   );
-  const sessionCandidates: SessionCandidate[] = [];
-  collectSessionNarrowings(
+  const sessionCandidates = collectSessionNarrowings(
     input.overrides,
     input.granted,
-    (sourceIndex, candidate) =>
-      sessionCandidates.push({ sourceIndex, ...candidate }),
   );
   return {
     dynamicBand: compileDynamicBand(dynamicCandidates),
@@ -586,9 +588,8 @@ function collectApplicableRules(
   state: StateDoc,
   granted: GrantSnapshot,
   isRegexSupported: (regex: string) => boolean,
-  observe?: (sourceIndex: number, narrowed: boolean, rule: Rule) => void,
-): Rule[] {
-  const rules: Rule[] = [];
+): DynamicCandidate[] {
+  const candidates: DynamicCandidate[] = [];
   let nextSyntheticNum = state.nextRuleNum;
   state.profiles
     .find((profile) => profile.id === state.activeProfileId)
@@ -604,23 +605,25 @@ function collectApplicableRules(
           projectionIndex === 0
             ? narrowed.rule
             : { ...narrowed.rule, num: nextSyntheticNum++ };
-        rules.push(compiledRule);
-        observe?.(sourceIndex, narrowed.targetSecured, compiledRule);
+        candidates.push({
+          sourceIndex,
+          narrowed: narrowed.targetSecured,
+          rule: compiledRule,
+        });
       }
     });
-  return rules;
+  return candidates;
 }
 
 function collectSessionNarrowings(
   overrides: readonly TabOverride[],
   granted: GrantSnapshot,
-  observe?: (sourceIndex: number, candidate: SessionNarrowing) => void,
-): SessionNarrowing[] {
+): SessionCandidate[] {
   return overrides.flatMap((override, sourceIndex) =>
-    narrowOverride(override, granted).map((candidate) => {
-      observe?.(sourceIndex, candidate);
-      return candidate;
-    }),
+    narrowOverride(override, granted).map((candidate) => ({
+      sourceIndex,
+      ...candidate,
+    })),
   );
 }
 
@@ -694,52 +697,6 @@ function overrideCondition(
   };
 }
 
-function collectPlacements(
-  dynamicCandidates: readonly DynamicCandidate[],
-  dynamic: readonly DnrRule[],
-  sessionCandidates: readonly SessionCandidate[],
-  session: readonly DnrRule[],
-  dynamicKeys: readonly KeyedRule[],
-  sessionKeys: readonly KeyedOverride[],
-): Map<RuleKey, Placement[]> {
-  const placements = new Map<RuleKey, Placement[]>();
-  dynamic.forEach((rule, index) => {
-    const candidate = dynamicCandidates[index];
-    if (candidate === undefined) {
-      return;
-    }
-    const key = dynamicKeys[candidate.sourceIndex]?.key;
-    if (key !== undefined) {
-      pushPlacement(placements, key, {
-        dnrId: rule.id,
-        band: "dynamic",
-        priority: rule.priority,
-        condition: copyCondition(rule.condition),
-        narrowed: candidate.narrowed,
-        tabId: undefined,
-      });
-    }
-  });
-  session.forEach((rule, index) => {
-    const candidate = sessionCandidates[index];
-    if (candidate === undefined) {
-      return;
-    }
-    const key = sessionKeys[candidate.sourceIndex]?.key;
-    if (key !== undefined) {
-      pushPlacement(placements, key, {
-        dnrId: rule.id,
-        band: "session",
-        priority: rule.priority,
-        condition: copyCondition(rule.condition),
-        narrowed: candidate.urlFilter !== undefined,
-        tabId: candidate.override.tabId,
-      });
-    }
-  });
-  return placements;
-}
-
 function copyCondition(condition: DnrRuleCondition): ReadonlyDnrRuleCondition {
   return {
     ...condition,
@@ -759,13 +716,13 @@ function copyCondition(condition: DnrRuleCondition): ReadonlyDnrRuleCondition {
 }
 
 function pushPlacement(
-  placements: Map<RuleKey, Placement[]>,
-  key: RuleKey,
+  placements: Placement[][],
+  sourceIndex: number,
   placement: Placement,
 ): void {
-  const existing = placements.get(key);
+  const existing = placements[sourceIndex];
   if (existing === undefined) {
-    placements.set(key, [placement]);
+    placements[sourceIndex] = [placement];
   } else {
     existing.push(placement);
   }
@@ -806,9 +763,10 @@ function storedEntry(
               ? { kind: "other-profile", profileName }
               : { kind: "off" },
           },
-    uncoveredSchemes: uncoveredSchemes(rule, granted),
-    initiatorUnnamed:
-      coversSubresourceTypes(rule) && rule.initiators.length === 0,
+    grantGap:
+      rule.enabled && profileId === activeProfileId && placements.length > 0
+        ? grantGap(rule, granted, placements)
+        : undefined,
   };
 }
 
@@ -843,6 +801,19 @@ function standingForRule(
 }
 
 function ungrantedReason(rule: Rule, granted: GrantSnapshot): AbsentReason {
+  return (
+    grantGap(rule, granted) ?? {
+      kind: "refused",
+      reason: "domains",
+    }
+  );
+}
+
+function grantGap(
+  rule: Rule,
+  granted: GrantSnapshot,
+  placements: readonly Placement[] = [],
+): AbsentReason | undefined {
   const missingInitiators = coversSubresourceTypes(rule)
     ? rule.initiators
         .filter((initiator) => !originGranted(initiator, granted))
@@ -856,12 +827,18 @@ function ungrantedReason(rule: Rule, granted: GrantSnapshot): AbsentReason {
   if (targetReached && initiatorReason !== undefined) {
     return initiatorReason;
   }
-  return (
-    missingReason("ungranted", missingGrants(rule, granted)) ?? {
-      kind: "refused",
-      reason: "domains",
-    }
+  const placedDomains = new Set(
+    placements.flatMap((placement) =>
+      placement.narrowed ? [] : (placement.condition.requestDomains ?? []),
+    ),
   );
+  const missing =
+    rule.scope.type === "domains"
+      ? rule.scope.domains
+          .filter((domain) => !placedDomains.has(domain))
+          .map(originPatternForDomain)
+      : missingGrants(rule, granted);
+  return missingReason("ungranted", missing);
 }
 
 function missingReason(
@@ -907,32 +884,8 @@ function overrideEntry(
     operation: override.operation,
     authored: overrideCondition(override),
     standing,
-    uncoveredSchemes: [],
-    initiatorUnnamed: false,
+    grantGap: undefined,
   };
-}
-
-function uncoveredSchemes(
-  rule: Rule,
-  granted: GrantSnapshot,
-): readonly ("ws" | "wss")[] {
-  if (
-    !expandResourceTypes(rule.resourceTypes).includes("websocket") ||
-    granted.origins.includes("<all_urls>")
-  ) {
-    return [];
-  }
-  if (rule.scope.type === "domains" || rule.scope.type === "all") {
-    return ["ws", "wss"];
-  }
-  const matcher =
-    rule.scope.type === "pattern" ? rule.scope.pattern : rule.scope.regex;
-  const scheme = /^\^?\|?(https?|wss?):(?:\\?\/){2}/.exec(matcher)?.[1];
-  return scheme === "http" || scheme === "https"
-    ? []
-    : scheme === "ws" || scheme === "wss"
-      ? [scheme]
-      : ["ws", "wss"];
 }
 
 function collectSlots(

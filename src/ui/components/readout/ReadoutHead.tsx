@@ -1,23 +1,16 @@
-import type { Profile } from "../../../core/model";
 import { copy } from "../../copy";
 import type { TabReadout } from "../../state/readout";
 import { sentence } from "../sentence";
 import { TRUNCATION_LIMITS, Truncate } from "../Truncate";
 import { GlobeGlyph } from "./glyphs";
-import { ProfilePicker } from "./ProfilePicker";
+import { ProfilePicker, type ProfilePickerProps } from "./ProfilePicker";
 
-interface ReadoutHeadProps {
+type ReadoutHeadProps = Omit<ProfilePickerProps, "onSwitch"> & {
   readout: TabReadout;
   hasRows: boolean;
-  profiles: readonly Profile[];
-  activeProfile: Profile;
-  previousProfileId: string | undefined;
-  switchShortcut: string | undefined;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
-  onNewProfile: () => Promise<string | undefined>;
-  onRenameProfile: (profileId: string, name: string) => void;
-}
+};
 
 /**
  * The calmest, most valuable row leads with the site (the one thing you most
@@ -31,6 +24,11 @@ export function ReadoutHead({
   activeProfile,
   previousProfileId,
   switchShortcut,
+  projection,
+  tab,
+  grants,
+  overrides,
+  isRegexSupported,
   paused,
   onSwitchProfile,
   onNewProfile,
@@ -40,7 +38,7 @@ export function ReadoutHead({
     readout.needsAccess > 0 ||
     readout.refused > 0 ||
     readout.managed > 0 ||
-    readout.outOfSync > 0;
+    readout.security > 0;
   const doubt = readout.unconfirmed > 0;
   // Pause is the state the count is most worth having, so the line stays and
   // says what it is counting instead of disappearing.
@@ -77,7 +75,11 @@ export function ReadoutHead({
           activeProfile={activeProfile}
           previousProfileId={previousProfileId}
           switchShortcut={switchShortcut}
-          host={readout.host}
+          projection={projection}
+          tab={tab}
+          grants={grants}
+          overrides={overrides}
+          isRegexSupported={isRegexSupported}
           onSwitch={onSwitchProfile}
           onNewProfile={onNewProfile}
           onRenameProfile={onRenameProfile}
@@ -112,15 +114,10 @@ export function ReadoutHead({
           {(readout.needsAccess > 0 ||
             readout.refused > 0 ||
             readout.managed > 0 ||
-            readout.outOfSync > 0 ||
+            readout.security > 0 ||
             readout.unconfirmed > 0 ||
             readout.overridden > 0) && (
             <p class="substatus">
-              {readout.outOfSync > 0 && (
-                <span class="seg amber">
-                  {copy.readout.outOfSync(readout.outOfSync)}
-                </span>
-              )}
               {readout.needsAccess > 0 && (
                 <span class="seg amber">
                   {copy.readout.needsAccess(readout.needsAccess)}
@@ -134,6 +131,11 @@ export function ReadoutHead({
               {readout.managed > 0 && (
                 <span class="seg amber">
                   {copy.readout.managed(readout.managed)}
+                </span>
+              )}
+              {readout.security > 0 && (
+                <span class="seg amber">
+                  {copy.readout.security(readout.security)}
                 </span>
               )}
               {readout.unconfirmed > 0 && (
