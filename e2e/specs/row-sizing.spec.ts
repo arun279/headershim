@@ -161,8 +161,8 @@ test("a long status takes the header's room down to a legible floor, and the ops
 
   const page = await context.newPage();
   // The narrowest width the options page is held to anywhere in this suite, and
-  // the reason this test can say anything at all: wider than this the wide-status
-  // row has slack, its header never reaches its floor, and no rendered width can
+  // tight enough that the wide-status row wants more room than it has. Give that
+  // row slack and its header stops short of its floor, and no rendered width can
   // tell a floor that is doing its job from one that has been taken away.
   await page.setViewportSize({ width: 360, height: 720 });
   await page.goto(`chrome-extension://${extensionId}/options.html#traffic`);
