@@ -114,15 +114,18 @@ test("a long value gives way to the header that names the row", async ({
   expect(valueBox?.width ?? 0).toBeGreaterThan(20);
 });
 
-// Every row in the Active-changes tape is its own grid, and each resolves to the
-// same track widths, so the op glyph lines up row to row. The status word at the
-// end of each row is content the glyph and row color already carry, so it gives
-// way before the header, which is the row's only identifier. Only layout proves
-// it, so this drives the real tape at a tight width with a short-status row above
-// a long-status one. It fails if a future edit lets one row's status set every
-// row's width (the header collapsing behind a long label two rows down) or knocks
-// the op glyphs out of line.
-test("a long status gives way to the header and the ops stay aligned", async ({
+// Every row in the Active-changes tape is its own grid and no track varies with
+// row content, so the op glyph lines up row to row however differently two rows
+// read. Within a row the status keeps its width and the header is the part that
+// yields, down to the floor its own stylesheet declares, which is the whole of
+// what keeps the row's only identifier readable. Only layout proves any of it,
+// so this drives the real tape at the narrowest width the options page is held
+// to, with one wide-status row and one narrow-status one. It fails if a row
+// loses its op glyph or the glyphs go out of line, if the floor stops holding a
+// readable run of the name, if something other than the header's floor is what
+// holds the tight row, or if the wide status starts taking width from the other
+// row.
+test("a long status takes the header's room down to a legible floor, and the ops stay aligned", async ({
   context,
   extensionId,
   serviceWorker,
@@ -130,9 +133,12 @@ test("a long status gives way to the header and the ops stay aligned", async ({
   await seedState(
     serviceWorker,
     stateWithRules([
+      // Chrome appends to a fixed list of request headers and no others, so this
+      // rule is refused, which prints a wide status word. The other rule is a
+      // grant away, which prints a narrow one, and sorts above it.
       {
         direction: "request",
-        operation: "set",
+        operation: "append",
         header: "x-forwarded-authorization-context-identifier",
         value: "on",
         scope: { type: "domains", domains: ["example.com"] },
@@ -154,24 +160,91 @@ test("a long status gives way to the header and the ops stay aligned", async ({
   );
 
   const page = await context.newPage();
-  await page.setViewportSize({ width: 420, height: 720 });
+  // The narrowest width the options page is held to anywhere in this suite, and
+  // the reason this test can say anything at all: wider than this the wide-status
+  // row has slack, its header never reaches its floor, and no rendered width can
+  // tell a floor that is doing its job from one that has been taken away.
+  await page.setViewportSize({ width: 360, height: 720 });
   await page.goto(`chrome-extension://${extensionId}/options.html#traffic`);
 
   const rows = page.locator(".tape-row");
   await expect(rows).toHaveCount(2);
 
+  // Exactly one row states the wide status, which is what picks the two rows
+  // apart below. The narrow status on the other row is seeded, not checked.
+  const longStatusRow = rows.filter({
+    hasText: copy.options.traffic.status.refused,
+  });
+  const shortStatusRow = rows.filter({
+    hasNotText: copy.options.traffic.status.refused,
+  });
+  await expect(longStatusRow).toHaveCount(1);
+
   // Every row resolves the same track widths, so the op glyph starts at one x.
-  const opXs = await rows
-    .locator(".tape-op")
-    .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().x));
+  // Counted first: a spread taken over no glyphs at all is -Infinity, which
+  // clears the bound on its own.
+  const ops = rows.locator(".tape-op");
+  await expect(ops).toHaveCount(2);
+  const opXs = await ops.evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().x),
+  );
   expect(Math.max(...opXs) - Math.min(...opXs)).toBeLessThan(0.5);
 
-  // The header on the short-status row keeps real width; the long status one row
-  // down does not reserve its width here and squeeze the identifier to nothing.
-  const shortStatusRow = rows.filter({ has: page.locator(".grant") });
-  const header = shortStatusRow.locator(".tape-header");
-  const headerBox = await header.boundingBox();
-  expect(headerBox?.width ?? 0).toBeGreaterThan(55);
+  // The floor each header declares, counted in characters of that header's own
+  // font, so the bar follows the typography instead of a pixel read off one
+  // build. Taken on every row, because the floor is what the browser then
+  // enforces on that row's identifier. Six where the stylesheet declares eight,
+  // so a considered change to the floor carries here and a collapse does not.
+  // First, because a lowered floor also takes the pressure off the row below,
+  // and this is the reading that says which of the two happened.
+  const headers = rows.locator(".tape-header");
+  await expect(headers).toHaveCount(2);
+  const floors = await headers.evaluateAll((els) =>
+    els.map((el) => {
+      const probe = document.createElement("span");
+      probe.style.cssText = "position:absolute;visibility:hidden;width:1ch";
+      el.append(probe);
+      const ch = probe.getBoundingClientRect().width;
+      probe.remove();
+      return Number.parseFloat(getComputedStyle(el).minWidth) / ch;
+    }),
+  );
+  expect(
+    Math.min(...floors),
+    "the identifier's declared floor no longer holds a readable run of the name",
+  ).toBeGreaterThanOrEqual(6);
+
+  const pressured = await longStatusRow.evaluate((row) => {
+    const header = row.querySelector(".tape-header") as HTMLElement;
+    const stamp = row.querySelector(".tape-stamp") as HTMLElement;
+    return {
+      headerWidth: header.getBoundingClientRect().width,
+      floor: Number.parseFloat(getComputedStyle(header).minWidth),
+      overrun: stamp.scrollWidth - stamp.clientWidth,
+    };
+  });
+
+  // The premise, on its own so that losing it reads as losing it: this row wants
+  // more width than it has, which is the only condition under which a floor
+  // decides anything. The floor reading above passed, so if this fails the floor
+  // is intact and the row has come by slack: retighten the width or the fixture.
+  expect(
+    pressured.overrun,
+    "this test's setup has expired: the row has slack at this width, so its floor is dormant and the assertion below would prove nothing. Not a layout regression",
+  ).toBeGreaterThan(0);
+  // And it is the header that absorbed all of it, down to its declared floor and
+  // stopped there. The header is the row's only shrinkable part, so anything else
+  // holding this row is a change in which part gives way.
+  expect(
+    pressured.headerWidth,
+    "the tight row is not being held by the header sitting on its declared floor",
+  ).toBeCloseTo(pressured.floor, 0);
+
+  // The wide status costs width in its own row and in no other: the row that
+  // states it carries the narrower identifier, and the row without it keeps the
+  // room it would have had anyway.
+  const roomy = await shortStatusRow.locator(".tape-header").boundingBox();
+  expect(roomy?.width ?? 0).toBeGreaterThan(pressured.headerWidth);
 });
 
 // The frame's two width jobs, which pull against each other, proven together at
