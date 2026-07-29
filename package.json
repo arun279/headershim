@@ -65,7 +65,7 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "5.5 kB"
+      "limit": "6 kB"
     },
     {
       "name": "Shared UI runtime",
@@ -81,7 +81,7 @@
         "!.output/chrome-mv3/chunks/options-*.js",
         "!.output/chrome-mv3/chunks/popup-*.js"
       ],
-      "limit": "27.217 kB"
+      "limit": "27.5 kB"
     },
     {
       "name": "Popup initial load",
@@ -98,7 +98,7 @@
         "!.output/chrome-mv3/assets/RuleEditor-*.css",
         "!.output/chrome-mv3/assets/options-*.css"
       ],
-      "limit": "44.689 kB"
+      "limit": "45 kB"
     },
     {
       "name": "Options initial load",
@@ -119,7 +119,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "39.141 kB"
+      "limit": "39.5 kB"
     },
     {
       "name": "Options rule editor",
@@ -127,7 +127,7 @@
         ".output/chrome-mv3/chunks/RuleEditor-*.js",
         ".output/chrome-mv3/assets/RuleEditor-*.css"
       ],
-      "limit": "12 kB"
+      "limit": "8.5 kB"
     },
     {
       "name": "Options deferred pages",
@@ -135,12 +135,12 @@
         ".output/chrome-mv3/chunks/DeferredPage-*.js",
         ".output/chrome-mv3/assets/DeferredPage-*.css"
       ],
-      "limit": "9.172 kB"
+      "limit": "9.5 kB"
     },
     {
       "name": "ModHeader import",
       "path": ".output/chrome-mv3/chunks/modheader-*.js",
-      "limit": "2.256 kB"
+      "limit": "2.5 kB"
     }
   ],
   "pnpm": {

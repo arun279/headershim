@@ -38,17 +38,17 @@ import { domainFromUrl } from "../src/platform/tabs";
 
 export default defineBackground(() => {
   let running: Promise<void> | undefined;
+  let badgeDoc: StateDoc | undefined;
   let dirty = false;
 
   // Every listener registers synchronously at wake time; one registered after
   // an await would be silently dropped on event-driven service-worker wakes.
-  const queueReconcile = () => reconcile();
-  subscribeState(queueReconcile);
-  subscribeSession(queueReconcile);
+  subscribeState(reconcile);
+  subscribeSession(reconcile);
   // Grants are a compile input, so a grant change is a reconcile: it installs
   // the rules a grant was waiting on and pulls back the ones a revoke covered,
   // stored and This-tab alike.
-  onGrantsChanged(queueReconcile);
+  onGrantsChanged(reconcile);
   browser.tabs.onRemoved.addListener((tabId) =>
     pruneOverrides((_row, id) => id !== tabId).catch(noop),
   );
@@ -58,12 +58,8 @@ export default defineBackground(() => {
   browser.commands.onCommand.addListener((command) =>
     handleCommand(command)?.catch(noop),
   );
-  for (const event of [
-    browser.runtime.onStartup,
-    browser.runtime.onInstalled,
-  ]) {
-    event.addListener(queueReconcile);
-  }
+  browser.runtime.onStartup.addListener(reconcile);
+  browser.runtime.onInstalled.addListener(reconcile);
   // A worker wake is itself a reconciliation trigger. Browser events are not
   // durable, so this also retries a stale rule left by a failed update before
   // the previous worker stopped.
@@ -92,16 +88,20 @@ export default defineBackground(() => {
           break;
         }
       }
-      await refreshBadge().catch(noop);
     } while (dirty);
+    if (badgeDoc !== undefined) {
+      await applyBadge(planBadge(badgeDoc)).catch(noop);
+    }
   }
 
   async function applyOnce(): Promise<boolean> {
     try {
+      badgeDoc = undefined;
       const doc = await loadDoc();
       if (doc === undefined) {
         return true;
       }
+      badgeDoc = doc;
       // Resolve every enabled regex against the browser's RE2 and read the live
       // grants before compiling both bands.
       const [session, granted, isRegexSupported] = await Promise.all([
@@ -243,13 +243,6 @@ export default defineBackground(() => {
       await writeState(seed);
       return seed;
     });
-  }
-
-  async function refreshBadge(): Promise<void> {
-    const outcome = migrate(await readRaw());
-    if (outcome.ok) {
-      await applyBadge(planBadge(outcome.value));
-    }
   }
 
   // The one session-row pruner: keep the rows the predicate accepts, across

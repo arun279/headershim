@@ -461,7 +461,7 @@ describe("background lifecycle", () => {
       expect(await getAppliedRevision()).toEqual({});
     });
     await vi.waitFor(() => {
-      expect(localGet).toHaveBeenCalledTimes(4);
+      expect(localGet).toHaveBeenCalledTimes(3);
     });
 
     expect(dnr.getDynamicRules).not.toHaveBeenCalled();
@@ -572,10 +572,20 @@ describe("background lifecycle", () => {
     expect(await dnr.fake.getSessionRules()).toEqual([]);
   });
 
-  it("serializes overlapping triggers onto the newest stored revision", async () => {
+  it("serializes overlapping triggers onto the newest stored state", async () => {
     start();
+    await settle();
+    const setBadgeText = vi.spyOn(browser.action, "setBadgeText");
     const docA = withRule(createV1Seed(), "x-a");
-    const docB = withRule(docA, "x-b");
+    const docB = withRule(
+      {
+        ...docA,
+        profiles: docA.profiles.map((profile, index) =>
+          index === 0 ? { ...profile, badgeText: "NW" } : profile,
+        ),
+      },
+      "x-b",
+    );
     let release = () => {};
     dnr.updateDynamicRules.mockImplementationOnce(
       (options) =>
@@ -603,6 +613,8 @@ describe("background lifecycle", () => {
       compileDynamic(docA).map((rule) => rule.id),
     );
     expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
+    expect(setBadgeText).not.toHaveBeenCalledWith({ text: "DE" });
+    expect(setBadgeText).toHaveBeenCalledWith({ text: "NW" });
   });
 
   it("reconciles a revision stored while the badge refresh is in flight", async () => {
