@@ -1,2 +1,45 @@
 #!/bin/sh
-exec pnpm verify
+records=
+verify=
+previous_refs=
+head_checked=
+head_sha=
+# read returns failure for a final record without a newline after populating it.
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha extra ||
+  [ -n "$local_ref$local_sha$remote_ref$remote_sha$extra" ]
+do
+  records=1
+  if [ -z "$local_ref" ] || [ -z "$local_sha" ] ||
+    [ -z "$remote_ref" ] || [ -z "$remote_sha" ] || [ -n "$extra" ]; then
+    verify=1
+    continue
+  fi
+  # Git uses an all-zero local object ID for ref deletion records.
+  case "$local_sha" in
+    *[!0]*)
+      verify=1
+      if [ -z "$head_checked" ]; then
+        head_sha=$(git rev-parse --verify --quiet HEAD)
+        head_checked=1
+      fi
+      if [ -n "$head_sha" ] && [ "$local_sha" = "$head_sha" ]; then
+        case "$remote_sha" in
+          *[!0]*) previous_refs="${previous_refs}${previous_refs:+ }$remote_sha" ;;
+        esac
+      fi
+      ;;
+  esac
+done
+
+if [ -n "$verify" ]; then
+  if [ -n "$previous_refs" ]; then
+    export PLAYWRIGHT_PREVIOUS_REFS="$previous_refs"
+  fi
+  exec pnpm verify
+fi
+
+if [ -n "$records" ]; then
+  echo "Skipping verification because this push contains only ref deletions."
+else
+  echo "Skipping verification because this push sends no refs."
+fi
