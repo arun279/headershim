@@ -30,7 +30,9 @@ pnpm build
 pnpm verify
 ```
 
-`pnpm install` configures git hooks: staged files are checked with Biome on commit, and the full verification gate runs before every push. `pnpm verify` runs the same gate on demand.
+`pnpm install` configures git hooks: staged files are checked with Biome on commit, and the full verification gate runs before every push that sends a non-deletion ref. `pnpm verify` runs the same gate on demand.
+
+The Playwright project gate compares the working tree with committed `HEAD` and the default-branch merge base. The pre-push hook and pull-request CI also compare the prior remote revision through `PLAYWRIGHT_PREVIOUS_REFS`. A deliberate removal needs one `{ "base", "test", "reason" }` acknowledgement for each reported comparison commit that contained the test. Acknowledgements become inactive when their comparison commit is no longer used.
 
 ## License
 
