@@ -4,12 +4,22 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 .sa-all-on-line {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   font-weight: 600;
+}
+.sa-all-on .btn {
+  white-space: nowrap;
+}
+
+.sa-guidance {
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .sa-group:not(:first-child) {
@@ -18,13 +28,13 @@
 
 .sa-list {
   list-style: none;
-  display: flex;
-  flex-direction: column;
 }
 .sa-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: var(--sp-4);
+  column-gap: var(--sp-3);
+  row-gap: var(--sp-2);
   padding: 9px 0;
 }
 .sa-row + .sa-row {
@@ -32,27 +42,42 @@
 }
 
 .sa-glyph {
-  flex: none;
-  display: inline-flex;
+  display: flex;
 }
 .sa-glyph.granted {
   color: var(--live-ink);
 }
-.sa-glyph.needed {
+.sa-glyph.needed,
+.sa-glyph.partial {
   color: var(--amber);
+}
+.sa-glyph.partial {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .sa-domain {
-  flex: 1;
-  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
   font-size: 13px;
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
 .sa-count {
-  margin-left: auto;
+  grid-column: 2;
   font-size: 11px;
+  line-height: 1.5;
   color: var(--ink3);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+.sa-actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.sa-actions > :is(.grant, .btn) {
+  min-height: 44px;
 }
 
 .sa-empty,
@@ -92,6 +117,20 @@
   color: var(--ink);
   font-size: 12px;
   line-height: 1.5;
+}
+
+@media (min-width: 960px) {
+  .sa-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .sa-count {
+    grid-row: 2;
+  }
+  .sa-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    justify-self: end;
+  }
 }
 .sa-all-caution {
   color: var(--ink);

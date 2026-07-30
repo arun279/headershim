@@ -221,13 +221,10 @@ test("the site-access page mirrors the browser's granted and needed origins", as
 
   const needed = page.getByRole("list", { name: text.neededHeading });
   await expect(needed.locator(".sa-domain").first()).toBeVisible();
-  // Each row middle-truncates to fit its column, so the exact host is read off
-  // title instead of from text the font measurement decides.
-  expect(
-    await needed
-      .locator(".sa-domain")
-      .evaluateAll((rows: HTMLElement[]) => rows.map((row) => row.title)),
-  ).toEqual(["api.example.com", "example.com"]);
+  expect(await needed.locator(".sa-domain").allTextContents()).toEqual([
+    "api.example.com",
+    "example.com",
+  ]);
 
   // No grant is obtainable here, so the granted group is absent and the broad
   // grant is offered (not the revoke-all card) — the post-revoke reality.

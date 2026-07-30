@@ -206,10 +206,10 @@ describe("popup readout", () => {
     );
     const line = expectWarningCaveat(root, copy.readout.managedReason);
     expect(root.querySelector(".status")?.textContent).toBe(
-      "0 changes on this tab",
+      "0 of 1 change running on this tab",
     );
     expect(root.querySelector(".substatus .amber")?.textContent).toBe(
-      "1 managed by Chrome",
+      "1 more is managed by Chrome",
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
     expect(line.querySelector('[role="switch"]')?.className).toBe("sw");
@@ -477,7 +477,7 @@ describe("popup readout", () => {
       '[aria-label="Rule off: x-env"]',
     );
     expect(root.querySelector(".status")?.textContent).toBe(
-      "0 changes on this tab",
+      "0 of 1 change running on this tab",
     );
     expect(root.querySelector(".empty")).toBeNull();
     expect(root.querySelector(".change-line.rest")).not.toBeNull();
@@ -495,10 +495,13 @@ describe("popup readout", () => {
     const line = root.querySelector(".change-line") as HTMLElement;
     expect(line.classList.contains("amber")).toBe(true);
     expect(root.querySelector(".substatus .amber")?.textContent).toBe(
-      "1 needs access",
+      "1 more needs access",
+    );
+    expect(root.querySelector(".global-access")?.textContent).toBe(
+      copy.readout.globalNeedsAccess,
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
-    expect(status().textContent).toBe("0 changes on this tab");
+    expect(status().textContent).toBe("0 of 1 change running on this tab");
     expect(line.querySelector(".why.amber")?.textContent).toBe(
       copy.readout.needsAccessReason(false),
     );
@@ -521,7 +524,7 @@ describe("popup readout", () => {
     expect(root.querySelector(".substatus")).toBeNull();
   });
 
-  it("labels the Grant all sites when a hostless pattern rule needs broad access", async () => {
+  it("labels the all-sites action when a hostless rule needs broad access", async () => {
     const { root } = await mount(
       seededDoc([
         rule({
@@ -548,7 +551,7 @@ describe("popup readout", () => {
     );
     expect(root.querySelector(".substatus .stop")).toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
-      "0 changes on this tab",
+      "0 of 1 change running on this tab",
     );
   });
 
@@ -744,8 +747,9 @@ describe("popup readout", () => {
     expect(line.querySelector(".grant")).not.toBeNull();
     expect(line.querySelector('[role="switch"]')).toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
-      "0 changes held on this tab",
+      "0 of 1 change held on this tab",
     );
+    expect(root.querySelector(".lamp.held")).not.toBeNull();
   });
 
   it("opens options from the footer gear", async () => {

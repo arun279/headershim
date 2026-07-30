@@ -6,6 +6,7 @@ import {
   useState,
 } from "preact/hooks";
 import { browser } from "wxt/browser";
+import { missingGrants } from "../../src/core/grants";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
   availableProfileName,
@@ -166,6 +167,9 @@ function Ready({
 
   const paused = doc.settings.paused;
   const activeProfile = useMemo(() => getActiveProfile(doc), [doc]);
+  const globalNeedsAccess = activeProfile.rules.some(
+    (rule) => rule.enabled && missingGrants(rule, grants).length > 0,
+  );
   const readout = useMemo(
     () =>
       computeReadout({
@@ -456,9 +460,11 @@ function Ready({
       ref={readoutRef}
       aria-busy={live.confirmation === "pending" ? "true" : undefined}
     >
+      {paused && <PauseBanner />}
       <ReadoutHead
         readout={readout}
         hasRows={hasRows}
+        globalNeedsAccess={globalNeedsAccess}
         profiles={doc.profiles}
         activeProfile={activeProfile}
         previousProfileId={doc.previousProfileId}
@@ -478,7 +484,6 @@ function Ready({
           {copy.readout.outOfSync}
         </p>
       )}
-      {paused && <PauseBanner />}
       {/* Pause is drawn where it is true: the count says how many are held and
           each held line says what it would do, so the state is in the words and
           not only in the hue. Desaturating the region on top of that would grey

@@ -23,7 +23,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-width: 0;
+  min-width: 200px;
   flex: 1;
 }
 .site .glb {
@@ -48,6 +48,14 @@
   color: var(--ink3);
 }
 
+.global-access {
+  margin: 10px 0 0 22px;
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .glance-wrap {
   margin-top: 13px;
 }
@@ -69,13 +77,10 @@
   background: transparent;
   border: 2px solid var(--amber);
 }
-.lamp.doubt {
-  background: transparent;
-  border: 2px solid var(--ink3);
-}
+.lamp.doubt,
 .lamp.held {
   background: transparent;
-  border: 2px solid var(--faint);
+  border: 2px solid var(--ink3);
 }
 .status {
   font-size: 15px;
@@ -110,12 +115,14 @@
   position: relative;
   margin-left: auto;
   flex: none;
+  min-width: 0;
+  max-width: 128px;
 }
 .prof {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  max-width: 176px;
+  max-width: 100%;
   font-size: 12px;
   color: var(--ink2);
   background: transparent;
@@ -315,9 +322,8 @@
 .line-body {
   min-width: 0;
 }
-/* Each variable-length part clips itself through the truncation primitive; the
-   row only has to stay on one line and refuse to grow past its column. */
 .say {
+  min-width: 0;
   font-size: 13px;
   line-height: 1.4;
   color: var(--ink);
@@ -334,23 +340,33 @@
 }
 .change-line .say .k {
   flex: 0 1 auto;
-  min-width: 16ch;
+  min-width: 6ch;
+  max-width: 24ch;
 }
-/* The edit button is a wrapper around the shrinkable value, so it gives way the
-   same way: the same flex and floor the value itself carries, since a button
-   wrapping nowrap text will not shrink on the child's floor alone. */
+.change-line .say .k:last-child {
+  max-width: 100%;
+}
 .v-edit {
   display: inline-flex;
   align-items: baseline;
   flex: 0 8 auto;
   min-width: 6ch;
-  padding: 0;
+  min-height: 24px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 3px;
   background: none;
   border: none;
   text-align: left;
 }
 .v-edit .v {
+  min-width: 0;
+  width: 100%;
   border-bottom: 1px dashed transparent;
+}
+.say > .v {
+  flex: 0 8 auto;
+  min-width: 6ch;
 }
 .v-edit:hover .v {
   border-bottom-color: var(--line-strong);

@@ -157,13 +157,30 @@ export function collectLayoutOffenders(tolerance: number): SweepResult {
       el instanceof SVGElement &&
       el.getAttribute("aria-hidden") === "true" &&
       (el.textContent ?? "").trim() === "";
+    const visuallyHidden =
+      style.position === "absolute" &&
+      (style.clip !== "auto" || style.clipPath !== "none");
     const recoverable =
       ellipsis ||
       (nowrap && title !== "") ||
       decorativeSvg ||
       el.closest("[data-decorative]") !== null;
 
-    if (rect.width > 1 && rect.height > 1) {
+    if (
+      rect.width <= 1 &&
+      rect.height > 1 &&
+      el.scrollWidth > 1 &&
+      (el.textContent ?? "").trim() !== "" &&
+      el.getAttribute("aria-hidden") !== "true" &&
+      !visuallyHidden
+    ) {
+      pushClip(
+        el,
+        "inline",
+        el.scrollWidth,
+        `content collapsed into a ${round(rect.width)}px box`,
+      );
+    } else if (rect.width > 1 && rect.height > 1) {
       if (
         isClip(style.overflowX) &&
         el.scrollWidth - el.clientWidth > tolerance &&

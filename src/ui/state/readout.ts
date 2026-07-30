@@ -52,6 +52,7 @@ export interface TabChange {
 
 export interface TabReadout {
   readonly host: string | undefined;
+  readonly listed: number;
   readonly total: number;
   readonly held: number;
   readonly request: readonly TabChange[];
@@ -221,6 +222,7 @@ function summarize(
 ): Pick<
   TabReadout,
   | "total"
+  | "listed"
   | "held"
   | "needsAccess"
   | "refused"
@@ -267,6 +269,7 @@ function summarize(
     if (canRun && networkManaged) managed += 1;
   }
   return {
+    listed: changes.length,
     total: paused ? 0 : running,
     held: paused ? running : 0,
     needsAccess,
