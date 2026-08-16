@@ -1,4 +1,5 @@
 import type { Worker } from "@playwright/test";
+import { COMMON_HEADER_NAMES } from "../../src/core/header-names";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
@@ -134,6 +135,44 @@ test("plain Enter stays in a field while the commit chord saves", {
   await expect
     .poll(() => firstRuleValue(serviceWorker))
     .toBe("not-yet-committed");
+});
+
+// Typing into the header-name field opens its suggestion list with no chevron
+// click and no arrow key; Esc then closes that list first, leaving the typed
+// text and the editor itself untouched, before a second Esc would reach the
+// editor's own guard.
+test("typing opens the header suggestion list, and Esc closes only that", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const page = await context.newPage();
+  await openPopup(page, extensionId, serviceWorker, createV1Seed());
+  const editor = page.getByRole("dialog", {
+    name: copy.editor.heading("new", "Default"),
+  });
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
+
+  const name = editor.getByRole("combobox", {
+    name: copy.editor.labels.headerName,
+  });
+  const expectedName = COMMON_HEADER_NAMES.find((entry) =>
+    entry.startsWith("auth"),
+  );
+  if (expectedName === undefined) {
+    throw new Error('no bundled header name starts with "auth"');
+  }
+  const prefix = expectedName.slice(0, 4);
+  await name.pressSequentially(prefix);
+  await expect(
+    editor.getByRole("option", { name: new RegExp(`^${expectedName}`) }),
+  ).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(editor.getByRole("listbox")).toBeHidden();
+  await expect(name).toHaveValue(prefix);
+  await expect(editor).toBeVisible();
 });
 
 // Esc on an untouched draft closes directly and commits nothing.

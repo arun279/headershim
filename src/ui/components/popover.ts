@@ -1,10 +1,16 @@
 import { getFocusable } from "../a11y/focus";
 
-/** Opens a Popover API surface and clamps it to the popup with fixed pixels. */
+/**
+ * Opens a Popover API surface and clamps it to the popup with fixed pixels.
+ * `preferAbove` flips the default below-the-trigger placement to above
+ * whenever there's room, for a trigger that has another control sitting
+ * right below it that the popover would otherwise paint over.
+ */
 export function openPositionedPopover(
   popover: HTMLElement,
   trigger: HTMLElement,
   align: "start" | "end" = "start",
+  preferAbove = false,
 ) {
   if (typeof popover.showPopover === "function") {
     try {
@@ -33,10 +39,15 @@ export function openPositionedPopover(
     Math.min(idealLeft, rightEdge - popoverRect.width - inset),
   );
   const below = triggerRect.bottom + 4;
+  const above = triggerRect.top - popoverRect.height - 4;
+  const fitsBelow = below + popoverRect.height <= bottomEdge - inset;
+  const fitsAbove = above >= topEdge + inset;
   const top =
-    below + popoverRect.height <= bottomEdge - inset
-      ? below
-      : Math.max(topEdge + inset, triggerRect.top - popoverRect.height - 4);
+    preferAbove && fitsAbove
+      ? above
+      : fitsBelow
+        ? below
+        : Math.max(topEdge + inset, above);
 
   popover.style.left = `${Math.round(left)}px`;
   popover.style.top = `${Math.round(top)}px`;
