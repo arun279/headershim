@@ -49,6 +49,7 @@ export function tabInfo(id: number, url?: string): FakeTab {
     frozen: false,
     autoDiscardable: true,
     groupId: -1,
+    lastAccessed: 0,
     ...(url === undefined ? {} : { url }),
   };
 }
