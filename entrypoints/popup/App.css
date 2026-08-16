@@ -103,4 +103,5 @@ body {
 .empty .l1 .mono {
   font-size: 13px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }

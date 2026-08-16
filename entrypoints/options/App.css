@@ -126,7 +126,6 @@
    without a per-paragraph width of its own. */
 .about-page,
 .profiles-page,
-.site-access-page,
 .import-export-page,
 .settings-page {
   max-width: 40rem;

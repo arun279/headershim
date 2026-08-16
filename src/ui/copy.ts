@@ -52,23 +52,33 @@ export const siteAccessCopy = {
   neededHeading: "Needed but not granted",
   partialHeading: "Limited access",
   grantedHeading: "Granted",
-  usedBy: "used by",
-  neededBy: "needed by",
-  partial: (origin: string) =>
-    `granted only to ${origin.replace(/\/\*$/, "")}; broaden to cover the rule's full site scope`,
+  guidance:
+    "Add rules in the popup or rule editor, and this-tab changes in the popup. Grant access there or here. Chrome's controls can also add, limit, or remove access.",
+  usageLead: (coverage: "full" | "partial" | "none") =>
+    coverage === "none" ? "Needed by" : "Used by",
+  partial: (origins: readonly string[]): Sentence => [
+    "Covers only ",
+    data(andList(origins.map((origin) => origin.replace(/\/\*$/, "")))),
+  ],
   ruleCount: (count: number) => `${count} ${rules(count)}`,
   tabCount: (count: number) => `${count} tab ${changes(count)}`,
+  unused: "Not used by an active rule or tab change",
   grant: "Grant",
   grantLabel: (domain: string) => `Grant access to ${domain}`,
+  broaden: "Broaden",
+  broadenLabel: (domain: string) => `Broaden access to ${domain}`,
+  broadened: (domain: string) => `Access to ${domain} broadened`,
+  notBroadened: (domain: string) => `Access to ${domain} was not broadened`,
   grantOriginsLabel: (origins: readonly string[]) =>
     `Grant access to ${andList(origins)}`,
   revoke: "Revoke",
-  revokeLabel: (domain: string) => `Revoke access to ${domain}`,
-  revoked: (domain: string) => `Access to ${domain} revoked`,
-  // A narrow grant removed while the broad grant stands changes nothing
-  // about reach; saying "revoked" there would claim access ended.
+  revokeLabel: (domain: string) => `Remove grant for ${domain}`,
+  revoked: (domain: string) => `No direct grant for ${domain}`,
   revokedUnderAllSites: (domain: string) =>
-    `${domain} grant removed. All-sites access still covers it.`,
+    `No direct grant for ${domain}; all-sites access still covers it`,
+  notGranted: (domain: string) => `Access to ${domain} was not granted`,
+  revokeFailed: (domain: string) =>
+    `Site grant for ${domain} could not be removed`,
   // The standing note: shown while any enabled rule reaches
   // subresources without naming the pages that start those requests.
   initiatorNote:
@@ -86,7 +96,10 @@ export const siteAccessCopy = {
         : `${count} enabled rules attach a credential or change a security header and need all-sites access to run. Allowing all sites lets them run wherever they match.`,
     button: "Allow on all sites",
     on: "All-sites access is on",
-    revoked: "All-sites access revoked",
+    revoke: "Revoke all-sites access",
+    revoked: "All-sites access is off",
+    notGranted: "All-sites access was not granted",
+    revokeFailed: "All-sites access could not be revoked",
   },
 };
 
@@ -170,30 +183,29 @@ export const copy = {
   // The popup readout: the tab-scoped answer and the one exception grammar.
   // Live changes carry no words; only exceptions speak, each in one language.
   readout: {
-    // The one fact. It wraps rather than truncating the count.
-    status: (count: number): Sentence => [
+    status: (count: number, listed: number, held: boolean): Sentence => [
       data(count),
-      ` ${changes(count)} on this tab`,
-    ],
-    // The same fact while everything is paused. The count is the honest summary
-    // of an unusual state, so pause changes its verb rather than removing it.
-    heldStatus: (count: number): Sentence => [
-      data(count),
-      ` ${changes(count)} held on this tab`,
+      ...(count === listed ? [] : [" of ", data(listed)]),
+      ` ${changes(listed)} ${held ? "held " : count === listed ? "" : "running "}on this tab`,
     ],
     newChange: "New change on this tab",
     // Substatus segments, shown only when a count is nonzero.
-    needsAccess: (count: number) => `${count} needs access`,
+    needsAccess: (count: number) =>
+      count === 1 ? "1 more needs access" : `${count} more need access`,
     refused: (count: number) =>
-      count === 1 ? "1 needs attention" : `${count} need attention`,
+      count === 1 ? "1 more needs attention" : `${count} more need attention`,
     managed: (count: number) =>
-      count === 1 ? "1 managed by Chrome" : `${count} managed by Chrome`,
+      count === 1
+        ? "1 more is managed by Chrome"
+        : `${count} more are managed by Chrome`,
     security: (count: number) =>
-      `${count} security-sensitive ${changes(count)}`,
+      `Includes ${count} security-sensitive ${changes(count)}`,
     overridden: (count: number) =>
       count === 1
-        ? "1 overridden by another rule"
-        : `${count} overridden by another rule`,
+        ? "1 more is overridden by another rule"
+        : `${count} more are overridden by another rule`,
+    globalNeedsAccess:
+      "Some enabled rules are not running on sites without access.",
     direction: { request: "Request", response: "Response" },
     verb: { set: "Set", append: "Append", remove: "Remove" },
     // A change that pause or missing access prevents states what it would do,
@@ -219,12 +231,15 @@ export const copy = {
     // A rule whose match Chrome settles per request, against a URL this popup
     // never sees. Saying "live" here would draw a fact it cannot know.
     unconfirmedReason: "Only Chrome can tell whether this matches here",
-    unconfirmed: (count: number) => `${count} confirmable only by Chrome`,
+    unconfirmed: (count: number) =>
+      count === 1
+        ? "Includes 1 match confirmable only by Chrome"
+        : `Includes ${count} matches confirmable only by Chrome`,
     outOfSync: "Header changes are not applied yet",
     grant: "Grant",
     // A rule Chrome can only run with broad access says so on the button, so the
     // click is honest before Chrome's own all-sites dialog appears.
-    grantAllSites: "Grant all sites",
+    grantAllSites: siteAccessCopy.allSites.button,
     // The switch on a popup line is the rule's switch, not this tab's, so a rule
     // that reaches past this tab says how far before anyone flips it.
     widerReach: {
@@ -622,8 +637,7 @@ export const copy = {
   },
 
   emptyState: {
-    siteAccess:
-      "No sites granted yet. Grants appear here when a rule asks for one.",
+    siteAccess: "No individual sites to show.",
   },
 
   scopeSummary: {

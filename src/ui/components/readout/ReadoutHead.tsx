@@ -8,6 +8,7 @@ import { ProfilePicker, type ProfilePickerProps } from "./ProfilePicker";
 type ReadoutHeadProps = Omit<ProfilePickerProps, "onSwitch"> & {
   readout: TabReadout;
   hasRows: boolean;
+  globalNeedsAccess: boolean;
   paused: boolean;
   onSwitchProfile: (profileId: string) => void;
 };
@@ -20,6 +21,7 @@ type ReadoutHeadProps = Omit<ProfilePickerProps, "onSwitch"> & {
 export function ReadoutHead({
   readout,
   hasRows,
+  globalNeedsAccess,
   profiles,
   activeProfile,
   previousProfileId,
@@ -86,18 +88,24 @@ export function ReadoutHead({
         />
       </div>
 
+      {globalNeedsAccess && (
+        <p class="global-access" role="status">
+          {copy.readout.globalNeedsAccess}
+        </p>
+      )}
+
       {showGlance && (
         <div class="glance-wrap">
           <div class="glance">
             {(readout.total > 0 || readout.held > 0 || attention || doubt) && (
               <span
                 class={`lamp ${
-                  attention
-                    ? "warn"
-                    : doubt
-                      ? "doubt"
-                      : paused
-                        ? "held"
+                  paused
+                    ? "held"
+                    : attention
+                      ? "warn"
+                      : doubt
+                        ? "doubt"
                         : "live"
                 }`}
                 aria-hidden="true"
@@ -105,9 +113,11 @@ export function ReadoutHead({
             )}
             <p class="status">
               {sentence(
-                paused
-                  ? copy.readout.heldStatus(readout.held)
-                  : copy.readout.status(readout.total),
+                copy.readout.status(
+                  paused ? readout.held : readout.total,
+                  readout.listed,
+                  paused,
+                ),
               )}
             </p>
           </div>

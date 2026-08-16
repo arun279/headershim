@@ -69,14 +69,25 @@ function expectHouseVoice(text: string): void {
 
 describe("copy", () => {
   it("answers the tab-scoped question and counts only exceptions", () => {
-    expect(sentenceText(copy.readout.status(1))).toBe("1 change on this tab");
-    expect(sentenceText(copy.readout.status(4))).toBe("4 changes on this tab");
-    expect(copy.readout.needsAccess(2)).toBe("2 needs access");
-    expect(copy.readout.overridden(1)).toBe("1 overridden by another rule");
-    expect(copy.readout.refused(3)).toBe("3 need attention");
+    expect(sentenceText(copy.readout.status(1, 1, false))).toBe(
+      "1 change on this tab",
+    );
+    expect(sentenceText(copy.readout.status(2, 4, false))).toBe(
+      "2 of 4 changes running on this tab",
+    );
+    expect(sentenceText(copy.readout.status(2, 4, true))).toBe(
+      "2 of 4 changes held on this tab",
+    );
+    expect(copy.readout.needsAccess(2)).toBe("2 more need access");
+    expect(copy.readout.overridden(1)).toBe(
+      "1 more is overridden by another rule",
+    );
+    expect(copy.readout.refused(3)).toBe("3 more need attention");
     // The one state only Chrome can settle names Chrome at the count, not a
     // bare "unconfirmed".
-    expect(copy.readout.unconfirmed(2)).toBe("2 confirmable only by Chrome");
+    expect(copy.readout.unconfirmed(2)).toBe(
+      "Includes 2 matches confirmable only by Chrome",
+    );
     expect(copy.readout.overriddenBy("staging")).toBe("overridden by staging");
     expect(copy.readout.needsAccessReason(true)).toBe(
       "Not running. Grant access to run it on this tab.",
@@ -221,21 +232,53 @@ describe("copy", () => {
         "title",
       ].sort(),
     );
-    expect(siteAccessCopy.usedBy).toBe("used by");
-    expect(siteAccessCopy.neededBy).toBe("needed by");
+    expect(siteAccessCopy.usageLead("none")).toBe("Needed by");
+    expect(siteAccessCopy.usageLead("partial")).toBe("Used by");
+    expect(siteAccessCopy.usageLead("full")).toBe("Used by");
     expect(siteAccessCopy.partialHeading).toBe("Limited access");
-    expect(siteAccessCopy.partial("https://api.example.com/*")).toContain(
-      "granted only to https://api.example.com",
+    expect(siteAccessCopy.guidance).toContain(
+      "Add rules in the popup or rule editor, and this-tab changes in the popup.",
     );
+    expect(siteAccessCopy.guidance).toContain("Grant access there or here.");
+    expect(siteAccessCopy.guidance).toContain(
+      "Chrome's controls can also add, limit, or remove access.",
+    );
+    expect(
+      sentenceText(siteAccessCopy.partial(["https://*.api.example.com/*"])),
+    ).toContain("Covers only https://*.api.example.com");
+    expect(
+      sentenceText(
+        siteAccessCopy.partial([
+          "https://api.example.com/*",
+          "http://api.example.com/*",
+        ]),
+      ),
+    ).toContain(
+      "Covers only https://api.example.com and http://api.example.com",
+    );
+    expect(
+      sentenceText(siteAccessCopy.partial(["one", "two", "three"])),
+    ).toContain("one, two and three");
+    expect(
+      sentenceText(
+        siteAccessCopy.partial(["one", "two", "three", "four", "five", "six"]),
+      ),
+    ).toContain("one, two, three, four, five and six");
+    expect(copy.readout.grantAllSites).toBe(siteAccessCopy.allSites.button);
     expect(siteAccessCopy.ruleCount(2)).toBe("2 rules");
     expect(siteAccessCopy.tabCount(1)).toBe("1 tab change");
     expect(siteAccessCopy.revoked("api.example.com")).toBe(
-      "Access to api.example.com revoked",
+      "No direct grant for api.example.com",
     );
-    // While the broad grant stands, removing a narrow grant must not claim
-    // access ended.
-    expect(siteAccessCopy.revokedUnderAllSites("api.example.com")).toBe(
-      "api.example.com grant removed. All-sites access still covers it.",
+    expect(siteAccessCopy.notGranted("api.example.com")).toBe(
+      "Access to api.example.com was not granted",
+    );
+    expect(siteAccessCopy.revokeFailed("api.example.com")).toBe(
+      "Site grant for api.example.com could not be removed",
+    );
+    expect(siteAccessCopy.allSites.revoke).toBe("Revoke all-sites access");
+    expect(siteAccessCopy.notBroadened("api.example.com")).toBe(
+      "Access to api.example.com was not broadened",
     );
   });
 
