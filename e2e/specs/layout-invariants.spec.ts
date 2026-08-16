@@ -298,16 +298,18 @@ test("this-tab composer names the narrowed grant it will ask for", {
 
   for (const theme of THEMES) {
     const doc = pathologicalDoc(host);
+    await seedState(serviceWorker, withTheme(doc, theme));
 
-    const composer = await openPopupOnHost({
-      context,
-      extensionId,
-      foregroundPage: web,
-      serviceWorker,
-      doc,
-      theme,
-      reducedMotion: true,
-    });
+    const composer = await context.newPage();
+    await composer.setViewportSize(POPUP);
+    await composer.emulateMedia({ reducedMotion: "reduce" });
+    await composer.goto(popupUrl(extensionId));
+    await web.bringToFront();
+    await composer.reload();
+    await expect(
+      composer.getByRole("button", { name: copy.readout.justThisTab }),
+    ).toBeVisible();
+
     await composer
       .getByRole("button", { name: copy.readout.justThisTab })
       .click();
