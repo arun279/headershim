@@ -83,11 +83,9 @@ describe("copy", () => {
       "1 more is overridden by another rule",
     );
     expect(copy.readout.refused(3)).toBe("3 more need attention");
-    // The one state only Chrome can settle names Chrome at the count, not a
+    // The count phrase must say what the state means on its own, not a
     // bare "unconfirmed".
-    expect(copy.readout.unconfirmed(2)).toBe(
-      "Includes 2 matches confirmable only by Chrome",
-    );
+    expect(copy.readout.unconfirmed(2)).toBe("Includes 2 decided per request");
     expect(copy.readout.overriddenBy("staging")).toBe("overridden by staging");
     expect(copy.readout.needsAccessReason(true)).toBe(
       "Not running. Grant access to run it on this tab.",
@@ -179,16 +177,14 @@ describe("copy", () => {
     });
     // One canonical label per state across the popup and the options
     // Active-changes surface: no per-surface drift.
-    expect(copy.options.traffic.status.unconfirmed).toBe(
-      "confirmable only by Chrome",
-    );
+    expect(copy.options.traffic.status.unconfirmed).toBe("decided per request");
     expect(copy.options.traffic.status.needsAccess).toBe("needs access");
     expect(copy.readout.unconfirmed(3)).toContain(
       copy.options.traffic.status.unconfirmed,
     );
     // The per-line reason stays the honest sentence that never presumes a match.
     expect(copy.readout.unconfirmedReason).toBe(
-      "Only Chrome can tell whether this matches here",
+      "Whether this runs is decided per request",
     );
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",

@@ -230,11 +230,11 @@ export const copy = {
     managedReason: managedHeader,
     // A rule whose match Chrome settles per request, against a URL this popup
     // never sees. Saying "live" here would draw a fact it cannot know.
-    unconfirmedReason: "Only Chrome can tell whether this matches here",
+    unconfirmedReason: "Whether this runs is decided per request",
     unconfirmed: (count: number) =>
       count === 1
-        ? "Includes 1 match confirmable only by Chrome"
-        : `Includes ${count} matches confirmable only by Chrome`,
+        ? "Includes 1 decided per request"
+        : `Includes ${count} decided per request`,
     outOfSync: "Header changes are not applied yet",
     grant: "Grant",
     // A rule Chrome can only run with broad access says so on the button, so the
@@ -391,7 +391,7 @@ export const copy = {
       title: "Active changes",
       status: {
         live: "live",
-        unconfirmed: "confirmable only by Chrome",
+        unconfirmed: "decided per request",
         needsAccess: "needs access",
         refused: "refused by Chrome",
         overLimit: "rule limit reached",
@@ -725,7 +725,7 @@ export const copy = {
     // compiles a pattern with no anchor into, which is the reach that leaks.
     patternHint: [
       [
-        data("||example.com/"),
+        data("||example.com^"),
         " matches the site, its subdomains, and every path.",
       ],
       [
