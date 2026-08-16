@@ -17,10 +17,14 @@ import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 // A git hook exports GIT_DIR, which would aim every fixture command at the
-// repository running the suite instead of the scratch repository at its cwd.
+// repository running the suite instead of the scratch repository at its cwd,
+// and CI exports the GITHUB_* and PLAYWRIGHT_* variables the checker and the
+// hook read. The suite controls every input its subjects consume.
 const isolatedEnv = {
   ...Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+    Object.entries(process.env).filter(
+      ([name]) => !/^(GIT_|GITHUB_|PLAYWRIGHT_)/.test(name),
+    ),
   ),
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
@@ -136,13 +140,7 @@ function runChecker(cwd, env = {}) {
     {
       cwd,
       encoding: "utf8",
-      env: {
-        ...isolatedEnv,
-        GITHUB_BASE_REF: "",
-        PLAYWRIGHT_BASE_REF: "",
-        PLAYWRIGHT_PREVIOUS_REFS: "",
-        ...env,
-      },
+      env: { ...isolatedEnv, ...env },
     },
   );
 }
