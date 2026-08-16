@@ -251,11 +251,13 @@ export const copy = {
     editValue: (header: string) => `Edit ${header} value`,
     // The footer's two openers are actions, not passive scopes: addChange opens
     // the saved-rule editor, justThisTab the this-tab composer. addThisTab is
-    // that composer's commit, left bare so it neither repeats the "THIS TAB
-    // ONLY" scope its heading already states, nor collides with the opener.
+    // that composer's commit, left bare when access is already held so it
+    // neither repeats the "THIS TAB ONLY" scope its heading already states,
+    // nor collides with the opener.
     addChange: "Add a change",
     justThisTab: "Add for this tab",
     addThisTab: "Add",
+    addThisTabAndAllow: (host: string) => `Add and allow ${host}`,
     pauseSwitch: "All header changes",
     pausedBanner:
       "Everything paused. Switching back on restores this exact state.",

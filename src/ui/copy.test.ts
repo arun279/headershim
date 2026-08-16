@@ -130,6 +130,9 @@ describe("copy", () => {
     expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
       "Create rule and allow api.example.com",
     );
+    expect(copy.readout.addThisTabAndAllow("api.example.com")).toBe(
+      "Add and allow api.example.com",
+    );
     expect(copy.actions.saveChangesAndAllow("api.example.com")).toBe(
       "Save changes and allow api.example.com",
     );

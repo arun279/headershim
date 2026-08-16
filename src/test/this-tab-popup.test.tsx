@@ -87,6 +87,23 @@ async function composeChange(): Promise<HTMLElement> {
 }
 
 describe("popup This-tab overrides", () => {
+  it("keeps the composer commit bare when access is already held", async () => {
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+    expect(composerCommitLabel(root)).toBe(copy.readout.addThisTab);
+  });
+
+  it("names the host when the composer commit will request access", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+    expect(composerCommitLabel(root)).toBe(
+      copy.readout.addThisTabAndAllow("app.example.com"),
+    );
+  });
+
   it("opens the composer with t and commits a this-tab change", async () => {
     const root = await composeChange();
     expect(root.querySelector(".compose")).toBeNull();
@@ -490,3 +507,10 @@ describe("popup This-tab overrides", () => {
     expect((await readSession()).tabs).toEqual({});
   });
 });
+
+function composerCommitLabel(root: HTMLElement): string | undefined {
+  return root
+    .querySelector(".compose .btn.primary")
+    ?.textContent?.replace("↵", "")
+    .trim();
+}

@@ -794,3 +794,10 @@
   padding: 11px 13px;
   border-top: var(--hairline) solid var(--hair);
 }
+/* The commit button names the site its grant will ask Chrome for, and the
+   popup is 398px wide, so its label must wrap rather than push Cancel out of the panel. */
+.cfoot .btn.primary {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+}

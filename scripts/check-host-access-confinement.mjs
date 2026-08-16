@@ -48,11 +48,36 @@ function testCallRanges(file, source) {
   let state = 0;
   let callStart = -1;
   let depth = 0;
+  // One counter per open template substitution (`${`): scan() does not know
+  // template nesting on its own, so a `}` that closes a substitution reads
+  // as an ordinary brace unless reScanTemplateToken tells the scanner to
+  // resume template text. A `{` inside the substitution counts against that
+  // same counter first, so an object literal there is not mistaken for the
+  // substitution's close.
+  const templateDepths = [];
   for (
     let kind = scanner.scan();
     kind !== SyntaxKind.EndOfFile;
     kind = scanner.scan()
   ) {
+    if (kind === SyntaxKind.TemplateHead) {
+      templateDepths.push(0);
+    } else if (
+      templateDepths.length > 0 &&
+      kind === SyntaxKind.OpenBraceToken
+    ) {
+      templateDepths[templateDepths.length - 1] += 1;
+    } else if (
+      templateDepths.length > 0 &&
+      kind === SyntaxKind.CloseBraceToken
+    ) {
+      if (templateDepths[templateDepths.length - 1] > 0) {
+        templateDepths[templateDepths.length - 1] -= 1;
+      } else {
+        kind = scanner.reScanTemplateToken(false);
+        if (kind === SyntaxKind.TemplateTail) templateDepths.pop();
+      }
+    }
     if (depth > 0) {
       if (kind === SyntaxKind.OpenParenToken) depth += 1;
       else if (kind === SyntaxKind.CloseParenToken) {
@@ -88,6 +113,11 @@ function testCallRanges(file, source) {
   return ranges;
 }
 
+const SEEDER = "seedStateAndWait(";
+// A helper that wraps the seeder inherits its precondition.
+const WRAPPING_HELPERS = ["openPopupOnHost("];
+const CONFINED_CALLS = [SEEDER, ...WRAPPING_HELPERS];
+
 const HOST_ACCESS_TAG = /\btag\s*:\s*["']@host-access["']/u;
 const HOST_ACCESS_TITLE = /^test(?:\.\w+)?\(\s*["']@host-access\b/u;
 
@@ -96,11 +126,12 @@ for (const file of endToEndSpecs()) {
   const source = readFileSync(path.join(root, file), "utf8");
   for (const [start, end] of testCallRanges(file, source)) {
     const span = source.slice(start, end);
-    if (!span.includes("seedStateAndWait(")) continue;
+    const call = CONFINED_CALLS.find((target) => span.includes(target));
+    if (call === undefined) continue;
     if (HOST_ACCESS_TAG.test(span) || HOST_ACCESS_TITLE.test(span)) continue;
     const line = source.slice(0, start).split("\n").length;
     violations.push(
-      `${file}:${line}: seedStateAndWait(...) called in a test not confined to @host-access.`,
+      `${file}:${line}: ${call}...) called in a test not confined to @host-access.`,
     );
   }
 }
@@ -110,7 +141,7 @@ if (violations.length > 0) {
     console.error(violation);
   }
   console.error(
-    `\n${violations.length} unconfined seedStateAndWait() call(s): confine the test with tag: "@host-access" (or a leading "@host-access" title word), or seed with seedState instead.`,
+    `\n${violations.length} unconfined host-access seeder call(s): confine the test with tag: "@host-access" (or a leading "@host-access" title word), or seed with seedState instead.`,
   );
   process.exit(1);
 }
