@@ -289,6 +289,40 @@ test("partial site-access rows hold their surface", {
   await page.close();
 });
 
+test("this-tab composer names the narrowed grant it will ask for", {
+  tag: "@narrow-host-access",
+}, async ({ context, echoServers, extensionId, serviceWorker }) => {
+  const host = new URL(echoServers.h1Url).hostname;
+  const web = await context.newPage();
+  await web.goto(`${echoServers.h1Url}/layout`);
+
+  for (const theme of THEMES) {
+    const doc = pathologicalDoc(host);
+
+    const composer = await openPopupOnHost({
+      context,
+      extensionId,
+      foregroundPage: web,
+      serviceWorker,
+      doc,
+      theme,
+      reducedMotion: true,
+    });
+    await composer
+      .getByRole("button", { name: copy.readout.justThisTab })
+      .click();
+    await expect(
+      composer.getByRole("button", {
+        name: copy.readout.addThisTabAndAllow(host),
+      }),
+    ).toBeVisible();
+    await measure(composer, theme, `popup narrow this-tab composer (${theme})`);
+    await composer.close();
+  }
+
+  await web.close();
+});
+
 async function sweepOptions(
   page: Page,
   extensionId: string,
