@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { copy } from "../../copy";
 import {
+  canRun,
   caveatNote,
   controlTone,
   displayTone,
@@ -23,11 +24,12 @@ interface ChangeLineProps {
 
 /**
  * One change, in the one grammar: a severity spine (teal live, amber a grant
- * away, managed, or not applied yet, red refused, grey-dashed at rest), the
- * operation glyph, and the wire bytes. A running line adds no reason unless
- * only Chrome can settle its match; the other things that speak are an
- * exception, said once, and a reach past this tab, because the switch on the row
- * is the rule's switch and turning it off here turns it off there.
+ * away or not applied yet, red refused, grey-dashed at rest), the operation
+ * glyph, and the wire bytes. A running line adds no reason unless only Chrome
+ * can settle its match; the other things that speak are an exception, said
+ * once, a transport caveat, a second and independent fact from the reason
+ * above it, and a reach past this tab, because the switch on the row is the
+ * rule's switch and turning it off here turns it off there.
  */
 export function ChangeLine({
   change,
@@ -43,7 +45,12 @@ export function ChangeLine({
     change.outcome.kind === "runs-if-matched"
       ? undefined
       : outcomeReason(change.outcome, change.source === "override");
-  const caveat = caveatNote(change.caveats, change.header, change.operation);
+  // A caveat states a wire consequence, so it says nothing for a change that
+  // will never reach the wire (a refusal, an over-limit rule, one shadowed by
+  // another), gated the same way the popup's transport count is.
+  const caveat = canRun(change.outcome)
+    ? caveatNote(change.caveats, change.header, change.operation)
+    : undefined;
   const grant = grantAction(change.outcome);
   const tone = displayTone(change.outcome, change.caveats);
   const toggleTone = controlTone(change.outcome, change.paused);

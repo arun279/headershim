@@ -63,5 +63,15 @@
     "base": "d2b396f7eaa4e65b703d9f10ddb67cd547b09238",
     "test": "shipped: e2e/specs/this-tab.spec.ts > cross-tab confinement holds regardless of open same-origin and cross-origin tabs",
     "reason": "Moved to host-access under the same name. With no grant the session band stays empty, so shipped has no installed rule whose tabIds could show the confinement this asserts."
+  },
+  {
+    "base": "abf46f792d5307364f3eace7a3b578be728f600b",
+    "test": "shipped: e2e/specs/dnr-contract.spec.ts > matches Chrome's dynamic-rule boundary",
+    "reason": "Moved to host-access under the same name. It relies on seedStateAndWait, whose precondition is the host-access build's all-sites grant (measured: an unconfined seedState here races the background's own reconciliation of the seeded doc, which can strip a probe rule that landed while it was still computing its removal batch)."
+  },
+  {
+    "base": "abf46f792d5307364f3eace7a3b578be728f600b",
+    "test": "shipped: e2e/specs/dnr-contract.spec.ts > rejects an invalid batch atomically",
+    "reason": "Moved to host-access under the same name, for the same reconciliation race as the sibling test above."
   }
 ]

@@ -177,13 +177,13 @@ const LIMIT_CASES = {
 >;
 
 const CAVEAT_CASES = {
-  transport: {
-    caveat: "transport",
-    expected: copy.readout.refusedReason.host,
+  "h1-only": {
+    caveat: "h1-only",
+    expected: copy.advisories.h1Only,
   },
-  "network-managed": {
-    caveat: "network-managed",
-    expected: copy.readout.managedReason,
+  "h2-breaking": {
+    caveat: "h2-breaking",
+    expected: copy.advisories.h2Breaking,
   },
   "security-response": {
     caveat: "security-response",
@@ -193,6 +193,36 @@ const CAVEAT_CASES = {
   Caveat,
   { readonly caveat: Caveat; readonly expected: string }
 >;
+
+// The headers whose measured truth differs from their family's one sentence,
+// so the note resolves per header where the caveat is read.
+const TRANSPORT_NOTE_CASES = [
+  {
+    header: "connection",
+    caveats: ["h1-only"],
+    expected: copy.advisories.h1Only,
+  },
+  {
+    header: "host",
+    caveats: ["h1-only"],
+    expected: copy.advisories.host,
+  },
+  {
+    header: "keep-alive",
+    caveats: ["h2-breaking"],
+    expected: copy.advisories.h2Breaking,
+  },
+  { header: " TE ", caveats: ["h2-breaking"], expected: copy.advisories.te },
+  {
+    header: "content-length",
+    caveats: ["h2-breaking"],
+    expected: copy.advisories.contentLength,
+  },
+] as const satisfies readonly {
+  readonly header: string;
+  readonly caveats: readonly Caveat[];
+  readonly expected: string;
+}[];
 
 const VERB_CASES = {
   set: {
@@ -387,13 +417,20 @@ describe("caveatNote", () => {
     },
   );
 
+  it.each(TRANSPORT_NOTE_CASES)(
+    "resolves the note for $header from the header, not the family alone",
+    ({ header, caveats, expected }) => {
+      expect(caveatNote(caveats, header, "set")).toBe(expected);
+    },
+  );
+
   it("reports the first caveat", () => {
     expect(
       caveatNote([
-        CAVEAT_CASES["network-managed"].caveat,
-        CAVEAT_CASES.transport.caveat,
+        CAVEAT_CASES["h1-only"].caveat,
+        CAVEAT_CASES["security-response"].caveat,
       ]),
-    ).toBe(copy.readout.managedReason);
+    ).toBe(copy.advisories.h1Only);
   });
 
   it("names a removed security response header", () => {

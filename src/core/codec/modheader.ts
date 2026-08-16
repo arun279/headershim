@@ -1,5 +1,5 @@
 import { BADGE_PALETTE } from "../badge";
-import { classifyHeaderName, normalizeHeaderName } from "../headers";
+import { allowsRequestAppend, normalizeHeaderName } from "../headers";
 import {
   availableProfileName,
   type BadgeColor,
@@ -357,7 +357,7 @@ function mapHeaderRule(
   const operation =
     direction === "request" &&
     requestedOperation === "append" &&
-    classifyHeaderName(header).requestAppend === "disallowed"
+    !allowsRequestAppend(header)
       ? "set"
       : requestedOperation;
   // The header, not the comment: the warning is about the header, and it is

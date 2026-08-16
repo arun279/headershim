@@ -61,7 +61,7 @@ export interface TabReadout {
   readonly overrides: readonly TabChange[];
   readonly needsAccess: number;
   readonly refused: number;
-  readonly managed: number;
+  readonly transport: number;
   readonly security: number;
   readonly overridden: number;
   readonly unconfirmed: number;
@@ -226,7 +226,7 @@ function summarize(
   | "held"
   | "needsAccess"
   | "refused"
-  | "managed"
+  | "transport"
   | "security"
   | "overridden"
   | "unconfirmed"
@@ -234,7 +234,7 @@ function summarize(
   let running = 0;
   let needsAccess = 0;
   let refused = 0;
-  let managed = 0;
+  let transport = 0;
   let security = 0;
   let overridden = 0;
   let unconfirmed = 0;
@@ -242,18 +242,23 @@ function summarize(
     const { outcome } = change;
     const canRun =
       outcome.kind === "runs" || outcome.kind === "runs-if-matched";
-    const networkManaged = change.caveats.includes("network-managed");
+    // The popup cannot see the connection a request will use, so a change
+    // that is definitely running (outcome "runs") but whose header carries a
+    // transport caveat is left out of the headline count and carried by the
+    // transport count instead. A "runs-if-matched" change is already
+    // uncertain for an unrelated reason (its match), so a caveat on top of
+    // that changes nothing about where it is counted.
+    const transportCaveat =
+      change.caveats.includes("h1-only") ||
+      change.caveats.includes("h2-breaking");
     if (canRun && change.caveats.includes("security-response")) {
       security += 1;
     }
-    const transport = change.caveats.includes("transport");
-    if (outcome.kind === "runs" && !networkManaged && !transport) {
-      running += 1;
+    if (outcome.kind === "runs") {
+      if (!transportCaveat) running += 1;
     } else if (outcome.kind === "runs-if-matched") {
-      if (!networkManaged && !transport) {
-        running += 1;
-        unconfirmed += 1;
-      }
+      running += 1;
+      unconfirmed += 1;
     } else if (outcome.kind === "shadowed") {
       overridden += 1;
     } else if (outcome.kind === "absent") {
@@ -266,7 +271,7 @@ function summarize(
         refused += 1;
       }
     }
-    if (canRun && networkManaged) managed += 1;
+    if (outcome.kind === "runs" && transportCaveat) transport += 1;
   }
   return {
     listed: changes.length,
@@ -274,7 +279,7 @@ function summarize(
     held: paused ? running : 0,
     needsAccess,
     refused,
-    managed,
+    transport,
     security,
     overridden,
     unconfirmed,

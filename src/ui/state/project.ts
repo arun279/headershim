@@ -19,7 +19,7 @@ export interface TabContext {
 
 export type Undecidable = "url-filter" | "regex-filter" | "initiator-domains";
 
-export type Caveat = "transport" | "network-managed" | "security-response";
+export type Caveat = "h1-only" | "h2-breaking" | "security-response";
 
 export type TabOutcome =
   | { readonly kind: "runs" }
@@ -272,11 +272,14 @@ export function resourceTypesContain(
 
 export function caveatsFor(entry: Entry): Caveat[] {
   const caveats: Caveat[] = [];
-  const advisory = classifyHeaderName(entry.header).advisories[0];
-  if (advisory?.kind === "host-http2") {
-    caveats.push("transport");
-  } else if (advisory?.kind === "network-managed") {
-    caveats.push("network-managed");
+  // Host joins the h1-only category: rewritten on the HTTP/1.1 wire, a no-op
+  // on HTTP/2, the same shape as connection and transfer-encoding. Its note
+  // text stays its own, resolved from the header name where the caveat is read.
+  const advisory = classifyHeaderName(entry.header, entry.stage).advisories[0];
+  if (advisory?.kind === "h1-only" || advisory?.kind === "host-http2") {
+    caveats.push("h1-only");
+  } else if (advisory?.kind === "h2-breaking") {
+    caveats.push("h2-breaking");
   }
   if (entry.stage === "response" && isSecurityResponseHeader(entry.header)) {
     caveats.push("security-response");

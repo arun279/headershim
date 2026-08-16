@@ -106,15 +106,15 @@ describe("all rules", () => {
     expect(hosts).toContain("api.example.com");
     expect(hosts).toContain("other.example.com");
 
-    // A granted rule is live; the invalid header is refused; the managed rule
-    // carries its caveat; the ungranted rule offers a Grant.
+    // A granted rule is live; the invalid header is refused; the h1-only rule
+    // carries its transport caveat; the ungranted rule offers a Grant.
     expect(root.querySelector(".fleet-row.live")).not.toBeNull();
     expect(root.querySelector(".fleet-row.stop")).not.toBeNull();
     expect(
       [...root.querySelectorAll(".fleet-row")]
         .find((row) => row.textContent?.includes("connection"))
         ?.querySelector(".why")?.textContent,
-    ).toContain(copy.readout.managedReason);
+    ).toContain(copy.advisories.h1Only);
     const blocked = [...root.querySelectorAll(".fleet-row.amber")].find(
       (row) => row.querySelector(".grant") !== null,
     );
@@ -141,12 +141,12 @@ describe("all rules", () => {
     // even when it carries a network caveat.
     const live = within(root, '.fleet-row.live [role="switch"]');
     const refused = within(root, '.fleet-row.stop [role="switch"]');
-    const managedRow = [...root.querySelectorAll(".fleet-row")].find((row) =>
+    const caveatedRow = [...root.querySelectorAll(".fleet-row")].find((row) =>
       row.textContent?.includes("connection"),
     );
-    const managed = managedRow?.querySelector('[role="switch"]');
-    if (!(managed instanceof HTMLElement)) {
-      throw new Error("missing managed switch");
+    const caveated = caveatedRow?.querySelector('[role="switch"]');
+    if (!(caveated instanceof HTMLElement)) {
+      throw new Error("missing caveated switch");
     }
     const needsAccessRow = [...root.querySelectorAll(".fleet-row.amber")].find(
       (row) => row.querySelector(".grant") !== null,
@@ -157,11 +157,11 @@ describe("all rules", () => {
     }
     expect(live.getAttribute("aria-checked")).toBe("true");
     expect(refused.getAttribute("aria-checked")).toBe("true");
-    expect(managed.getAttribute("aria-checked")).toBe("true");
+    expect(caveated.getAttribute("aria-checked")).toBe("true");
     expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
-    expect(managed.className).toBe("sw");
+    expect(caveated.className).toBe("sw");
     expect(needsAccess.className).toBe("sw sw-blocked");
   });
 
@@ -514,14 +514,22 @@ describe("active changes", () => {
     expect(rows.length).toBe(3);
     expect(root.querySelector(".tape-row.stop")).not.toBeNull();
     expect(root.querySelector(".tape-row.live")).not.toBeNull();
-    const managed = rows.find((row) => row.textContent?.includes("connection"));
-    expect(managed?.classList.contains("amber")).toBe(true);
-    expect(managed?.querySelector(".tape-status")?.textContent).toBe(
-      copy.options.traffic.status.managed,
+    // Two independent facts on the caveated row: the status word says it is
+    // installed and the caveat word carries the transport truth beside it.
+    const caveated = rows.find((row) =>
+      row.textContent?.includes("connection"),
+    );
+    expect(caveated?.classList.contains("amber")).toBe(true);
+    expect(caveated?.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.live,
+    );
+    expect(caveated?.querySelector(".tape-caveat")?.textContent).toBe(
+      copy.options.traffic.caveat.h1Only,
     );
     expect(root.querySelector(".tape-row.stop .tape-status")?.textContent).toBe(
       copy.options.traffic.status.refused,
     );
+    expect(root.querySelector(".tape-row.stop .tape-caveat")).toBeNull();
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
   });
@@ -543,8 +551,60 @@ describe("active changes", () => {
     expect(row.querySelector(".tape-verb")?.textContent).toBe(
       copy.readout.heldVerb.set,
     );
-    expect(row.querySelector(".tape-status")?.textContent).toBe(
+    // The Grant pill carries the access fact itself, so no "needs access"
+    // status word doubles it.
+    expect(row.querySelector(".tape-action")?.textContent).toBe(
       siteAccessCopy.grant,
+    );
+    expect(row.querySelector(".tape-status")).toBeNull();
+  });
+
+  it("keeps the caveat word beside the Grant action", async () => {
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "transfer-encoding",
+            scope: domainScope("api.example.com"),
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+    const row = within(root, ".tape-row.amber");
+
+    expect(row.querySelector(".tape-action")?.textContent).toBe(
+      siteAccessCopy.grant,
+    );
+    expect(row.querySelector(".tape-caveat")?.textContent).toBe(
+      copy.options.traffic.caveat.h1Only,
+    );
+    expect(row.querySelector(".tape-status")).toBeNull();
+  });
+
+  it("keeps the status word and gains the caveat word on a cross-site row", async () => {
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "te",
+            scope: { type: "pattern", pattern: "||example.com^", hosts: [] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount("#traffic");
+    const row = within(root, ".tape-row");
+
+    // A cross-site row names no single site to ask for, so no pill: the
+    // status word stays, and te carries its own word because "breaks on
+    // HTTP/2" is false for the one value HTTP/2 allows it.
+    expect(row.querySelector(".tape-action")).toBeNull();
+    expect(row.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.needsAccess,
+    );
+    expect(row.querySelector(".tape-caveat")?.textContent).toBe(
+      copy.options.traffic.caveat.te,
     );
   });
 

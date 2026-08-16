@@ -83,6 +83,15 @@ describe("copy", () => {
       "1 more is overridden by another rule",
     );
     expect(copy.readout.refused(3)).toBe("3 more need attention");
+    // The transport count names the caveat that set these changes apart, not
+    // the working half every member shares; what each one does on HTTP/2
+    // differs per header and is carried by that change's own line.
+    expect(copy.readout.transport(1)).toBe(
+      "1 more depends on the connection or its value",
+    );
+    expect(copy.readout.transport(3)).toBe(
+      "3 more depend on the connection or their value",
+    );
     // The count phrase must say what the state means on its own, not a
     // bare "unconfirmed".
     expect(copy.readout.unconfirmed(2)).toBe("Includes 2 decided per request");
@@ -150,8 +159,28 @@ describe("copy", () => {
   });
 
   it("keeps the static canonical strings verbatim", () => {
-    expect(copy.readout.refusedReason.host).toBe(
-      "Chrome won't let extensions change the Host header on HTTP/2, but it can on HTTP/1.1",
+    // The host sentence has one home: the editor advisory, which the popup
+    // reason (transportNote) also reads, so the two surfaces cannot state
+    // different truths about the Host header.
+    expect(copy.advisories.host).toBe(
+      "Rewrites the Host header on HTTP/1.1. On HTTP/2 Chrome keeps the real authority, so the change has nothing to act on there.",
+    );
+    // The transport sentences, verbatim. Each names the transport and states
+    // the measured wire behavior of its family, and nothing more: h1-only
+    // members arrive on HTTP/1.1 and are absent on HTTP/2; h2-breaking members
+    // arrive on HTTP/1.1 and fail requests on HTTP/2; te and content-length
+    // carry the value conditions under which HTTP/2 lets them through.
+    expect(copy.advisories.h1Only).toBe(
+      "Takes effect on HTTP/1.1 only; HTTP/2 has no such header and drops the change.",
+    );
+    expect(copy.advisories.h2Breaking).toBe(
+      "Takes effect on HTTP/1.1; on HTTP/2 this header makes requests fail.",
+    );
+    expect(copy.advisories.te).toBe(
+      "HTTP/2 allows te only as trailers; any other value makes requests fail there. HTTP/1.1 sends it as written.",
+    );
+    expect(copy.advisories.contentLength).toBe(
+      "Sent as written on HTTP/1.1, even when it contradicts the body. On HTTP/2, requests fail when it does.",
     );
     // Names the control the footer actually has, not a "Resume" that never
     // appears on any surface.
@@ -181,6 +210,16 @@ describe("copy", () => {
     expect(copy.options.traffic.status.needsAccess).toBe("needs access");
     expect(copy.readout.unconfirmed(3)).toContain(
       copy.options.traffic.status.unconfirmed,
+    );
+    // The tape's caveat words, one per family in the same lowercase register.
+    // te and content-length each get their own: "breaks on HTTP/2" is false
+    // for te's one allowed value, and false for a content-length that agrees
+    // with the body, so both name their condition instead of the failure.
+    expect(copy.options.traffic.caveat.h1Only).toBe("HTTP/1.1 only");
+    expect(copy.options.traffic.caveat.h2Breaking).toBe("breaks on HTTP/2");
+    expect(copy.options.traffic.caveat.te).toBe("trailers only on HTTP/2");
+    expect(copy.options.traffic.caveat.contentLength).toBe(
+      "mismatch breaks HTTP/2",
     );
     // The per-line reason stays the honest sentence that never presumes a match.
     expect(copy.readout.unconfirmedReason).toBe(

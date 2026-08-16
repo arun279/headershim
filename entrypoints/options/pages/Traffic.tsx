@@ -1,4 +1,5 @@
 import type { Projection } from "../../../src/core/applied";
+import { normalizeHeaderName } from "../../../src/core/headers";
 import type { StateDoc } from "../../../src/core/model";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
@@ -9,6 +10,7 @@ import {
 import { Truncate } from "../../../src/ui/components/Truncate";
 import { copy, siteAccessCopy } from "../../../src/ui/copy";
 import {
+  canRun,
   displayTone,
   grantAction,
   verb,
@@ -25,7 +27,8 @@ const text = copy.options.traffic;
 
 /**
  * Every change the compiled ruleset carries and where each one stands: applying,
- * managed by Chrome, a grant away, or refused. It reads that ruleset, never the
+ * a grant away, or refused, with any transport caveat the header carries said
+ * beside the status rather than in its place. It reads that ruleset, never the
  * wire, so it states what HeaderShim is set to do and never that a request
  * happened. A rule that is off would do nothing, and nothing is what this page
  * omits. Values are never carried here, so a secret cannot reach it.
@@ -74,6 +77,12 @@ function TapeLine({ row }: { row: TapeRow }) {
   const host = row.kind === "cross-site" ? text.crossSiteHost : row.host;
   const tone = displayTone(row.outcome, row.caveats);
   const grant = grantAction(row.outcome);
+  // The pill only on rows that name one site: a concrete host is one request
+  // away, while a cross-site row names no single site to ask for and keeps the
+  // "needs access" word instead.
+  const action =
+    grant !== undefined && row.kind === "domain" ? grant : undefined;
+  const caveat = caveatWord(row);
   return (
     <li class={`tape-row ${tone}${row.paused ? " paused" : ""}`}>
       <span class="tape-mark" aria-hidden="true">
@@ -88,23 +97,32 @@ function TapeLine({ row }: { row: TapeRow }) {
           {verb(row.outcome, row.operation, row.paused)}
         </span>
         <Truncate mode="middle" value={row.header} class="tape-header" />
-        {/* A row that says "needs access" and offers no way to give it leaves the
-            reader to go and find the Site access page. A concrete host is one
-            request away; a cross-site row names no single site to ask for. */}
-        {grant !== undefined && row.kind === "domain" ? (
-          <button
-            type="button"
-            class="grant tape-status"
-            aria-label={siteAccessCopy.grantOriginsLabel(grant.origins)}
-            onClick={() => void requestPermissions([...grant.origins])}
-          >
-            {grant.label}
-          </button>
-        ) : (
-          <span class="tape-status" title={statusLabel(row)}>
-            {statusLabel(row)}
-          </span>
-        )}
+        {/* Two independent facts, as on every change line: where the rule
+            stands, and the transport caveat its header carries either way. The
+            Grant pill states the access fact itself, so the "needs access" word
+            would only repeat it; the caveat word repeats nothing and stays. */}
+        <span class="tape-meta">
+          {action === undefined && (
+            <span class="tape-status" title={statusLabel(row)}>
+              {statusLabel(row)}
+            </span>
+          )}
+          {caveat !== undefined && (
+            <span class="tape-caveat" title={caveat}>
+              {caveat}
+            </span>
+          )}
+          {action !== undefined && (
+            <button
+              type="button"
+              class="grant tape-action"
+              aria-label={siteAccessCopy.grantOriginsLabel(action.origins)}
+              onClick={() => void requestPermissions([...action.origins])}
+            >
+              {action.label}
+            </button>
+          )}
+        </span>
       </span>
     </li>
   );
@@ -129,8 +147,18 @@ function statusLabel(row: TapeRow): string {
       ? text.status.overLimit
       : text.status.refused;
   }
-  if (row.caveats.includes("network-managed")) {
-    return text.status.managed;
-  }
   return text.status.live;
+}
+
+// A caveat states a wire consequence, so it says nothing for a row that will
+// never reach the wire: a refusal, an over-limit rule, or one shadowed by
+// another, gated the same way the popup's transport count is.
+function caveatWord(row: TapeRow): string | undefined {
+  if (!canRun(row.outcome)) return undefined;
+  if (row.caveats.includes("h1-only")) return text.caveat.h1Only;
+  if (!row.caveats.includes("h2-breaking")) return undefined;
+  const header = normalizeHeaderName(row.header);
+  if (header === "te") return text.caveat.te;
+  if (header === "content-length") return text.caveat.contentLength;
+  return text.caveat.h2Breaking;
 }

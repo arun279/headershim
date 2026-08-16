@@ -57,7 +57,15 @@ async function updateSession(
   );
 }
 
-test("matches Chrome's dynamic-rule boundary", async ({ serviceWorker }) => {
+test("matches Chrome's dynamic-rule boundary", {
+  tag: "@host-access",
+}, async ({ serviceWorker }) => {
+  // The probes below drive chrome.declarativeNetRequest directly, so they
+  // need the background's own reconciliation of the seeded (empty) doc to
+  // have finished settling before they add rules of their own: measured, an
+  // unconfined bare seedState here is a real race — the background's reconcile
+  // of the just-seeded doc can still be in flight and strip a probe rule that
+  // landed while it was computing its own removal batch.
   await seedStateAndWait(serviceWorker, createV1Seed());
 
   for (const contractCase of DNR_CONTRACT_CASES) {
@@ -95,7 +103,10 @@ test("matches Chrome's dynamic-rule boundary", async ({ serviceWorker }) => {
   }
 });
 
-test("rejects an invalid batch atomically", async ({ serviceWorker }) => {
+test("rejects an invalid batch atomically", {
+  tag: "@host-access",
+}, async ({ serviceWorker }) => {
+  // Same reasoning as above.
   await seedStateAndWait(serviceWorker, createV1Seed());
   const installed = contractBaseRule(PROBE_RULE_ID);
   expect(await update(serviceWorker, [installed], [PROBE_RULE_ID])).toBeNull();

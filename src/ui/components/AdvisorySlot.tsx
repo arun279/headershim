@@ -7,6 +7,7 @@ import {
 import type { Direction, HeaderOp } from "../../core/model";
 import { isUnanchoredPattern } from "../../core/scope";
 import { copy } from "../copy";
+import { transportNote } from "../dispositionCopy";
 import { sentence } from "./sentence";
 import "./AdvisorySlot.css";
 
@@ -24,7 +25,7 @@ export function AdvisorySlot({
   pattern?: string | undefined;
 }) {
   const advisories = [
-    ...classifyHeaderName(header).advisories,
+    ...classifyHeaderName(header, direction).advisories,
     ...headerSensitivity({ direction, operation, header }),
   ];
   const unanchored = pattern !== undefined && isUnanchoredPattern(pattern);
@@ -42,7 +43,7 @@ export function AdvisorySlot({
       <div>
         <strong>{copy.editor.caution}</strong>
         {advisories.map((advisory) => (
-          <p key={advisory.kind}>{advisoryCopy(advisory.kind)}</p>
+          <p key={advisory.kind}>{advisoryCopy(advisory.kind, header)}</p>
         ))}
         {responseOnRequest && <p>{copy.advisories.responseOnRequest}</p>}
         {unanchored && <p>{sentence(copy.advisories.unanchoredPattern)}</p>}
@@ -51,10 +52,11 @@ export function AdvisorySlot({
   );
 }
 
-function advisoryCopy(kind: HeaderAdvisoryClass): string {
+function advisoryCopy(kind: HeaderAdvisoryClass, header: string): string {
   switch (kind) {
-    case "network-managed":
-      return copy.advisories.managedHeader;
+    case "h1-only":
+    case "h2-breaking":
+      return transportNote(kind, header);
     case "host-http2":
       return copy.advisories.host;
     case "credential":

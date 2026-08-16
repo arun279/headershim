@@ -43,13 +43,15 @@ export const HEADER_ERROR_COPY_IDS = {
 } as const satisfies Record<HeaderErrorClass, string>;
 
 export type HeaderAdvisoryClass =
-  | "network-managed"
+  | "h1-only"
+  | "h2-breaking"
   | "host-http2"
   | "credential"
   | "security-response";
 
 export const HEADER_ADVISORY_COPY_IDS = {
-  "network-managed": "header-network-managed",
+  "h1-only": "header-h1-only",
+  "h2-breaking": "header-h2-breaking",
   "host-http2": "header-host-http2",
   credential: "header-credential",
   "security-response": "header-security-response",
@@ -84,8 +86,12 @@ export type HeaderValidationError =
 
 type HeaderAdvisory =
   | {
-      readonly kind: "network-managed";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["network-managed"];
+      readonly kind: "h1-only";
+      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["h1-only"];
+    }
+  | {
+      readonly kind: "h2-breaking";
+      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["h2-breaking"];
     }
   | {
       readonly kind: "host-http2";
@@ -127,13 +133,21 @@ export const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const REQUEST_APPEND_HEADER_SET: ReadonlySet<string> = new Set(
   REQUEST_APPEND_HEADERS,
 );
-const NETWORK_MANAGED_HEADERS: ReadonlySet<string> = new Set([
+// Both transport sets state measured request-side behavior (set rules driven
+// through HTTP/1.1 and HTTP/2 echo servers); the response side is unmeasured,
+// so classifyHeaderName stays silent there. HTTP/1.1 carried every member as
+// written. On HTTP/2 the h1-only members were absent from the request, and the
+// h2-breaking members made the request itself fail, except te with the value
+// "trailers" and a content-length that agrees with the body, which both
+// arrived. RFC 9113 section 8.2.2 corroborates the split.
+const H1_ONLY_HEADERS: ReadonlySet<string> = new Set([
   "connection",
+  "transfer-encoding",
+]);
+const H2_BREAKING_HEADERS: ReadonlySet<string> = new Set([
   "content-length",
   "keep-alive",
   "te",
-  "trailer",
-  "transfer-encoding",
   "upgrade",
 ]);
 const CREDENTIAL_HEADERS: ReadonlySet<string> = new Set([
@@ -189,34 +203,51 @@ export function isSecurityResponseHeader(header: string): boolean {
 
 /**
  * Whether Chrome will append to this request header, given an already
- * normalized name. Exposed on its own because the compiler wants this answer
- * and nothing else: reaching it through classifyHeaderName pulls the advisory
- * tables into the background bundle, which never reads one.
+ * normalized name. Exposed on its own because the compiler and the ModHeader
+ * codec want this answer and nothing else: reaching it through
+ * classifyHeaderName pulls the advisory tables into the background bundle,
+ * which never reads one.
  */
 export function allowsRequestAppend(normalizedHeader: string): boolean {
   return REQUEST_APPEND_HEADER_SET.has(normalizedHeader);
 }
 
-export function classifyHeaderName(header: string): HeaderClassification {
+export function classifyHeaderName(
+  header: string,
+  direction: Direction,
+): HeaderClassification {
   const normalized = normalizeHeaderName(header);
 
   return {
     requestAppend: allowsRequestAppend(normalized) ? "allowed" : "disallowed",
-    advisories: NETWORK_MANAGED_HEADERS.has(normalized)
-      ? [
-          {
-            kind: "network-managed",
-            copyId: HEADER_ADVISORY_COPY_IDS["network-managed"],
-          },
-        ]
-      : normalized === "host"
-        ? [
-            {
-              kind: "host-http2",
-              copyId: HEADER_ADVISORY_COPY_IDS["host-http2"],
-            },
-          ]
-        : [],
+    // The transport advisories are request-side measurements, so only request
+    // rules carry one; a response rule on the same name says nothing rather
+    // than repeating a claim nothing has measured.
+    advisories:
+      direction !== "request"
+        ? []
+        : H1_ONLY_HEADERS.has(normalized)
+          ? [
+              {
+                kind: "h1-only",
+                copyId: HEADER_ADVISORY_COPY_IDS["h1-only"],
+              },
+            ]
+          : H2_BREAKING_HEADERS.has(normalized)
+            ? [
+                {
+                  kind: "h2-breaking",
+                  copyId: HEADER_ADVISORY_COPY_IDS["h2-breaking"],
+                },
+              ]
+            : normalized === "host"
+              ? [
+                  {
+                    kind: "host-http2",
+                    copyId: HEADER_ADVISORY_COPY_IDS["host-http2"],
+                  },
+                ]
+              : [],
   };
 }
 
@@ -302,7 +333,7 @@ export function validateHeader(
     });
   }
 
-  const classification = classifyHeaderName(header);
+  const classification = classifyHeaderName(header, input.direction);
   if (
     input.direction === "request" &&
     input.operation === "append" &&

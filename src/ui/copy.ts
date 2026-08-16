@@ -109,8 +109,6 @@ const andList = (items: readonly string[]) =>
   items.length <= 1
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} and ${items.slice(-1).join("")}`;
-const managedHeader =
-  "Chrome's network stack manages this header itself; a rule here usually has no effect.";
 
 /**
  * Why each declared permission is there, keyed by the ids the manifest is built
@@ -194,10 +192,16 @@ export const copy = {
       count === 1 ? "1 more needs access" : `${count} more need access`,
     refused: (count: number) =>
       count === 1 ? "1 more needs attention" : `${count} more need attention`,
-    managed: (count: number) =>
+    // Counts the transport-caveat changes the headline leaves out. The line
+    // names the caveat that set them apart, not the working half every member
+    // shares; what each one does on HTTP/2 differs per header, and each
+    // listed change carries its own full sentence. Transport-family members
+    // depend on the connection; te and content-length depend on the value
+    // they carry.
+    transport: (count: number) =>
       count === 1
-        ? "1 more is managed by Chrome"
-        : `${count} more are managed by Chrome`,
+        ? "1 more depends on the connection or its value"
+        : `${count} more depend on the connection or their value`,
     security: (count: number) =>
       `Includes ${count} security-sensitive ${changes(count)}`,
     overridden: (count: number) =>
@@ -218,7 +222,6 @@ export const copy = {
     to: "→",
     overriddenBy: (winner: string) => `overridden by ${winner}`,
     refusedReason: {
-      host: "Chrome won't let extensions change the Host header on HTTP/2, but it can on HTTP/1.1",
       header: "Chrome won't accept this header name",
       append:
         "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
@@ -227,7 +230,6 @@ export const copy = {
       regex: "Chrome won't accept this regular expression",
       domains: "Chrome won't accept this rule's sites",
     },
-    managedReason: managedHeader,
     // A rule whose match Chrome settles per request, against a URL this popup
     // never sees. Saying "live" here would draw a fact it cannot know.
     unconfirmedReason: "Whether this runs is decided per request",
@@ -396,9 +398,18 @@ export const copy = {
         refused: "refused by Chrome",
         overLimit: "rule limit reached",
         overridden: "overridden",
-        managed: "managed by Chrome",
         outOfSync: "not applied yet",
         paused: "paused",
+      },
+      // A second, independent word beside the status, never in its place: the
+      // header's transport caveat in the same lowercase register. The full
+      // sentences live in `advisories`; te gets its own word because "breaks
+      // on HTTP/2" is false for the one value HTTP/2 allows it.
+      caveat: {
+        h1Only: "HTTP/1.1 only",
+        h2Breaking: "breaks on HTTP/2",
+        te: "trailers only on HTTP/2",
+        contentLength: "mismatch breaks HTTP/2",
       },
       crossSiteHost: "cross-site",
       // Empty means the active profile has nothing switched on: either its rules
@@ -839,8 +850,22 @@ export const copy = {
   },
 
   advisories: {
-    managedHeader,
-    host: "Chrome can't change the authority on HTTP/2 connections, which most sites use. This rule usually has no effect.",
+    // The transport caveats, one sentence per measured behavior (set rules,
+    // request side, driven through HTTP/1.1 and HTTP/2 echo servers). Each
+    // names the transport and states only what the wire showed.
+    h1Only:
+      "Takes effect on HTTP/1.1 only; HTTP/2 has no such header and drops the change.",
+    h2Breaking:
+      "Takes effect on HTTP/1.1; on HTTP/2 this header makes requests fail.",
+    te: "HTTP/2 allows te only as trailers; any other value makes requests fail there. HTTP/1.1 sends it as written.",
+    contentLength:
+      "Sent as written on HTTP/1.1, even when it contradicts the body. On HTTP/2, requests fail when it does.",
+    // Measured on the wire: a Host rule rewrites what HTTP/1.1 requests carry.
+    // On HTTP/2 Chrome keeps the real authority, so the change has nothing to
+    // act on there. The popup reason and the editor advisory read this one
+    // key, so the two surfaces cannot state different truths about the same
+    // header.
+    host: "Rewrites the Host header on HTTP/1.1. On HTTP/2 Chrome keeps the real authority, so the change has nothing to act on there.",
     // Fires on request and response rules alike, so it names where the value is
     // written rather than a send: a response rule sends the site nothing.
     credential:

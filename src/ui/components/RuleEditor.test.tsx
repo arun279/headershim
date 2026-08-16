@@ -834,7 +834,7 @@ describe("RuleEditor advisories and value field", () => {
     typeInto(ctx.nameInput(), "te");
     const advisory = ctx.root.querySelector(".advisory-slot");
     expect(advisory?.textContent).toContain(copy.editor.caution);
-    expect(advisory?.textContent).toContain(copy.advisories.managedHeader);
+    expect(advisory?.textContent).toContain(copy.advisories.te);
     expect(advisory?.parentElement?.classList.contains("sheet-pinned")).toBe(
       true,
     );

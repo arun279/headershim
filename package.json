@@ -39,7 +39,8 @@
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check:test-classes": "node scripts/check-test-classes.mjs",
-    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
+    "check:host-access-confinement": "node scripts/check-host-access-confinement.mjs",
+    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
@@ -83,7 +84,7 @@
         "!.output/chrome-mv3/chunks/options-*.js",
         "!.output/chrome-mv3/chunks/popup-*.js"
       ],
-      "limit": "27.5 kB"
+      "limit": "27.7 kB"
     },
     {
       "name": "Popup initial load",
@@ -100,7 +101,7 @@
         "!.output/chrome-mv3/assets/RuleEditor-*.css",
         "!.output/chrome-mv3/assets/options-*.css"
       ],
-      "limit": "45 kB"
+      "limit": "45.3 kB"
     },
     {
       "name": "Options initial load",
@@ -121,7 +122,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "39.5 kB"
+      "limit": "39.7 kB"
     },
     {
       "name": "Options rule editor",
@@ -137,7 +138,7 @@
         ".output/chrome-mv3/chunks/DeferredPage-*.js",
         ".output/chrome-mv3/assets/DeferredPage-*.css"
       ],
-      "limit": "9502 B"
+      "limit": "9615 B"
     },
     {
       "name": "ModHeader import",
