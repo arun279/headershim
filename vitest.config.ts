@@ -33,7 +33,7 @@ export default defineConfig({
         autoUpdate: true,
         "src/core/**": {
           statements: 97.62,
-          branches: 94.93,
+          branches: 94.95,
           functions: 99.59,
           lines: 97.55,
         },

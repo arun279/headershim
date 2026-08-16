@@ -39,7 +39,7 @@ export function ReadoutHead({
   const attention =
     readout.needsAccess > 0 ||
     readout.refused > 0 ||
-    readout.managed > 0 ||
+    readout.transport > 0 ||
     readout.security > 0;
   const doubt = readout.unconfirmed > 0;
   // Pause is the state the count is most worth having, so the line stays and
@@ -123,7 +123,7 @@ export function ReadoutHead({
           </div>
           {(readout.needsAccess > 0 ||
             readout.refused > 0 ||
-            readout.managed > 0 ||
+            readout.transport > 0 ||
             readout.security > 0 ||
             readout.unconfirmed > 0 ||
             readout.overridden > 0) && (
@@ -138,9 +138,9 @@ export function ReadoutHead({
                   {copy.readout.refused(readout.refused)}
                 </span>
               )}
-              {readout.managed > 0 && (
+              {readout.transport > 0 && (
                 <span class="seg amber">
-                  {copy.readout.managed(readout.managed)}
+                  {copy.readout.transport(readout.transport)}
                 </span>
               )}
               {readout.security > 0 && (

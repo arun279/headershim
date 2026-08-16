@@ -1,4 +1,5 @@
 import { isAllSitesOrigin } from "../core/grants";
+import { normalizeHeaderName } from "../core/headers";
 import type { HeaderOp } from "../core/model";
 import type { AbsentReason } from "../core/verdict";
 import { copy, siteAccessCopy } from "./copy";
@@ -37,6 +38,26 @@ const ABSENT_TONES = {
   "ungranted-initiator": "amber",
   "over-limit": "stop",
 } as const satisfies Record<AbsentReason["kind"], Tone>;
+
+/**
+ * Whether a change is running now, could run once its match resolves, or is a
+ * grant away from running: the cases worth stating a wire consequence for. A
+ * refusal, an over-limit rule, and a rule shadowed by another are not, since
+ * nothing the reader does on this row changes that. The popup's transport
+ * count and every surface that renders a transport caveat gate on this, so
+ * they can never disagree about which changes it is worth naming a wire
+ * consequence for.
+ */
+export function canRun(outcome: Outcome): boolean {
+  if (outcome.kind === "shadowed") return false;
+  if (outcome.kind === "absent" || outcome.kind === "partial") {
+    return (
+      outcome.reason.kind === "ungranted" ||
+      outcome.reason.kind === "ungranted-initiator"
+    );
+  }
+  return true;
+}
 
 export function outcomeTone(outcome: Outcome): Tone {
   return outcome.kind === "absent"
@@ -175,6 +196,25 @@ function absentReason(
   return undefined;
 }
 
+/**
+ * The full sentence behind a transport caveat. One family sentence, except
+ * where a header's measured truth differs from its family's: host keeps its
+ * canonical reason, and te and content-length carry their value conditions.
+ * The rule surfaces and the editor advisory both resolve through here, so no
+ * two surfaces can state different transport truths for one header.
+ */
+export function transportNote(
+  family: Extract<Caveat, "h1-only" | "h2-breaking">,
+  header: string,
+): string {
+  const name = normalizeHeaderName(header);
+  if (name === "host") return copy.advisories.host;
+  if (family === "h1-only") return copy.advisories.h1Only;
+  if (name === "te") return copy.advisories.te;
+  if (name === "content-length") return copy.advisories.contentLength;
+  return copy.advisories.h2Breaking;
+}
+
 export function caveatNote(
   caveats: readonly Caveat[],
   header?: string,
@@ -182,8 +222,9 @@ export function caveatNote(
 ): string | undefined {
   const caveat = caveats[0];
   if (caveat === undefined) return undefined;
-  if (caveat === "transport") return copy.readout.refusedReason.host;
-  if (caveat === "network-managed") return copy.readout.managedReason;
+  if (caveat === "h1-only" || caveat === "h2-breaking") {
+    return transportNote(caveat, header ?? "");
+  }
   if (header === undefined || operation === undefined) {
     return copy.advisories.securityResponse;
   }

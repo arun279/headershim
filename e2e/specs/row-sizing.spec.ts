@@ -135,7 +135,15 @@ test("a long status takes the header's room down to a legible floor, and the ops
     stateWithRules([
       // Chrome appends to a fixed list of request headers and no others, so this
       // rule is refused, which prints a wide status word. The other rule is a
-      // grant away, which prints a narrow one, and sorts above it.
+      // grant away, which prints a narrow one, and sorts above it. Its header is
+      // long enough to sit above its own floor with real room to spare, so the
+      // comparison below is not two floors reading as equal by accident.
+      // Deliberately caveat-free (unlike connection or transfer-encoding): the
+      // two-item meta cluster (caveat word beside the Grant pill) is driven in
+      // a real browser by header-matrix.spec.ts's "an ungranted rule keeps its
+      // transport caveat beside its Grant action", so this fixture stays about
+      // the one thing it measures — the header's floor under a wide sibling
+      // status.
       {
         direction: "request",
         operation: "append",
@@ -149,8 +157,8 @@ test("a long status takes the header's room down to a legible floor, and the ops
       {
         direction: "request",
         operation: "set",
-        header: "transfer-encoding",
-        value: "chunked",
+        header: "x-env-selector-name",
+        value: "staging",
         scope: { type: "domains", domains: ["example.com"] },
         resourceTypes: "all",
         initiators: [],
@@ -232,18 +240,29 @@ test("a long status takes the header's room down to a legible floor, and the ops
     pressured.overrun,
     "this test's setup has expired: the row has slack at this width, so its floor is dormant and the assertion below would prove nothing. Not a layout regression",
   ).toBeGreaterThan(0);
-  // And it is the header that absorbed all of it, down to its declared floor and
-  // stopped there. The header is the row's only shrinkable part, so anything else
-  // holding this row is a change in which part gives way.
+  // And it is the header that absorbed all of it, down to its declared floor
+  // and stopped there. The status word is the other shrinkable part (its own
+  // wrapper shrinks to its own floor too), but Truncate re-cuts the header's
+  // own text to fit its measured box, so the header is what gives up room the
+  // moment the row is short of it.
   expect(
     pressured.headerWidth,
     "the tight row is not being held by the header sitting on its declared floor",
   ).toBeCloseTo(pressured.floor, 0);
 
   // The wide status costs width in its own row and in no other: the row that
-  // states it carries the narrower identifier, and the row without it keeps the
-  // room it would have had anyway.
-  const roomy = await shortStatusRow.locator(".tape-header").boundingBox();
+  // states it carries the narrower identifier, and the row without it keeps
+  // real room rather than having been squeezed onto its own floor too, which
+  // would make the comparison below prove nothing.
+  const shortHeader = shortStatusRow.locator(".tape-header");
+  const shortFloorPx = await shortHeader.evaluate((el) =>
+    Number.parseFloat(getComputedStyle(el).minWidth),
+  );
+  const roomy = await shortHeader.boundingBox();
+  expect(
+    roomy?.width ?? 0,
+    "the un-pressured row's identifier has been squeezed onto its floor too, so the comparison below proves nothing",
+  ).toBeGreaterThan(shortFloorPx * 1.25);
   expect(roomy?.width ?? 0).toBeGreaterThan(pressured.headerWidth);
 });
 

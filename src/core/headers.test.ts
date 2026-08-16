@@ -224,48 +224,59 @@ describe("request append classification", () => {
 });
 
 describe("header advisories", () => {
-  it("classifies hop-by-hop and content-length names as network managed", () => {
-    for (const header of [
-      "connection",
-      "keep-alive",
-      "transfer-encoding",
-      "upgrade",
-      "te",
-      "trailer",
-      "content-length",
-    ]) {
-      expect(classifyHeaderName(header).advisories).toEqual([
-        {
-          kind: "network-managed",
-          copyId: "header-network-managed",
-        },
+  it("classifies the names HTTP/2 drops as h1-only", () => {
+    for (const header of ["connection", "transfer-encoding"]) {
+      expect(classifyHeaderName(header, "request").advisories).toEqual([
+        { kind: "h1-only", copyId: "header-h1-only" },
       ]);
     }
   });
 
+  it("classifies the names that fail requests on HTTP/2 as h2-breaking", () => {
+    for (const header of ["content-length", "keep-alive", "te", "upgrade"]) {
+      expect(classifyHeaderName(header, "request").advisories).toEqual([
+        { kind: "h2-breaking", copyId: "header-h2-breaking" },
+      ]);
+    }
+  });
+
+  it("gives trailer no advisory: it reaches the wire on both transports", () => {
+    expect(classifyHeaderName("trailer", "request").advisories).toEqual([]);
+  });
+
+  it("stays silent on the response side, where nothing is measured", () => {
+    for (const header of [
+      "connection",
+      "content-length",
+      "keep-alive",
+      "te",
+      "transfer-encoding",
+      "upgrade",
+      "host",
+    ]) {
+      expect(classifyHeaderName(header, "response").advisories).toEqual([]);
+    }
+  });
+
   it("classifies host with its dedicated advisory", () => {
-    expect(classifyHeaderName(" HOST ").advisories).toEqual([
+    expect(classifyHeaderName(" HOST ", "request").advisories).toEqual([
       { kind: "host-http2", copyId: "header-host-http2" },
     ]);
   });
 
-  it("classifies permitted hop-by-hop appends as both allowed and advisory", () => {
-    for (const header of [
-      "connection",
-      "keep-alive",
-      "te",
-      "trailer",
-      "transfer-encoding",
-      "upgrade",
-    ]) {
-      expect(classifyHeaderName(header)).toEqual({
+  it("classifies permitted hop-by-hop appends independently of their advisory family", () => {
+    const families = {
+      connection: [{ kind: "h1-only", copyId: "header-h1-only" }],
+      "keep-alive": [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
+      te: [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
+      trailer: [],
+      "transfer-encoding": [{ kind: "h1-only", copyId: "header-h1-only" }],
+      upgrade: [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
+    };
+    for (const [header, advisories] of Object.entries(families)) {
+      expect(classifyHeaderName(header, "request")).toEqual({
         requestAppend: "allowed",
-        advisories: [
-          {
-            kind: "network-managed",
-            copyId: "header-network-managed",
-          },
-        ],
+        advisories,
       });
     }
   });

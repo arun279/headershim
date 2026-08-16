@@ -39,6 +39,7 @@ Every row below runs in the `host-access` project and asserts an observable netw
 | `default resource types include top-level navigation` | A rule using the default resource set modifies a real main-frame request. |
 | `HTTP/1.1 header operations are observable on the wire` | Nine request-header scenarios cover User-Agent, Origin set/remove, Referer set/remove, Accept-Language, custom set/remove, and Cookie. Removal rows also assert that a neighboring header survives. |
 | `Host is a silent no-op over HTTP/2 while a custom header works` | The server keeps the original `:authority`, rejects the attempted Host replacement, and receives the custom header from the same ruleset. |
+| `transport caveats state what the wire does on each protocol` | Every transport-caveated header (connection, transfer-encoding, trailer, te as trailers and as gzip, content-length consistent and contradicting, host, keep-alive, upgrade), each seeded alone beside a control rule and driven over both echo servers: HTTP/1.1 carries each as written, and HTTP/2 strips it, carries it, keeps `:authority`, or fails the navigation, per header. The same pass reads the caveat word and sentence off the Active-changes and All-rules surfaces, so a wire outcome and a rendered claim that disagree fail the test. |
 | `response-header rules apply to HTTP-cached responses` | After the first modified response is cached, the installed rule's value changes; the cache hit exposes the new value while both the cached body and server counter prove that no second request reached the server. |
 | `a granted This-tab override modifies a same-origin request` | A tab-scoped session rule changes the echoed same-origin request header. |
 | `a same-site navigation and an SPA route change keep the override` | Static host access exposes each updated tab URL; the session rule remains installed after both a navigation and `history.pushState`. |
@@ -53,7 +54,6 @@ Playwright cannot synthesize browser toolbar gestures, the operating system's ex
 
 | Boundary | Runnable coverage |
 |---|---|
-| DNR handling of `Content-Length` | Chrome currently sends a DNR-set value over HTTP/1.1 even when it conflicts with the body length. Whether the browser sends, rewrites, or rejects that value has no HeaderShim branch or state transition, so the suite does not pin it. |
 | Global extension shortcuts | `src/test/background.test.ts` drives `toggle-pause` and `previous-profile` through `commands.onCommand`. `keyboard.spec.ts` exercises the equivalent popup commands with real key events. Opening the popup for `_execute_action` is browser-owned. |
 | Destination-only access followed by initiator access | `src/core/grants.test.ts` proves the initiator is the remaining grant gap. `src/test/background.test.ts` proves grant changes refresh status with zero DNR rewrites. `grants.spec.ts` keeps the real missing-access 200 response and absent-header assertion. |
 | Revoking broad access while a narrow grant exists | `src/test/options-site-access.test.tsx` clicks the all-sites revoke control, proves the narrow permission survives, keeps its rule in Granted, and moves only the broad-covered rule to Needed. |

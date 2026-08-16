@@ -199,20 +199,61 @@ describe("popup readout", () => {
     expect(root.querySelector(".lamp.live")).toBeNull();
   });
 
-  it("does not count a network-managed rule as running", async () => {
+  it("does not count an h1-only rule as running and states its caveat", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "connection", value: "keep-alive" })]),
       true,
     );
-    const line = expectWarningCaveat(root, copy.readout.managedReason);
+    const line = expectWarningCaveat(root, copy.advisories.h1Only);
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 of 1 change running on this tab",
     );
     expect(root.querySelector(".substatus .amber")?.textContent).toBe(
-      "1 more is managed by Chrome",
+      copy.readout.transport(1),
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
     expect(line.querySelector('[role="switch"]')?.className).toBe("sw");
+  });
+
+  it("states the value condition on an h2-breaking rule", async () => {
+    const { root } = await mount(
+      seededDoc([rule({ header: "te", value: "trailers" })]),
+      true,
+    );
+    expectWarningCaveat(root, copy.advisories.te);
+    expect(root.querySelector(".substatus .amber")?.textContent).toBe(
+      copy.readout.transport(1),
+    );
+  });
+
+  // A rule Chrome settles per request AND whose header carries a transport
+  // caveat states both facts: the line still carries the header's HTTP/2
+  // behavior, and the headline counts it as decided per request rather than
+  // asserting an effect ("takes effect on HTTP/1.1") for a rule that may
+  // never match at all.
+  it("states both facts for a match-undecided rule with a transport caveat", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule({
+          header: "connection",
+          value: "keep-alive",
+          scope: {
+            type: "pattern",
+            pattern: "||api.example.com/",
+            hosts: ["api.example.com"],
+          },
+        }),
+      ]),
+      true,
+    );
+    expectWarningCaveat(root, copy.advisories.h1Only);
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "1 change on this tab",
+    );
+    expect(root.querySelector(".substatus .rest")?.textContent).toBe(
+      copy.readout.unconfirmed(1),
+    );
+    expect(root.querySelector(".substatus .amber")).toBeNull();
   });
 
   it("does not project an out-of-sync ruleset", async () => {
@@ -547,9 +588,12 @@ describe("popup readout", () => {
     );
     const line = root.querySelector(".change-line.amber");
     expect(line?.querySelector(".why.amber")?.textContent).toContain(
-      "Chrome won't let extensions change the Host header",
+      copy.advisories.host,
     );
     expect(root.querySelector(".substatus .stop")).toBeNull();
+    expect(root.querySelector(".substatus .amber")?.textContent).toBe(
+      copy.readout.transport(1),
+    );
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 of 1 change running on this tab",
     );

@@ -160,7 +160,7 @@ describe("computeReadout", () => {
       storedRule("winner", 3, { header: "x-collision" }),
       storedRule("shadowed", 4, { header: "x-collision" }),
       storedRule("refused", 5, { header: ":authority" }),
-      storedRule("managed", 6, { header: "connection" }),
+      storedRule("transport-caveat", 6, { header: "connection" }),
       storedRule("ungranted-initiator", 7, {
         header: "x-cross-origin",
         resourceTypes: ["xhr"],
@@ -180,7 +180,7 @@ describe("computeReadout", () => {
       held: 0,
       needsAccess: 1,
       refused: 1,
-      managed: 1,
+      transport: 1,
       overridden: 1,
       unconfirmed: 1,
     });
@@ -197,19 +197,79 @@ describe("computeReadout", () => {
       held: 3,
       needsAccess: 1,
       refused: 1,
-      managed: 1,
+      transport: 1,
       overridden: 1,
       unconfirmed: 1,
     });
   });
 
+  it("counts a Host rule into the transport count, not as running", () => {
+    const doc = state([storedRule("host-rule", 1, { header: "host" })]);
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout).toMatchObject({ total: 0, transport: 1 });
+  });
+
+  // A rule Chrome settles per request AND whose header carries a transport
+  // caveat is uncertain for one reason: the match. The transport count is not
+  // where that belongs, since it would assert an effect the popup cannot know
+  // ("takes effect on HTTP/1.1") for a rule that may never match at all; it
+  // keeps the same place an uncaveated undecided rule would, and its own line
+  // still carries the header's HTTP/2 behavior.
+  it("counts a match-undecided caveated change as unconfirmed, not transport", () => {
+    const doc = state([
+      storedRule("conditional-caveat", 1, {
+        header: "connection",
+        scope: {
+          type: "pattern",
+          pattern: "||api.example.com/",
+          hosts: [TAB.host],
+        },
+      }),
+    ]);
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout).toMatchObject({ total: 1, unconfirmed: 1, transport: 0 });
+  });
+
+  // The transport caveats are request-side measurements, so a response rule on
+  // the same name counts as running and carries no caveat: silence, not an
+  // unmeasured claim.
+  it("keeps response-side rules out of the transport count", () => {
+    const doc = state([
+      storedRule("response-connection", 1, {
+        direction: "response",
+        header: "connection",
+      }),
+    ]);
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout).toMatchObject({ total: 1, transport: 0 });
+    expect(readout.response[0]?.caveats).toEqual([]);
+  });
+
   it("does not count caveats from changes that cannot run", () => {
     const rules = [
-      storedRule("disabled-managed", 1, {
+      storedRule("disabled-transport", 1, {
         header: "connection",
         enabled: false,
       }),
-      storedRule("refused-managed", 2, {
+      storedRule("refused-transport", 2, {
         header: "connection",
         value: "bad\r\nvalue",
       }),
@@ -235,7 +295,7 @@ describe("computeReadout", () => {
     expect(readout).toMatchObject({
       total: 0,
       refused: 2,
-      managed: 0,
+      transport: 0,
       security: 0,
     });
   });

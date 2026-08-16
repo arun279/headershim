@@ -15,9 +15,10 @@
 .tape-list {
   list-style: none;
 }
-/* The one auto track holds a fixed-width badge and every other track is fixed or
-   fr, so no track varies with row content: each row resolves the same widths and
-   the op glyph starts at one x down the list. */
+/* Each row is its own grid, but no track is sized by content: a fixed mark,
+   a host column clamped between two lengths, and the leftover fraction resolve
+   to the same widths in every row, so the op glyph starts at one x down the
+   list. */
 .tape-row {
   display: grid;
   grid-template-columns: 16px minmax(8ch, 20ch) minmax(0, 1fr);
@@ -72,11 +73,13 @@
   font-weight: 600;
   color: var(--ink);
 }
-/* The header is the row's only identifier: it takes the row's spare width and
-   keeps a legible floor, while the status word, which the glyph and the row's
-   color already carry, gives way first. */
+/* The header is the row's identifier and the meta cluster is its second facts
+   (status, caveat, Grant); neither pulls width from the other. The cluster's
+   own margin-left: auto already claims the row's free space, so the header
+   does not grow into it: both sides sit at their content width until the row
+   is genuinely short, then give way, gap by gap, down to their own floors. */
 .tape-row .tape-header {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 8ch;
 }
 /* Direction in the glyph slot, operation in the word beside it: two rules that
@@ -94,9 +97,29 @@
   font-weight: 500;
   color: var(--ink2);
 }
-.tape-status {
-  flex: none;
-  min-width: 0;
+/* The row's second facts, packed at the right edge by this wrapper's own auto
+   margin: the status word, the caveat word, and the Grant pill, whichever of
+   them the row carries. No flex-grow and no cap: the cluster resolves at its
+   content width and only gives width back, word by word, when the row is
+   genuinely short of room. */
+.tape-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+/* The pill is an action, not a third word: a wider gap sets it apart from the
+   prose beside it the way ChangeLine's own control column does. */
+.tape-action {
+  margin-left: 5px;
+}
+/* A floor, never min-width: 0: a caveat that shrinks to nothing is a hidden
+   fact. flex-shrink stays on, because text-overflow can only fire on an item
+   that is allowed to shrink below its content. */
+.tape-status,
+.tape-caveat {
+  flex: 0 1 auto;
+  min-width: 6ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -109,19 +132,18 @@
 .tape-row.amber .tape-status {
   color: var(--amber);
 }
-/* Where the gap can be closed, the cell is the shared Grant pill, so it takes
-   the pill's own ink instead of the amber the words beside it are set in. */
-.tape-row.amber .tape-status.grant {
-  color: var(--on-amber);
-  font-size: 11px;
-  font-weight: 650;
-}
 .tape-row.stop .tape-status {
   color: var(--stop);
 }
 .tape-row.doubt .tape-status,
 .tape-row.rest .tape-status,
 .tape-row.paused .tape-status {
+  color: var(--ink3);
+}
+/* Always the header's own ink, never the row's tone: the caveat is a property
+   of the header, not of where the rule stands, and staying one color keeps it
+   from reading as a repeat of the status word beside it. */
+.tape-caveat {
   color: var(--ink3);
 }
 
@@ -139,9 +161,6 @@
   }
   .tape-stamp {
     grid-column: 2;
-  }
-  .tape-status {
-    flex: none;
   }
 }
 
