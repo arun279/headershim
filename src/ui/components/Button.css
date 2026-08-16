@@ -5,7 +5,7 @@
   min-height: 30px;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-ctl);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -31,6 +31,16 @@
   background: transparent;
   border: var(--hairline) solid var(--amber);
   color: var(--amber);
+}
+
+/* The one destructive affordance: worn by every confirm-to-delete and by the
+   rule editor's delete. Red text, no fill, a soft red on hover. */
+.btn.destructive {
+  color: var(--stop);
+}
+
+.btn.destructive:hover:not(:disabled) {
+  background: var(--stop-soft);
 }
 
 .icon-btn {
@@ -66,7 +76,7 @@
   min-height: 28px;
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-chip);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: left;
 }
 
@@ -74,13 +84,18 @@
   background: var(--raise2);
 }
 
-.menu-item.destructive {
-  color: var(--amber);
-}
-
 .btn:disabled,
 .icon-btn:disabled,
 .menu-item:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* The primary goes inert only while its own commit is in flight, and for the
+   whole of that window its label is the one piece of text on screen naming what
+   Chrome is being asked to allow. So it stops taking the click and keeps its
+   fill and label at full strength: dimming the thing that has to stay readable
+   is not a state worth drawing. */
+.btn.primary:disabled {
+  opacity: 1;
 }

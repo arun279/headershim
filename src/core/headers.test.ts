@@ -357,7 +357,7 @@ describe("header sensitivity", () => {
     }
   });
 
-  it("stays quiet for an append, which can only add a further constraint", () => {
+  it("notes an append to a security response header", () => {
     expect(
       headerSensitivity(
         input({
@@ -366,7 +366,7 @@ describe("header sensitivity", () => {
           operation: "append",
         }),
       ),
-    ).toEqual([]);
+    ).toEqual([securityResponse]);
   });
 
   it("stays quiet on the request side, where the site never sent the protection", () => {

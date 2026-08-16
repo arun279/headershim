@@ -9,10 +9,6 @@ interface ChromePermissionsQuery {
   permissions?: string[];
 }
 
-interface ChromeMatchedRule {
-  rule: { ruleId: number };
-}
-
 interface ChromeTab {
   id?: number;
   url?: string;
@@ -30,18 +26,23 @@ declare const chrome: {
     };
   };
   declarativeNetRequest: {
+    MAX_NUMBER_OF_DYNAMIC_RULES: number;
+    MAX_NUMBER_OF_REGEX_RULES: number;
+    MAX_NUMBER_OF_SESSION_RULES: number;
+    MAX_NUMBER_OF_UNSAFE_DYNAMIC_RULES: number;
     getDynamicRules(): Promise<unknown[]>;
     getSessionRules(): Promise<unknown[]>;
+    isRegexSupported(options: { regex: string }): Promise<{
+      isSupported: boolean;
+      reason?: "memoryLimitExceeded" | "syntaxError";
+    }>;
     updateDynamicRules(options: {
       addRules?: unknown[];
       removeRuleIds?: number[];
     }): Promise<void>;
-    getMatchedRules(filter: {
-      tabId: number;
-      minTimeStamp?: number;
-    }): Promise<{ rulesMatchedInfo: ChromeMatchedRule[] }>;
-    setExtensionActionOptions(options: {
-      displayActionCountAsBadgeText: boolean;
+    updateSessionRules(options: {
+      addRules?: unknown[];
+      removeRuleIds?: number[];
     }): Promise<void>;
   };
   action: {

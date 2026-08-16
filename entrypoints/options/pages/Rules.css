@@ -1,9 +1,8 @@
 /*
  * The rule list reuses the popup's one grammar: a severity spine (teal live,
- * amber a grant away, red refused, faint where only Chrome can settle it,
- * grey-dashed at rest), the op glyph in the spine's color, sans narrating and
- * mono for every wire byte. Denser than the popup, because this is where every
- * rule is read at once.
+ * amber a grant away, red refused, grey-dashed at rest), the op glyph in the
+ * spine's color, sans narrating and mono for every wire byte. Denser than the
+ * popup, because this is where every rule is read at once.
  */
 
 .rules-controls {
@@ -21,7 +20,7 @@
 
 .fleet-group {
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
   background: var(--panel);
   overflow: hidden;
 }
@@ -43,7 +42,7 @@
   font-family: var(--font-ui);
 }
 .fleet-group-note {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink3);
 }
 .fleet-count {
@@ -82,19 +81,13 @@
   border-radius: 0 3px 3px 0;
   background: var(--live);
 }
-.fleet-row.needs-access .spine,
-.fleet-row.managed .spine,
-.fleet-row.out-of-sync .spine {
+.fleet-row.amber .spine {
   background: var(--amber);
 }
-.fleet-row.refused .spine {
+.fleet-row.stop .spine {
   background: var(--stop);
 }
-.fleet-row.unconfirmed .spine {
-  background: var(--faint);
-}
-.fleet-row.off .spine,
-.fleet-row.overridden .spine,
+.fleet-row.rest .spine,
 .fleet-row.paused .spine {
   background: transparent;
   border-left: 3px dashed var(--faint);
@@ -111,19 +104,13 @@
   width: 16px;
   height: 16px;
 }
-.fleet-row.needs-access .op,
-.fleet-row.managed .op,
-.fleet-row.out-of-sync .op {
+.fleet-row.amber .op {
   color: var(--amber);
 }
-.fleet-row.refused .op {
+.fleet-row.stop .op {
   color: var(--stop);
 }
-.fleet-row.unconfirmed .op {
-  color: var(--faint);
-}
-.fleet-row.off .op,
-.fleet-row.overridden .op,
+.fleet-row.rest .op,
 .fleet-row.paused .op {
   color: var(--faint);
 }
@@ -147,45 +134,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.fleet-open .verb {
-  color: var(--ink2);
+/* Everything the two row grammars share is in tokens.css; this page is denser,
+   so it reads its wire bytes one step down. */
+.fleet-row .say :is(.k, .v) {
   font-size: 12px;
-}
-.fleet-open .k {
-  font-family: var(--font-data);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.fleet-open .to {
-  color: var(--ink3);
-  font-family: var(--font-data);
-  font-size: 12px;
-}
-/* The value takes what the header leaves, and is measured against that: sized by
-   its own content it would measure itself, and settle a character short. */
-.fleet-open .v {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-data);
-  font-size: 12.5px;
-  color: var(--ink2);
-}
-.fleet-row.off .fleet-open .k,
-.fleet-row.off .fleet-open .v,
-.fleet-row.overridden .fleet-open .v {
-  color: var(--ink3);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-.fleet-row.overridden .fleet-open .k,
-.fleet-row.paused .fleet-open .k,
-.fleet-row.paused .fleet-open .v,
-.fleet-row.paused .fleet-open .verb {
-  color: var(--ink3);
 }
 
-/* Second line: a reason where one is owed, else the scope in the by-header lens. */
+/* The state line: why a rule is not running, toned to its severity. It sits
+   under the scope line, never in place of it. */
 .fleet-open .why {
   display: flex;
   align-items: center;
@@ -219,11 +175,20 @@
   background: transparent;
   border: 1.5px solid var(--faint);
 }
+/* The identity line (the domains, pattern, or regex a rule matches) and the
+   shared-site prose beside it. */
 .fleet-scope {
   display: block;
   margin-top: 2px;
   font-size: 11px;
   color: var(--ink3);
+}
+/* Only the mono expression clips: it is one machine string, whitespace and all,
+   with the full text on its title. The prose keeps wrapping so its count shows. */
+.fleet-scope.mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
 }
 
 .fleet-row .line-control {
@@ -232,25 +197,23 @@
   gap: 9px;
   flex: none;
 }
-.fleet-row .grant {
-  flex: none;
-  font-weight: 650;
-  font-size: 11.5px;
-  color: var(--on-amber);
-  background: var(--amber);
-  border-radius: var(--r-chip);
-  padding: 6px 12px;
-}
-
 /* The empty state is the page's content, not a caption stranded above a void:
    it fills the card the rule groups would have filled. */
+/* The author's own note on the rule, under the row's reason line. */
+.fleet-open .fleet-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink3);
+}
+
 .rules-card-empty {
   display: grid;
   place-items: center;
   min-height: 320px;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 .editor-loading {

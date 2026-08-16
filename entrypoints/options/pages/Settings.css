@@ -3,7 +3,7 @@
   flex-direction: column;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 .settings-row {
@@ -17,15 +17,15 @@
 .settings-row + .settings-row {
   border-top: var(--hairline) solid var(--line);
 }
-.settings-row > :first-child {
-  min-width: 150px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
+/* The label column belongs to the theme row's legend, the one row that pairs a
+   label with a control. The link and erase rows are a single control, so they
+   size to their own content instead of a label column leaking onto them. */
 .settings-radios legend {
   float: left;
   margin-right: var(--sp-5);
+  min-width: 150px;
+  font-weight: 600;
+  color: var(--ink);
 }
 .settings-radios {
   flex-wrap: wrap;
@@ -34,8 +34,42 @@
 .settings-link {
   color: var(--live-ink);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 12px;
 }
-.settings-shortcuts .settings-link {
-  min-width: 0;
+
+/* The shortcuts row stacks: its name and the change link on top, then one line
+   per command pairing what it does with the key that drives it. */
+.settings-shortcuts {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-4);
+}
+.shortcuts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+.settings-label {
+  font-weight: 600;
+  color: var(--ink);
+}
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.shortcut-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+.shortcut-desc {
+  font-size: 13px;
+  color: var(--ink2);
+}
+.shortcut-unset {
+  font-size: 11px;
+  color: var(--ink3);
 }

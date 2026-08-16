@@ -6,6 +6,7 @@ import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
 import type { MutationError } from "../state/mutations";
 import {
+  atPaint,
   fire,
   pasteInto,
   press,
@@ -147,11 +148,35 @@ async function saveDraft(ctx: ReturnType<typeof mount>) {
   await settle();
 }
 
+function pickScope(ctx: ReturnType<typeof mount>, type: "pattern" | "regex") {
+  fire(() =>
+    (
+      ctx.root.querySelector(
+        `.segmented input[value="${type}"]`,
+      ) as HTMLInputElement
+    ).click(),
+  );
+}
+
+async function addGrantHost(ctx: ReturnType<typeof mount>, host: string) {
+  const input = ctx.root.querySelector(".grant-chip-input") as HTMLInputElement;
+  typeInto(input, host);
+  press(input, "Enter");
+  await settle();
+}
+
+async function saveAndExpectRefused(
+  ctx: ReturnType<typeof mount>,
+  error: string,
+) {
+  await saveDraft(ctx);
+  expect(ctx.onSave).not.toHaveBeenCalled();
+  expect(ctx.errors()).toContain(error);
+}
+
 function expectAllSitesGranted(ctx: ReturnType<typeof mount>) {
   expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith(["*://*/*"]);
-  expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith([
-    copy.scopeSummary.allSites,
-  ]);
+  expect(ctx.onGranted).toHaveBeenCalledOnce();
   expect(ctx.onClose).toHaveBeenCalledOnce();
 }
 
@@ -163,9 +188,9 @@ function deleteButton(
   ) as HTMLButtonElement | undefined;
 }
 
-function openInsertMenu(ctx: ReturnType<typeof mount>): void {
+function openGenerateMenu(ctx: ReturnType<typeof mount>): void {
   fire(() =>
-    (ctx.root.querySelector(".insert-btn") as HTMLButtonElement).click(),
+    (ctx.root.querySelector(".generate-btn") as HTMLButtonElement).click(),
   );
 }
 
@@ -212,9 +237,11 @@ describe("RuleEditor commit model", () => {
       copy.actions.createRule,
     );
     expect(ctx.nameInput().placeholder).toBe(
-      copy.editor.placeholders.headerName,
+      copy.editor.placeholders.headerName.request,
     );
-    expect(ctx.valueInput().placeholder).toBe(copy.editor.placeholders.value);
+    // The value field carries no example: what a value looks like is decided by
+    // the header named above it, so one header's example is wrong on the rest.
+    expect(ctx.valueInput().placeholder).toBe("");
   });
 
   it("lands focus in the header field the moment it opens", () => {
@@ -339,6 +366,28 @@ describe("RuleEditor commit model", () => {
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
 
+  // Preact diffs the actions row by index, so the Cancel that raises the guard
+  // and the Discard that replaces it are one DOM node, and a pointer Cancel
+  // leaves focus sitting on it. Placing focus in the commit that paints the
+  // guard is what stops an Enter struck straight after from answering the
+  // question with the one outcome that cannot be taken back.
+  it("focuses Keep editing in the commit that paints the guard", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    const cancel = ctx.root.querySelector(
+      ".editor-cancel",
+    ) as HTMLButtonElement;
+    cancel.focus();
+    const focused = atPaint(
+      () => ctx.root.querySelector(".discard-title") !== null,
+      () => document.activeElement?.textContent,
+    );
+
+    cancel.click();
+    expect(await focused).toBe(copy.editor.discardConfirm.keepEditing);
+    expect(cancel.textContent).toBe(copy.editor.discardConfirm.discard);
+  });
+
   it("Esc during an in-flight save waits for the outcome instead of pretending to revert", async () => {
     let release: (outcome: Result<Rule, MutationError>) => void = () => {};
     const onSave = vi.fn(
@@ -361,6 +410,9 @@ describe("RuleEditor commit model", () => {
   it("Esc closes the suggestion list first, the editor second", () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "auth");
+    // The list opens on a deliberate ↓, not on the keystroke, so it never sits
+    // over the value field waiting to eat a click meant for that field.
+    press(ctx.nameInput(), "ArrowDown");
     expect(ctx.root.querySelector('[role="listbox"]')).not.toBeNull();
     press(ctx.nameInput(), "Escape");
     expect(ctx.root.querySelector('[role="listbox"]')).toBeNull();
@@ -436,7 +488,9 @@ describe("RuleEditor commit model", () => {
       }),
       undefined,
     );
-    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("edit");
+    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "edit" }),
+    );
   });
 
   it("does not commit on Enter in the multiline value field", async () => {
@@ -469,6 +523,94 @@ describe("RuleEditor commit model", () => {
         },
       }),
       undefined,
+    );
+  });
+
+  it("refuses a domain that is not a hostname and marks the chip", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    typeInto(ctx.chipInput(), "*.example.com");
+    press(ctx.chipInput(), "Enter");
+    await settle();
+
+    // The wildcard lands in the stop hue the moment it commits; the real domain
+    // beside it stays plain.
+    const invalidChips = ctx.root.querySelectorAll(".domain-chip.invalid");
+    expect(invalidChips).toHaveLength(1);
+    expect(invalidChips[0]?.textContent).toContain("*.example.com");
+
+    // Chrome stores such an entry and matches no request, so the save is refused
+    // rather than authoring a rule that reads live and changes nothing, and the
+    // refusal lands focus on the scope input, not on the chip that cannot hold it.
+    await saveAndExpectRefused(ctx, copy.errors.domainInvalid);
+    expect(document.activeElement).toBe(ctx.chipInput());
+  });
+
+  it("saves an underscore host, which Chrome stores and matches verbatim", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    typeInto(ctx.chipInput(), "my_service.corp");
+    press(ctx.chipInput(), "Enter");
+    await settle();
+
+    // The host is live, not a dead shape, so no chip is marked and the save runs.
+    expect(ctx.root.querySelector(".domain-chip.invalid")).toBeNull();
+
+    fire(() => ctx.saveButton().click());
+    await settle();
+    expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+      expect.objectContaining({
+        scope: {
+          type: "domains",
+          domains: ["api.example.com", "my_service.corp"],
+        },
+      }),
+      undefined,
+    );
+  });
+
+  it("refuses a wildcard grant host the same way, since it feeds requestDomains", async () => {
+    const ctx = mount({ grants: NARROW });
+    pickScope(ctx, "regex");
+    typeInto(
+      ctx.root.querySelector('[aria-label="Regex"]') as HTMLInputElement,
+      ".*google.*",
+    );
+    await addGrantHost(ctx, "*.google.com");
+    expect(
+      ctx.root.querySelector(".grant-chip.invalid")?.textContent,
+    ).toContain("*.google.com");
+
+    typeInto(ctx.nameInput(), "authorization");
+    typeInto(ctx.valueInput(), "Bearer one");
+    await saveAndExpectRefused(ctx, copy.errors.domainInvalid);
+    expect(ctx.onRequestGrant).not.toHaveBeenCalled();
+    // The bad host, not the valid regex beside it, is what the refusal marks and
+    // takes focus.
+    expect(
+      ctx.root
+        .querySelector('[aria-label="Regex"]')
+        ?.getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(document.activeElement).toBe(
+      ctx.root.querySelector(".grant-chip-input"),
+    );
+  });
+
+  it("marks the pattern, not the host, when the empty pattern is the shown refusal", async () => {
+    const ctx = mount({ grants: NARROW });
+    pickScope(ctx, "pattern");
+    // Pattern left empty, and a malformed grant host present too: the empty
+    // pattern is the refusal shown, so it, not the host, takes the mark and focus.
+    await addGrantHost(ctx, "*.google.com");
+    typeInto(ctx.nameInput(), "authorization");
+    typeInto(ctx.valueInput(), "Bearer one");
+    await saveAndExpectRefused(ctx, copy.errors.scopeEmpty.pattern);
+    expect(document.activeElement).toBe(
+      ctx.root.querySelector('[aria-label="URL pattern"]'),
     );
   });
 
@@ -524,7 +666,7 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
     expect(field?.textContent).toContain(copy.errors.headerNotModifiable);
   });
 
-  it("renders the append-allowlist copy under the operation control", async () => {
+  it("refuses request-append and lands focus on the operation control", async () => {
     const ctx = mount(
       {},
       {
@@ -535,14 +677,46 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
         },
       },
     );
-    const operation = ctx.operationInput("append");
-    setOperation(operation);
+    setOperation(ctx.operationInput("append"));
+    // A real click leaves focus on the primary; the refusal must move it.
+    ctx.saveButton().focus();
     await fillAndCommit(ctx, "x-custom-token");
     expect(ctx.nameInput().value).toBe("x-custom-token");
-    const field = operation.closest(".editor-primary-field");
-    expect(field?.textContent).toContain(
+
+    const append = ctx.operationInput("append");
+    expect(append.closest(".editor-primary-field")?.textContent).toContain(
       copy.errors.appendDisallowed("x-custom-token"),
     );
+    // A refusal that leaves focus on the button that raised it reads as a dead
+    // click; the operation control owns the refusal, so it takes the mark and
+    // the focus.
+    expect(append.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(append);
+  });
+
+  it("lands focus on the resource-types control when none stays selected", async () => {
+    const ctx = mount();
+    typeInto(ctx.nameInput(), "x-custom");
+    typeInto(ctx.valueInput(), "v1");
+    const disclosure = () =>
+      [...ctx.root.querySelectorAll(".disclosure")].find((button) =>
+        button.textContent?.includes(copy.editor.labels.resourceTypes),
+      ) as HTMLButtonElement;
+    fire(() => disclosure().click());
+    for (const box of ctx.root.querySelectorAll<HTMLInputElement>(
+      ".rt-item input",
+    )) {
+      if (box.checked) {
+        fire(() => box.click());
+      }
+    }
+    ctx.saveButton().focus();
+    await saveDraft(ctx);
+
+    expect(ctx.onSave).not.toHaveBeenCalled();
+    expect(ctx.errors()).toContain(copy.errors.scopeEmpty.resourceTypes);
+    expect(disclosure().getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(disclosure());
   });
 
   it.each([
@@ -586,13 +760,19 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       copy.errors.storageBudget,
     ],
   ] as const)(
-    "renders cap and budget errors at editor level",
+    "renders cap and budget errors at editor level and lands focus on the banner",
     async (error, message) => {
       const ctx = mount({}, { error: error as MutationError });
+      // A real click leaves focus on the primary; a form-level refusal has no
+      // field to blame, so the banner itself must take the focus back off it.
+      ctx.saveButton().focus();
       await fillAndCommit(ctx);
       expect(ctx.onClose).not.toHaveBeenCalled();
       expect(ctx.errors()).toContain(message);
       expect(ctx.nameInput().value).toBe("x-custom");
+      expect(document.activeElement).toBe(
+        ctx.root.querySelector(".editor-error-global"),
+      );
     },
   );
 });
@@ -667,26 +847,27 @@ describe("RuleEditor advisories and value field", () => {
     expect(ctx.root.querySelector(".value-row")).toBeNull();
   });
 
-  it("inserts a generated UUID literal with the frozen note, regenerates, and clears on hand edit", () => {
+  it("generates a UUID literal that replaces the value, regenerates, and clears on hand edit", () => {
     const ctx = mount();
-    openInsertMenu(ctx);
+    openGenerateMenu(ctx);
     const uuid = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.insertUuid,
+      (item) => item.textContent === copy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => uuid.click());
     const first = ctx.valueInput().value;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
-    expect(ctx.root.textContent).toContain(copy.generatedValue.note);
+    // The generated value drops the literal note; hand-editing brings it back.
+    expect(ctx.root.textContent).not.toContain(copy.valueNote.literal);
 
-    openInsertMenu(ctx);
+    openGenerateMenu(ctx);
     const again = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.insertUuid,
+      (item) => item.textContent === copy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => again.click());
     expect(ctx.valueInput().value).not.toBe(first);
 
     typeInto(ctx.valueInput(), "hand-edited");
-    expect(ctx.root.textContent).not.toContain(copy.generatedValue.note);
+    expect(ctx.root.textContent).toContain(copy.valueNote.literal);
   });
 
   it("shows the freeze time for a saved generated value", () => {
@@ -697,7 +878,7 @@ describe("RuleEditor advisories and value field", () => {
       }),
     });
     expect(ctx.root.textContent).toContain(
-      copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
+      copy.valueNote.frozen("2026-07-12T14:03:27.000Z"),
     );
   });
 });
@@ -713,13 +894,14 @@ describe("RuleEditor grant moment", () => {
       "*://*.api.example.com/*",
     ]);
     expect(ctx.onSave).toHaveBeenCalledOnce();
-    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith("create");
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["api.example.com"]);
+    expect(ctx.onCommitted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "create" }),
+    );
+    expect(ctx.onGranted).toHaveBeenCalledOnce();
     expect(ctx.onClose).toHaveBeenCalledOnce();
-    expect(ctx.root.querySelector(".grant-panel")).toBeNull();
   });
 
-  it("includes and records a different tab origin when the rule reaches subresources", async () => {
+  it("requests a different tab origin without changing the authored initiators", async () => {
     const differs = mount({
       grants: NARROW,
       prefillDomain: "api.example.com",
@@ -732,7 +914,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(differs.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
 
@@ -749,6 +931,16 @@ describe("RuleEditor grant moment", () => {
       undefined,
       expect.objectContaining({ initiators: [] }),
       undefined,
+    );
+
+    const broad = mount({
+      grants: GRANTED_ALL,
+      prefillDomain: "api.example.com",
+      tabDomain: "app.example.com",
+    });
+    await fillAndCommit(broad, "authorization");
+    expect(broad.onSave.mock.calls[0]?.[1].initiators).toEqual(
+      differs.onSave.mock.calls[0]?.[1].initiators,
     );
   });
 
@@ -970,7 +1162,7 @@ describe("RuleEditor grant moment", () => {
       }),
       undefined,
     );
-    expect(ctx.onGranted).toHaveBeenCalledExactlyOnceWith(["google.com"]);
+    expect(ctx.onGranted).toHaveBeenCalledOnce();
   });
 
   it("carries the grant hosts of an existing pattern rule into an editable field", () => {
@@ -1005,6 +1197,43 @@ describe("RuleEditor grant moment", () => {
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
   });
 
+  it("offers to widen Chrome's exact-origin toolbar grant", () => {
+    const granted: GrantSnapshot = {
+      origins: ["https://api.example.com/*"],
+      allSites: false,
+    };
+    const ctx = mount({ grants: granted, prefillDomain: "api.example.com" });
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("api.example.com"),
+    );
+  });
+
+  // The button is the disclosure of reach that comes before Chrome's own dialog,
+  // and the popup does not survive that dialog, so the button is the last word.
+  // Naming the sites states exactly what Chrome will ask for; a count would hide
+  // which sites, understating the very thing the button exists to state.
+  it("names the sites when the commit asks Chrome for more than one", async () => {
+    const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
+    typeInto(ctx.chipInput(), "example.com");
+    fire(() => press(ctx.chipInput(), "Enter"));
+
+    expect(ctx.saveButton().textContent).toBe(
+      copy.actions.createRuleAndAllow("api.example.com and example.com"),
+    );
+
+    ctx.onRequestGrant.mockResolvedValueOnce(false);
+    await fillAndCommit(ctx, "authorization");
+    expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
+      "*://*.api.example.com/*",
+      "*://*.example.com/*",
+    ]);
+    // The decline names the same reach the button did.
+    expect(ctx.onGrantDeclined).toHaveBeenCalledExactlyOnceWith(
+      "api.example.com and example.com",
+    );
+  });
+
   it("requests only the missing initiator when the target is already granted", async () => {
     const granted: GrantSnapshot = {
       origins: ["*://*.api.example.com/*"],
@@ -1024,7 +1253,7 @@ describe("RuleEditor grant moment", () => {
     ]);
     expect(ctx.onSave).toHaveBeenCalledWith(
       undefined,
-      expect.objectContaining({ initiators: ["app.example.com"] }),
+      expect.objectContaining({ initiators: [] }),
       undefined,
     );
     expect(ctx.onClose).toHaveBeenCalledOnce();

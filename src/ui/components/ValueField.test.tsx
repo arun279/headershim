@@ -19,37 +19,38 @@ function mount(props: Partial<Parameters<typeof ValueField>[0]> = {}) {
     root,
     onInput,
     onGenerate,
-    insertButton: () => root.querySelector(".insert-btn") as HTMLButtonElement,
+    generateButton: () =>
+      root.querySelector(".generate-btn") as HTMLButtonElement,
     menuItems: () =>
       [...root.querySelectorAll('[role="menuitem"]')] as HTMLButtonElement[],
     input: () => root.querySelector("textarea") as HTMLTextAreaElement,
   };
 }
 
-describe("ValueField insert menu", () => {
+describe("ValueField generate menu", () => {
   it("offers exactly UUID and Timestamp as generated values", () => {
     const ctx = mount();
-    expect(ctx.insertButton().getAttribute("aria-haspopup")).toBe("menu");
-    fire(() => ctx.insertButton().click());
+    expect(ctx.generateButton().getAttribute("aria-haspopup")).toBe("menu");
+    fire(() => ctx.generateButton().click());
     expect(ctx.menuItems().map((item) => item.textContent)).toEqual([
-      copy.editor.insertUuid,
-      copy.editor.insertTimestamp,
+      copy.editor.generateUuid,
+      copy.editor.generateTimestamp,
     ]);
     expect(document.activeElement).toBe(ctx.menuItems()[0]);
   });
 
   it("reports the picked kind and closes, returning focus to the trigger", () => {
     const ctx = mount();
-    fire(() => ctx.insertButton().click());
+    fire(() => ctx.generateButton().click());
     fire(() => ctx.menuItems()[1]?.click());
     expect(ctx.onGenerate).toHaveBeenCalledExactlyOnceWith("timestamp");
     expect(ctx.menuItems()).toHaveLength(0);
-    expect(document.activeElement).toBe(ctx.insertButton());
+    expect(document.activeElement).toBe(ctx.generateButton());
   });
 
   it("closes on Esc without collapsing the editor around it", () => {
     const ctx = mount();
-    fire(() => ctx.insertButton().click());
+    fire(() => ctx.generateButton().click());
     const item = ctx.menuItems()[0] as HTMLButtonElement;
     press(item, "Escape");
     expect(ctx.menuItems()).toHaveLength(0);
@@ -95,26 +96,19 @@ describe("ValueField multiline control", () => {
   });
 });
 
-describe("ValueField generated notes", () => {
-  it("says nothing when the value is plain text", () => {
+describe("ValueField standing note", () => {
+  it("says a plain value is used exactly as typed, not as a template", () => {
     const ctx = mount();
-    expect(ctx.root.textContent).not.toContain(copy.generatedValue.note);
+    expect(ctx.root.textContent).toContain(copy.valueNote.literal);
   });
 
-  it("labels an unsaved generated value with the frozen explanation", () => {
-    const ctx = mount({
-      generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
-    });
-    expect(ctx.root.textContent).toContain(copy.generatedValue.note);
-  });
-
-  it("shows the freeze time once saved and regenerates the same kind", () => {
+  it("replaces the literal note with the freeze time and regenerates the kind", () => {
     const ctx = mount({
       generated: { kind: "timestamp", at: "2026-07-12T14:03:00.000Z" },
-      frozenAt: "2026-07-12 14:03 UTC",
     });
+    expect(ctx.root.textContent).not.toContain(copy.valueNote.literal);
     expect(ctx.root.textContent).toContain(
-      copy.generatedValue.frozen("2026-07-12 14:03 UTC"),
+      copy.valueNote.frozen("2026-07-12T14:03:00.000Z"),
     );
     const regenerate = [...ctx.root.querySelectorAll("button")].find(
       (button) => button.textContent === copy.actions.regenerate,

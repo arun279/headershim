@@ -29,7 +29,9 @@ export function installDnr() {
   return { fake, ...handlers };
 }
 
-export const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+export async function settle(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 type FakeTab = Parameters<typeof fakeBrowser.tabs.onUpdated.trigger>[2];
 

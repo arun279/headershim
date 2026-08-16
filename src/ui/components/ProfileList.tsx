@@ -5,17 +5,19 @@ import { useAnnounce } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
-import { Toggle } from "./Toggle";
-import { ProfileName } from "./Truncate";
+import { InlineRename } from "./InlineRename";
+import { Truncate as ProfileName } from "./Truncate";
 import "./ProfileList.css";
 
 interface ProfileListProps {
   profiles: readonly Profile[];
-  activeProfileId: string | undefined;
+  activeProfileId: string;
+  /** The active profile is selected but not running, so its dot is not live. */
+  paused: boolean;
   /** The expanded card, whose badge and rules are open for editing. */
   openProfileId: string | undefined;
   onOpen: (profileId: string) => void;
-  onToggle: (profileId: string, enabled: boolean) => void;
+  onActivate: (profileId: string) => void;
   onReorder: (profileId: string, toIndex: number) => void;
   onRename: (profileId: string, name: string) => void;
   onClone: (profileId: string) => void;
@@ -73,7 +75,7 @@ export function ProfileList(props: ProfileListProps) {
   };
 
   return (
-    <ul class="profile-list">
+    <ul class={props.paused ? "profile-list paused" : "profile-list"}>
       {profiles.map((profile) => (
         <ProfileCard
           key={profile.id}
@@ -90,7 +92,7 @@ export function ProfileList(props: ProfileListProps) {
             }
           }}
           onOpen={() => props.onOpen(profile.id)}
-          onToggle={(enabled) => props.onToggle(profile.id, enabled)}
+          onActivate={() => props.onActivate(profile.id)}
           onRename={(name) => props.onRename(profile.id, name)}
           onClone={() => props.onClone(profile.id)}
           onDelete={() => props.onDelete(profile.id)}
@@ -119,7 +121,7 @@ interface ProfileCardProps {
   posinset: number;
   handleRef: (node: HTMLButtonElement | null) => void;
   onOpen: () => void;
-  onToggle: (enabled: boolean) => void;
+  onActivate: () => void;
   onRename: (name: string) => void;
   onClone: () => void;
   onDelete: () => void;
@@ -133,21 +135,6 @@ interface ProfileCardProps {
 function ProfileCard(props: ProfileCardProps) {
   const { profile } = props;
   const [renaming, setRenaming] = useState(false);
-  const nameInput = useRef<HTMLInputElement>(null);
-
-  const startRename = () => {
-    setRenaming(true);
-    // Focus lands after the input mounts.
-    queueMicrotask(() => nameInput.current?.select());
-  };
-
-  const commitName = () => {
-    const value = nameInput.current?.value.trim() ?? "";
-    setRenaming(false);
-    if (value.length > 0 && value !== profile.name) {
-      props.onRename(value);
-    }
-  };
 
   const onHandleKeyDown = (event: JSX.TargetedKeyboardEvent<HTMLElement>) => {
     switch (event.key) {
@@ -186,23 +173,10 @@ function ProfileCard(props: ProfileCardProps) {
           <DragGlyph />
         </button>
         {renaming ? (
-          <input
-            class="profile-name-input inset-field"
-            type="text"
-            maxLength={48}
-            aria-label={copy.options.profiles.nameLabel}
-            defaultValue={profile.name}
-            ref={nameInput}
-            onBlur={commitName}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitName();
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                setRenaming(false);
-              }
-            }}
+          <InlineRename
+            value={profile.name}
+            onCommit={props.onRename}
+            onClose={() => setRenaming(false)}
           />
         ) : (
           <button
@@ -232,11 +206,17 @@ function ProfileCard(props: ProfileCardProps) {
         <span class="profile-rulecount">
           {copy.options.profiles.ruleCount(profile.rules.length)}
         </span>
-        <Toggle
-          checked={props.active}
-          label={copy.options.profiles.toggleLabel(profile.name, props.active)}
-          onChange={props.onToggle}
-        />
+        <label class="profile-activate">
+          <input
+            class="sr-only"
+            type="radio"
+            name="active-profile"
+            checked={props.active}
+            aria-label={copy.options.profiles.activeLabel(profile.name)}
+            onChange={props.onActivate}
+          />
+          <span class="radio-dot" aria-hidden="true" />
+        </label>
       </div>
       {props.open && !renaming && (
         <div class="profile-detail">
@@ -246,7 +226,7 @@ function ProfileCard(props: ProfileCardProps) {
             onChange={props.onBadgeChange}
           />
           <div class="profile-actions">
-            <Button kind="quiet" onClick={startRename}>
+            <Button kind="quiet" onClick={() => setRenaming(true)}>
               {copy.options.profiles.rename}
             </Button>
             <Button kind="quiet" onClick={props.onClone}>

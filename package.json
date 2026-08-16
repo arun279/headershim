@@ -17,28 +17,30 @@
     "dev": "wxt",
     "build": "wxt build",
     "build:e2e:hostaccess": "E2E_HOST_ACCESS=1 wxt build",
+    "build:e2e:narrow-hostaccess": "E2E_NARROW_HOST_ACCESS=1 wxt build",
     "icons": "node scripts/render-icons.mjs",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check:lint": "biome ci .",
+    "check:lint": "biome ci . --error-on-warnings",
     "check:types": "tsc --noEmit",
-    "check:test": "vitest run --coverage",
-    "check:knip": "knip",
-    "check:knip:production": "knip --production --include files",
+    "check:test": "node scripts/check-coverage.mjs",
+    "check:knip": "knip --treat-config-hints-as-errors",
+    "check:knip:production": "knip --production --include files --treat-config-hints-as-errors",
+    "check:playwright-projects": "node scripts/check-playwright-projects.mjs",
     "check:fake-browser": "node scripts/check-fake-browser.mjs",
     "check:dup": "jscpd",
-    "check:size": "pnpm build && size-limit",
+    "check:size": "pnpm build && node scripts/check-size-coverage.mjs && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
+    "check:no-network": "pnpm build && node scripts/check-no-network.mjs",
     "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:overrides": "node scripts/check-overrides.mjs",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
-    "check": "biome ci . && tsc --noEmit && vitest run --coverage && knip && knip --production --include files && pnpm check:fake-browser && jscpd && pnpm build && node scripts/manifest-policy.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash",
-    "e2e": "pnpm build && pnpm build:e2e:hostaccess && playwright test",
-    "e2e:packed:pack": "pnpm build && node e2e/packed/pack.mjs",
-    "e2e:packed:selfcheck": "node e2e/packed/selfcheck.mjs",
-    "e2e:packed": "playwright test -c playwright.packed.config.ts",
+    "check:test-classes": "node scripts/check-test-classes.mjs",
+    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes",
+    "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
+    "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
     "prepare": "git config core.hooksPath .githooks"
   },
@@ -64,32 +66,61 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "5.25 kB"
+      "limit": "6 kB"
     },
     {
       "name": "Shared UI runtime",
-      "path": ".output/chrome-mv3/chunks/readout-*.js",
-      "limit": "15 kB"
+      "path": [
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/InlineRename-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/brand-*.js",
+        "!.output/chrome-mv3/chunks/focus-*.js",
+        "!.output/chrome-mv3/chunks/headerLine-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/options-*.js",
+        "!.output/chrome-mv3/chunks/popup-*.js"
+      ],
+      "limit": "27.5 kB"
     },
     {
-      "name": "Popup",
-      "path": ".output/chrome-mv3/chunks/popup-*.js",
-      "limit": "23 kB"
+      "name": "Popup initial load",
+      "path": [
+        ".output/chrome-mv3/popup.html",
+        ".output/chrome-mv3/theme-bootstrap.js",
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/options-*.js",
+        ".output/chrome-mv3/assets/*.css",
+        "!.output/chrome-mv3/assets/DeferredPage-*.css",
+        "!.output/chrome-mv3/assets/RuleEditor-*.css",
+        "!.output/chrome-mv3/assets/options-*.css"
+      ],
+      "limit": "45 kB"
     },
     {
       "name": "Options initial load",
       "path": [
         ".output/chrome-mv3/options.html",
         ".output/chrome-mv3/theme-bootstrap.js",
-        ".output/chrome-mv3/chunks/options-*.js",
-        ".output/chrome-mv3/chunks/readout-*.js",
-        ".output/chrome-mv3/chunks/commit-copy-*.js",
-        ".output/chrome-mv3/chunks/headers-*.js",
-        ".output/chrome-mv3/assets/readout-*.css",
-        ".output/chrome-mv3/assets/commit-copy-*.css",
-        ".output/chrome-mv3/assets/options-*.css"
+        ".output/chrome-mv3/chunks/*.js",
+        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
+        "!.output/chrome-mv3/chunks/InlineRename-*.js",
+        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
+        "!.output/chrome-mv3/chunks/focus-*.js",
+        "!.output/chrome-mv3/chunks/headerLine-*.js",
+        "!.output/chrome-mv3/chunks/modheader-*.js",
+        "!.output/chrome-mv3/chunks/popup-*.js",
+        ".output/chrome-mv3/assets/*.css",
+        "!.output/chrome-mv3/assets/DeferredPage-*.css",
+        "!.output/chrome-mv3/assets/RuleEditor-*.css",
+        "!.output/chrome-mv3/assets/headerLine-*.css",
+        "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "45 kB"
+      "limit": "39.5 kB"
     },
     {
       "name": "Options rule editor",
@@ -97,7 +128,20 @@
         ".output/chrome-mv3/chunks/RuleEditor-*.js",
         ".output/chrome-mv3/assets/RuleEditor-*.css"
       ],
-      "limit": "12 kB"
+      "limit": "8.5 kB"
+    },
+    {
+      "name": "Options deferred pages",
+      "path": [
+        ".output/chrome-mv3/chunks/DeferredPage-*.js",
+        ".output/chrome-mv3/assets/DeferredPage-*.css"
+      ],
+      "limit": "9.5 kB"
+    },
+    {
+      "name": "ModHeader import",
+      "path": ".output/chrome-mv3/chunks/modheader-*.js",
+      "limit": "2.5 kB"
     }
   ],
   "pnpm": {

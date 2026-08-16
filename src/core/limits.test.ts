@@ -7,6 +7,7 @@ import {
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
+  MINIMUM_CHROME_VERSION,
   RULE_COUNT_WARNING_THRESHOLD,
   serializedStateDocBytes,
   shouldShowRuleCountWarning,
@@ -60,7 +61,7 @@ function state(...profiles: Profile[]): StateDoc {
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: 10_000,
     settings: { paused: false, theme: "system" },
   };
@@ -102,6 +103,13 @@ function expectBoundary(
 }
 
 describe("enabled rule limits", () => {
+  it("requires separate dynamic and session rule limits at the manifest floor", () => {
+    expect(
+      MAX_ENABLED_RULES + MAX_SESSION_OVERRIDES <= 5_000 ||
+        MINIMUM_CHROME_VERSION >= 120,
+    ).toBe(true);
+  });
+
   it("checks an enabled rule created by a save at both boundaries", () => {
     const enabledSave = state(profile("saved", rules(MAX_ENABLED_RULES - 1)));
     enabledSave.profiles[0]?.rules.push(storedRule(MAX_ENABLED_RULES));
@@ -148,7 +156,10 @@ describe("enabled rule limits", () => {
     secondDisabled.enabled = true;
     expect(checkEnabledRuleLimits(enabledRules(enabledToggle))).toMatchObject({
       ok: false,
-      error: { kind: "enabled-rule-limit-exceeded", count: 4_501 },
+      error: {
+        kind: "enabled-rule-limit-exceeded",
+        count: MAX_ENABLED_RULES + 1,
+      },
     });
 
     const regexToggle = state(
@@ -181,7 +192,7 @@ describe("enabled rule limits", () => {
   it("checks all rules activated by enabling a profile", () => {
     const atEnabledLimit = state(
       profile("active", rules(1)),
-      profile("activated", rules(4_500)),
+      profile("activated", rules(MAX_ENABLED_RULES)),
     );
     const activated = atEnabledLimit.profiles[1];
     if (activated === undefined) {
@@ -189,10 +200,13 @@ describe("enabled rule limits", () => {
     }
     atEnabledLimit.activeProfileId = activated.id;
     expect(checkEnabledRuleLimits(enabledRules(atEnabledLimit)).ok).toBe(true);
-    activated.rules.push(storedRule(4_501));
+    activated.rules.push(storedRule(MAX_ENABLED_RULES + 1));
     expect(checkEnabledRuleLimits(enabledRules(atEnabledLimit))).toMatchObject({
       ok: false,
-      error: { kind: "enabled-rule-limit-exceeded", count: 4_501 },
+      error: {
+        kind: "enabled-rule-limit-exceeded",
+        count: MAX_ENABLED_RULES + 1,
+      },
     });
 
     const atRegexLimit = state(
@@ -214,18 +228,23 @@ describe("enabled rule limits", () => {
 
   it("checks imported profiles when they are enabled", () => {
     const importedEnabled = state(profile("existing", rules(1)));
-    importedEnabled.profiles.push(profile("imported", rules(4_500)));
+    importedEnabled.profiles.push(
+      profile("imported", rules(MAX_ENABLED_RULES)),
+    );
     const importedProfile = importedEnabled.profiles[1];
     if (importedProfile === undefined) {
       throw new Error("fixture must contain the imported profile");
     }
     importedEnabled.activeProfileId = importedProfile.id;
     expect(checkEnabledRuleLimits(enabledRules(importedEnabled)).ok).toBe(true);
-    importedProfile.rules.push(storedRule(4_501));
+    importedProfile.rules.push(storedRule(MAX_ENABLED_RULES + 1));
     expect(checkEnabledRuleLimits(enabledRules(importedEnabled))).toMatchObject(
       {
         ok: false,
-        error: { kind: "enabled-rule-limit-exceeded", count: 4_501 },
+        error: {
+          kind: "enabled-rule-limit-exceeded",
+          count: MAX_ENABLED_RULES + 1,
+        },
       },
     );
 
@@ -304,10 +323,16 @@ describe("session and storage limits", () => {
 });
 
 describe("rule count warning", () => {
-  it("appears only after the 4,000-rule threshold", () => {
-    expect(RULE_COUNT_WARNING_THRESHOLD).toBe(4_000);
-    expect(shouldShowRuleCountWarning(3_999)).toBe(false);
-    expect(shouldShowRuleCountWarning(4_000)).toBe(false);
-    expect(shouldShowRuleCountWarning(4_001)).toBe(true);
+  it("appears before the enabled-rule cap", () => {
+    expect(RULE_COUNT_WARNING_THRESHOLD).toBe(MAX_ENABLED_RULES - 500);
+    expect(shouldShowRuleCountWarning(RULE_COUNT_WARNING_THRESHOLD - 1)).toBe(
+      false,
+    );
+    expect(shouldShowRuleCountWarning(RULE_COUNT_WARNING_THRESHOLD)).toBe(
+      false,
+    );
+    expect(shouldShowRuleCountWarning(RULE_COUNT_WARNING_THRESHOLD + 1)).toBe(
+      true,
+    );
   });
 });

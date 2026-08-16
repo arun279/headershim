@@ -1,7 +1,8 @@
+import { normalizeHeaderName } from "./headers";
 import {
-  createProfile,
-  isStoredProfileNameValid,
-  normalizeBadgeText,
+  BADGE_COLORS,
+  createDefaultProfile,
+  isNormalizedBadgeText,
   type Profile,
   type Rule,
   type Settings,
@@ -9,7 +10,6 @@ import {
 } from "./model";
 import { err, ok, type Result } from "./result";
 import {
-  BADGE_COLORS,
   DIRECTIONS,
   HEADER_OPERATIONS,
   hasValidHeaderValue,
@@ -27,67 +27,43 @@ export type MigrationError =
   | { readonly kind: "corrupt" }
   | { readonly kind: "newer-store"; readonly foundVersion: number };
 
-type MigrationStep = (doc: unknown) => Result<unknown, MigrationError>;
-
-export const migrations: Readonly<Partial<Record<number, MigrationStep>>> = {};
-
 export function migrate(doc: unknown): Result<StateDoc, MigrationError> {
-  const initialVersion = versionOf(doc);
-  if (initialVersion === undefined) {
+  const version = versionOf(doc);
+  if (version === undefined) {
     return err({ kind: "corrupt" });
   }
-  if (initialVersion > CURRENT) {
-    return err({ kind: "newer-store", foundVersion: initialVersion });
+  if (version > CURRENT) {
+    return err({ kind: "newer-store", foundVersion: version });
   }
 
-  let migrated = doc;
-  let version = initialVersion;
-  // The initial schema has no predecessor that can exercise this chain yet.
-  /* v8 ignore start */
-  while (version < CURRENT) {
-    const step = migrations[version];
-    if (step === undefined) {
-      return err({ kind: "corrupt" });
-    }
-
-    const result = step(migrated);
-    if (!result.ok) {
-      return err(result.error);
-    }
-
-    const nextVersion = versionOf(result.value);
-    if (nextVersion === undefined || nextVersion <= version) {
-      return err({ kind: "corrupt" });
-    }
-    if (nextVersion > CURRENT) {
-      return err({ kind: "newer-store", foundVersion: nextVersion });
-    }
-
-    migrated = result.value;
-    version = nextVersion;
-  }
-  /* v8 ignore stop */
-
-  if (!isStateDoc(migrated)) {
+  const repaired = repairActiveProfile(doc);
+  if (!isStateDoc(repaired)) {
     return err({ kind: "corrupt" });
   }
+  return ok(repaired);
+}
 
-  const { activeProfileId } = migrated;
-  if (
-    activeProfileId !== undefined &&
-    !migrated.profiles.some((profile) => profile.id === activeProfileId)
-  ) {
-    return ok({ ...migrated, activeProfileId: undefined });
+// There is always exactly one active profile. An activeProfileId that names no
+// stored profile (a value written by an earlier build that allowed none active,
+// or a deleted profile) is repaired to the first profile before validation.
+function repairActiveProfile(doc: unknown): unknown {
+  if (!isRecord(doc)) {
+    return doc;
   }
-  return ok(migrated);
+  const { profiles, activeProfileId } = doc;
+  if (!Array.isArray(profiles)) {
+    return doc;
+  }
+  const ids = profiles.filter(isRecord).map(({ id }) => id);
+  if (ids.includes(activeProfileId)) {
+    return doc;
+  }
+  const [first] = ids;
+  return typeof first === "string" ? { ...doc, activeProfileId: first } : doc;
 }
 
 export function createV1Seed(): StateDoc {
-  const profile = createProfile({
-    name: "Default",
-    badgeText: "DE",
-    color: "indigo",
-  });
+  const profile = createDefaultProfile();
 
   return {
     v: CURRENT,
@@ -122,13 +98,22 @@ function isStateDoc(value: unknown): value is StateDoc {
     return false;
   }
 
-  const { v, profiles, activeProfileId, nextRuleNum, settings } = value;
+  const {
+    v,
+    profiles,
+    activeProfileId,
+    previousProfileId,
+    nextRuleNum,
+    settings,
+  } = value;
   if (
     v !== CURRENT ||
     !Array.isArray(profiles) ||
     profiles.length === 0 ||
     !profiles.every(isProfile) ||
-    (activeProfileId !== undefined && typeof activeProfileId !== "string") ||
+    typeof activeProfileId !== "string" ||
+    (previousProfileId !== undefined &&
+      typeof previousProfileId !== "string") ||
     typeof nextRuleNum !== "number" ||
     !Number.isSafeInteger(nextRuleNum) ||
     nextRuleNum < 1 ||
@@ -138,15 +123,14 @@ function isStateDoc(value: unknown): value is StateDoc {
   }
 
   const profileIds = profiles.map(({ id }) => id);
+  const profileNames = profiles.map(({ name }) => name.toLowerCase());
   const rules = profiles.flatMap(({ rules: profileRules }) => profileRules);
   const ruleIds = rules.map(({ id }) => id);
   const ruleNums = rules.map(({ num }) => num);
 
   return (
     hasUniqueValues(profileIds) &&
-    profiles.every((profile) =>
-      isStoredProfileNameValid(profiles, profile.name, profile.id),
-    ) &&
+    hasUniqueValues(profileNames) &&
     hasUniqueValues(ruleIds) &&
     hasUniqueValues(ruleNums) &&
     ruleNums.every((num) => num < nextRuleNum)
@@ -163,9 +147,9 @@ function isProfile(value: unknown): value is Profile {
     typeof id === "string" &&
     id.length > 0 &&
     typeof name === "string" &&
-    isStoredProfileNameValid([], name) &&
+    name.trim().length > 0 &&
     typeof badgeText === "string" &&
-    normalizeBadgeText(badgeText) === badgeText &&
+    isNormalizedBadgeText(badgeText) &&
     isOneOf(color, BADGE_COLORS) &&
     Array.isArray(rules) &&
     rules.every(isRule)
@@ -200,7 +184,7 @@ function isRule(value: unknown): value is Rule {
     isOneOf(operation, HEADER_OPERATIONS) &&
     typeof header === "string" &&
     header.length > 0 &&
-    header === header.trim().toLowerCase() &&
+    header === normalizeHeaderName(header) &&
     hasValidHeaderValue(value) &&
     isScope(scope) &&
     isResourceTypes(resourceTypes) &&

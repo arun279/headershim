@@ -1,3 +1,36 @@
+.combobox {
+  position: relative;
+}
+
+.combobox .field {
+  padding-right: 26px;
+}
+
+/* Pointer path to the list; the input owns the keyboard path (↓). */
+.combo-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+.combo-toggle:hover {
+  color: var(--ink);
+}
+
+.combo-toggle:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Max 6 visible options; the rest scroll inside the popover. */
 .combo-list {
   position: fixed;

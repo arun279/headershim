@@ -20,11 +20,10 @@ export function remove(origins: string[]): Promise<boolean> {
 }
 
 export function onChanged(callback: () => void): () => void {
-  const listener = () => callback();
-  browser.permissions.onAdded.addListener(listener);
-  browser.permissions.onRemoved.addListener(listener);
+  browser.permissions.onAdded.addListener(callback);
+  browser.permissions.onRemoved.addListener(callback);
   return () => {
-    browser.permissions.onAdded.removeListener(listener);
-    browser.permissions.onRemoved.removeListener(listener);
+    browser.permissions.onAdded.removeListener(callback);
+    browser.permissions.onRemoved.removeListener(callback);
   };
 }

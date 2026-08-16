@@ -4,8 +4,6 @@ export default {
   entry: [
     "src/**/*.test.ts",
     "e2e/specs/**/*.spec.ts",
-    "e2e/packed/**/*.spec.ts",
-    "e2e/packed/{pack,update-server,policy,selfcheck}.mjs",
     "scripts/echo-server.mjs",
     // Loaded synchronously from both extension-page heads before UI modules.
     "public/theme-bootstrap.js",
@@ -32,11 +30,6 @@ export default {
     "!**/test-*.ts!",
     "!**/*.fake.ts!",
   ],
-  // The packed suite runs off a second Playwright config; without this the
-  // plugin only discovers the default one.
-  playwright: {
-    config: ["playwright.config.ts", "playwright.packed.config.ts"],
-  },
   // The h2 echo server shells out to the system openssl to mint a throwaway cert.
   ignoreBinaries: ["openssl"],
 } satisfies KnipConfig;

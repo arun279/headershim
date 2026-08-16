@@ -1,19 +1,25 @@
 import type { ComponentChildren } from "preact";
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
   type GrantSnapshot,
   isAllSitesOrigin,
   requiredOrigins,
-  type SiteAccessEntry,
-  siteAccessView,
 } from "../../../src/core/grants";
 import { headerSensitivity } from "../../../src/core/headers";
-import type { StateDoc } from "../../../src/core/model";
+import {
+  activeProfile,
+  type StateDoc,
+  type TabOverride,
+} from "../../../src/core/model";
 import {
   remove as removePermissions,
   request as requestPermissions,
 } from "../../../src/platform/permissions";
+import {
+  read as readSession,
+  subscribe as subscribeSession,
+} from "../../../src/platform/session-store";
 import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import {
@@ -21,10 +27,14 @@ import {
   TriangleGlyph,
 } from "../../../src/ui/components/readout/glyphs";
 import { Truncate } from "../../../src/ui/components/Truncate";
-import { copy } from "../../../src/ui/copy";
+import { copy, siteAccessCopy } from "../../../src/ui/copy";
+import {
+  type SiteAccessEntry,
+  siteAccessView,
+} from "../../../src/ui/state/site-access";
 import "./SiteAccess.css";
 
-const text = copy.options.siteAccess;
+const text = siteAccessCopy;
 
 /**
  * Every origin headershim can touch, and every origin its enabled rules still
@@ -44,14 +54,13 @@ export function SiteAccessPage({
   const announce = useAnnounce();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
-  const view = siteAccessView(doc, grants);
-  const activeProfile = doc.profiles.find(
-    (profile) => profile.id === doc.activeProfileId,
-  );
+  const overrides = useSessionOverrides();
+  const view = siteAccessView(doc, grants, overrides);
+  const profile = activeProfile(doc);
   // A sensitive rule cautions only when its honest requirement is broad access:
   // requiredOrigins yields the all-sites origin for all-scope or hostless
   // pattern/regex rules, the only ones widened beyond one-at-a-time host grants.
-  const broadSensitiveCount = (activeProfile?.rules ?? []).filter(
+  const broadSensitiveCount = (profile?.rules ?? []).filter(
     (rule) =>
       rule.enabled &&
       requiredOrigins(rule).some(isAllSitesOrigin) &&
@@ -74,22 +83,24 @@ export function SiteAccessPage({
   const grant = (entry: SiteAccessEntry) =>
     void requestPermissions([entry.origin]).then((granted) => {
       if (granted) {
-        announce(copy.toast.activeOn(entry.domain));
+        announce(copy.toast.accessGranted);
         anchorFocus();
       }
     });
 
   const revoke = (entry: SiteAccessEntry) =>
-    void removePermissions([entry.origin]).then((removed) => {
-      if (removed) {
-        announce(
-          grants.allSites
-            ? text.revokedUnderAllSites(entry.domain)
-            : text.revoked(entry.domain),
-        );
-        anchorFocus();
-      }
-    });
+    void removePermissions([...(entry.grantedOrigins ?? [entry.origin])]).then(
+      (removed) => {
+        if (removed) {
+          announce(
+            grants.allSites
+              ? text.revokedUnderAllSites(entry.domain)
+              : text.revoked(entry.domain),
+          );
+          anchorFocus();
+        }
+      },
+    );
 
   const grantAllSites = () =>
     void requestPermissions([ALL_SITES_ORIGIN]).then((granted) => {
@@ -142,9 +153,30 @@ export function SiteAccessPage({
                   <TriangleGlyph />
                 </span>
               }
-              count={text.usedBy}
+              count={(entry) => `${text.usedBy} ${usageCount(entry)}`}
               action={text.grant}
               actionLabel={text.grantLabel}
+              pill
+              onAction={grant}
+            />
+          )}
+          {view.partial.length > 0 && (
+            <SiteGroup
+              heading={text.partialHeading}
+              entries={view.partial}
+              glyph={
+                <span class="sa-glyph needed">
+                  <TriangleGlyph />
+                </span>
+              }
+              count={(entry) =>
+                `${text.neededBy} ${usageCount(entry)} · ${text.partial(
+                  entry.limitedTo ?? entry.domain,
+                )}`
+              }
+              action={text.grant}
+              actionLabel={text.grantLabel}
+              pill
               onAction={grant}
             />
           )}
@@ -157,15 +189,17 @@ export function SiteAccessPage({
                   <CheckGlyph />
                 </span>
               }
-              count={text.ruleCount}
+              count={usageCount}
               action={text.revoke}
               actionLabel={text.revokeLabel}
               onAction={revoke}
             />
           )}
-          {view.needed.length === 0 && view.granted.length === 0 && (
-            <p class="sa-empty">{copy.emptyState.siteAccess}</p>
-          )}
+          {view.needed.length === 0 &&
+            view.partial.length === 0 &&
+            view.granted.length === 0 && (
+              <p class="sa-empty">{copy.emptyState.siteAccess}</p>
+            )}
           {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
         </div>
       )}
@@ -205,6 +239,25 @@ export function SiteAccessPage({
   );
 }
 
+/** Global session usage belongs to this global page, not the popup's tab view. */
+function useSessionOverrides(): readonly TabOverride[] {
+  const [overrides, setOverrides] = useState<readonly TabOverride[]>([]);
+  useEffect(() => {
+    let disposed = false;
+    const load = () =>
+      readSession().then((session) => {
+        if (!disposed) setOverrides(Object.values(session.tabs).flat());
+      });
+    void load();
+    const unsubscribe = subscribeSession(() => void load());
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, []);
+  return overrides;
+}
+
 function SiteGroup({
   heading,
   entries,
@@ -212,14 +265,17 @@ function SiteGroup({
   count,
   action,
   actionLabel,
+  pill,
   onAction,
 }: {
   heading: string;
   entries: readonly SiteAccessEntry[];
   glyph: ComponentChildren;
-  count: (n: number) => string;
+  count: (entry: SiteAccessEntry) => string;
   action: string;
   actionLabel: (domain: string) => string;
+  /** Granting is the same act the rule rows offer, so it carries the same pill. */
+  pill?: boolean;
   onAction: (entry: SiteAccessEntry) => void;
 }) {
   return (
@@ -237,17 +293,38 @@ function SiteGroup({
               value={entry.domain}
               class="mono sa-domain"
             />
-            <span class="sa-count">{count(entry.ruleCount)}</span>
-            <Button
-              kind="quiet"
-              label={actionLabel(entry.domain)}
-              onClick={() => onAction(entry)}
-            >
-              {action}
-            </Button>
+            <span class="sa-count">{count(entry)}</span>
+            {pill === true ? (
+              <button
+                type="button"
+                class="grant"
+                aria-label={actionLabel(entry.domain)}
+                onClick={() => onAction(entry)}
+              >
+                {action}
+              </button>
+            ) : (
+              <Button
+                kind="quiet"
+                label={actionLabel(entry.domain)}
+                onClick={() => onAction(entry)}
+              >
+                {action}
+              </Button>
+            )}
           </li>
         ))}
       </ul>
     </>
   );
+}
+
+function usageCount(entry: SiteAccessEntry): string {
+  const counts = [
+    ...(entry.ruleCount > 0 ? [text.ruleCount(entry.ruleCount)] : []),
+    ...(entry.thisTabCount === undefined
+      ? []
+      : [text.tabCount(entry.thisTabCount)]),
+  ];
+  return counts.length === 0 ? text.ruleCount(0) : counts.join(" · ");
 }

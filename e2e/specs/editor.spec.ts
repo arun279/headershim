@@ -1,18 +1,8 @@
-import type { Page, Worker } from "@playwright/test";
+import type { Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
-import { expect, seedState, test } from "../fixtures";
-
-// The Ready view attaches the popup's document-level keydown listener only once
-// it mounts, and init awaits async storage; pressing a shortcut before then
-// drops the key. The profile-switcher chip is the head control that view always
-// draws, so its visibility is the stable signal the keypress will be heard.
-async function waitForReady(page: Page): Promise<void> {
-  await expect(
-    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
-  ).toBeVisible();
-}
+import { expect, openPopup, test } from "../fixtures";
 
 async function readState(worker: Worker): Promise<StateDoc> {
   return worker.evaluate(async () => {
@@ -34,10 +24,8 @@ test("editor controls never save or leave the sheet by themselves", async ({
   extensionId,
   serviceWorker,
 }) => {
-  await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await waitForReady(page);
+  await openPopup(page, extensionId, serviceWorker, createV1Seed());
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
@@ -160,10 +148,8 @@ test("editor controls never save or leave the sheet by themselves", async ({
 test("Create rule is the only pointer action that saves a draft", {
   tag: "@host-access",
 }, async ({ context, extensionId, serviceWorker }) => {
-  await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await waitForReady(page);
+  await openPopup(page, extensionId, serviceWorker, createV1Seed());
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
@@ -222,10 +208,8 @@ test("Create rule is the only pointer action that saves a draft", {
 test("plain Enter stays in Value while the commit chord creates the rule", {
   tag: "@host-access",
 }, async ({ context, extensionId, serviceWorker }) => {
-  await seedState(serviceWorker, createV1Seed());
   const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await waitForReady(page);
+  await openPopup(page, extensionId, serviceWorker, createV1Seed());
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {

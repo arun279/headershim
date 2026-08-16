@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Profile, Rule, Scope, StateDoc } from "./model";
-import { CURRENT, createV1Seed, migrate, migrations } from "./schema";
+import { CURRENT, createV1Seed, migrate } from "./schema";
 
 function storedRule(
   num: number,
@@ -80,7 +80,7 @@ function validDoc(): StateDoc {
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: 5,
     settings: { paused: false, theme: "system" },
   };
@@ -145,7 +145,6 @@ describe("migrate", () => {
         hosts: [],
       });
     }
-    expect(migrations).toEqual({});
   });
 
   it("accepts all current settings variants", () => {
@@ -158,27 +157,31 @@ describe("migrate", () => {
     expect(migrate(dark).ok).toBe(true);
   });
 
-  it("accepts no active profile", () => {
-    expect(migrate({ ...validDoc(), activeProfileId: undefined }).ok).toBe(
-      true,
-    );
+  it("repairs a missing active profile id to the first profile", () => {
+    const doc = { ...validDoc(), activeProfileId: undefined };
+    const result = migrate(doc);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { ...doc, activeProfileId: firstProfile().id },
+    });
   });
 
-  it("repairs a dangling active profile id to no active profile", () => {
+  it("repairs a dangling active profile id to the first profile", () => {
     const doc = { ...validDoc(), activeProfileId: "missing" };
     const result = migrate(doc);
 
     expect(result).toEqual({
       ok: true,
-      value: { ...doc, activeProfileId: undefined },
+      value: { ...doc, activeProfileId: firstProfile().id },
     });
     if (result.ok) {
       expect(result.value).not.toBe(doc);
     }
   });
 
-  it("preserves a document whose profile name exceeds the write-time limit", () => {
-    const doc = withProfile({ name: "x".repeat(49) });
+  it("preserves a document with a long profile name", () => {
+    const doc = withProfile({ name: "x".repeat(200) });
     const result = migrate(doc);
 
     expect(result).toEqual({ ok: true, value: doc });
@@ -202,7 +205,6 @@ describe("migrate", () => {
       { ...validDoc(), profiles: [] },
       { ...validDoc(), profiles: "Default" },
       { ...validDoc(), profiles: [null] },
-      { ...validDoc(), activeProfileId: 1 },
       { ...validDoc(), nextRuleNum: "5" },
       { ...validDoc(), nextRuleNum: 0 },
       { ...validDoc(), nextRuleNum: 1.5 },

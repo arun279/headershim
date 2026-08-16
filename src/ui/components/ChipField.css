@@ -1,7 +1,7 @@
 .chip-field-label {
   display: block;
   margin-bottom: var(--sp-1);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--ink);
 }
 
@@ -27,6 +27,20 @@
   background: var(--panel);
   border-radius: var(--r-chip);
   font-size: 12px;
+}
+
+/* A chip that is not shaped like a hostname is stored verbatim and matches no
+   request, so it wears the same stop hue the refused-save copy does, and its
+   value carries a wavy underline so the verdict survives where the hue cannot
+   be seen. */
+.chip-field-chip.invalid {
+  color: var(--stop);
+  background: var(--stop-soft);
+  border-color: var(--stop);
+}
+
+.chip-field-chip.invalid .mono {
+  text-decoration: underline wavy;
 }
 
 .domain-chip {
@@ -65,13 +79,6 @@
   color: var(--ink2);
 }
 
-.chip-field-hint {
-  flex: none;
-  padding-right: var(--sp-1);
-  font-size: 10.5px;
-  color: var(--ink2);
-}
-
 .grant-field {
   margin-top: var(--sp-3);
 }
@@ -84,6 +91,8 @@
   border-radius: var(--r-ctl);
 }
 
-.grant-chip .mono {
+/* Named through the base class a grant chip always carries, so it sits at the
+   same specificity as the invalid-state rule above and not below it. */
+.chip-field-chip.grant-chip .mono {
   font-size: 11px;
 }

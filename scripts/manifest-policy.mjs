@@ -74,10 +74,14 @@ if (manifest.web_accessible_resources !== undefined) {
 if (manifest.sandbox !== undefined) {
   violations.push("sandbox must be absent");
 }
-// connect-src 'none' is what makes "HeaderShim never talks to the network" a
-// browser-enforced fact rather than a claim. Match it exactly: a subset check
-// passes while a directive is silently dropped, and this policy previously
-// inspected a key the built manifest did not even have.
+// connect-src 'none' is what makes "the extension's own pages and worker cannot
+// open fetch, XHR, WebSocket, EventSource, or sendBeacon" browser-enforced
+// rather than a claim; it does not cover images, media, fonts, frames, forms, or
+// navigations, so it is one of the two facts PRIVACY.md states, not the whole
+// story. check-no-network.mjs holds the other one, that the built files carry no
+// call written to any of them. Match this one exactly: a subset check passes while
+// a directive is silently dropped, and this policy previously inspected a key
+// the built manifest did not even have.
 const REQUIRED_CSP =
   "script-src 'self'; object-src 'self'; connect-src 'none';";
 if (manifest.content_security_policy?.extension_pages !== REQUIRED_CSP) {
@@ -96,7 +100,7 @@ if (manifest.options_ui?.open_in_tab !== true) {
   violations.push("options_ui.open_in_tab must be true");
 }
 
-const allowedCommands = ["_execute_action", "toggle-pause", "next-profile"];
+const allowedCommands = ["_execute_action", "toggle-pause", "previous-profile"];
 const unexpectedCommands = Object.keys(manifest.commands ?? {}).filter(
   (command) => !allowedCommands.includes(command),
 );

@@ -3,10 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // Guards against committed code/docs/tests referencing material that isn't in
-// this repo: private planning-doc citations, internal task/finding ids, and
-// process framing (checklists, review rounds, handoffs) a reader with only
-// the repo has no way to resolve. See README/e2e/README.md for the
-// reader-facing alternative each of these was rewritten into.
+// this repo: private planning-doc citations, internal task/finding ids,
+// process framing (checklists, review rounds, handoffs), and substitution
+// slots left unfilled, all of which a reader with only the repo has no way to
+// resolve. See README/e2e/README.md for the reader-facing alternative each of
+// these was rewritten into.
 
 const root = path.resolve(import.meta.dirname, "..");
 const SELF_PATH = "scripts/check-self-contained.mjs";
@@ -42,38 +43,46 @@ const RULES = [
   {
     name: "private-doc-citation",
     pattern: /\b(?:SPEC|DESIGN|ARCHITECTURE)\b/g,
-    hint: "cites a private planning document — inline the actual constraint instead",
+    hint: "cites a private planning document: inline the actual constraint instead",
+  },
+  {
+    // A comment line that is nothing but a screaming-snake token is a slot an
+    // edit was supposed to substitute into and didn't, so the line names
+    // something only the generator knew and says nothing to the reader.
+    name: "placeholder-token",
+    pattern: /(?<=^\s*\/\/\s*)[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?=\s*$)/g,
+    hint: "is a placeholder token, not a comment: write the sentence it stood in for",
   },
   {
     name: "section-symbol",
     pattern: /§/g,
-    hint: "cites a section of a document that isn't committed — inline the constraint instead",
+    hint: "cites a section of a document that isn't committed: inline the constraint instead",
   },
   {
     name: "finding-id",
     pattern:
-      /\b(?:correctness-\d+(?:-\d+)?|SEC\d+(?:-\d+)?|SIMP\d+(?:-\d+)?|TEST\d+(?:-\d+)?|SF\d+(?:-\d+)?|a11y-design-\d+(?:-\d+)?|T\d{2})\b/g,
-    hint: "references an internal task/finding id — describe the behavior instead",
+      /\b(?:correctness-\d+(?:-\d+)?|SEC\d+(?:-\d+)?|SIMP\d+(?:-\d+)?|TEST\d+(?:-\d+)?|SF\d+(?:-\d+)?|a11y-design-\d+(?:-\d+)?|T\d{2}|C\d+-\d+)\b/g,
+    hint: "references an internal task/finding id: describe the behavior instead",
   },
   {
     name: "review-verdict-tag",
     pattern: /\bverdict\s+P\d\b/g,
-    hint: "references an internal review-priority tag — state the actual reasoning instead",
+    hint: "references an internal review-priority tag: state the actual reasoning instead",
   },
   {
     name: "case-id",
     pattern: /\bcase\s+\d+\b/gi,
-    hint: "references an internal test-case number — use a descriptive name instead",
+    hint: "references an internal test-case number: use a descriptive name instead",
   },
   {
     name: "checklist",
     pattern: /\bchecklists?\b/gi,
-    hint: 'references a "checklist" that isn\'t in the repo — describe what to verify and how',
+    hint: 'references a "checklist" that isn\'t in the repo: describe what to verify and how',
   },
   {
     name: "verification-phase",
     pattern: /verification phase/gi,
-    hint: "references an internal review phase — describe the actual status instead",
+    hint: "references an internal review phase: describe the actual status instead",
   },
   {
     name: "spike",
@@ -88,7 +97,7 @@ const RULES = [
   {
     name: "handoff",
     pattern: /\bhandoffs?\b/gi,
-    hint: 'references a process "handoff" — describe the actual transition instead',
+    hint: 'references a process "handoff": describe the actual transition instead',
   },
   {
     name: "round-n",
@@ -98,7 +107,7 @@ const RULES = [
   {
     name: "packed-real-chrome-checklist",
     pattern: /packed\/real-chrome/gi,
-    hint: 'references the "packed/real-Chrome checklist" — describe the manual verification directly',
+    hint: 'references the "packed/real-Chrome checklist": describe the manual verification directly',
   },
   {
     // content-disposition is the real HTTP header name; only the bare,
@@ -131,7 +140,7 @@ for (const file of trackedFiles()) {
       const match = rule.pattern.exec(line);
       if (match !== null) {
         violations.push(
-          `${file}:${index + 1}: [${rule.name}] "${match[0]}" — ${rule.hint}`,
+          `${file}:${index + 1}: [${rule.name}] "${match[0]}": ${rule.hint}`,
         );
       }
     });

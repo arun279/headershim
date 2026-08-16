@@ -1,14 +1,16 @@
-import type { Locator, Page, Worker } from "@playwright/test";
+import type { Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
 import {
   expect,
+  openPopup,
   seedState,
   seedStateAndWait,
   stateWithRules,
   test,
 } from "../fixtures";
+import { pathologicalDoc } from "../fixtures/pathological";
 
 // The popup's real in-popup key bindings, driven through key events against the
 // built popup: the popup-wide `n` command and the editor's own key semantics
@@ -17,39 +19,6 @@ import {
 // (Alt+Shift+…) are the browser's own shortcut manager dispatching
 // chrome.commands and cannot be synthesized by Playwright or CDP; their
 // application-side command handlers run in src/test/background.test.ts.
-
-async function openPopup(
-  page: Page,
-  extensionId: string,
-  serviceWorker: Worker,
-  doc: StateDoc,
-): Promise<void> {
-  await seedState(serviceWorker, doc);
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  // The profile switcher is the head landmark the Ready view always draws, so
-  // its presence is the stable signal that the popup has rendered.
-  await expect(
-    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
-  ).toBeVisible();
-}
-
-// The popup's keydown listener attaches in a post-paint effect, so a shortcut
-// pressed the instant the head lands can fall in the gap before it is live and
-// be dropped. Re-press until the layer it opens is on screen. Each attempt first
-// checks whether the layer is already up, so a press that landed just after the
-// inner timeout is never followed by a stray keypress into the layer's focused
-// field; the whole retry stays inside the configured expect timeout.
-async function pressUntilVisible(
-  page: Page,
-  key: string,
-  layer: Locator,
-): Promise<void> {
-  await expect(async () => {
-    if (await layer.isVisible()) return;
-    await page.keyboard.press(key);
-    await expect(layer).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10_000 });
-}
 
 function firstRuleValue(serviceWorker: Worker): Promise<string | undefined> {
   return serviceWorker.evaluate(async () => {
@@ -77,11 +46,10 @@ test("the new-rule shortcut opens the editor", async ({
 }) => {
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
-  await pressUntilVisible(
-    page,
-    "n",
+  await page.keyboard.press("n");
+  await expect(
     page.getByRole("dialog", { name: copy.editor.heading("new", "Default") }),
-  );
+  ).toBeVisible();
 });
 
 // The `t` command opens the This-tab composer. The redesigned composer authors
@@ -103,11 +71,10 @@ test("the this-tab shortcut opens the composer", {
   await expect(
     page.getByRole("button", { name: copy.readout.justThisTab }),
   ).toBeVisible();
-  await pressUntilVisible(
-    page,
-    "t",
+  await page.keyboard.press("t");
+  await expect(
     page.getByRole("region", { name: copy.readout.newChange }),
-  );
+  ).toBeVisible();
 });
 
 // The editor key semantics run on the static host-access build so the seeded
@@ -126,7 +93,8 @@ test("plain Enter stays in a field while the commit chord saves", {
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
 
   await editor
     .getByRole("combobox", { name: copy.editor.labels.headerName })
@@ -179,7 +147,8 @@ test("Esc on a clean draft closes without committing", async ({
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(editor).toBeHidden();
   expect(await firstRuleValue(serviceWorker)).toBeUndefined();
@@ -198,7 +167,8 @@ test("Esc on a dirty draft guards, then a bare Esc closes the popup", async ({
   const editor = page.getByRole("dialog", {
     name: copy.editor.heading("new", "Default"),
   });
-  await pressUntilVisible(page, "n", editor);
+  await page.keyboard.press("n");
+  await expect(editor).toBeVisible();
   await editor
     .getByRole("textbox", { name: copy.editor.labels.value })
     .fill("dirty-draft");
@@ -268,7 +238,7 @@ test("the readout switch flips its rule from the keyboard", {
   await page.reload();
 
   const on = page.getByRole("switch", {
-    name: copy.readout.ruleToggle("x-keyboard-toggle", true),
+    name: copy.rules.switchLabel("x-keyboard-toggle", true),
   });
   await expect(on).toBeChecked();
 
@@ -278,7 +248,7 @@ test("the readout switch flips its rule from the keyboard", {
   await expect.poll(() => firstRuleEnabled(serviceWorker)).toBe(false);
   await expect(
     page.getByRole("switch", {
-      name: copy.readout.ruleToggle("x-keyboard-toggle", false),
+      name: copy.rules.switchLabel("x-keyboard-toggle", false),
     }),
   ).not.toBeChecked();
 });
@@ -369,4 +339,59 @@ test("options rules can be created and edited from the keyboard", {
   await page.keyboard.press("Enter");
   await expect(editDialog).toBeHidden();
   await expect.poll(() => firstRuleValue(serviceWorker)).toBe("edited");
+});
+
+// Opening the rule editor and closing it, and switching profiles, must each
+// leave focus on a real element, never stranded on <body>, which would drop
+// keyboard and screen-reader users with no anchor (WCAG 2.4.3). The platform
+// only restores focus when it is inside a closing dialog, so app code owns this.
+// Driven under the pathological seed so a long value or profile name cannot
+// knock focus loose, and polled because focus settles a frame after a layer
+// unmounts. Host-access build with a web tab in front so the readout resolves a
+// host and both the editor and the switch are reachable.
+test("popup layer transitions never strand focus on the body", {
+  tag: "@host-access",
+}, async ({ context, echoServers, extensionId, serviceWorker }) => {
+  const host = new URL(echoServers.h1Url).hostname;
+  await seedStateAndWait(serviceWorker, pathologicalDoc(host));
+  const web = await context.newPage();
+  await web.goto(`${echoServers.h1Url}/focus`);
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await web.bringToFront();
+  await page.reload();
+
+  const focusOnBody = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      return active === null || active === document.body;
+    });
+
+  // The rule editor is opened from the Add control and closed with Escape: focus
+  // enters the dialog, and on close it returns to the readout landmark rather
+  // than falling to the body (the editor is a full-surface swap that unmounts the
+  // opener, so the app, not the platform, has to place focus).
+  await page
+    .getByRole("button", { name: copy.readout.addChange })
+    .first()
+    .focus();
+  await page.keyboard.press("Enter");
+  const editor = page.getByRole("dialog");
+  await expect(editor).toBeVisible();
+  await expect.poll(focusOnBody).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeHidden();
+  await expect.poll(focusOnBody).toBe(false);
+
+  // Switching profiles from the picker lands focus on the switch trigger. Pick
+  // the first unselected row: a profile name can truncate in the picker, so it
+  // cannot be selected reliably by a name that may be cut.
+  await page
+    .getByRole("button", { name: copy.readout.switcher.chipLabel })
+    .click();
+  const picker = page.locator("#profile-switch-pop");
+  await expect(picker).toBeVisible();
+  await picker.locator(".pop-list .popt:not(.sel)").first().click();
+  await expect(picker).toBeHidden();
+  await expect.poll(focusOnBody).toBe(false);
 });

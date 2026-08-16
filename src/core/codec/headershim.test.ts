@@ -8,7 +8,6 @@ import {
   exportHeadershim,
   importHeadershim,
   migrate,
-  migrations,
 } from "./headershim";
 
 const GOLDEN_URL = new URL(
@@ -118,7 +117,7 @@ function profileSet(): StateDoc {
   return {
     v: 1,
     profiles,
-    activeProfileId: profiles[0]?.id,
+    activeProfileId: profiles[0]?.id ?? "",
     nextRuleNum: 5,
     settings: { paused: true, theme: "dark" },
   };
@@ -316,8 +315,8 @@ describe("headershim import", () => {
     });
   });
 
-  it("keeps suffixed collision names within the profile name limit", () => {
-    const name = "x".repeat(48);
+  it("suffixes a colliding name without truncating it", () => {
+    const name = "x".repeat(200);
     const doc = profileSet();
     const selected = doc.profiles[0];
     if (selected === undefined) {
@@ -336,7 +335,7 @@ describe("headershim import", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      value: { profiles: [{ name: `${"x".repeat(46)} 2` }] },
+      value: { profiles: [{ name: `${name} 2` }] },
     });
   });
 
@@ -370,12 +369,12 @@ describe("headershim import", () => {
         warnings: [
           {
             kind: "credential",
-            ruleName: "development",
+            ruleName: "authorization",
             header: "authorization",
           },
           {
             kind: "security-response",
-            ruleName: "unframe the docs",
+            ruleName: "content-security-policy",
             header: "content-security-policy",
           },
         ],
@@ -429,7 +428,6 @@ describe("headershim import", () => {
       { ...valid, profiles: null },
       { ...valid, profiles: [null] },
       { ...valid, profiles: [{ ...profile, name: "" }] },
-      { ...valid, profiles: [{ ...profile, name: "x".repeat(49) }] },
       { ...valid, profiles: [{ ...profile, badge: "ABC" }] },
       { ...valid, profiles: [{ ...profile, color: "amber" }] },
       { ...valid, profiles: [{ ...profile, rules: null }] },
@@ -465,13 +463,12 @@ describe("headershim import", () => {
 });
 
 describe("envelope migrations", () => {
-  it("passes the current golden envelope through the independent chain", () => {
+  it("passes the current golden envelope through unchanged", () => {
     const raw = readFileSync(MIGRATION_URL, "utf8");
     const parsed: unknown = JSON.parse(raw);
     const result = migrate(parsed);
 
     expect(CURRENT_SCHEMA_VERSION).toBe(1);
-    expect(migrations).toEqual({});
     expect(result).toEqual({ ok: true, value: parsed });
     if (result.ok) {
       expect(result.value).toBe(parsed);

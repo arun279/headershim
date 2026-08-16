@@ -11,11 +11,22 @@ export interface EchoServers {
   h2Url: string;
 }
 
-export async function spawnEchoServers(): Promise<{
+export function echoServerEnvironment(
+  base: NodeJS.ProcessEnv,
+  literalGrantPorts: boolean,
+): NodeJS.ProcessEnv {
+  return {
+    ...base,
+    ...(literalGrantPorts ? { HEADERSHIM_LITERAL_GRANT_PORTS: "1" } : {}),
+  };
+}
+
+export async function spawnEchoServers(literalGrantPorts = false): Promise<{
   servers: EchoServers;
   child: ChildProcess;
 }> {
   const child = spawn(process.execPath, [echoServerScript], {
+    env: echoServerEnvironment(process.env, literalGrantPorts),
     stdio: ["ignore", "pipe", "inherit"],
   });
   const servers = await new Promise<EchoServers>((resolve, reject) => {

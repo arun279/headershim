@@ -1,6 +1,7 @@
 import { BADGE_PALETTE } from "../badge";
 import { classifyHeaderName, normalizeHeaderName } from "../headers";
 import {
+  availableProfileName,
   type BadgeColor,
   type HeaderOp,
   normalizeBadgeText,
@@ -13,7 +14,6 @@ import { err, ok, type Result } from "../result";
 import { BADGE_COLORS, isRecord } from "../validation";
 import { detectImportFormat } from "./detect";
 import {
-  availableProfileName,
   type ImportError,
   type ImportedProfile,
   type ImportPlan,
@@ -91,6 +91,11 @@ type DroppedWarningKind =
   | "time-filter-dropped"
   | "url-replacement-dropped";
 
+interface RuleLocation {
+  readonly profileIndex: number;
+  readonly ruleIndex: number;
+}
+
 export type ModHeaderImportWarning =
   | {
       readonly kind: "request-append-degraded";
@@ -114,7 +119,7 @@ export type ModHeaderImportWarning =
       readonly ruleName: string;
       readonly value: string;
     }
-  | {
+  | (RuleLocation & {
       readonly kind: "dynamic-token";
       readonly ruleName: string;
       readonly tokens: readonly string[];
@@ -122,7 +127,7 @@ export type ModHeaderImportWarning =
         readonly kind: "convert-to-frozen-value";
         readonly tokens: readonly ("uuid" | "timestamp")[];
       };
-    };
+    });
 
 export type RegexValidator = (regex: string) => Promise<Result<void, unknown>>;
 
@@ -203,9 +208,9 @@ async function mapProfile(
   >
 > {
   const name = availableProfileName(
-    normalizeProfileName(source.title),
+    source.title.trim(),
     existingProfiles,
-    plannedProfiles,
+    plannedProfiles.map((profile) => profile.name),
   );
   const scopeResult = await importScope(source.urlFilters, validateRegex);
   if (!scopeResult.ok) {
@@ -223,7 +228,10 @@ async function mapProfile(
       return err({ kind: "invalid-export" });
     }
     mappings.push(
-      mapHeaderRule(parsed, "request", scopeResult.value.scope, resourceTypes),
+      mapHeaderRule(parsed, "request", scopeResult.value.scope, resourceTypes, {
+        profileIndex: plannedProfiles.length,
+        ruleIndex: mappings.length,
+      }),
     );
   }
   for (const row of source.respHeaders ?? []) {
@@ -232,7 +240,16 @@ async function mapProfile(
       return err({ kind: "invalid-export" });
     }
     mappings.push(
-      mapHeaderRule(parsed, "response", scopeResult.value.scope, resourceTypes),
+      mapHeaderRule(
+        parsed,
+        "response",
+        scopeResult.value.scope,
+        resourceTypes,
+        {
+          profileIndex: plannedProfiles.length,
+          ruleIndex: mappings.length,
+        },
+      ),
     );
   }
   for (const row of source.cookieHeaders ?? []) {
@@ -250,6 +267,10 @@ async function mapProfile(
         "cookie-semantics-degraded",
         scopeResult.value.scope,
         resourceTypes,
+        {
+          profileIndex: plannedProfiles.length,
+          ruleIndex: mappings.length,
+        },
       ),
     );
   }
@@ -268,6 +289,10 @@ async function mapProfile(
         "set-cookie-semantics-degraded",
         scopeResult.value.scope,
         resourceTypes,
+        {
+          profileIndex: plannedProfiles.length,
+          ruleIndex: mappings.length,
+        },
       ),
     );
   }
@@ -286,6 +311,10 @@ async function mapProfile(
         "csp-semantics-degraded",
         scopeResult.value.scope,
         resourceTypes,
+        {
+          profileIndex: plannedProfiles.length,
+          ruleIndex: mappings.length,
+        },
       ),
     );
   }
@@ -321,6 +350,7 @@ function mapHeaderRule(
   direction: "request" | "response",
   scope: Scope,
   resourceTypes: ResourceGroup[] | "all",
+  location: RuleLocation,
 ): RuleMapping {
   const header = normalizeHeaderName(source.name);
   const requestedOperation = source.operation;
@@ -330,7 +360,9 @@ function mapHeaderRule(
     classifyHeaderName(header).requestAppend === "disallowed"
       ? "set"
       : requestedOperation;
-  const ruleName = source.comment?.trim() || header;
+  // The header, not the comment: the warning is about the header, and it is
+  // one short token where a comment is free text of any length.
+  const ruleName = header;
   const warnings: ModHeaderImportWarning[] = [];
   if (operation !== requestedOperation) {
     warnings.push({
@@ -339,7 +371,7 @@ function mapHeaderRule(
       header,
     });
   }
-  appendDynamicTokenWarning(source.value, ruleName, warnings);
+  appendDynamicTokenWarning(source.value, ruleName, location, warnings);
 
   return {
     rule: {
@@ -370,10 +402,14 @@ function mapSpecialRule(
     | "csp-semantics-degraded",
   scope: Scope,
   resourceTypes: ResourceGroup[] | "all",
+  location: RuleLocation,
 ): RuleMapping {
-  const ruleName = source.comment?.trim() || source.name;
+  // The header the rule ends up writing, the same identifier every other
+  // warning on this rule is filed under. A per-cookie source names one cookie,
+  // which would file two warnings about one rule under two different names.
+  const ruleName = header;
   const warnings: ModHeaderImportWarning[] = [{ kind: warningKind, ruleName }];
-  appendDynamicTokenWarning(value, ruleName, warnings);
+  appendDynamicTokenWarning(value, ruleName, location, warnings);
 
   return {
     rule: {
@@ -510,6 +546,7 @@ function appendDroppedWarnings(
 function appendDynamicTokenWarning(
   value: string | undefined,
   ruleName: string,
+  location: RuleLocation,
   warnings: ModHeaderImportWarning[],
 ): void {
   if (value === undefined) {
@@ -529,6 +566,7 @@ function appendDynamicTokenWarning(
   warnings.push({
     kind: "dynamic-token",
     ruleName,
+    ...location,
     tokens,
     ...(convertible.length === 0
       ? {}
@@ -617,10 +655,6 @@ function isOptionalRecordArray(
   value: unknown,
 ): value is readonly Record<string, unknown>[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every(isRecord));
-}
-
-function normalizeProfileName(title: string): string {
-  return title.trim().slice(0, 48).trimEnd();
 }
 
 function describeRow(row: Record<string, unknown>): string {

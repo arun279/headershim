@@ -4,6 +4,8 @@ import {
   DNR_RESOURCE_TYPES,
   expandResourceTypes,
   isDomainSupported,
+  isHostnameShaped,
+  isUnanchoredPattern,
   originPatternForDomain,
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
@@ -70,7 +72,7 @@ describe("resource type expansion", () => {
   it("emits a multi-group subset in canonical DNR order, not UI-group order", () => {
     // xhr+scripts in UI order would be [xmlhttprequest, script]; the compiler
     // must emit DNR enum order so the reconcile round-trip compares equal to
-    // whatever order Chrome echoes back (C1-1).
+    // whatever order Chrome echoes back.
     expect(expandResourceTypes(["xhr", "scripts"])).toEqual([
       "script",
       "xmlhttprequest",
@@ -96,14 +98,23 @@ describe("scope conditions", () => {
         pattern: "||example.com^",
         hosts: ["example.com"],
       }),
-    ).toEqual({ urlFilter: "||example.com^" });
+    ).toEqual({
+      requestDomains: ["example.com"],
+      urlFilter: "||example.com^",
+    });
     expect(
       scopeCondition({
         type: "regex",
         regex: "^https://example\\.com/",
         hosts: ["example.com"],
       }),
-    ).toEqual({ regexFilter: "^https://example\\.com/" });
+    ).toEqual({
+      requestDomains: ["example.com"],
+      regexFilter: "^https://example\\.com/",
+    });
+    expect(
+      scopeCondition({ type: "pattern", pattern: "/api", hosts: [] }),
+    ).toEqual({ urlFilter: "/api" });
     expect(scopeCondition({ type: "all" })).toEqual({});
     expect(
       scopeCondition({ type: "domains", domains }).requestDomains,
@@ -116,6 +127,11 @@ describe("origin patterns", () => {
     expect(originPatternForDomain("api.example.com")).toBe(
       "*://*.api.example.com/*",
     );
+  });
+
+  it("uses exact-host patterns for IP literals", () => {
+    expect(originPatternForDomain("127.0.0.1")).toBe("*://127.0.0.1/*");
+    expect(originPatternForDomain("[::1]")).toBe("*://[::1]/*");
   });
 });
 
@@ -140,6 +156,23 @@ describe("urlFilter grammar", () => {
     const result = validateUrlFilter("||*.example.com");
     expect(result).toEqual({ ok: false, error: "domain-anchor-wildcard" });
   });
+
+  // A pattern with no pipe anchor is a substring match over the whole URL, the
+  // silent leak the caution band warns about; one with a leading pipe is anchored
+  // to the front and an empty field is the unwritten scope.
+  it.each(["example.com/", "*.example.com/", "/api/"])(
+    "flags the unanchored pattern %s",
+    (pattern) => {
+      expect(isUnanchoredPattern(pattern)).toBe(true);
+    },
+  );
+
+  it.each(["||example.com/", "|https://example.com/", ""])(
+    "clears the anchored or empty pattern %s",
+    (pattern) => {
+      expect(isUnanchoredPattern(pattern)).toBe(false);
+    },
+  );
 });
 
 describe("requestDomains grammar", () => {
@@ -174,5 +207,46 @@ describe("requestDomains grammar", () => {
   it("draws the boundary at U+0080, exactly where Chrome draws it", () => {
     expect(isDomainSupported("a\u007f.com")).toBe(true);
     expect(isDomainSupported("a\u0080.com")).toBe(false);
+  });
+});
+
+describe("isHostnameShaped, the author-time host check", () => {
+  // Wider than the compiler gate on purpose: it names the shapes Chrome stores
+  // and never matches, so a rule can never read live while changing nothing.
+  it.each([
+    ["example.com", "the ordinary case"],
+    ["a.b.example.com", "sub-domains"],
+    ["3.api.example.com", "an all-digit label inside a name"],
+    ["xn--bcher-kva.de", "an internationalized domain, as punycode"],
+    ["localhost", "a single label"],
+    ["192.168.0.1", "a canonical IPv4"],
+    ["[2001:db8::1]", "a bracketed IPv6 literal"],
+    ["[::ffff:192.0.2.128]", "an IPv4-mapped IPv6 literal"],
+    ["my_service.corp", "an underscore GURL keeps and Chrome matches verbatim"],
+    ["_dmarc.example.com", "a leading-underscore service label"],
+    ["under_score", "a single underscored label"],
+  ])("accepts %s (%s)", (host) => {
+    expect(isHostnameShaped(host)).toBe(true);
+  });
+
+  it.each([
+    ["*.example.com", "a wildcard, which requestDomains never expands"],
+    ["example.com:8080", "a port"],
+    ["http://example.com", "a scheme"],
+    ["example.com/api", "a path"],
+    [".example.com", "a leading dot"],
+    ["example.com.", "a trailing dot"],
+    ["example..com", "an empty label"],
+    ["exa mple.com", "a space"],
+    ["not a domain!!", "free text"],
+    ["999.1.1.1", "an out-of-range IPv4 octet Chrome would not match"],
+    ["01.2.3.4", "a non-canonical IPv4 octet"],
+    ["1.2.3", "a three-octet IPv4"],
+    ["[not-an-ip]", "brackets holding no IPv6"],
+    ["[192.0.2.1]", "a bracketed IPv4, which has no colon"],
+    ["[]", "empty brackets"],
+    ["", "the empty string"],
+  ])("rejects %s (%s)", (host) => {
+    expect(isHostnameShaped(host)).toBe(false);
   });
 });

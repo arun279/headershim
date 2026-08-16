@@ -1,18 +1,13 @@
 import { planBadge } from "../src/core/badge";
+import { emitRules } from "../src/core/compile";
 import {
-  compileDynamic,
-  compileSession,
-  dropUncompilable,
-} from "../src/core/compile";
-import { docMissingGrants } from "../src/core/grants";
-import {
-  activateNextProfile,
+  activatePreviousProfile,
   type StateDoc,
   type TabOverride,
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
+import { type RulesRevision, revisionOf } from "../src/core/revision";
 import { createV1Seed, migrate } from "../src/core/schema";
-import { computeStatus } from "../src/core/status";
 import { applyBadge } from "../src/platform/badge";
 import {
   getDynamicRules,
@@ -26,9 +21,9 @@ import {
   onChanged as onGrantsChanged,
 } from "../src/platform/permissions";
 import {
-  getReconcileError,
+  getAppliedRevision,
   read as readSession,
-  setReconcileError,
+  setAppliedRevision,
   subscribe as subscribeSession,
   write as writeSession,
 } from "../src/platform/session-store";
@@ -42,25 +37,20 @@ import {
 import { domainFromUrl } from "../src/platform/tabs";
 
 export default defineBackground(() => {
-  // Wake-local coordination for the single-flight scheduler, not durable
-  // state: a service-worker death mid-write self-heals on the next trigger.
   let running: Promise<void> | undefined;
+  let badgeDoc: StateDoc | undefined;
   let dirty = false;
 
   // Every listener registers synchronously at wake time; one registered after
   // an await would be silently dropped on event-driven service-worker wakes.
-  browser.runtime.onInstalled.addListener(() => reconcile());
-  browser.runtime.onStartup.addListener(() => reconcile());
-  subscribeState(() => void reconcile());
-  subscribeSession(() => void reconcile());
-  // Grants are not a compile input: Chrome enforces host access at match
-  // time, so a grant change only moves badge and needs-access surfaces.
-  // Fire-and-forget cleanup listeners swallow their own rejections (a rejected
-  // write must not escape unhandled, matching runUntilSettled's fail-closed
-  // discipline) while still returning the promise so callers can await settling.
-  onGrantsChanged(() => refreshBadge().catch(noop));
+  subscribeState(reconcile);
+  subscribeSession(reconcile);
+  // Grants are a compile input, so a grant change is a reconcile: it installs
+  // the rules a grant was waiting on and pulls back the ones a revoke covered,
+  // stored and This-tab alike.
+  onGrantsChanged(reconcile);
   browser.tabs.onRemoved.addListener((tabId) =>
-    endOverrides(tabId).catch(noop),
+    pruneOverrides((_row, id) => id !== tabId).catch(noop),
   );
   browser.tabs.onUpdated.addListener((tabId, _changeInfo, tab) =>
     enforceOverrideLifetime(tabId, tab.url).catch(noop),
@@ -68,6 +58,12 @@ export default defineBackground(() => {
   browser.commands.onCommand.addListener((command) =>
     handleCommand(command)?.catch(noop),
   );
+  browser.runtime.onStartup.addListener(reconcile);
+  browser.runtime.onInstalled.addListener(reconcile);
+  // A worker wake is itself a reconciliation trigger. Browser events are not
+  // durable, so this also retries a stale rule left by a failed update before
+  // the previous worker stopped.
+  void reconcile();
 
   function reconcile(): Promise<void> {
     if (running !== undefined) {
@@ -84,67 +80,126 @@ export default defineBackground(() => {
   }
 
   async function runUntilSettled(): Promise<void> {
-    try {
-      do {
-        dirty = false;
-        const applied = (await applyOnce()) || (await applyOnce());
-        await flagReconcileError(!applied);
-        await refreshBadge();
-      } while (dirty);
-    } catch {
-      // A throw outside the update*Rules window (a rejected read, a compile
-      // RangeError, a storage write) must still fail closed and visible rather
-      // than escape unhandled and leave state silently unreconciled.
-      await flagReconcileError(true).catch(noop);
-      await refreshBadge().catch(noop);
+    do {
+      dirty = false;
+      // Three attempts survive two consecutive DNR or storage failures.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (await applyOnce()) {
+          break;
+        }
+      }
+    } while (dirty);
+    if (badgeDoc !== undefined) {
+      await applyBadge(planBadge(badgeDoc)).catch(noop);
     }
   }
 
   async function applyOnce(): Promise<boolean> {
-    const doc = await loadDoc();
-    if (doc === undefined) {
-      return true;
-    }
-    const session = await readSession();
-    const desiredDynamic = compileDynamic(await compilableDoc(doc));
-    const desiredSession = compileSession(
-      Object.values(session.tabs).flat(),
-      doc.settings.paused,
-    );
-    const [actualDynamic, actualSession] = await Promise.all([
-      getDynamicRules(),
-      getSessionRules(),
-    ]);
-    const dynamicPlan = planReconcile(desiredDynamic, actualDynamic);
-    const sessionPlan = planReconcile(desiredSession, actualSession);
     try {
+      badgeDoc = undefined;
+      const doc = await loadDoc();
+      if (doc === undefined) {
+        return true;
+      }
+      badgeDoc = doc;
+      // Resolve every enabled regex against the browser's RE2 and read the live
+      // grants before compiling both bands.
+      const [session, granted, isRegexSupported] = await Promise.all([
+        readSession(),
+        grantSnapshot(),
+        resolveRegexSupport(doc, "active"),
+      ]);
+      const batch = emitRules({
+        doc,
+        overrides: Object.values(session.tabs).flat(),
+        granted,
+        isRegexSupported,
+      });
+      const [actualDynamic, actualSession] = await readRuleBands();
+      const desiredRevision = await revisionOf(batch.dynamic, batch.session);
+      if (actualDynamic === undefined || actualSession === undefined) {
+        await publishRevision(
+          actualDynamic === undefined ||
+            planReconcile(batch.dynamic, actualDynamic) !== null,
+          actualSession === undefined ||
+            planReconcile(batch.session, actualSession) !== null,
+          desiredRevision,
+        );
+        return false;
+      }
+      const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
+      const sessionPlan = planReconcile(batch.session, actualSession);
+      if (dynamicPlan === null && sessionPlan === null) {
+        const applied = await getAppliedRevision();
+        if (
+          applied?.dynamic !== desiredRevision.dynamic ||
+          applied?.session !== desiredRevision.session
+        ) {
+          await setAppliedRevision(desiredRevision);
+        }
+        return true;
+      }
+      await publishRevision(
+        dynamicPlan !== null,
+        sessionPlan !== null,
+        desiredRevision,
+      );
       if (dynamicPlan !== null) {
-        await updateDynamicRules(dynamicPlan);
+        await updateDynamicRules(dynamicPlan).catch(noop);
       }
       if (sessionPlan !== null) {
-        await updateSessionRules(sessionPlan);
+        await updateSessionRules(sessionPlan).catch(noop);
       }
+      const [installedDynamic, installedSession] = await readRuleBands();
+      const dynamicMismatch =
+        installedDynamic === undefined ||
+        planReconcile(batch.dynamic, installedDynamic) !== null;
+      const sessionMismatch =
+        installedSession === undefined ||
+        planReconcile(batch.session, installedSession) !== null;
+      await publishRevision(dynamicMismatch, sessionMismatch, desiredRevision);
+      return !dynamicMismatch && !sessionMismatch;
     } catch {
-      // Inputs are pre-validated, so a rejected update is unexpected — but
-      // storage has already changed, so the caller retries from a fresh read
-      // and raises the health flag rather than leaving stale rules live.
+      await setAppliedRevision({}).catch(noop);
       return false;
     }
-    return true;
   }
 
-  // Resolve every enabled regex against the browser's RE2 (async) so the pure
-  // core drop can strip rules Chrome would reject before they reach the atomic
-  // batch. Distinct regexes only; the common case (none, or all already valid)
-  // stays cheap.
-  async function compilableDoc(doc: StateDoc): Promise<StateDoc> {
-    return dropUncompilable(doc, await resolveRegexSupport(doc));
+  async function readRuleBands(): Promise<
+    readonly [
+      Awaited<ReturnType<typeof getDynamicRules>> | undefined,
+      Awaited<ReturnType<typeof getSessionRules>> | undefined,
+    ]
+  > {
+    return Promise.all([readBand(getDynamicRules), readBand(getSessionRules)]);
   }
 
-  async function flagReconcileError(value: boolean): Promise<void> {
-    if ((await getReconcileError()) !== value) {
-      await setReconcileError(value);
+  async function readBand<T>(read: () => Promise<T>): Promise<T | undefined> {
+    for (const delay of [0, 50, 200]) {
+      if (delay) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      try {
+        return await read();
+      } catch {}
     }
+    return undefined;
+  }
+
+  function publishRevision(
+    dynamicMismatch: boolean,
+    sessionMismatch: boolean,
+    desired: Required<RulesRevision>,
+  ): Promise<void> {
+    return setAppliedRevision(
+      dynamicMismatch
+        ? sessionMismatch
+          ? {}
+          : { session: desired.session }
+        : sessionMismatch
+          ? { dynamic: desired.dynamic }
+          : desired,
+    );
   }
 
   async function loadDoc(): Promise<StateDoc | undefined> {
@@ -190,49 +245,27 @@ export default defineBackground(() => {
     });
   }
 
-  async function refreshBadge(): Promise<void> {
-    const outcome = migrate(await readRaw());
-    if (!outcome.ok) {
-      return;
-    }
-    const [granted, reconcileError] = await Promise.all([
-      grantSnapshot(),
-      getReconcileError(),
-    ]);
-    const { state, title } = planBadge({
-      doc: outcome.value,
-      status: computeStatus({
-        doc: outcome.value,
-        grantGaps: docMissingGrants(outcome.value, granted),
-        reconcileError,
-      }),
-    });
-    await applyBadge(state, title);
-  }
-
-  async function endOverrides(
-    tabId: number,
-    keep: (row: TabOverride) => boolean = () => false,
+  // The one session-row pruner: keep the rows the predicate accepts, across
+  // every tab, in a single locked write. Tab close and cross-origin navigation
+  // are the two lifetime ends that remove rows before the tab can reuse them.
+  async function pruneOverrides(
+    keep: (row: TabOverride, tabId: number) => boolean,
   ): Promise<void> {
-    const session = await readSession();
-    if ((session.tabs[tabId] ?? []).length === 0) {
-      return;
-    }
     await locked(async () => {
       const current = await readSession();
-      const rows = current.tabs[tabId] ?? [];
-      const kept = rows.filter(keep);
-      if (kept.length === rows.length) {
-        return;
+      const entries = Object.entries(current.tabs)
+        .map(([id, rows]): [string, TabOverride[]] => [
+          id,
+          rows.filter((row) => keep(row, Number(id))),
+        ])
+        .filter(([, rows]) => rows.length > 0);
+      const tabs = Object.fromEntries(entries);
+      if (
+        Object.values(tabs).flat().length !==
+        Object.values(current.tabs).flat().length
+      ) {
+        await writeSession({ ...current, tabs });
       }
-      const tabs = Object.fromEntries(
-        Object.entries(current.tabs)
-          .map(([id, tabRows]): [string, TabOverride[]] =>
-            Number(id) === tabId ? [id, kept] : [id, tabRows],
-          )
-          .filter(([, tabRows]) => tabRows.length > 0),
-      );
-      await writeSession({ ...current, tabs });
     });
   }
 
@@ -243,9 +276,9 @@ export default defineBackground(() => {
     // activeTab exposes tab.url exactly while its grant is alive; a missing,
     // empty, or cross-origin url means the override's lifetime ended (the rows
     // must be gone before the user can re-click the icon after an A→B→A trip).
-    // domainFromUrl parses defensively — an uncommitted tab hands back "".
+    // domainFromUrl parses defensively because an uncommitted tab hands back "".
     const host = domainFromUrl(url);
-    return endOverrides(tabId, (row) => row.originHost === host);
+    return pruneOverrides((row, id) => id !== tabId || row.originHost === host);
   }
 
   function handleCommand(command: string): Promise<void> | undefined {
@@ -255,8 +288,8 @@ export default defineBackground(() => {
         settings: { ...doc.settings, paused: !doc.settings.paused },
       }));
     }
-    if (command === "next-profile") {
-      return mutateState(activateNextProfile);
+    if (command === "previous-profile") {
+      return mutateState(activatePreviousProfile);
     }
     return undefined;
   }

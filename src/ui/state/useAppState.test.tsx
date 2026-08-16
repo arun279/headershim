@@ -2,16 +2,18 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
-import type { Profile, Rule, StateDoc } from "../../core/model";
+import { compile } from "../../core/compile";
+import type { Profile, StateDoc, TabOverride } from "../../core/model";
+import { revisionOf } from "../../core/revision";
 import {
-  setReconcileError,
+  clearAppliedRevision,
+  setAppliedRevision,
   write as writeSession,
 } from "../../platform/session-store";
 import { write } from "../../platform/store";
-import { render, settle } from "../test/render";
+import { atPaint, render, settle } from "../test/render";
 import { useAppState } from "./useAppState";
 
-// fake-browser does not model tab focus, so pin the popup's tab directly.
 vi.mock("../../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(7),
 }));
@@ -21,47 +23,12 @@ function Probe() {
   return (
     <output data-phase={app.phase}>
       {app.phase === "ready"
-        ? `${app.status.kind}:${app.overrides.length}`
+        ? `${app.live.confirmation}:${app.overrides.length}:${Object.keys(app.session.tabs).length}`
         : app.phase === "newer-store"
           ? String(app.foundVersion)
           : ""}
     </output>
   );
-}
-
-function RegexProbe() {
-  const app = useAppState();
-  return (
-    <output>
-      {app.phase === "ready"
-        ? String(app.isRegexSupported("(?=unsupported)"))
-        : app.phase}
-    </output>
-  );
-}
-
-function probe(root: HTMLElement) {
-  const output = root.querySelector("output") as HTMLElement;
-  return {
-    phase: () => output.getAttribute("data-phase"),
-    text: () => output.textContent,
-  };
-}
-
-function rule(overrides: Partial<Rule> = {}): Rule {
-  return {
-    id: "rule-1",
-    num: 1,
-    direction: "request",
-    operation: "set",
-    header: "x-test",
-    value: "1",
-    scope: { type: "domains", domains: ["example.com"] },
-    resourceTypes: "all",
-    initiators: [],
-    enabled: true,
-    ...overrides,
-  };
 }
 
 function doc(profileOverrides: Partial<Profile> = {}): StateDoc {
@@ -83,102 +50,188 @@ function doc(profileOverrides: Partial<Profile> = {}): StateDoc {
   };
 }
 
+function override(num: number, tabId: number): TabOverride {
+  return {
+    num,
+    tabId,
+    originHost: "example.com",
+    direction: "request",
+    operation: "set",
+    header: "x-debug",
+    value: String(num),
+    enabled: true,
+  };
+}
+
+async function publish(
+  state: StateDoc,
+  overrides: readonly TabOverride[] = [],
+): Promise<void> {
+  const batch = compile({
+    doc: state,
+    overrides,
+    granted: {
+      origins: ["*://*.example.com/*"],
+      allSites: false,
+    },
+    isRegexSupported: () => true,
+  });
+  await setAppliedRevision(await revisionOf(batch.dynamic, batch.session));
+}
+
+function output(root: HTMLElement): HTMLOutputElement {
+  const element = root.querySelector("output");
+  if (!(element instanceof HTMLOutputElement)) {
+    throw new Error("missing output");
+  }
+  return element;
+}
+
 describe("useAppState", () => {
-  it("stays initializing on an empty store and becomes ready on the seed write", async () => {
-    const view = probe(render(<Probe />));
+  it("stays initializing until a valid document arrives", async () => {
+    const root = render(<Probe />);
     await settle();
-    expect(view.phase()).toBe("initializing");
+    expect(output(root).getAttribute("data-phase")).toBe("initializing");
 
-    await write(doc());
+    const state = doc();
+    await publish(state);
+    await write(state);
     await settle();
-    expect(view.phase()).toBe("ready");
-    expect(view.text()).toBe("live:0");
+    expect(output(root).textContent).toBe("applied:0:0");
   });
 
-  it("refuses a newer store with its version", async () => {
+  it("reports a newer stored version", async () => {
     await fakeBrowser.storage.local.set({ state: { v: 9 } });
-    const view = probe(render(<Probe />));
+    const root = render(<Probe />);
     await settle();
-    expect(view.phase()).toBe("newer-store");
-    expect(view.text()).toBe("9");
+    expect(output(root).textContent).toBe("9");
   });
 
-  it("treats a corrupt store as still initializing", async () => {
-    await fakeBrowser.storage.local.set({ state: { v: 1, profiles: [] } });
-    const view = probe(render(<Probe />));
+  it("checks regex support for profile-switch targets", async () => {
+    const regex = "^https://preview\\.example\\.com/";
+    const state = doc();
+    state.profiles.push({
+      id: "p2",
+      name: "Preview",
+      badgeText: "PR",
+      color: "blue",
+      rules: [
+        {
+          id: "target-regex",
+          num: 1,
+          direction: "request",
+          operation: "set",
+          header: "x-preview",
+          value: "on",
+          scope: { type: "regex", regex, hosts: ["preview.example.com"] },
+          resourceTypes: "all",
+          initiators: [],
+          enabled: true,
+        },
+      ],
+    });
+    const support = vi.fn(async () => ({ isSupported: true }));
+    Object.assign(fakeBrowser.declarativeNetRequest, {
+      isRegexSupported: support,
+    });
+    await publish(state);
+    await write(state);
+
+    const root = render(<Probe />);
     await settle();
-    expect(view.phase()).toBe("initializing");
+
+    expect(output(root).textContent).toBe("applied:0:0");
+    expect(support).toHaveBeenCalledExactlyOnceWith({ regex });
   });
 
-  it("surfaces the reconcile health flag as out-of-sync when it changes", async () => {
-    await write(doc());
-    const view = probe(render(<Probe />));
+  it("keeps a mismatched batch unprojectable", async () => {
+    const state = doc();
+    await setAppliedRevision({ dynamic: "different", session: "different" });
+    await write(state);
+    const root = render(<Probe />);
     await settle();
-    expect(view.text()).toBe("live:0");
-
-    await setReconcileError(true);
-    await settle();
-    expect(view.text()).toBe("out-of-sync:0");
-
-    await setReconcileError(false);
-    await settle();
-    expect(view.text()).toBe("live:0");
+    expect(output(root).textContent).toBe("pending:0:0");
   });
 
-  it("computes needs-access from the live grant snapshot", async () => {
-    await write(doc({ rules: [rule()] }));
-    const view = probe(render(<Probe />));
-    await settle();
-    expect(view.text()).toBe("needs-access:0");
-
+  it("keeps a changed batch pending on its first projection", async () => {
+    const state = doc();
     await fakeBrowser.permissions.request({
       origins: ["*://*.example.com/*"],
     });
+    await publish(state);
+    await write(state);
+    const root = render(<Probe />);
     await settle();
-    expect(view.text()).toBe("live:0");
+    expect(output(root).textContent).toBe("applied:0:0");
+
+    const firstProjection = atPaint(
+      () => output(root).textContent?.endsWith(":1:1") === true,
+      () => output(root).textContent,
+    );
+    await writeSession({
+      nextNum: 2,
+      tabs: { 7: [override(1, 7)] },
+    });
+
+    expect(await firstProjection).toBe("pending:1:1");
   });
 
-  it("counts this-tab overrides for the active tab only", async () => {
-    await write(doc());
-    const row = {
-      num: 1,
-      tabId: 7,
-      originHost: "example.com",
-      direction: "request",
-      operation: "set",
-      header: "x-debug",
-      value: "1",
-      enabled: true,
-    } as const;
+  it("ignores an older applied-revision read that resolves last", async () => {
+    const state = doc();
+    await publish(state);
+    await write(state);
+    const stale = await fakeBrowser.storage.session.get("appliedRules");
+    const readSession = fakeBrowser.storage.session.get.bind(
+      fakeBrowser.storage.session,
+    );
+    let release: ((value: Awaited<typeof stale>) => void) | undefined;
+    const delayed = new Promise<Awaited<typeof stale>>((resolve) => {
+      release = resolve;
+    });
+    const get = vi.spyOn(fakeBrowser.storage.session, "get");
+    get
+      .mockImplementationOnce(readSession)
+      .mockImplementationOnce(() => delayed);
+
+    const root = render(<Probe />);
+    await Promise.resolve();
+    await clearAppliedRevision();
+    release?.(stale);
+    await settle();
+
+    expect(output(root).textContent).toBe("pending:0:0");
+    get.mockRestore();
+  });
+
+  it("compiles every tab's overrides while exposing only the active tab's", async () => {
+    const state = doc();
+    const row7 = override(1, 7);
+    const row9 = override(2, 9);
+    const rows = [row7, row9];
+    await fakeBrowser.permissions.request({
+      origins: ["*://*.example.com/*"],
+    });
     await writeSession({
       nextNum: 3,
-      tabs: { 7: [row], 9: [{ ...row, num: 2, tabId: 9 }] },
+      tabs: { 7: [row7], 9: [row9] },
     });
+    await publish(state, rows);
+    await write(state);
 
-    const view = probe(render(<Probe />));
+    const root = render(<Probe />);
     await settle();
-    expect(view.text()).toBe("live:1");
+    expect(output(root).textContent).toBe("applied:1:2");
   });
 
-  it("resolves each active regex once and exposes browser support synchronously", async () => {
-    const checkRegex = vi.fn(async ({ regex }: { regex: string }) => ({
-      isSupported: regex !== "(?=unsupported)",
-    }));
-    Object.assign(fakeBrowser.declarativeNetRequest, {
-      isRegexSupported: checkRegex,
-    });
-    const invalid = rule({
-      scope: { type: "regex", regex: "(?=unsupported)", hosts: [] },
-    });
-    await write(
-      doc({
-        rules: [invalid, { ...invalid, id: "rule-2", num: 2 }],
-      }),
-    );
-
-    const root = render(<RegexProbe />);
+  it("stays applied when an edit does not change emitted rules", async () => {
+    const state = doc();
+    await publish(state);
+    await write(state);
+    const root = render(<Probe />);
     await settle();
-    expect(root.querySelector("output")?.textContent).toBe("false");
-    expect(checkRegex).toHaveBeenCalledTimes(1);
+
+    await write(doc({ name: "Renamed" }));
+    await settle();
+    expect(output(root).textContent).toBe("applied:0:0");
   });
 });

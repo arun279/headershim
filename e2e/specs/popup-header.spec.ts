@@ -88,7 +88,7 @@ test("a popup-created profile becomes active without reloading", async ({
   expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 });
 
-test("the popup options button opens the options workspace", async ({
+test("the popup options button opens the About page", async ({
   context,
   extensionId,
   serviceWorker,
@@ -103,10 +103,15 @@ test("the popup options button opens the options workspace", async ({
     context.waitForEvent("page"),
     popup.getByRole("button", { name: copy.actions.options }).click(),
   ]);
-  await options.waitForURL(/\/options\.html/);
+  await options.waitForURL(/\/options\.html#about$/);
   const optionsUrl = new URL(options.url());
   expect(optionsUrl.protocol).toBe("chrome-extension:");
   expect(optionsUrl.host).toBe(extensionId);
   expect(optionsUrl.pathname).toBe("/options.html");
-  await expect(options.getByRole("main")).toBeVisible();
+  await expect(
+    options.getByRole("heading", {
+      level: 1,
+      name: copy.options.about.title,
+    }),
+  ).toBeVisible();
 });

@@ -66,24 +66,26 @@ describe("ScopeEditor match type", () => {
     expect(new Set(ctx.radios().map((radio) => radio.name)).size).toBe(1);
   });
 
-  it("switches to URL pattern with its syntax helper and the grant-hosts disclosure", () => {
+  it("splits the URL-pattern helper into two lines, the second naming the substring reach", () => {
     const ctx = mount();
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
     expect(ctx.micros()).toEqual([
-      sentenceText(copy.editor.patternHint),
+      ...copy.editor.patternHint.map((line) => sentenceText(line)),
       copy.editor.grantHostsAllSites,
     ]);
+    expect(ctx.micros()[1]).toContain("query string");
   });
 
-  it("shows the RE2 helper on regex and discloses the empty-hosts all-sites grant", () => {
+  it("shows the anchored subdomains-only idiom on regex and discloses the all-sites grant", () => {
     const ctx = mount();
     fire(() => ctx.radios()[2]?.click());
     expect(ctx.root.querySelector('[aria-label="Regex"]')).not.toBeNull();
     expect(ctx.micros()).toEqual([
-      copy.editor.regexHint,
+      sentenceText(copy.editor.regexHint),
       copy.editor.grantHostsAllSites,
     ]);
+    expect(ctx.micros()[0]).toContain("subdomains only");
   });
 
   it("selects All sites as the fourth scope segment", () => {
@@ -113,11 +115,16 @@ describe("ScopeEditor domain chips", () => {
     expect(ctx.chips()).toEqual(["api.example.com", "cdn.example.com"]);
   });
 
-  it("shows the Enter hint beside the chip input", () => {
+  // The placeholder already offers the add on screen, so the key is named only
+  // for a reader who cannot see it: described, not printed.
+  it("names the Enter key in the chip input's description, not beside it", () => {
     const ctx = mount();
-    const hint = ctx.root.querySelector(".chip-field-hint") as HTMLElement;
-    expect(hint.textContent).toBe(copy.editor.addChipHint);
-    expect(ctx.chipInput().getAttribute("aria-describedby")).toContain(hint.id);
+    const described = ctx.chipInput().getAttribute("aria-describedby") ?? "";
+    const hint = described
+      .split(" ")
+      .map((id) => ctx.root.querySelector(`#${id}`))
+      .find((node) => node?.textContent === copy.editor.addChipHint);
+    expect(hint?.className).toBe("sr-only");
   });
 
   it("commits pending text when the field blurs", () => {

@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "preact/hooks";
-import { availableProfileName } from "../../../src/core/codec/headershim";
+import { useRef, useState } from "preact/hooks";
 import { shouldShowRuleCountWarning } from "../../../src/core/limits";
 import {
-  BADGE_COLORS,
+  activeProfile,
+  availableProfileName,
   type Profile,
   type StateDoc,
 } from "../../../src/core/model";
@@ -11,10 +11,10 @@ import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { ProfileList } from "../../../src/ui/components/ProfileList";
 import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
-import { Toast } from "../../../src/ui/components/Toast";
+import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
-import { useToast } from "../useToast";
+import { useToast } from "../../../src/ui/state/useToast";
 import "./Profiles.css";
 
 const text = copy.options.profiles;
@@ -26,62 +26,41 @@ const text = copy.options.profiles;
  */
 export function ProfilesPage({
   doc,
+  paused,
   mutations,
 }: {
   doc: StateDoc;
+  paused: boolean;
   mutations: Mutations;
 }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const [openId, setOpenId] = useState(
-    doc.profiles.find((profile) => profile.id === doc.activeProfileId)?.id ??
-      doc.profiles[0]?.id,
-  );
+  const [openId, setOpenId] = useState<string | undefined>(undefined);
   const [confirmDelete, setConfirmDelete] = useState<Profile | undefined>(
     undefined,
   );
-  const {
-    toast,
-    action: toastAction,
-    showUndoable,
-    flash,
-    dismiss,
-    retireUndo,
-  } = useToast();
+  const { toast, showUndoable, flash, dismiss } = useToast();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (doc.activeProfileId !== undefined) {
-      setOpenId(doc.activeProfileId);
-    }
-  }, [doc.activeProfileId]);
 
   const run = <T,>(mutation: Promise<Result<T, MutationError>>) => {
     void mutation.then((outcome) => {
       if (outcome.ok) {
-        retireUndo();
+        dismiss();
       } else {
         flash(outcome.error);
       }
     });
   };
 
-  const enabledRuleCount =
-    doc.profiles
-      .find((profile) => profile.id === doc.activeProfileId)
-      ?.rules.filter((rule) => rule.enabled).length ?? 0;
+  const enabledRuleCount = activeProfile(doc).rules.filter(
+    (rule) => rule.enabled,
+  ).length;
 
   const create = () => {
     void mutations
-      .createProfile({
-        name: availableProfileName(text.newName, doc.profiles, []),
-        color:
-          BADGE_COLORS[doc.profiles.length % BADGE_COLORS.length] ??
-          BADGE_COLORS[0],
-        enabled: false,
-      })
+      .createProfile(availableProfileName(text.newName, doc.profiles))
       .then((outcome) => {
         if (outcome.ok) {
-          retireUndo();
+          dismiss();
           setOpenId(outcome.value.id);
         } else {
           flash(outcome.error);
@@ -92,7 +71,7 @@ export function ProfilesPage({
   const clone = (profileId: string) =>
     void mutations.cloneProfile(profileId).then((outcome) => {
       if (outcome.ok) {
-        retireUndo();
+        dismiss();
         setOpenId(outcome.value.id);
       } else {
         flash(outcome.error);
@@ -106,9 +85,11 @@ export function ProfilesPage({
         flash(outcome.error);
         return;
       }
-      const { profile: deleted, index } = outcome.value;
-      showUndoable(copy.toast.profileDeleted(profile.name), () =>
-        mutations.restoreProfile(deleted, index),
+      showUndoable(
+        outcome.value.placeholderProfileId === undefined
+          ? copy.toast.profileDeleted(profile.name)
+          : copy.toast.lastProfileDeleted(profile.name),
+        () => mutations.restoreProfile(outcome.value),
       );
       titleRef.current?.focus();
     });
@@ -137,11 +118,10 @@ export function ProfilesPage({
         <ProfileList
           profiles={doc.profiles}
           activeProfileId={doc.activeProfileId}
+          paused={paused}
           openProfileId={openId}
           onOpen={setOpenId}
-          onToggle={(id, enabled) =>
-            run(mutations.activateProfile(enabled ? id : undefined))
-          }
+          onActivate={(id) => run(mutations.activateProfile(id))}
           onReorder={(id, toIndex) =>
             run(mutations.reorderProfile(id, toIndex))
           }
@@ -177,24 +157,17 @@ export function ProfilesPage({
             >
               {copy.actions.cancel}
             </button>
-            <Button kind="quiet" onClick={() => deleteProfile(confirmDelete)}>
+            <Button
+              kind="destructive"
+              onClick={() => deleteProfile(confirmDelete)}
+            >
               {text.deleteConfirm.confirm}
             </Button>
           </div>
         </Modal>
       )}
 
-      {toast !== undefined && (
-        <Toast
-          nonce={toast.nonce}
-          onDismiss={dismiss}
-          persist={toastAction !== undefined}
-          actionLabel={toastAction?.label}
-          onAction={toastAction?.run}
-        >
-          {toast.message}
-        </Toast>
-      )}
+      <ToastHost toast={toast} onDismiss={dismiss} />
     </section>
   );
 }

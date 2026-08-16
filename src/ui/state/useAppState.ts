@@ -1,22 +1,21 @@
-import { useEffect, useState } from "preact/hooks";
-import {
-  docMissingGrants,
-  type GrantSnapshot,
-  type RuleGrantGap,
-} from "../../core/grants";
+import { useEffect, useMemo, useState } from "preact/hooks";
+import { confirm, type Live } from "../../core/applied";
+import { compile } from "../../core/compile";
+import type { GrantSnapshot } from "../../core/grants";
 import type { StateDoc, TabOverride } from "../../core/model";
+import { type RulesRevision, revisionOf } from "../../core/revision";
 import { migrate } from "../../core/schema";
-import { computeStatus, type SystemStatus } from "../../core/status";
+import type { Batch } from "../../core/verdict";
 import { resolveRegexSupport } from "../../platform/dnr";
 import {
   snapshot as grantSnapshot,
   onChanged as onGrantsChanged,
 } from "../../platform/permissions";
 import {
-  getReconcileError,
+  getAppliedRevision,
   read as readSession,
   type SessionState,
-  subscribeReconcileError,
+  subscribeAppliedRevision,
   subscribe as subscribeSession,
 } from "../../platform/session-store";
 import { readRaw, subscribe as subscribeStore } from "../../platform/store";
@@ -28,14 +27,14 @@ export type AppState =
   | {
       readonly phase: "ready";
       readonly doc: StateDoc;
-      readonly status: SystemStatus;
+      readonly live: Live;
       readonly grants: GrantSnapshot;
-      readonly grantGaps: readonly RuleGrantGap[];
       readonly isRegexSupported: (regex: string) => boolean;
       /** The active tab's id; undefined on chrome:// and store pages. */
       readonly tabId: number | undefined;
       /** This-tab session overrides for the active tab, in insertion order. */
       readonly overrides: readonly TabOverride[];
+      readonly session: SessionState;
     };
 
 type DocSource =
@@ -45,13 +44,6 @@ type DocSource =
     }
   | { readonly newerVersion: number };
 
-/**
- * Projects the popup's world from its two buses: the state document over
- * `storage.onChanged` and the live grant snapshot over `permissions.onChanged`
- * (plus the session store for This-tab rows and the reconcile health flag).
- * A grant revoked while the popup is open flips the needs-access surfaces at
- * the same moment it flips the badge — both read `computeStatus`.
- */
 export function useAppState(): AppState {
   const [docSource, setDocSource] = useState<DocSource | undefined>(undefined);
   const [grants, setGrants] = useState<GrantSnapshot | undefined>(undefined);
@@ -59,12 +51,18 @@ export function useAppState(): AppState {
     nextNum: 1,
     tabs: {},
   });
-  const [reconcileError, setReconcileError] = useState(false);
+  const [appliedRevision, setAppliedRevision] = useState<RulesRevision>();
+  const [expected, setExpected] = useState<{
+    readonly batch: Batch;
+    readonly revision: RulesRevision;
+  }>();
   const [tabId, setTabId] = useState<number | undefined>(undefined);
   const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     let disposed = false;
+    let docGeneration = 0;
+    let appliedGeneration = 0;
     const assign =
       <T>(set: (value: T) => void) =>
       (value: T) => {
@@ -74,13 +72,14 @@ export function useAppState(): AppState {
       };
 
     const loadDoc = async () => {
+      const generation = ++docGeneration;
       const outcome = migrate(await readRaw());
-      if (disposed) {
+      if (disposed || generation !== docGeneration) {
         return;
       }
       if (outcome.ok) {
         const isRegexSupported = await resolveRegexSupport(outcome.value);
-        if (!disposed) {
+        if (!disposed && generation === docGeneration) {
           setDocSource({ doc: outcome.value, isRegexSupported });
         }
       } else if (outcome.error.kind === "newer-store") {
@@ -92,17 +91,21 @@ export function useAppState(): AppState {
     };
     const loadGrants = () => grantSnapshot().then(assign(setGrants));
     const loadSession = () => readSession().then(assign(setSession));
-    const loadHealth = () =>
-      getReconcileError().then(assign(setReconcileError));
+    const loadApplied = async () => {
+      const generation = ++appliedGeneration;
+      const revision = await getAppliedRevision();
+      if (!disposed && generation === appliedGeneration) {
+        setAppliedRevision(revision);
+      }
+    };
 
-    // Ready only once every source has answered, so the first rendered state
-    // never flashes a false Live while the health flag or session rows are
-    // still in flight.
+    // Wait for the applied revision and session rows before projecting live
+    // state.
     void Promise.all([
       loadDoc(),
       loadGrants(),
       loadSession(),
-      loadHealth(),
+      loadApplied(),
       activeTabId().then(assign(setTabId)),
     ]).then(() => assign(setBooted)(true));
 
@@ -110,7 +113,7 @@ export function useAppState(): AppState {
       subscribeStore(() => void loadDoc()),
       onGrantsChanged(() => void loadGrants()),
       subscribeSession(() => void loadSession()),
-      subscribeReconcileError(() => void loadHealth()),
+      subscribeAppliedRevision(() => void loadApplied()),
     ];
     return () => {
       disposed = true;
@@ -120,6 +123,34 @@ export function useAppState(): AppState {
     };
   }, []);
 
+  const batch = useMemo(
+    () =>
+      docSource !== undefined &&
+      !("newerVersion" in docSource) &&
+      grants !== undefined
+        ? compile({
+            doc: docSource.doc,
+            overrides: Object.values(session.tabs).flat(),
+            granted: grants,
+            isRegexSupported: docSource.isRegexSupported,
+          })
+        : undefined,
+    [docSource, grants, session],
+  );
+  useEffect(() => {
+    let disposed = false;
+    if (batch !== undefined) {
+      void revisionOf(batch.dynamic, batch.session).then((revision) => {
+        if (!disposed) {
+          setExpected({ batch, revision });
+        }
+      });
+    }
+    return () => {
+      disposed = true;
+    };
+  }, [batch]);
+
   if (!booted || docSource === undefined || grants === undefined) {
     return { phase: "initializing" };
   }
@@ -127,15 +158,22 @@ export function useAppState(): AppState {
     return { phase: "newer-store", foundVersion: docSource.newerVersion };
   }
 
-  const grantGaps = docMissingGrants(docSource.doc, grants);
+  if (batch === undefined) {
+    return { phase: "initializing" };
+  }
+
   return {
     phase: "ready",
     doc: docSource.doc,
-    status: computeStatus({ doc: docSource.doc, grantGaps, reconcileError }),
+    live: confirm(
+      batch,
+      expected?.batch === batch ? expected.revision : undefined,
+      appliedRevision,
+    ),
     grants,
-    grantGaps,
     isRegexSupported: docSource.isRegexSupported,
     tabId,
     overrides: tabId === undefined ? [] : (session.tabs[tabId] ?? []),
+    session,
   };
 }

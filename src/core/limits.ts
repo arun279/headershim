@@ -1,11 +1,13 @@
 import type { Rule, StateDoc } from "./model";
 import { err, ok, type Result } from "./result";
 
+export const MAX_DYNAMIC_RULES = 5_000;
 export const MAX_ENABLED_RULES = 4_500;
 export const MAX_REGEX_RULES = 1_000;
 export const MAX_SESSION_OVERRIDES = 1_000;
+export const MINIMUM_CHROME_VERSION = 120;
 export const MAX_DOC_BYTES = 4 * 1024 * 1024;
-export const RULE_COUNT_WARNING_THRESHOLD = 4_000;
+export const RULE_COUNT_WARNING_THRESHOLD = MAX_ENABLED_RULES - 500;
 
 export type LimitError =
   | {
@@ -17,6 +19,11 @@ export type LimitError =
       readonly kind: "regex-rule-limit-exceeded";
       readonly count: number;
       readonly limit: typeof MAX_REGEX_RULES;
+    }
+  | {
+      readonly kind: "dynamic-rule-limit-exceeded";
+      readonly count: number;
+      readonly limit: typeof MAX_DYNAMIC_RULES;
     }
   | {
       readonly kind: "session-override-limit-exceeded";
@@ -40,6 +47,15 @@ export function checkEnabledRuleLimits(
     });
   }
 
+  const dynamicCount = projectedDynamicRuleCount(candidateEnabledRules);
+  if (dynamicCount > MAX_DYNAMIC_RULES) {
+    return err({
+      kind: "dynamic-rule-limit-exceeded",
+      count: dynamicCount,
+      limit: MAX_DYNAMIC_RULES,
+    });
+  }
+
   const regexCount = candidateEnabledRules.filter(
     (rule) => rule.scope.type === "regex",
   ).length;
@@ -52,6 +68,37 @@ export function checkEnabledRuleLimits(
   }
 
   return ok(undefined);
+}
+
+export function enabledRulesFit(
+  candidateEnabledRules: readonly Rule[],
+): boolean {
+  return (
+    candidateEnabledRules.length <= MAX_ENABLED_RULES &&
+    projectedDynamicRuleCount(candidateEnabledRules) <= MAX_DYNAMIC_RULES &&
+    candidateEnabledRules.filter((rule) => rule.scope.type === "regex")
+      .length <= MAX_REGEX_RULES
+  );
+}
+
+/**
+ * A domains rule can produce one installed projection per named domain: either
+ * that domain joins the fully granted projection or it needs its own narrowed
+ * filter. Other scopes never split. Counting that grant-independent ceiling at
+ * commit time prevents a saved profile from overflowing Chrome after grants
+ * change.
+ */
+export function projectedDynamicRuleCount(
+  candidateEnabledRules: readonly Rule[],
+): number {
+  return candidateEnabledRules.reduce(
+    (count, rule) =>
+      count +
+      (rule.scope.type === "domains"
+        ? Math.max(1, rule.scope.domains.length)
+        : 1),
+    0,
+  );
 }
 
 export function checkSessionOverrideLimit(

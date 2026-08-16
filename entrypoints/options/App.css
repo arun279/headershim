@@ -1,7 +1,8 @@
 /*
  * The Workbench frame: a left rail that owns the brand and navigation, and a
- * content column that fills the window at a readable measure. Nothing floats in
- * a gray void; the rail and the content each paint edge to edge.
+ * content column that fills the window. Nothing floats in a gray void; the rail
+ * and the content each paint edge to edge. A page that reads better narrow holds
+ * its own measure within that column, rather than one cap narrowing them all.
  */
 
 .wb {
@@ -46,7 +47,7 @@
   width: 24px;
   height: 24px;
   flex: none;
-  border-radius: 7px;
+  border-radius: var(--r-chip);
   background: var(--live-soft);
   color: var(--live);
 }
@@ -62,7 +63,7 @@
   color: var(--ink);
 }
 .wb-version {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink3);
 }
 
@@ -91,8 +92,9 @@
   font-size: 13px;
   font-weight: 550;
 }
+/* Hover lifts the ink only; the filled well is the current page's alone, so
+   pointing at one destination never wears the mark that means you are on it. */
 .wb-nav-link:hover {
-  background: var(--raise);
   color: var(--ink);
 }
 /* Active: bold + filled well + accent bar, so the marker never rests on color
@@ -112,11 +114,23 @@
 }
 .wb-page {
   width: 100%;
-  max-width: 940px;
   padding: 28px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+}
+/* Rules and Active changes read every row at once and take the window. The
+   reading and manage pages hold a measure and centre in the column, so a card
+   is a reading column rather than a full-bleed panel with a void down one side.
+   The card fills the measure, so each page's prose reads to the card edge
+   without a per-paragraph width of its own. */
+.about-page,
+.profiles-page,
+.site-access-page,
+.import-export-page,
+.settings-page {
+  max-width: 40rem;
+  margin-inline: auto;
 }
 
 .wb-head {
@@ -125,23 +139,26 @@
   justify-content: space-between;
   gap: var(--sp-5);
 }
+/* fit-content so the focus ring a nav click lands here draws around the word
+   rather than across the full content width. */
 .wb-title {
+  width: fit-content;
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
-/* The shared page card: Site access, Import & export, and About all sit on it. */
-.sa-card,
-.ie-block,
-.about-card {
+/* The shared page card: Site access, Import & export, and About all sit on it.
+   :where() so the recipe carries no specificity, and a page's own single-class
+   modifier (the all-on card's row) wins over it without having to out-specify it. */
+:where(.sa-card, .ie-block, .about-card, .perm-card) {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   padding: 18px 20px;
   background: var(--panel);
   border: var(--hairline) solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--r-card);
 }
 
 /* Modal card + confirm actions the pages reuse. */
@@ -170,9 +187,26 @@
     border-right: none;
     border-bottom: var(--hairline) solid var(--hair);
   }
+  /* One wrapped band of destinations. Two columns of unequal length leave a
+     void beside the shorter one, and the group headings are a second axis a
+     band has no room to carry; the nav's own label still names the region. */
   .wb-nav-groups {
     flex-flow: row wrap;
-    gap: 10px 20px;
+    gap: 2px 6px;
+  }
+  .wb-nav-group {
+    flex-flow: row wrap;
+    gap: 2px 6px;
+  }
+  .wb-nav-grouplabel {
+    display: none;
+  }
+  /* The heading and the page's controls each take the width rather than
+     splitting it, so a two-word title stops breaking across two lines. */
+  .wb-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
   }
   .wb-page {
     padding: 20px 18px 48px;

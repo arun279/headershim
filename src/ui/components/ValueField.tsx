@@ -12,26 +12,27 @@ interface ValueFieldProps {
   value: string;
   /** Present while the value is a generated literal; hand-editing clears it. */
   generated?: Rule["generated"] | undefined;
-  /** Formatted freeze time when the generated value is the one already saved. */
-  frozenAt?: string | undefined;
   error?: string | undefined;
   onInput: (value: string) => void;
   onGenerate?: ((kind: "uuid" | "timestamp") => void) | undefined;
 }
 
 /**
- * Value input with the Insert menu for generated values. Inserting writes the
- * actual string — never a token — and the note under the field says exactly
- * what that means: frozen at save, not per request. The field grows with its
- * content so a long credential reads from its start, and a pasted value is
- * trimmed of the surrounding whitespace the clipboard adds: that is a clipboard
- * artifact, not something the user typed.
+ * Value input with the Generate menu for frozen values. Both the typed and the
+ * generated case carry a standing note under the field, so it is never silent
+ * about what the value is: a hand-typed value is used verbatim, and Generate
+ * writes an actual string — never a token — frozen at that moment, so neither is
+ * a template that fills in per request. The field grows with its content so a
+ * long credential reads from its start, and a pasted value is trimmed of the
+ * surrounding whitespace the clipboard adds: that is a clipboard artifact, not
+ * something the user typed.
  */
 export function ValueField(props: ValueFieldProps) {
   const id = useId();
+  const { generated, onGenerate } = props;
   const [newlineRemoved, setNewlineRemoved] = useState(false);
   const describedBy = [
-    ...(props.generated === undefined ? [] : [`${id}-note`]),
+    `${id}-note`,
     ...(newlineRemoved ? [`${id}-newline-note`] : []),
     ...(props.error === undefined ? [] : [`${id}-error`]),
   ].join(" ");
@@ -48,7 +49,8 @@ export function ValueField(props: ValueFieldProps) {
             class="field mono value-input"
             rows={2}
             wrap="soft"
-            placeholder={copy.editor.placeholders.value}
+            spellcheck={false}
+            autocomplete="off"
             value={props.value}
             aria-invalid={props.error !== undefined ? true : undefined}
             aria-describedby={describedBy === "" ? undefined : describedBy}
@@ -84,31 +86,25 @@ export function ValueField(props: ValueFieldProps) {
               setNewlineRemoved(/\r|\n/.test(pasted.trim()));
             }}
           />
-          {props.onGenerate !== undefined && (
-            <InsertMenu onGenerate={props.onGenerate} />
-          )}
+          {onGenerate !== undefined && <GenerateMenu onGenerate={onGenerate} />}
         </div>
-        {props.generated !== undefined && (
-          <p class="editor-micro" id={`${id}-note`}>
-            {props.frozenAt === undefined
-              ? copy.generatedValue.note
-              : copy.generatedValue.frozen(props.frozenAt)}
-            {props.onGenerate !== undefined && (
-              <>
-                {" · "}
-                <button
-                  type="button"
-                  class="link-btn"
-                  onClick={() =>
-                    props.onGenerate?.(props.generated?.kind ?? "uuid")
-                  }
-                >
-                  {copy.actions.regenerate}
-                </button>
-              </>
-            )}
-          </p>
-        )}
+        <p class="editor-micro" id={`${id}-note`}>
+          {generated === undefined
+            ? copy.valueNote.literal
+            : copy.valueNote.frozen(generated.at)}
+          {generated !== undefined && onGenerate !== undefined && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                class="link-btn"
+                onClick={() => onGenerate(generated.kind)}
+              >
+                {copy.actions.regenerate}
+              </button>
+            </>
+          )}
+        </p>
         {newlineRemoved && (
           <p class="editor-micro value-newline-note" id={`${id}-newline-note`}>
             {copy.editor.newlineRemoved}
@@ -128,7 +124,7 @@ function stripLineBreaks(value: string): string {
   return value.replace(/(?:\r\n|\r|\n)+/g, " ");
 }
 
-function InsertMenu({
+function GenerateMenu({
   onGenerate,
 }: {
   onGenerate: (kind: "uuid" | "timestamp") => void;
@@ -156,23 +152,23 @@ function InsertMenu({
   }, [open]);
 
   return (
-    <div class="insert">
+    <div class="generate">
       <button
         type="button"
-        class="insert-btn"
+        class="generate-btn"
         ref={buttonRef}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        {copy.editor.insert} <span aria-hidden="true">▾</span>
+        {copy.editor.generate} <span aria-hidden="true">▾</span>
       </button>
       {open && (
         <div
-          class="menu-pop insert-menu"
+          class="menu-pop generate-menu"
           popover="manual"
           role="menu"
-          aria-label={copy.editor.insert}
+          aria-label={copy.editor.generate}
           ref={menuRef}
           onKeyDown={(event) => {
             if (event.key === "Tab" && menuRef.current !== null) {
@@ -221,7 +217,7 @@ function InsertMenu({
             class="menu-item"
             onClick={() => pick("uuid")}
           >
-            {copy.editor.insertUuid}
+            {copy.editor.generateUuid}
           </button>
           <button
             type="button"
@@ -230,7 +226,7 @@ function InsertMenu({
             class="menu-item"
             onClick={() => pick("timestamp")}
           >
-            {copy.editor.insertTimestamp}
+            {copy.editor.generateTimestamp}
           </button>
         </div>
       )}

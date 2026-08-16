@@ -1,63 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
-import type { BadgeState } from "../core/badge";
+import type { BadgePlan } from "../core/badge";
 import { applyBadge } from "./badge";
 
-function manual(text: string): BadgeState {
+function plan(text: string, title: string): BadgePlan {
   return {
-    kind: "manual",
     text,
     backgroundColor: "#3344aa",
     textColor: "#ffffff",
+    title,
   };
 }
 
 describe("badge adapter", () => {
-  it("disables managed counts before painting manual text", async () => {
-    const setOptions = vi
-      .spyOn(browser.declarativeNetRequest, "setExtensionActionOptions")
-      .mockResolvedValue();
-    const setText = vi.spyOn(browser.action, "setBadgeText");
-
-    await applyBadge(manual(""), "");
-
-    expect(setOptions).toHaveBeenCalledWith({
-      displayActionCountAsBadgeText: false,
-    });
-    expect(setOptions.mock.invocationCallOrder[0]).toBeLessThan(
-      setText.mock.invocationCallOrder[0] ?? 0,
-    );
-    expect(await browser.action.getBadgeText({})).toBe("");
-  });
-
-  it("clears manual text before enabling managed counts", async () => {
-    const setOptions = vi
-      .spyOn(browser.declarativeNetRequest, "setExtensionActionOptions")
-      .mockResolvedValue();
-    await browser.action.setBadgeText({ text: "QA" });
-
-    await applyBadge(
-      { kind: "count", backgroundColor: "#3344aa", textColor: "#ffffff" },
-      "",
-    );
-
-    expect(await browser.action.getBadgeText({})).toBe("");
-    expect(setOptions).toHaveBeenCalledWith({
-      displayActionCountAsBadgeText: true,
-    });
-  });
-
-  it("sets the paused tooltip and clears it back to the default title", async () => {
-    vi.spyOn(
-      browser.declarativeNetRequest,
-      "setExtensionActionOptions",
-    ).mockResolvedValue();
+  it("paints the badge text, colours, and tooltip", async () => {
+    const setBackground = vi.spyOn(browser.action, "setBadgeBackgroundColor");
+    const setTextColor = vi.spyOn(browser.action, "setBadgeTextColor");
     const setTitle = vi.spyOn(browser.action, "setTitle");
 
-    await applyBadge(manual(""), "HeaderShim: paused");
-    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
+    await applyBadge(plan("PR", "HeaderShim: paused"));
 
-    await applyBadge(manual("QA"), "");
-    expect(setTitle).toHaveBeenLastCalledWith({ title: "" });
+    expect(await browser.action.getBadgeText({})).toBe("PR");
+    expect(setBackground).toHaveBeenCalledWith({ color: "#3344aa" });
+    expect(setTextColor).toHaveBeenCalledWith({ color: "#ffffff" });
+    expect(setTitle).toHaveBeenCalledWith({ title: "HeaderShim: paused" });
+  });
+
+  it("clears the tooltip back to the default title", async () => {
+    const setTitle = vi.spyOn(browser.action, "setTitle");
+
+    await applyBadge(plan("", ""));
+
+    expect(setTitle).toHaveBeenCalledWith({ title: "" });
+    expect(await browser.action.getBadgeText({})).toBe("");
   });
 });

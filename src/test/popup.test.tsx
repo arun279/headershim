@@ -6,21 +6,35 @@ import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/popup/App";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
-import { setReconcileError } from "../platform/session-store";
+import { setAppliedRevision } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
-import { fire, press, render, settle, typeInto } from "../ui/test/render";
+import {
+  atPaint,
+  fire,
+  paint,
+  press,
+  render,
+  settle,
+  typeInto,
+} from "../ui/test/render";
+import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
 // activeTabDomain is a spy: a tab with no web origin is its own popup state.
-vi.mock("../platform/tabs", () => ({
+// Only the active-tab reads are stubbed, so openAboutPage still runs for real
+// against the fake browser.
+vi.mock("../platform/tabs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../platform/tabs")>()),
   activeTabId: () => Promise.resolve(5),
   activeTabDomain: vi.fn(() => Promise.resolve("api.example.com")),
+  activeTabOrigin: () => Promise.resolve("https://api.example.com"),
 }));
 
 const ORIGIN = "*://*.api.example.com/*";
 
 beforeEach(() => {
+  stopFollowingCurrentBatch();
   fakeBrowser.reset();
 });
 
@@ -58,11 +72,15 @@ function tokenDoc(): StateDoc {
   return seededDoc([rule({ header: "authorization", value: SWAP_FROM })]);
 }
 
+function openTokenSwap(root: ParentNode): HTMLInputElement {
+  fire(() => (root.querySelector(".token .swap") as HTMLButtonElement).click());
+  return root.querySelector(".swapfield input") as HTMLInputElement;
+}
+
 /** A popup whose hero is a live token, with the swap already committed. */
 async function mountSwapped() {
   const { root } = await mount(tokenDoc(), true);
-  fire(() => (root.querySelector(".token .swap") as HTMLButtonElement).click());
-  const field = root.querySelector(".swapfield input") as HTMLInputElement;
+  const field = openTokenSwap(root);
   typeInto(field, SWAP_TO);
   press(field, "Enter");
   await settle();
@@ -94,14 +112,22 @@ async function mount(doc?: StateDoc, granted = false) {
     await fakeBrowser.permissions.request({ origins: [ORIGIN] });
   }
   if (doc !== undefined) await write(doc);
+  await followCurrentBatch();
   const root = render(<App />);
   await settle();
   return {
     root,
     status: () => root.querySelector(".status") as HTMLElement,
     lines: () => [...root.querySelectorAll(".change-line")],
-    body: () => root.querySelector(".popup-body") as HTMLElement,
   };
+}
+
+function expectWarningCaveat(root: ParentNode, reason: string): HTMLElement {
+  const line = root.querySelector<HTMLElement>(".change-line");
+  if (line === null) throw new Error("change line was not rendered");
+  expect(line.classList.contains("amber")).toBe(true);
+  expect(line.querySelector(".why.amber")?.textContent).toContain(reason);
+  return line;
 }
 
 const twoRules = () =>
@@ -113,7 +139,7 @@ const twoRules = () =>
 async function turnOffOnlyRule(): Promise<HTMLElement> {
   const { root } = await mount(seededDoc([rule()]), true);
   const toggle = root.querySelector<HTMLButtonElement>(
-    '[aria-label="Turn off: x-env"]',
+    '[aria-label="Rule on: x-env"]',
   );
   if (toggle === null) throw new Error("missing rule toggle");
   await act(async () => toggle.click());
@@ -137,16 +163,15 @@ describe("popup readout", () => {
     expect(root.querySelector(".substatus")).toBeNull();
   });
 
-  it("renders a live change as a silent teal-spine line with a toggle", async () => {
+  it("renders a live change without a universal initiator warning", async () => {
     const { lines } = await mount(seededDoc([rule()]), true);
     expect(lines()).toHaveLength(1);
     const line = lines()[0] as HTMLElement;
     expect(line.classList.contains("live")).toBe(true);
     expect(line.querySelector(".k")?.textContent).toBe("x-env");
     expect(line.querySelector(".v")?.textContent).toBe("staging");
-    expect(line.querySelector('[aria-label="Turn off: x-env"]')).not.toBeNull();
-    // A live line adds no reason.
-    expect(line.querySelector(".why")).toBeNull();
+    expect(line.querySelector('[aria-label="Rule on: x-env"]')).not.toBeNull();
+    expect(line.textContent).not.toContain("Requests started by other pages");
   });
 
   it("shows a hollow doubt lamp when any counted line is unconfirmed", async () => {
@@ -166,7 +191,7 @@ describe("popup readout", () => {
       ]),
       true,
     );
-    expect(root.querySelector(".change-line.unconfirmed")).not.toBeNull();
+    expect(root.querySelector(".change-line.doubt")).not.toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
       "2 changes on this tab",
     );
@@ -174,17 +199,12 @@ describe("popup readout", () => {
     expect(root.querySelector(".lamp.live")).toBeNull();
   });
 
-  it("renders a network-managed line as managed, never live or counted", async () => {
+  it("does not count a network-managed rule as running", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "connection", value: "keep-alive" })]),
       true,
     );
-    const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("managed")).toBe(true);
-    expect(line.classList.contains("live")).toBe(false);
-    expect(line.querySelector(".why.amber")?.textContent).toContain(
-      copy.readout.managedReason,
-    );
+    const line = expectWarningCaveat(root, copy.readout.managedReason);
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
     );
@@ -192,20 +212,20 @@ describe("popup readout", () => {
       "1 managed by Chrome",
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
-    expect(line.querySelector('[role="switch"]')?.className).toBe(
-      "sw sw-inert",
-    );
+    expect(line.querySelector('[role="switch"]')?.className).toBe("sw");
   });
 
-  it("keeps the live tone off an out-of-sync rule toggle", async () => {
-    await setReconcileError(true);
-    const { root } = await mount(seededDoc([rule()]), true);
-    const toggle = root.querySelector(
-      '.change-line.out-of-sync [role="switch"]',
+  it("does not project an out-of-sync ruleset", async () => {
+    const doc = seededDoc([rule()]);
+    await write(doc);
+    await setAppliedRevision({ dynamic: "different", session: "different" });
+    const root = render(<App />);
+    await settle();
+    expect(root.querySelector(".popup")?.getAttribute("aria-busy")).toBe(
+      "true",
     );
-    expect(toggle?.getAttribute("aria-checked")).toBe("true");
-    expect(toggle?.className).toBe("sw sw-inert");
-    expect(toggle?.className).not.toBe("sw");
+    expect(root.querySelector(".change-line")).not.toBeNull();
+    expect(root.textContent).toContain(copy.readout.outOfSync);
   });
 
   it("renders generated metadata in place of an absent literal value", async () => {
@@ -247,11 +267,39 @@ describe("popup readout", () => {
     expect(token).not.toBeNull();
     expect(token.querySelector(".pre")?.textContent).toBe("Bearer");
     expect(token.querySelector(".last")?.textContent).toBe("wxyz");
+    // The visible masked value is hidden from assistive tech, which instead
+    // hears one honest name saying the middle is withheld, so the two cleartext
+    // fragments ("Bearer" + "wxyz") are never read back as a whole credential.
+    expect(
+      (token.querySelector(".tk-val") as HTMLElement).getAttribute(
+        "aria-hidden",
+      ),
+    ).toBe("true");
+    expect(token.querySelector(".sr-only")?.textContent).toBe(
+      "Bearer credential, hidden, ending in wxyz",
+    );
     // The opaque token draws no countdown it would have to invent.
     expect(token.querySelector(".fresh-track")).toBeNull();
     expect(token.textContent).toContain(copy.token.opaque);
     // Never repeated as a plain request line.
     expect(root.querySelectorAll(".change-line")).toHaveLength(0);
+  });
+
+  it("keeps a credential rule's wider reach in the hero", async () => {
+    const { root } = await mount(
+      seededDoc([
+        rule({
+          header: "authorization",
+          value: SWAP_FROM,
+          scope: { type: "all" },
+        }),
+      ]),
+      true,
+    );
+
+    expect(root.querySelector(".token")?.textContent).toContain(
+      copy.readout.widerReach.broad,
+    );
   });
 
   it("draws a real countdown for a decodable JWT", async () => {
@@ -287,6 +335,22 @@ describe("popup readout", () => {
     expect(root.querySelector(".fresh-lab")?.textContent).not.toContain(
       copy.token.warnNote,
     );
+    // No share of a life is left, so no bar is drawn to report one: an empty
+    // track still reads as a track.
+    expect(root.querySelector(".fresh-track")).toBeNull();
+  });
+
+  // Pause reaches every line in words. The hero is the one change carrying a
+  // live credential, and a dimmed card beside a working Replace button says
+  // nothing on its own about whether the header is going out.
+  it("says the hero credential is held while header changes are paused", async () => {
+    const { root } = await mount(
+      { ...tokenDoc(), settings: { ...tokenDoc().settings, paused: true } },
+      true,
+    );
+    expect(root.querySelector(".token .tk-held")?.textContent).toBe(
+      copy.token.held,
+    );
   });
 
   it("swaps a token through a masked field, onto the rule carrying it", async () => {
@@ -299,7 +363,7 @@ describe("popup readout", () => {
     expect(
       root.querySelector(".swapfield .btn.primary")?.textContent,
     ).toContain(copy.token.replace);
-    // The resting masked value yields to a bare "on <host>" while swapping.
+    expect(root.querySelector(".tk-swaptarget")).toBeNull();
     expect(root.querySelector(".tk-val")).toBeNull();
 
     typeInto(field, SWAP_TO);
@@ -315,12 +379,23 @@ describe("popup readout", () => {
     expect(session.tabs[5]).toBeUndefined();
   });
 
+  it("does not replace a token with an empty value", async () => {
+    const { root } = await mount(tokenDoc(), true);
+    const field = openTokenSwap(root);
+    const replace = root.querySelector(
+      ".swapfield .btn.primary",
+    ) as HTMLButtonElement;
+
+    expect(replace.disabled).toBe(true);
+    press(field, "Enter");
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe(SWAP_FROM);
+    expect(root.querySelector(".swapfield input")).not.toBeNull();
+  });
+
   it("reports a token swap that cannot reach the current store", async () => {
     const { root } = await mount(tokenDoc(), true);
-    fire(() =>
-      (root.querySelector(".token .swap") as HTMLButtonElement).click(),
-    );
-    const field = root.querySelector(".swapfield input") as HTMLInputElement;
+    const field = openTokenSwap(root);
     typeInto(field, SWAP_TO);
     const get = vi
       .spyOn(fakeBrowser.storage.local, "get")
@@ -391,7 +466,7 @@ describe("popup readout", () => {
   it("keeps the last disabled rule visible and focused for re-enabling", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const disable = root.querySelector<HTMLButtonElement>(
-      '[aria-label="Turn off: x-env"]',
+      '[aria-label="Rule on: x-env"]',
     );
     if (disable === null) throw new Error("missing rule toggle");
     disable.focus();
@@ -399,13 +474,13 @@ describe("popup readout", () => {
     await settle();
 
     const enable = root.querySelector<HTMLButtonElement>(
-      '[aria-label="Turn on: x-env"]',
+      '[aria-label="Rule off: x-env"]',
     );
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
     );
     expect(root.querySelector(".empty")).toBeNull();
-    expect(root.querySelector(".change-line.off")).not.toBeNull();
+    expect(root.querySelector(".change-line.rest")).not.toBeNull();
     expect(enable).not.toBeNull();
     expect(document.activeElement).toBe(enable);
 
@@ -418,12 +493,16 @@ describe("popup readout", () => {
   it("shows an ungranted rule amber with a Grant that clears every surface", async () => {
     const { root, status } = await mount(seededDoc([rule()]));
     const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("needs-access")).toBe(true);
+    expect(line.classList.contains("amber")).toBe(true);
     expect(root.querySelector(".substatus .amber")?.textContent).toBe(
       "1 needs access",
     );
     expect(root.querySelector(".lamp.warn")).not.toBeNull();
     expect(status().textContent).toBe("0 changes on this tab");
+    expect(line.querySelector(".why.amber")?.textContent).toBe(
+      copy.readout.needsAccessReason(false),
+    );
+    expect(line.textContent).not.toContain("until you close the tab");
     const grant = root.querySelector(
       ".change-line .grant",
     ) as HTMLButtonElement;
@@ -451,26 +530,23 @@ describe("popup readout", () => {
       ]),
     );
     const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("needs-access")).toBe(true);
+    expect(line.classList.contains("amber")).toBe(true);
     const grant = root.querySelector(
       ".change-line .grant",
     ) as HTMLButtonElement;
     expect(grant.textContent).toBe(copy.readout.grantAllSites);
   });
 
-  it("states the honest refused reason for a Host rule and stays enabled", async () => {
+  it("states the Host transport caveat without counting it as running", async () => {
     const { root } = await mount(
       seededDoc([rule({ header: "host", value: "internal.example.com" })]),
       true,
     );
-    const line = root.querySelector(".change-line") as HTMLElement;
-    expect(line.classList.contains("refused")).toBe(true);
-    expect(line.querySelector(".why.stop")?.textContent).toContain(
+    const line = root.querySelector(".change-line.amber");
+    expect(line?.querySelector(".why.amber")?.textContent).toContain(
       "Chrome won't let extensions change the Host header",
     );
-    expect(root.querySelector(".substatus .stop")?.textContent).toBe(
-      "1 refused by Chrome",
-    );
+    expect(root.querySelector(".substatus .stop")).toBeNull();
     expect(root.querySelector(".status")?.textContent).toBe(
       "0 changes on this tab",
     );
@@ -499,7 +575,7 @@ describe("popup readout", () => {
       true,
     );
     const overridden = [...root.querySelectorAll(".change-line")].find((line) =>
-      line.classList.contains("overridden"),
+      line.classList.contains("rest"),
     );
     expect(overridden?.querySelector(".why.rest")?.textContent).toContain(
       "overridden by staging environment",
@@ -514,6 +590,8 @@ describe("popup readout", () => {
     const input = root.querySelector(".v-input") as HTMLInputElement;
     expect(input.type).toBe("text");
     expect(input.value).toBe("staging");
+    expect(root.textContent).toContain("x-env");
+    expect(root.textContent).toContain(copy.rules.editValueHint);
     typeInto(input, "production");
     press(input, "Enter");
     await settle();
@@ -529,6 +607,9 @@ describe("popup readout", () => {
     const input = root.querySelector(".v-input") as HTMLInputElement;
     expect(input.type).toBe("password");
     expect(input.value).toBe("");
+    press(input, "Enter");
+    await settle();
+    expect((await read()).profiles[0]?.rules[0]?.value).toBe("sk_live_secret");
   });
 
   it("shows the empty state when nothing reaches this site", async () => {
@@ -546,28 +627,66 @@ describe("popup readout", () => {
     expect(root.querySelector(".empty .add")).not.toBeNull();
   });
 
-  it("offers no change to add when there is no site to change", async () => {
+  // While paused the banner above states the cause once, so the empty state
+  // drops the site-shaped sentence rather than restate a global condition as a
+  // fact about this site. The one action stays.
+  it("drops the site line while paused and lets the banner carry the cause", async () => {
+    const seed = createV1Seed();
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      true,
+    );
+    expect(root.querySelector(".pausebar")).not.toBeNull();
+    expect(root.querySelector(".empty .l1")).toBeNull();
+    expect(root.textContent).not.toContain("isn't changing anything on");
+    expect(root.querySelector(".empty .add")?.textContent).toContain(
+      copy.readout.addChange,
+    );
+  });
+
+  // A tab with no site to read says why the screen is empty, and offers the one
+  // thing still worth opening from here rather than asking for what the reader
+  // has already done.
+  it("says why there is nothing to change and offers the rule list", async () => {
     const { activeTabDomain } = await import("../platform/tabs");
     vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
     const { root } = await mount(createV1Seed(), true);
     expect(root.querySelector(".empty")?.textContent).toContain(
-      "Open the popup on a website",
+      "this tab is not on one",
     );
-    expect(root.querySelectorAll(".add")).toHaveLength(0);
+    expect(root.querySelector(".empty .add")?.textContent).toContain(
+      "See all rules",
+    );
     expect(root.querySelector(".tab-btn")).toBeNull();
   });
 
-  it("reads the master switch on while running, the way every switch here does", async () => {
+  // The head's site slot names the site this tab is on, in the face reserved for
+  // literal wire bytes. A tab with no site says so in a muted marker rather than
+  // sitting empty; the marker is plain furniture, never the wire-byte host face,
+  // so it never reads as a site of its own.
+  it("marks the site slot as siteless rather than naming a site", async () => {
+    const { activeTabDomain } = await import("../platform/tabs");
+    vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
+    const { root } = await mount(createV1Seed(), true);
+    expect(root.querySelector(".site .no-site")?.textContent).toBe(
+      copy.readout.noSite,
+    );
+    expect(root.querySelector(".site .host")).toBeNull();
+  });
+
+  it("names the master switch by what it controls and reads its state like every switch here", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const master = root.querySelector(
       '.foot [aria-label="All header changes"]',
     ) as HTMLButtonElement;
     const ruleSwitch = root.querySelector(
-      '[aria-label="Turn off: x-env"]',
+      '[aria-label="Rule on: x-env"]',
     ) as HTMLButtonElement;
-    // Running reads checked on both, so the two switches 10px apart cannot
-    // show the same fact with opposite knobs.
-    expect(root.querySelector(".foot .pause")?.textContent).toContain("On");
+    // A bare knob shows no visible word, so its hover name has to carry what it
+    // controls, not the state its position and aria-checked already give.
+    expect(master.getAttribute("title")).toBe("All header changes");
+    // Running reads checked on both, so the two switches cannot show the same
+    // fact with opposite knobs.
     expect(master.getAttribute("aria-checked")).toBe("true");
     expect(ruleSwitch.getAttribute("aria-checked")).toBe("true");
 
@@ -581,7 +700,6 @@ describe("popup readout", () => {
         ) as HTMLElement
       ).getAttribute("aria-checked"),
     ).toBe("false");
-    expect(root.querySelector(".foot .pause")?.textContent).toContain("Paused");
   });
 
   it("pauses to a banner and paused lines, then resumes", async () => {
@@ -599,28 +717,55 @@ describe("popup readout", () => {
     // on top of that: every control in it still writes.
     expect(root.querySelector(".change-line.paused")).not.toBeNull();
     expect(root.querySelector(".popup-body")?.className).toBe("popup-body");
+    // Colour is not the state. The count stays and says what it is counting, and
+    // a held line says what it would do rather than claiming to be doing it.
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "1 change held on this tab",
+    );
+    expect(root.querySelector(".change-line.paused .verb")?.textContent).toBe(
+      "Would set",
+    );
     await act(async () => pause.click());
     await settle();
     expect((await read()).settings.paused).toBe(false);
   });
 
+  it("keeps an ungranted reason actionable while paused", async () => {
+    const seed = seededDoc([rule()]);
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      false,
+    );
+
+    const line = root.querySelector(".change-line.amber") as HTMLElement;
+    expect(line).not.toBeNull();
+    expect(line.classList.contains("paused")).toBe(false);
+    expect(line.querySelector(".verb")?.textContent).toBe("Would set");
+    expect(line.querySelector(".grant")).not.toBeNull();
+    expect(line.querySelector('[role="switch"]')).toBeNull();
+    expect(root.querySelector(".status")?.textContent).toBe(
+      "0 changes held on this tab",
+    );
+  });
+
   it("opens options from the footer gear", async () => {
-    const open = vi
-      .spyOn(fakeBrowser.runtime, "openOptionsPage")
-      .mockResolvedValue(undefined);
+    const open = vi.spyOn(fakeBrowser.tabs, "create");
     const { root } = await mount(createV1Seed(), true);
     fire(() =>
       (
         root.querySelector('.foot [aria-label="Options"]') as HTMLButtonElement
       ).click(),
     );
-    expect(open).toHaveBeenCalledOnce();
+    await settle();
+    expect(open).toHaveBeenCalledExactlyOnceWith({
+      url: fakeBrowser.runtime.getURL("/options.html#about"),
+    });
   });
 });
 
 describe("popup profile switch", () => {
-  const withSecond = () =>
-    seededDoc(
+  const withSecond = (): StateDoc => ({
+    ...seededDoc(
       [rule()],
       [
         {
@@ -633,7 +778,11 @@ describe("popup profile switch", () => {
           ],
         },
       ],
-    );
+    ),
+    // Prod read-only is the profile last switched away from, so it is the one
+    // the shortcut would flip back to.
+    previousProfileId: "p2",
+  });
 
   // Opens the picker and returns the "Prod read-only" switch target.
   const openPickerTarget = (root: HTMLElement): HTMLButtonElement => {
@@ -702,6 +851,52 @@ describe("popup profile switch", () => {
     // No commit happened from the preview alone.
     const stored = await read();
     expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
+  });
+
+  it("names the shortcut's switch consequence on the closed chip", async () => {
+    const { root } = await mount(withSecond(), true);
+    // The menu is shut: the answer is on the chip, not behind opening it.
+    expect(root.querySelector(".pop")).toBeNull();
+    const hint = (root.querySelector(".prof") as HTMLButtonElement).title;
+    expect(hint).toContain("If you switch to Prod read-only");
+    expect(hint).toContain("x-read-only");
+    expect(hint).toContain("x-env");
+  });
+
+  it("prints the profile shortcut key on the row it would flip to", async () => {
+    const { root } = await mount(withSecond(), true);
+    const target = openPickerTarget(root);
+    expect(target.querySelector(".kbd")?.textContent).toBe("⌥⇧K");
+    // The active profile is not the flip target, so it wears the check, not the
+    // accelerator.
+    const current = root.querySelector(".popt.sel");
+    expect(current?.querySelector(".kbd")).toBeNull();
+    expect(current?.querySelector(".chk")).not.toBeNull();
+  });
+
+  it("commits a new profile name when a click outside dismisses the menu", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    typeInto(input, "QA headers");
+    // A pointerdown outside light-dismisses the menu; the typed name commits on
+    // the way out, the way it does when the Options rename loses focus.
+    fire(() =>
+      document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })),
+    );
+    await settle();
+
+    expect(root.querySelector(".pop")).toBeNull();
+    expect((await read()).profiles[1]?.name).toBe("QA headers");
+  });
+
+  it("names the commit keys beside the rename field", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    const input = await openNewProfileName(root);
+    const hintId = input.getAttribute("aria-describedby");
+    if (hintId === null) throw new Error("rename field names no commit keys");
+    expect(root.querySelector(`#${hintId}`)?.textContent).toBe(
+      copy.options.profiles.renameHint,
+    );
   });
 
   it("creates, focuses, and names a new profile from the picker", async () => {
@@ -807,10 +1002,12 @@ describe("popup profile switch", () => {
     await settle();
 
     const current = root.querySelector('[aria-current="true"]');
-    expect((await read()).profiles).toHaveLength(2);
+    const updated = await read();
+    expect(updated.profiles).toHaveLength(2);
     expect(root.querySelector(".profile-name-input")).toBeNull();
+    expect(updated.activeProfileId).toBe(updated.profiles[1]?.id);
     expect(current?.querySelector(".nm")?.textContent).toBe(
-      copy.options.profiles.newName,
+      updated.profiles[1]?.name,
     );
     expect(document.activeElement).toBe(current);
   });
@@ -861,6 +1058,43 @@ describe("popup authoring entry points", () => {
     fire(() => (root.querySelector(".foot .add") as HTMLButtonElement).click());
     await settle();
     expect(root.querySelector(".rule-editor")).not.toBeNull();
+  });
+
+  // Opening the form must not drop the pause context: a rule authored here is
+  // inert until the extension resumes, so the banner rides into the editor too.
+  it("keeps the pause banner while the rule editor is open", async () => {
+    const seed = seededDoc([rule()]);
+    const { root } = await mount(
+      { ...seed, settings: { ...seed.settings, paused: true } },
+      true,
+    );
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+    expect(root.querySelector(".rule-editor")).not.toBeNull();
+    expect(root.querySelector(".pausebar")).not.toBeNull();
+  });
+
+  it("confirms a rule was created without certifying its live outcome", async () => {
+    const { root } = await mount(tokenDoc(), true);
+    press(root.querySelector(".popup") as HTMLElement, "n");
+    await settle();
+    typeInto(
+      root.querySelector('[role="combobox"]') as HTMLInputElement,
+      "authorization",
+    );
+    typeInto(
+      root.querySelector(".value-row textarea") as HTMLTextAreaElement,
+      "Bearer duplicate",
+    );
+    fire(() =>
+      (
+        root.querySelector(".editor-actions .primary") as HTMLButtonElement
+      ).click(),
+    );
+    await settle();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.toast.ruleCreated,
+    );
   });
 
   it("t opens the this-tab composer", async () => {
@@ -916,5 +1150,29 @@ describe("popup lifecycle", () => {
       true,
     );
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  // The popup opens under a keystroke and users keep typing into it, so a key
+  // struck the instant the readout lands has to be heard rather than dropped
+  // with nothing to say why. The switcher chip is the head control the readout
+  // always draws, and the run that paints it is the run that binds the commands.
+  it("hears a command key struck the instant the readout head lands", async () => {
+    await write(seededDoc([rule()]));
+    await followCurrentBatch();
+    const heard = atPaint(
+      () => document.querySelector(".prof") !== null,
+      () => {
+        const event = new KeyboardEvent("keydown", {
+          key: "n",
+          bubbles: true,
+          cancelable: true,
+        });
+        document.body.dispatchEvent(event);
+        return event.defaultPrevented;
+      },
+    );
+
+    paint(<App />);
+    expect(await heard).toBe(true);
   });
 });

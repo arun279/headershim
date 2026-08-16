@@ -1,485 +1,581 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { type Applied, confirm, type Projection } from "../../core/applied";
 import type { GrantSnapshot } from "../../core/grants";
+import { MAX_ENABLED_RULES } from "../../core/limits";
 import type { Profile, Rule, StateDoc, TabOverride } from "../../core/model";
-import type { SystemStatus } from "../../core/status";
+import { overrideKey, ruleKey } from "../../core/verdict";
 import { copy } from "../copy";
-import { LIVE, OUT_OF_SYNC, PAUSED } from "../test/fixtures";
-import {
-  previewSwitch,
-  computeReadout as projectReadout,
-  type ReadoutInput,
-  refusedReason,
-} from "./readout";
+import { confirmedBatch } from "../test/fixtures";
+import type { TabContext } from "./project";
+import { computeReadout, previewSwitch } from "./readout";
 
-const GRANTED: GrantSnapshot = { origins: [], allSites: true };
-const NONE: GrantSnapshot = { origins: [], allSites: false };
-const SUPPORT_ALL = () => true;
+const TAB = {
+  tabId: 41,
+  host: "api.example.com",
+  origin: "https://api.example.com",
+} as const;
 
-let seq = 0;
-function rule(overrides: Partial<Rule> = {}): Rule {
-  seq += 1;
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
+const API_SITE: GrantSnapshot = {
+  origins: ["*://*.api.example.com/*"],
+  allSites: false,
+};
+
+type RuleChanges = Omit<Partial<Rule>, "id" | "num" | "value"> & {
+  readonly value?: string | undefined;
+};
+
+function storedRule(id: string, num: number, changes: RuleChanges = {}): Rule {
+  const { value, ...fields } = changes;
+  const operation = fields.operation ?? "set";
   return {
-    id: `rule-${seq}`,
-    num: seq,
+    id,
+    num,
     direction: "request",
-    operation: "set",
-    header: "x-env",
-    value: "staging",
-    scope: { type: "domains", domains: ["api.example.com"] },
+    operation,
+    header: "x-test",
+    ...(operation === "remove" ? {} : { value: value ?? `value-${num}` }),
+    scope: { type: "domains", domains: [TAB.host] },
     resourceTypes: "all",
     initiators: [],
     enabled: true,
-    ...overrides,
+    ...fields,
   };
 }
 
-function profile(overrides: Partial<Profile> = {}): Profile {
+function activeProfile(rules: Rule[]): Profile {
   return {
-    id: "p-default",
+    id: "default",
     name: "Default",
     badgeText: "DE",
     color: "indigo",
-    rules: [],
-    ...overrides,
+    rules,
   };
 }
 
-function state(activeProfile: Profile | undefined): StateDoc {
+function otherProfile(rules: Rule[]): Profile {
+  return {
+    id: "other",
+    name: "Other",
+    badgeText: "OT",
+    color: "slate",
+    rules,
+  };
+}
+
+function switchDoc(active: Rule[], target: Profile): StateDoc {
+  return {
+    ...state(active),
+    profiles: [activeProfile(active), target],
+  };
+}
+
+function state(rules: Rule[], paused = false): StateDoc {
   return {
     v: 1,
-    profiles: activeProfile === undefined ? [] : [activeProfile],
-    activeProfileId: activeProfile?.id,
+    profiles: [activeProfile(rules)],
+    activeProfileId: "default",
     nextRuleNum: 100,
-    settings: { paused: false, theme: "system" },
+    settings: { paused, theme: "system" },
   };
 }
 
-function computeReadout(
-  input: Omit<ReadoutInput, "doc" | "isRegexSupported"> & {
-    activeProfile: Profile | undefined;
-    isRegexSupported?: (regex: string) => boolean;
-  },
-) {
-  const { activeProfile, isRegexSupported = SUPPORT_ALL, ...rest } = input;
-  return projectReadout({
-    ...rest,
-    doc: state(activeProfile),
-    isRegexSupported,
-  });
-}
-
-function override(overrides: Partial<TabOverride> = {}): TabOverride {
+function temporary(
+  num: number,
+  changes: Partial<TabOverride> = {},
+): TabOverride {
   return {
-    num: 1,
-    tabId: 5,
-    originHost: "api.example.com",
+    num,
+    tabId: TAB.tabId,
+    originHost: TAB.host,
     direction: "request",
     operation: "set",
-    header: "x-flag",
-    value: "1",
+    header: "x-temporary",
+    value: `temporary-${num}`,
     enabled: true,
-    ...overrides,
+    ...changes,
   };
 }
 
-const base = {
-  host: "api.example.com" as string | undefined,
-  grants: GRANTED,
-  overrides: [] as TabOverride[],
-  status: LIVE as SystemStatus,
-};
+function appliedFor(
+  doc: StateDoc,
+  overrides: readonly TabOverride[] = [],
+  granted: GrantSnapshot = ALL_SITES,
+): Applied {
+  return confirmedBatch({
+    doc,
+    overrides,
+    granted,
+    isRegexSupported: () => true,
+  }).applied;
+}
 
 describe("computeReadout", () => {
-  it("is empty with no host", () => {
-    const readout = computeReadout({
-      ...base,
-      host: undefined,
-      activeProfile: undefined,
+  it("keeps a this-tab authorization change in the strip", () => {
+    const saved = storedRule("saved-auth", 1, {
+      header: "Authorization",
+      value: "Bearer saved",
     });
-    expect(readout.total).toBe(0);
-    expect(readout.request).toHaveLength(0);
+    const override = temporary(90, {
+      header: "authorization",
+      value: "Bearer session",
+    });
+    const doc = state([saved]);
+    const readout = computeReadout({
+      applied: appliedFor(doc, [override]),
+      doc,
+      overrides: [override],
+      tab: TAB,
+    });
+
     expect(readout.token).toBeUndefined();
-  });
-
-  it("groups live changes by direction and counts them", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({ header: "x-env" }),
-          rule({
-            header: "x-frame-options",
-            direction: "response",
-            operation: "remove",
-          }),
-        ],
-      }),
-    });
-    expect(readout.total).toBe(2);
-    expect(readout.request.map((c) => c.header)).toEqual(["x-env"]);
-    expect(readout.response.map((c) => c.header)).toEqual(["x-frame-options"]);
-    expect(readout.request[0]?.status).toBe("live");
-  });
-
-  it("lifts the authorization rule into the token and redacts its value", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [rule({ header: "authorization", value: "Bearer secret" })],
-      }),
-    });
-    expect(readout.token?.header).toBe("authorization");
-    expect(readout.token?.value).toBe("Bearer secret");
-    expect(readout.token?.display).toBe("Bearer …redacted");
-    // Counted, but not repeated in the request list.
-    expect(readout.total).toBe(1);
-    expect(readout.request).toHaveLength(0);
-  });
-
-  it("marks an ungranted rule needs-access with the origins to grant", () => {
-    const readout = computeReadout({
-      ...base,
-      grants: NONE,
-      activeProfile: profile({ rules: [rule()] }),
-    });
-    expect(readout.request[0]?.status).toBe("needs-access");
-    expect(readout.request[0]?.missing).toEqual(["*://*.api.example.com/*"]);
-    expect(readout.needsAccess).toBe(1);
-    expect(readout.total).toBe(0);
-  });
-
-  it.each([
-    ["request", "connection"],
-    ["response", "content-length"],
-  ] as const)(
-    "marks a %s network-managed header managed and uncounted",
-    (direction, header) => {
-      const readout = computeReadout({
-        ...base,
-        activeProfile: profile({ rules: [rule({ direction, header })] }),
-      });
-      const line = [...readout.request, ...readout.response][0];
-      expect(line?.status).toBe("managed");
-      expect(readout.managed).toBe(1);
-      expect(readout.total).toBe(0);
-    },
-  );
-
-  it("lets compiler refusal outrank network-managed classification", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({
-            operation: "append",
-            header: "content-length",
-          }),
-        ],
-      }),
-    });
-    expect(readout.request[0]?.status).toBe("refused");
-    expect(readout.request[0]?.refused).toBe("append");
-    expect(readout.refused).toBe(1);
-    expect(readout.managed).toBe(0);
-    expect(readout.total).toBe(0);
-  });
-
-  it("marks a network-managed this-tab override managed and uncounted", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: undefined,
-      overrides: [override({ header: "connection" })],
-    });
-    expect(readout.overrides[0]?.status).toBe("managed");
-    expect(readout.managed).toBe(1);
-    expect(readout.total).toBe(0);
-  });
-
-  it("marks a Host rule refused, honestly and enabled", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [rule({ header: "host", value: "x" })],
-      }),
-    });
-    expect(readout.request[0]?.status).toBe("refused");
-    expect(readout.request[0]?.refused).toBe("host");
-    expect(readout.refused).toBe(1);
-    expect(readout.total).toBe(0);
-  });
-
-  it("marks a same-profile collision overridden using the shared primitive", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({ header: "x-env", comment: "staging environment" }),
-          rule({ header: "x-env", value: "prod" }),
-        ],
-      }),
-    });
-    const loser = readout.request.find((c) => c.status === "overridden");
-    expect(loser?.overriddenBy).toBe("staging environment");
-    expect(readout.overridden).toBe(1);
-    expect(readout.total).toBe(1);
-  });
-
-  it("does not let a compiler-dropped rule override a compiled rule", () => {
-    const dropped = rule({ header: "x-env", value: "bad\nvalue" });
-    const compiled = rule({ header: "x-env", value: "prod" });
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({ rules: [dropped, compiled] }),
-    });
-
-    expect(
-      readout.request.find((change) => change.ruleId === dropped.id)?.status,
-    ).toBe("refused");
-    expect(
-      readout.request.find((change) => change.ruleId === compiled.id)?.status,
-    ).toBe("live");
-    expect(readout.overridden).toBe(0);
-  });
-
-  it("never promotes an overridden authorization rule into the token hero", () => {
-    const winner = rule({ header: "authorization", value: "Bearer winner" });
-    const loser = rule({ header: "authorization", value: "Bearer loser" });
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({ rules: [winner, loser] }),
-    });
-
-    expect(readout.token?.ruleId).toBe(winner.id);
-    expect(
-      readout.request.find((change) => change.ruleId === loser.id)?.status,
-    ).toBe("overridden");
-    expect(readout.total).toBe(1);
-  });
-
-  it("renders a disabled rule off, uncounted, and never as the token", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({
-            header: "authorization",
-            value: "Bearer x",
-            enabled: false,
-          }),
-        ],
-      }),
-    });
-    expect(readout.token).toBeUndefined();
-    expect(readout.request[0]?.status).toBe("off");
-    expect(readout.total).toBe(0);
-  });
-
-  it("keeps the token card through pause rather than restructuring the readout", () => {
-    const rules = [rule({ header: "authorization", value: "Bearer x" })];
-    const live = computeReadout({
-      ...base,
-      activeProfile: profile({ rules }),
-    });
-    const paused = computeReadout({
-      ...base,
-      status: PAUSED,
-      activeProfile: profile({ rules }),
-    });
-
-    expect(live.token?.status).toBe("live");
-    // Same rule, same shape: only the reading on the card moves.
-    expect(paused.token?.key).toBe(live.token?.key);
-    expect(paused.token?.status).toBe("paused");
-    expect(paused.request).toEqual([]);
-  });
-
-  it("never reads live while Chrome has not taken the ruleset", () => {
-    const readout = computeReadout({
-      ...base,
-      status: OUT_OF_SYNC,
-      activeProfile: profile({
-        rules: [rule({ header: "authorization", value: "Bearer x" })],
-      }),
-    });
-    expect(readout.request[0]?.status).toBe("out-of-sync");
-    expect(readout.outOfSync).toBe(1);
-    expect(readout.total).toBe(0);
-    // The hero is the loudest live claim in the popup; it may not be made.
-    expect(readout.token).toBeUndefined();
-  });
-
-  it("declines to claim a pattern rule matches this tab", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({
-            scope: {
-              type: "pattern",
-              pattern: "||api.stripe.com^",
-              hosts: ["api.example.com"],
-            },
-          }),
-        ],
-      }),
-    });
-    // Granted on this host, but the urlFilter is what Chrome matches on, and
-    // this projection cannot evaluate it.
-    expect(readout.request[0]?.status).toBe("unconfirmed");
-    expect(readout.unconfirmed).toBe(1);
-    expect(readout.total).toBe(1);
-  });
-
-  const hostlessRegexProfile = () =>
-    profile({
-      rules: [
-        rule({ scope: { type: "regex", regex: "^https://x/", hosts: [] } }),
-      ],
-    });
-
-  it("declines to claim a regex rule matches this tab, however broad its grant", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: hostlessRegexProfile(),
-    });
-    expect(readout.request[0]?.status).toBe("unconfirmed");
-  });
-
-  it("asks for broad access when a hostless regex rule needs a grant", () => {
-    const readout = computeReadout({
-      ...base,
-      grants: NONE,
-      activeProfile: hostlessRegexProfile(),
-    });
-    expect(readout.request[0]?.status).toBe("needs-access");
-    expect(readout.request[0]?.missing).toEqual(["*://*/*"]);
-  });
-
-  it("refuses a regex the browser reports unsupported", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [
-          rule({ scope: { type: "regex", regex: "(?=bad)", hosts: [] } }),
-        ],
-      }),
-      isRegexSupported: () => false,
-    });
-    expect(readout.request[0]?.status).toBe("refused");
-    expect(readout.request[0]?.refused).toBe("regex");
-  });
-
-  it("declines to claim a rule fires when initiators decide it per request", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({
-        rules: [rule({ initiators: ["app.example.com"] })],
-      }),
-    });
-    expect(readout.request[0]?.status).toBe("unconfirmed");
-  });
-
-  it.each([
-    [
-      "a domain Chrome refuses",
-      {
-        scope: {
-          type: "domains" as const,
-          domains: ["api.example.com", "exämple.com"],
+    expect(readout.request).toEqual([
+      expect.objectContaining({
+        key: ruleKey("default", "saved-auth", 0),
+        source: "rule",
+        ruleId: "saved-auth",
+        display: "Bearer [hidden]",
+        outcome: {
+          kind: "shadowed",
+          by: overrideKey(90, 0),
+          label: "authorization rule",
         },
+      }),
+    ]);
+    expect(readout.overrides.map((change) => change.key)).toEqual(["tab:90:0"]);
+    expect(readout).toMatchObject({ total: 1, overridden: 1 });
+  });
+
+  it("summarizes projected outcomes and keeps absent reasons while paused", () => {
+    const rules = [
+      storedRule("running", 1, { header: "x-running" }),
+      storedRule("conditional", 2, {
+        header: "x-conditional",
+        scope: {
+          type: "pattern",
+          pattern: "||api.example.com/",
+          hosts: [TAB.host],
+        },
+      }),
+      storedRule("winner", 3, { header: "x-collision" }),
+      storedRule("shadowed", 4, { header: "x-collision" }),
+      storedRule("refused", 5, { header: ":authority" }),
+      storedRule("managed", 6, { header: "connection" }),
+      storedRule("ungranted-initiator", 7, {
+        header: "x-cross-origin",
+        resourceTypes: ["xhr"],
+        initiators: ["app.other.test"],
+      }),
+    ];
+    const liveDoc = state(rules);
+    const live = computeReadout({
+      applied: appliedFor(liveDoc, [], API_SITE),
+      doc: liveDoc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(live).toMatchObject({
+      total: 3,
+      held: 0,
+      needsAccess: 1,
+      refused: 1,
+      managed: 1,
+      overridden: 1,
+      unconfirmed: 1,
+    });
+
+    const pausedDoc = state(rules, true);
+    const paused = computeReadout({
+      applied: appliedFor(pausedDoc, [], API_SITE),
+      doc: pausedDoc,
+      overrides: [],
+      tab: TAB,
+    });
+    expect(paused).toMatchObject({
+      total: 0,
+      held: 3,
+      needsAccess: 1,
+      refused: 1,
+      managed: 1,
+      overridden: 1,
+      unconfirmed: 1,
+    });
+  });
+
+  it("does not count caveats from changes that cannot run", () => {
+    const rules = [
+      storedRule("disabled-managed", 1, {
+        header: "connection",
+        enabled: false,
+      }),
+      storedRule("refused-managed", 2, {
+        header: "connection",
+        value: "bad\r\nvalue",
+      }),
+      storedRule("disabled-security", 3, {
+        direction: "response",
+        header: "content-security-policy",
+        enabled: false,
+      }),
+      storedRule("refused-security", 4, {
+        direction: "response",
+        header: "content-security-policy",
+        value: "bad\r\nvalue",
+      }),
+    ];
+    const doc = state(rules);
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout).toMatchObject({
+      total: 0,
+      refused: 2,
+      managed: 0,
+      security: 0,
+    });
+  });
+
+  it("uses authored values and generation metadata for display fields", () => {
+    const generated = storedRule("generated", 1, {
+      header: "X-Request-ID",
+      value: "",
+      generated: {
+        kind: "uuid",
+        at: "2026-07-12T14:03:00.000Z",
       },
-      "domains",
-    ],
-    ["a line break in the value", { value: "a\r\nb" }, "value"],
-    ["a pseudo-header name", { header: ":authority" }, "header"],
-    [
-      "a urlFilter Chrome rejects",
-      { scope: { type: "pattern" as const, pattern: "||*", hosts: [] } },
-      "pattern",
-    ],
-  ])("refuses a rule the compiler drops: %s", (_label, changes, reason) => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: profile({ rules: [rule(changes)] }),
     });
-    const line = readout.request[0];
-    expect(line?.status).toBe("refused");
-    expect(line?.refused).toBe(reason);
-    expect(readout.refused).toBe(1);
-    expect(readout.total).toBe(0);
-  });
-
-  it("lifts a this-tab authorization swap into the token, out of the strip", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: undefined,
-      overrides: [
-        override({ num: 7, header: "authorization", value: "Bearer swapped" }),
-        override({ num: 8, header: "x-flag", value: "1" }),
-      ],
+    const secret = storedRule("secret", 2, {
+      header: "Proxy-Authorization",
+      value: "Basic abc123",
     });
-    expect(readout.token?.overrideNum).toBe(7);
-    expect(readout.overrides.map((o) => o.overrideNum)).toEqual([8]);
-  });
-
-  it("excludes an override-only reconcile failure from the headline", () => {
-    const readout = computeReadout({
-      ...base,
-      activeProfile: undefined,
-      overrides: [override()],
-      status: OUT_OF_SYNC,
+    const removed = storedRule("removed", 3, {
+      direction: "response",
+      operation: "remove",
+      header: "X-Powered-By",
     });
-    expect(readout.total).toBe(0);
-    expect(readout.outOfSync).toBe(1);
-  });
-});
+    const doc = state([generated, secret, removed]);
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
 
-describe("refusedReason", () => {
-  it("flags the Host header and clears everything else", () => {
-    expect(refusedReason(rule({ header: "host" }), SUPPORT_ALL)).toBe("host");
     expect(
-      refusedReason(rule({ header: "x-env" }), SUPPORT_ALL),
-    ).toBeUndefined();
+      readout.request.find((change) => change.ruleId === generated.id),
+    ).toMatchObject({
+      profileId: "default",
+      ruleId: "generated",
+      direction: "request",
+      operation: "set",
+      header: "X-Request-ID",
+      value: "",
+      display: copy.rules.generated(copy.editor.generatedKind.uuid),
+      secret: false,
+      enabled: true,
+      paused: false,
+    });
+    expect(
+      readout.request.find((change) => change.ruleId === secret.id),
+    ).toMatchObject({
+      header: "Proxy-Authorization",
+      value: "Basic abc123",
+      display: "Basic [hidden]",
+      secret: true,
+    });
+    expect(
+      readout.response.find((change) => change.ruleId === removed.id),
+    ).not.toHaveProperty("display");
   });
 
-  it("maps append refusal separately from an invalid header name", () => {
-    expect(
-      refusedReason(
-        rule({ operation: "append", header: "content-type" }),
-        SUPPORT_ALL,
-      ),
-    ).toBe("append");
-    expect(copy.readout.refusedReason.append).toBe(
-      "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
-    );
-    expect(refusedReason(rule({ header: ":authority" }), SUPPORT_ALL)).toBe(
-      "header",
-    );
+  it("omits rules that only reach another site", () => {
+    const here = storedRule("here", 1, { header: "x-here" });
+    const there = storedRule("there", 2, {
+      header: "x-there",
+      scope: { type: "domains", domains: ["other.example.com"] },
+    });
+    const doc = state([here, there]);
+
+    const readout = computeReadout({
+      applied: appliedFor(doc),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout.request.map((change) => change.header)).toEqual(["x-here"]);
+    expect(readout.total).toBe(1);
+  });
+
+  it("selects the installed authorization placement for the token hero", () => {
+    const ungranted = storedRule("ungranted", 1, {
+      header: "authorization",
+      value: "Bearer UNGRANTED",
+      resourceTypes: ["xhr"],
+      initiators: ["thirdparty.example"],
+    });
+    const installed = storedRule("installed", 2, {
+      header: "authorization",
+      value: "Bearer PLACED",
+    });
+    const doc = state([ungranted, installed]);
+
+    const readout = computeReadout({
+      applied: appliedFor(doc, [], API_SITE),
+      doc,
+      overrides: [],
+      tab: TAB,
+    });
+
+    expect(readout.token).toMatchObject({
+      ruleId: "installed",
+      value: "Bearer PLACED",
+      outcome: { kind: "runs" },
+    });
   });
 });
 
 describe("previewSwitch", () => {
-  it("diffs the target profile against what is live now on this tab", () => {
-    const from = profile({
-      rules: [
-        rule({ header: "authorization", value: "Bearer x" }),
-        rule({ header: "x-env" }),
-      ],
-    });
-    const to = profile({
-      id: "p-target",
-      name: "Prod read-only",
-      rules: [rule({ header: "x-read-only", value: "1" })],
-    });
-    const preview = previewSwitch(from, to, "api.example.com");
-    expect(preview.drops).toEqual(["authorization", "x-env"]);
-    expect(preview.adds).toEqual([{ header: "x-read-only", display: "1" }]);
+  it("requires regex support and overrides for every preview", () => {
+    expectTypeOf<Parameters<typeof previewSwitch>>().toEqualTypeOf<
+      [
+        projection: Projection,
+        targetProfile: Profile,
+        tab: TabContext,
+        granted: GrantSnapshot,
+        isRegexSupported: (regex: string) => boolean,
+        overrides: readonly TabOverride[],
+      ]
+    >();
   });
 
-  it("is empty without a host", () => {
-    expect(previewSwitch(undefined, profile(), undefined)).toEqual({
+  it("shows the complete switch while the current batch is pending", () => {
+    const active = storedRule("active", 1, { header: "authorization" });
+    const target = otherProfile([
+      storedRule("target", 2, { header: "x-target" }),
+    ]);
+    const applied = appliedFor({
+      ...state([active]),
+      profiles: [activeProfile([active]), target],
+    });
+    const live = confirm(
+      applied.batch,
+      { dynamic: "expected", session: "expected" },
+      { dynamic: "stale", session: "stale" },
+    );
+    if (live.confirmation !== "pending")
+      throw new Error("expected pending projection");
+
+    expect(previewSwitch(live, target, TAB, ALL_SITES, () => true, [])).toEqual(
+      {
+        drops: ["authorization"],
+        adds: [{ header: "x-target", display: "value-2" }],
+      },
+    );
+  });
+
+  it("does not report a persistent this-tab change as dropped", () => {
+    const doc: StateDoc = {
+      ...state([]),
+      profiles: [activeProfile([]), otherProfile([])],
+    };
+    const override = temporary(90, { header: "x-tab-only" });
+    const target = doc.profiles[1];
+    if (target === undefined) throw new Error("missing target profile");
+
+    expect(
+      previewSwitch(
+        appliedFor(doc, [override]),
+        target,
+        TAB,
+        ALL_SITES,
+        () => true,
+        [],
+      ),
+    ).toEqual({
       drops: [],
       adds: [],
     });
+  });
+
+  it("does not preview a saved rule beneath a persistent this-tab change", () => {
+    const override = temporary(90, { header: "x-target" });
+    const target = otherProfile([
+      storedRule("target", 2, { header: "x-target" }),
+    ]);
+    const doc: StateDoc = {
+      ...state([]),
+      profiles: [activeProfile([]), target],
+    };
+
+    expect(
+      previewSwitch(
+        appliedFor(doc, [override]),
+        target,
+        TAB,
+        ALL_SITES,
+        () => true,
+        [override],
+      ),
+    ).toEqual({
+      drops: [],
+      adds: [],
+    });
+  });
+
+  it("pairs a reachable target entry with its own value", () => {
+    const target = otherProfile([
+      storedRule("disabled", 2, {
+        header: "x-disabled",
+        value: "never",
+        enabled: false,
+      }),
+      storedRule("reachable", 3, {
+        header: "x-reachable",
+        value: "real-value",
+      }),
+    ]);
+    const doc: StateDoc = {
+      ...state([storedRule("active", 1, { header: "x-active" })]),
+      profiles: [
+        activeProfile([storedRule("active", 1, { header: "x-active" })]),
+        target,
+      ],
+    };
+
+    expect(
+      previewSwitch(appliedFor(doc), target, TAB, ALL_SITES, () => true, []),
+    ).toEqual({
+      drops: ["x-active"],
+      adds: [{ header: "x-reachable", display: "real-value" }],
+    });
+  });
+
+  it("does not preview a refused target switch", () => {
+    const active = storedRule("active", 1, { header: "x-auth" });
+    const target = otherProfile([
+      storedRule("invalid", 2, {
+        header: "x-auth",
+        value: "invalid\r\nvalue",
+      }),
+    ]);
+    const doc = switchDoc([active], target);
+
+    expect(
+      previewSwitch(appliedFor(doc), target, TAB, ALL_SITES, () => true, []),
+    ).toEqual({
+      drops: ["x-auth"],
+      adds: [],
+    });
+  });
+
+  it("keeps valid target changes when another target rule is refused", () => {
+    const active = storedRule("active", 1, { header: "x-current" });
+    const refusedRegex = "^https://unsupported\\.example\\.com/";
+    const target = otherProfile([
+      storedRule("valid", 2, { header: "x-valid" }),
+      storedRule("refused", 3, {
+        header: "x-refused",
+        scope: {
+          type: "regex",
+          regex: refusedRegex,
+          hosts: [TAB.host],
+        },
+      }),
+    ]);
+    const doc = switchDoc([active], target);
+
+    expect(
+      previewSwitch(
+        appliedFor(doc),
+        target,
+        TAB,
+        ALL_SITES,
+        (regex) => regex !== refusedRegex,
+        [],
+      ),
+    ).toEqual({
+      drops: ["x-current"],
+      adds: [{ header: "x-valid", display: "value-2" }],
+    });
+  });
+
+  it("does not preview a target rule without site access", () => {
+    const active = storedRule("active", 1, { header: "x-active" });
+    const target = otherProfile([
+      storedRule("target", 2, { header: "x-target" }),
+    ]);
+    const doc = switchDoc([active], target);
+
+    expect(
+      previewSwitch(
+        appliedFor(doc),
+        target,
+        TAB,
+        {
+          origins: [],
+          allSites: false,
+        },
+        () => true,
+        [],
+      ),
+    ).toEqual({
+      drops: ["x-active"],
+      adds: [],
+    });
+  });
+
+  it("uses target profile regex support in the preview", () => {
+    const active = storedRule("active", 1, { header: "x-active" });
+    const regex = "^https://api\\.example\\.com/";
+    const target = otherProfile([
+      storedRule("target", 2, {
+        header: "x-target",
+        scope: { type: "regex", regex, hosts: [TAB.host] },
+      }),
+    ]);
+    const doc = switchDoc([active], target);
+
+    expect(
+      previewSwitch(
+        appliedFor(doc),
+        target,
+        TAB,
+        ALL_SITES,
+        (candidate) => candidate === regex,
+        [],
+      ),
+    ).toEqual({
+      drops: ["x-active"],
+      adds: [{ header: "x-target", display: "value-2" }],
+    });
+  });
+
+  it("does not preview a target profile beyond the enabled limit", () => {
+    const active = storedRule("active", 1, { header: "x-active" });
+    const target = otherProfile([
+      ...Array.from({ length: MAX_ENABLED_RULES }, (_, index) =>
+        storedRule(`kept-${index}`, index + 2, { header: "x-kept" }),
+      ),
+      storedRule("overflow", MAX_ENABLED_RULES + 2, {
+        header: "x-overflow",
+      }),
+    ]);
+    const doc = switchDoc([active], target);
+
+    const preview = previewSwitch(
+      appliedFor(doc),
+      target,
+      TAB,
+      ALL_SITES,
+      () => true,
+      [],
+    );
+    expect(preview).toEqual({ drops: [], adds: [] });
   });
 });

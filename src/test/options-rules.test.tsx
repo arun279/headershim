@@ -3,14 +3,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
-import type { Profile } from "../core/model";
+import { ALL_SITES_ORIGIN } from "../core/grants";
+import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
-import { setReconcileError } from "../platform/session-store";
+import { setAppliedRevision } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
-import { copy } from "../ui/copy";
+import { copy, siteAccessCopy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
+import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 const text = copy.options.allRules;
 
@@ -21,12 +23,17 @@ function oneRule(): Profile[] {
   ];
 }
 
-async function seed(profiles: Profile[]): Promise<void> {
-  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id }));
+function domainScope(domain: string): Rule["scope"] {
+  return { type: "domains", domains: [domain] };
 }
 
-async function mount(hash = "#rules") {
+async function seed(profiles: Profile[]): Promise<void> {
+  await write(stateDoc(profiles, { activeProfileId: profiles[0]?.id ?? "" }));
+}
+
+async function mount(hash = "#rules", publish = true) {
   window.location.hash = hash;
+  if (publish) await followCurrentBatch();
   const root = render(<App />);
   await settle();
   return root;
@@ -47,6 +54,7 @@ function findButton(root: ParentNode, label: string): HTMLButtonElement {
 }
 
 beforeEach(() => {
+  stopFollowingCurrentBatch();
   resetFixtures();
   window.location.hash = "";
 });
@@ -65,19 +73,19 @@ async function seedOneOfEachSeverity(): Promise<void> {
       rules: [
         rule({
           header: "x-live",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          scope: domainScope("api.example.com"),
         }),
         rule({
           header: "x-blocked",
-          scope: { type: "domains", domains: ["other.example.com"] },
+          scope: domainScope("other.example.com"),
         }),
         rule({
-          header: "host",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          header: ":authority",
+          scope: domainScope("api.example.com"),
         }),
         rule({
           header: "connection",
-          scope: { type: "domains", domains: ["api.example.com"] },
+          scope: domainScope("api.example.com"),
         }),
       ],
     }),
@@ -98,16 +106,29 @@ describe("all rules", () => {
     expect(hosts).toContain("api.example.com");
     expect(hosts).toContain("other.example.com");
 
-    // A granted rule is live; the Host rule is refused; the managed rule is
-    // inert; the ungranted rule needs access and offers a Grant.
+    // A granted rule is live; the invalid header is refused; the managed rule
+    // carries its caveat; the ungranted rule offers a Grant.
     expect(root.querySelector(".fleet-row.live")).not.toBeNull();
-    expect(root.querySelector(".fleet-row.refused")).not.toBeNull();
+    expect(root.querySelector(".fleet-row.stop")).not.toBeNull();
     expect(
-      root.querySelector(".fleet-row.managed .why")?.textContent,
+      [...root.querySelectorAll(".fleet-row")]
+        .find((row) => row.textContent?.includes("connection"))
+        ?.querySelector(".why")?.textContent,
     ).toContain(copy.readout.managedReason);
-    const blocked = within(root, ".fleet-row.needs-access");
+    const blocked = [...root.querySelectorAll(".fleet-row.amber")].find(
+      (row) => row.querySelector(".grant") !== null,
+    );
+    if (!(blocked instanceof HTMLElement)) {
+      throw new Error("missing grantable rule");
+    }
     expect(blocked.querySelector(".grant")?.textContent).toBe(
       copy.readout.grant,
+    );
+    expect(blocked.querySelector(".verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
+    );
+    expect(blocked.querySelector(".why")?.textContent).toContain(
+      copy.readout.needsAccessReason(false),
     );
   });
 
@@ -115,45 +136,100 @@ describe("all rules", () => {
     await seedOneOfEachSeverity();
     const root = await mount();
 
-    // Both rules are switched on, but only one of them is running: a refused
-    // rule wearing the live hue contradicts the reason printed beside it.
+    // Every rule here is switched on. Refused and ungranted rules use the
+    // blocked control tone, while a running rule keeps the live control tone
+    // even when it carries a network caveat.
     const live = within(root, '.fleet-row.live [role="switch"]');
-    const refused = within(root, '.fleet-row.refused [role="switch"]');
-    const managed = within(root, '.fleet-row.managed [role="switch"]');
-    const needsAccess = within(root, '.fleet-row.needs-access [role="switch"]');
+    const refused = within(root, '.fleet-row.stop [role="switch"]');
+    const managedRow = [...root.querySelectorAll(".fleet-row")].find((row) =>
+      row.textContent?.includes("connection"),
+    );
+    const managed = managedRow?.querySelector('[role="switch"]');
+    if (!(managed instanceof HTMLElement)) {
+      throw new Error("missing managed switch");
+    }
+    const needsAccessRow = [...root.querySelectorAll(".fleet-row.amber")].find(
+      (row) => row.querySelector(".grant") !== null,
+    );
+    const needsAccess = needsAccessRow?.querySelector('[role="switch"]');
+    if (!(needsAccess instanceof HTMLElement)) {
+      throw new Error("missing needs-access switch");
+    }
     expect(live.getAttribute("aria-checked")).toBe("true");
     expect(refused.getAttribute("aria-checked")).toBe("true");
     expect(managed.getAttribute("aria-checked")).toBe("true");
     expect(needsAccess.getAttribute("aria-checked")).toBe("true");
     expect(live.className).toBe("sw");
     expect(refused.className).toBe("sw sw-blocked");
-    expect(managed.className).toBe("sw sw-inert");
-    expect(needsAccess.className).toBe("sw sw-inert");
+    expect(managed.className).toBe("sw");
+    expect(needsAccess.className).toBe("sw sw-blocked");
   });
 
-  it("keeps the live tone off an out-of-sync rule toggle", async () => {
+  it("does not project an out-of-sync ruleset", async () => {
     await seed(oneRule());
-    await setReconcileError(true);
-    const root = await mount();
-
-    const toggle = within(root, '.fleet-row.out-of-sync [role="switch"]');
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.className).toBe("sw sw-inert");
-    expect(toggle.className).not.toBe("sw");
+    await setAppliedRevision({ dynamic: "different", session: "different" });
+    const root = await mount("#rules", false);
+    expect(root.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(root.querySelector(".fleet-row")).not.toBeNull();
+    expect(root.textContent).toContain(copy.readout.outOfSync);
   });
 
-  it("keeps the running tone off a configured-on rule in an off profile", async () => {
+  it("keeps the scope beside the profile note for a rule in an inactive profile", async () => {
     const active = profile("p1", { name: "Active" });
     const inactive = profile("p2", {
       name: "Inactive",
-      rules: [rule({ header: "x-held" })],
+      rules: [
+        rule({
+          header: "x-held",
+          scope: { type: "domains", domains: ["held.example.com"] },
+        }),
+      ],
     });
     await seed([active, inactive]);
     const root = await mount();
 
-    const row = within(root, ".fleet-row.off");
-    expect(row.textContent).toContain(text.profileOff);
+    // The off-profile row states both what it matches and why it is at rest;
+    // the reason must not take the scope's line.
+    const row = within(root, ".fleet-row.rest");
+    expect(row.querySelector(".fleet-scope")?.textContent).toBe(
+      "held.example.com",
+    );
+    expect(row.textContent).toContain(text.notActiveProfile("Inactive"));
     expect(row.querySelector('[role="switch"]')?.className).toBe("sw sw-inert");
+  });
+
+  it("shows each cross-site rule's own pattern and regex, not a scope-kind word", async () => {
+    fakeBrowser.declarativeNetRequest.isRegexSupported = vi.fn(async () => ({
+      isSupported: true,
+    }));
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "x-env",
+            scope: {
+              type: "pattern",
+              pattern: "*://api.stripe.com/*",
+              hosts: ["api.stripe.com"],
+            },
+          }),
+          rule({
+            header: "x-env",
+            scope: { type: "regex", regex: "^https://gh\\.test/", hosts: [] },
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    // The pattern and the regex are the only thing telling one cross-site rule
+    // from the other, so each row carries its own expression.
+    const scopes = [...root.querySelectorAll(".fleet-scope")].map(
+      (node) => node.textContent,
+    );
+    expect(scopes).toContain("*://api.stripe.com/*");
+    expect(scopes).toContain("^https://gh\\.test/");
   });
 
   it("truncates a long value to the ceiling every surface shares", async () => {
@@ -171,6 +247,30 @@ describe("all rules", () => {
       TRUNCATION_LIMITS.value,
     );
     expect(rendered.title).toBe(value);
+  });
+
+  // A redaction marker is fixed text this product wrote, not the user's bytes.
+  // Cut, "Bearer [hidden]" becomes "Bear…den]", which reads as a fragment of a
+  // real value rather than as a value being withheld, so it is shown whole and
+  // the header beside it gives up the room.
+  it("shows a redaction marker whole, however narrow the row", async () => {
+    await seed([
+      profile("p1", {
+        name: "Staging",
+        rules: [
+          rule({
+            header: "authorization",
+            value: `Bearer ${"z".repeat(600)}`,
+          }),
+        ],
+      }),
+    ]);
+    const root = await mount();
+
+    const rendered = within(root, ".fleet-open .v");
+    expect(rendered.textContent).toBe(`Bearer ${copy.rules.redacted}`);
+    expect(rendered.textContent).not.toContain("…");
+    expect(rendered.className).toContain("truncate-whole");
   });
 
   it("renders generated metadata in place of an absent literal value", async () => {
@@ -238,7 +338,8 @@ describe("all rules", () => {
     );
   });
 
-  it("states all-sites reach unconditionally", async () => {
+  it("states all-sites reach unconditionally when the rule is running", async () => {
+    await fakeBrowser.permissions.request({ origins: [ALL_SITES_ORIGIN] });
     await seed([
       profile("p1", {
         name: "Staging",
@@ -288,6 +389,12 @@ describe("all rules", () => {
   // groupBySite draws one row per rule x domain, so a two-domain rule is two
   // rows whose switches are the same switch. The row has to own up to its reach.
   it("says how far a rule reaches when one rule is drawn under several sites", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [
+        originPatternForDomain("api.stripe.com"),
+        originPatternForDomain("api.github.com"),
+      ],
+    });
     await seed([
       profile("p1", {
         name: "Staging",
@@ -310,10 +417,12 @@ describe("all rules", () => {
     const rows = [...root.querySelectorAll(".fleet-row")];
     expect(rows).toHaveLength(2);
     for (const row of rows) {
+      // The reach a shared switch carries is stated once, in the visible line,
+      // not doubled into the switch's own accessible name.
       expect(row.textContent).toContain(text.sharedRule(2));
       expect(
         row.querySelector('[role="switch"]')?.getAttribute("aria-label"),
-      ).toBe(copy.rules.switchLabel("x-env", true, 2));
+      ).toBe(copy.rules.switchLabel("x-env", true));
     }
   });
 
@@ -370,7 +479,7 @@ describe("rule delete", () => {
   });
 });
 
-describe("configured changes", () => {
+describe("active changes", () => {
   it("lists live and refused stamps and never carries a value", async () => {
     await fakeBrowser.permissions.request({
       origins: [originPatternForDomain("api.example.com")],
@@ -382,13 +491,16 @@ describe("configured changes", () => {
           rule({
             header: "authorization",
             value: "Bearer super-secret",
-            scope: { type: "domains", domains: ["api.example.com"] },
+            scope: domainScope("api.example.com"),
           }),
           rule({
-            header: "host",
-            scope: { type: "domains", domains: ["api.example.com"] },
+            header: ":authority",
+            scope: domainScope("api.example.com"),
           }),
-          rule({ header: "connection", scope: { type: "all" } }),
+          rule({
+            header: "connection",
+            scope: domainScope("api.example.com"),
+          }),
           rule({ header: "x-off", enabled: false }),
         ],
       }),
@@ -400,33 +512,186 @@ describe("configured changes", () => {
     );
     const rows = [...root.querySelectorAll(".tape-row")];
     expect(rows.length).toBe(3);
-    expect(root.querySelector(".tape-row.refused")).not.toBeNull();
-    expect(root.querySelector(".tape-row.managed")).not.toBeNull();
+    expect(root.querySelector(".tape-row.stop")).not.toBeNull();
     expect(root.querySelector(".tape-row.live")).not.toBeNull();
-    expect(
-      root.querySelector(".tape-row.managed .tape-status")?.textContent,
-    ).toBe(copy.options.traffic.status.managed);
+    const managed = rows.find((row) => row.textContent?.includes("connection"));
+    expect(managed?.classList.contains("amber")).toBe(true);
+    expect(managed?.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.managed,
+    );
+    expect(root.querySelector(".tape-row.stop .tape-status")?.textContent).toBe(
+      copy.options.traffic.status.refused,
+    );
     // The page carries header names, never values, so a secret cannot reach it.
     expect(root.textContent).not.toContain("super-secret");
   });
 
-  it("shows the append refusal reason from the compiler", async () => {
+  it("uses a conditional verb when an active change needs access", async () => {
     await seed([
       profile("p1", {
-        name: "Staging",
         rules: [
           rule({
-            operation: "append",
-            header: "content-type",
-            scope: { type: "all" },
+            header: "x-blocked",
+            scope: { type: "domains", domains: ["api.example.com"] },
           }),
         ],
       }),
     ]);
     const root = await mount("#traffic");
+    const row = within(root, ".tape-row.amber");
 
-    expect(within(root, ".tape-status").textContent).toBe(
-      copy.readout.refusedReason.append,
+    expect(row.querySelector(".tape-verb")?.textContent).toBe(
+      copy.readout.heldVerb.set,
     );
+    expect(row.querySelector(".tape-status")?.textContent).toBe(
+      siteAccessCopy.grant,
+    );
+  });
+
+  it("names and requests the projected initiator grant", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            header: "x-subresource",
+            scope: { type: "domains", domains: ["api.example.com"] },
+            resourceTypes: ["xhr"],
+            initiators: ["app.example.com"],
+          }),
+        ],
+      }),
+    ]);
+    const request = vi.spyOn(fakeBrowser.permissions, "request");
+    const root = await mount("#traffic");
+    const grant = root.querySelector(".tape-row .grant");
+    if (!(grant instanceof HTMLButtonElement)) {
+      throw new Error("missing Traffic grant");
+    }
+    const origins = [originPatternForDomain("app.example.com")];
+
+    expect(grant.getAttribute("aria-label")).toBe(
+      siteAccessCopy.grantOriginsLabel(origins),
+    );
+    fire(() => grant.click());
+    expect(request).toHaveBeenCalledWith({ origins });
+    request.mockRestore();
+  });
+
+  it("names shadowed and security-header rows", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await write(
+      stateDoc(
+        [
+          profile("p1", {
+            rules: [
+              rule({
+                id: "winner",
+                num: 1,
+                direction: "response",
+                header: "strict-transport-security",
+                value: "max-age=63072000",
+                scope: { type: "domains", domains: ["api.example.com"] },
+              }),
+              {
+                id: "lower",
+                num: 2,
+                direction: "response",
+                operation: "remove",
+                header: "strict-transport-security",
+                scope: { type: "domains", domains: ["api.example.com"] },
+                resourceTypes: "all",
+                initiators: [],
+                enabled: true,
+              },
+            ],
+          }),
+        ],
+        { nextRuleNum: 3 },
+      ),
+    );
+    const root = await mount("#traffic");
+    const rows = [...root.querySelectorAll(".tape-row")];
+    const statuses = rows.map(
+      (row) => row.querySelector(".tape-status")?.textContent,
+    );
+
+    expect(statuses).toContain(copy.options.traffic.status.live);
+    expect(statuses).toContain(copy.options.traffic.status.overridden);
+  });
+
+  it("reports a refused security header as refused", async () => {
+    await fakeBrowser.permissions.request({
+      origins: [originPatternForDomain("api.example.com")],
+    });
+    await seed([
+      profile("p1", {
+        rules: [
+          rule({
+            direction: "response",
+            header: "content-security-policy",
+            value: "default-src 'none'\nbad",
+            scope: {
+              type: "domains",
+              domains: ["api.example.com"],
+            },
+          }),
+        ],
+      }),
+    ]);
+
+    const root = await mount("#traffic");
+    const row = root.querySelector(".tape-row");
+    expect(row?.classList.contains("stop")).toBe(true);
+    expect(row?.querySelector(".tape-status")?.textContent).toBe(
+      copy.options.traffic.status.refused,
+    );
+  });
+
+  it("keeps the needs-access glyph while paused", async () => {
+    await write(
+      stateDoc(
+        [
+          profile("p1", {
+            rules: [
+              rule({
+                header: "x-blocked",
+                scope: { type: "domains", domains: ["api.example.com"] },
+              }),
+            ],
+          }),
+        ],
+        { settings: { paused: true, theme: "system" } },
+      ),
+    );
+    const root = await mount("#traffic");
+    const row = within(root, ".tape-row.amber");
+
+    expect(row.querySelector(".tape-mark circle")).not.toBeNull();
+    expect(row.querySelector(".tape-mark rect")).toBeNull();
+  });
+
+  // The page is the active profile's switched-on changes, so an enabled rule in
+  // another profile leaves it empty; the empty line states that fact and never
+  // tells the reader to turn on a rule the active profile does not hold.
+  it("stays empty when only another profile has a switched-on rule", async () => {
+    await seed([
+      profile("p1", { name: "Active", rules: [] }),
+      profile("p2", {
+        name: "Other",
+        rules: [rule({ header: "x-flag" })],
+      }),
+    ]);
+    const root = await mount("#traffic");
+
+    expect(root.querySelector(".tape-list")).toBeNull();
+    expect(within(root, ".tape-empty").textContent).toContain(
+      copy.options.traffic.empty,
+    );
+    expect(root.textContent).not.toContain("Turn a rule on");
   });
 });

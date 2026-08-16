@@ -14,6 +14,7 @@ body {
 }
 
 .popup-body {
+  order: 2;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -21,20 +22,17 @@ body {
   padding-bottom: 6px;
 }
 
-.pausebar {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 16px;
-  background: var(--amber-soft);
-  border-bottom: var(--hairline) solid var(--hair);
-  font-size: 11.5px;
+.pending-receipt {
+  padding: 7px 14px;
   color: var(--amber);
-  font-weight: 650;
+  background: var(--amber-soft);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* ---------------- footer ---------------- */
 .foot {
+  order: 3;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -45,14 +43,6 @@ body {
 .foot-sp {
   flex: 1;
 }
-.foot .pause {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11.5px;
-  color: var(--ink2);
-  font-weight: 600;
-}
 
 /* Bordered "Add a change" and the empty-state action share this affordance. */
 .add {
@@ -60,7 +50,7 @@ body {
   align-items: center;
   flex: none;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink);
   background: transparent;
@@ -76,20 +66,18 @@ body {
   height: 13px;
   color: var(--live);
 }
-/* The footer's controls hold their width: a shrunk label wraps mid-phrase, and
-   a shrunk icon button drops under the 24px minimum target. */
+/* The footer's controls hold their width so a shrunk label never wraps
+   mid-phrase. */
 .tab-btn {
-  display: inline-flex;
-  align-items: center;
   flex: none;
-  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink2);
-  padding: 6px 2px;
+  padding: 6px 8px;
+  border-radius: var(--r-ctl);
 }
-.tab-btn svg {
-  color: var(--ink3);
+.tab-btn:hover {
+  background: var(--raise);
 }
 .foot .icon-btn {
   flex: none;
@@ -113,6 +101,6 @@ body {
   margin-bottom: 20px;
 }
 .empty .l1 .mono {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
 }

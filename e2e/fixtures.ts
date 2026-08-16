@@ -15,6 +15,7 @@ import {
   compileSession,
   type DnrRule,
 } from "../src/core/compile";
+import { type GrantSnapshot, isAllSitesOrigin } from "../src/core/grants";
 import {
   createRule,
   type RuleDraft,
@@ -23,6 +24,7 @@ import {
 } from "../src/core/model";
 import { planReconcile } from "../src/core/reconcile";
 import { createV1Seed } from "../src/core/schema";
+import { copy } from "../src/ui/copy";
 import {
   type EchoServers,
   spawnEchoServers,
@@ -31,11 +33,15 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// Names every test browser's profile directory, which is also how a spec picks
+// this suite's browsers out of the process table.
+export const PROFILE_PREFIX = "headershim-e2e-";
+
 interface ExtensionBuildOptions {
-  extensionBuild: "host-access" | "shipped";
+  extensionBuild: "host-access" | "narrow-host-access" | "shipped";
 }
 
-interface WorkerFixtures {
+interface WorkerFixtures extends ExtensionBuildOptions {
   echoServers: EchoServers;
 }
 
@@ -45,15 +51,13 @@ interface TestFixtures {
   extensionId: string;
 }
 
-export const test = base.extend<
-  ExtensionBuildOptions & TestFixtures,
-  WorkerFixtures
->({
-  extensionBuild: ["shipped", { option: true }],
+export const test = base.extend<TestFixtures, WorkerFixtures>({
+  extensionBuild: ["shipped", { option: true, scope: "worker" }],
   echoServers: [
-    // biome-ignore lint/correctness/noEmptyPattern: Playwright resolves fixture dependencies from this parameter's destructuring; it declares none.
-    async ({}, use) => {
-      const { servers, child } = await spawnEchoServers();
+    async ({ extensionBuild }, use) => {
+      const { servers, child } = await spawnEchoServers(
+        extensionBuild === "narrow-host-access",
+      );
       await use(servers);
       await stopEchoServers(child);
     },
@@ -61,14 +65,16 @@ export const test = base.extend<
   ],
 
   context: async ({ extensionBuild }, use) => {
-    const userDataDir = await mkdtemp(path.join(tmpdir(), "headershim-e2e-"));
+    const userDataDir = await mkdtemp(path.join(tmpdir(), PROFILE_PREFIX));
     const { HEADED } = process.env;
     const extensionPath = path.join(
       root,
       ".output",
       extensionBuild === "host-access"
         ? "chrome-mv3-e2e-hostaccess"
-        : "chrome-mv3",
+        : extensionBuild === "narrow-host-access"
+          ? "chrome-mv3-e2e-narrow-hostaccess"
+          : "chrome-mv3",
     );
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",
@@ -80,6 +86,10 @@ export const test = base.extend<
         `--load-extension=${extensionPath}`,
         // The h2 echo server presents a throwaway self-signed cert.
         "--ignore-certificate-errors",
+        // This moves the GPU service into the browser process rather than
+        // changing what it does, so nothing a spec renders is affected and the
+        // browser each test launches costs one process less.
+        "--in-process-gpu",
       ],
     });
     await use(context);
@@ -102,10 +112,12 @@ export const test = base.extend<
 
 export { expect };
 
-interface SessionSeed {
+export interface SessionSeed {
   nextNum: number;
   tabs: { [tabId: number]: TabOverride[] };
 }
+
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
 
 export async function activeTabId(worker: Worker): Promise<number> {
   const id = await worker.evaluate(async () => {
@@ -128,7 +140,7 @@ export async function getSessionRules(worker: Worker): Promise<DnrRule[]> {
   return rules as DnrRule[];
 }
 
-function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
+export function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
   // Same "state" lock the background holds around its session pruning, so a
   // seed cannot interleave with an in-flight onUpdated/onRemoved cleanup.
   return worker.evaluate(
@@ -140,11 +152,20 @@ function seedSession(worker: Worker, seed: SessionSeed): Promise<void> {
   );
 }
 
+async function assertAllSitesGranted(worker: Worker): Promise<void> {
+  const { origins } = await worker.evaluate(() => chrome.permissions.getAll());
+  expect(
+    origins.some(isAllSitesOrigin),
+    "seedSessionAndWait requires the host-access build's all-sites grant",
+  ).toBe(true);
+}
+
 export async function seedSessionAndWait(
   worker: Worker,
   overrides: readonly TabOverride[],
 ): Promise<DnrRule[]> {
-  const desired = compileSession(overrides, false);
+  await assertAllSitesGranted(worker);
+  const desired = compileSession(overrides, false, ALL_SITES);
   const tabs: { [tabId: number]: TabOverride[] } = {};
   for (const override of overrides) {
     const rows = tabs[override.tabId] ?? [];
@@ -162,11 +183,8 @@ export async function seedSessionAndWait(
   return desired;
 }
 
-export function getBadgeText(worker: Worker, tabId?: number): Promise<string> {
-  return worker.evaluate(
-    (id) => chrome.action.getBadgeText(id === null ? {} : { tabId: id }),
-    tabId ?? null,
-  );
+export function getBadgeText(worker: Worker): Promise<string> {
+  return worker.evaluate(() => chrome.action.getBadgeText({}));
 }
 
 export function getBadgeColor(
@@ -202,10 +220,29 @@ export function seedState(worker: Worker, doc: StateDoc): Promise<void> {
   );
 }
 
+// Seeds the document the popup will read, opens it, and waits for the Ready
+// view. The profile-switcher chip is the head control that view always draws,
+// and the view binds the popup's key commands in the commit that paints it, so
+// the chip on screen is the signal a synthetic keypress will be heard.
+export async function openPopup(
+  page: Page,
+  extensionId: string,
+  worker: Worker,
+  doc: StateDoc,
+): Promise<void> {
+  await seedState(worker, doc);
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(
+    page.getByRole("button", { name: copy.readout.switcher.chipLabel }),
+  ).toBeVisible();
+}
+
 export async function seedStateAndWait(
   worker: Worker,
   doc: StateDoc,
 ): Promise<DnrRule[]> {
+  // Every caller runs on the static host-access build, which holds all-sites, so
+  // no rule is grant-dropped and the plain compile is what the background lands.
   const desired = compileDynamic(doc);
   await seedState(worker, doc);
   await expect

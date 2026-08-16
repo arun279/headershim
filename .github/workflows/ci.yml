@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.33.0
@@ -27,6 +29,8 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+        env:
+          PLAYWRIGHT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
       # Dependency vulnerabilities are gated by the osv-scanner job in
       # security.yml (fail-on-vuln, recursive, with a documented allowlist).
       # The npm registry retired the legacy audit endpoint pnpm audit used, so

@@ -21,7 +21,9 @@ export function ProfileBadge({
       style={{
         width: `${size}px`,
         height: `${size}px`,
-        fontSize: `${Math.round(size * 0.52)}px`,
+        // Under half the box: two full-width glyphs (a CJK code) then still fit
+        // the square instead of clipping against its own rounded edge.
+        fontSize: `${Math.round(size * 0.46)}px`,
         background: `var(--badge-${color})`,
       }}
     >

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { useRef, useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
-import { fire, press, render } from "../test/render";
+import { atPaint, fire, paint, press, render } from "../test/render";
 import { Sheet } from "./Sheet";
 
 describe("Sheet", () => {
@@ -115,6 +115,22 @@ describe("Sheet", () => {
         ?.click(),
     );
     expect(document.activeElement).toBe(trigger);
+  });
+
+  // A sheet answers keys through its own element, so a key aimed at whatever it
+  // replaced never reaches it. Focus has to be inside by the time it is drawn,
+  // or the Escape that closes it is dropped for as long as focus sits outside.
+  it("holds focus in the commit that paints it", async () => {
+    const inside = atPaint(
+      () => document.querySelector(".sheet") !== null,
+      () => document.querySelector(".sheet")?.contains(document.activeElement),
+    );
+    paint(
+      <Sheet label="Edit rule" header={<h1>New rule</h1>}>
+        <input aria-label="Header name" />
+      </Sheet>,
+    );
+    expect(await inside).toBe(true);
   });
 
   it("omits the pinned stratum when a mode has no trailing controls", () => {

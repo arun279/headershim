@@ -1,9 +1,12 @@
-import type { TabOverride } from "../../src/core/model";
+import type { Worker } from "@playwright/test";
+import type { StateDoc, TabOverride } from "../../src/core/model";
 import {
   activeTabId,
   expect,
   fetchEcho,
   getSessionRules,
+  type SessionSeed,
+  seedSession,
   seedSessionAndWait,
   test,
 } from "../fixtures";
@@ -21,16 +24,100 @@ function override(tabId: number, originHost: string, num = 1): TabOverride {
   };
 }
 
-// A This-tab session override's confinement is a property of the compiled
-// rule's own condition. The structural cases assert that condition against the
-// shipped build; tagged traffic and lifetime cases use the static-host-access
-// e2e artifact so Chromium exposes the tab URL and applies the session rule.
+// Reconcile owns the whole session band: it removes every installed rule it did
+// not compile, and a single pass applies its removals and additions in one
+// updateSessionRules call. That makes a rule the product never compiles a
+// settling probe, and it makes an empty band a positive observation rather than
+// an absence: a pass that had compiled an override would swap the probe for it
+// atomically, so the band would go from the probe straight to the override and
+// never be seen empty. The probe omits the optional resourceTypes, matching a
+// legal browser-returned rule shape that normalization has to tolerate, and it
+// carries the compiled action shape so getSessionRules keeps returning what it
+// says it returns while the probe is installed.
+//
+// The seed is what wakes reconcile, and storage drops a write that changes
+// nothing, so each drain has to advance the allocator to stay a trigger.
+async function drainThroughReconcile(
+  worker: Worker,
+  seed: SessionSeed,
+): Promise<void> {
+  await worker.evaluate(() =>
+    chrome.declarativeNetRequest.updateSessionRules({
+      addRules: [
+        {
+          id: 999_999,
+          priority: 1,
+          action: {
+            type: "modifyHeaders",
+            requestHeaders: [
+              { header: "x-headershim-settling", operation: "set", value: "1" },
+            ],
+          },
+          condition: { urlFilter: "||headershim-settling.invalid/" },
+        },
+      ],
+      removeRuleIds: [],
+    }),
+  );
+  await seedSession(worker, seed);
+  await expect.poll(async () => (await getSessionRules(worker)).length).toBe(0);
+}
 
-test("a This-tab override compiles to a session rule confined to its tab and origin", async ({
+// A This-tab session override's confinement is a property of the compiled
+// rule's own condition. Those structural and traffic specs use the static-host-
+// access artifact so Chromium exposes the tab URL and installs the rule. The
+// first spec owns the complementary shipped-build guarantee: without a grant,
+// the persisted row never enters the session band.
+
+test("the shipped build keeps an ungranted This-tab row out of the session band", async ({
   context,
   echoServers,
   serviceWorker,
 }) => {
+  const page = await context.newPage();
+  await page.goto(`${echoServers.h1Url}/ungranted`);
+  const tabId = await activeTabId(serviceWorker);
+  const originHost = new URL(echoServers.h1Url).hostname;
+  const row = override(tabId, originHost);
+
+  // The row is stored before either probe, so it is there to be compiled by
+  // every pass the probes wait on.
+  await seedSession(serviceWorker, { nextNum: 2, tabs: { [tabId]: [row] } });
+
+  // The first drain is a barrier, not the proof: the pass that answers it may
+  // have read the session before the row landed and dropped the probe knowing
+  // nothing about it. Reconcile is single-flight, so every pass that begins
+  // after that one read the stored row, and only such a pass can answer the
+  // second drain. Its empty band is the guarantee: without the grant filter,
+  // that same pass would have installed the ungranted override instead.
+  await drainThroughReconcile(serviceWorker, {
+    nextNum: 3,
+    tabs: { [tabId]: [row] },
+  });
+  await drainThroughReconcile(serviceWorker, {
+    nextNum: 4,
+    tabs: { [tabId]: [row] },
+  });
+
+  // The band is empty because the grant filter dropped the row, and not because
+  // there was nothing to compile: compileSession returns an empty band outright
+  // while the profile is paused, and the background prunes a tab's rows on a
+  // navigation or a close. Both leave a trace, and neither is what happened.
+  const stored = await serviceWorker.evaluate(async (id) => {
+    const { state } = await chrome.storage.local.get("state");
+    const { sessionState } = await chrome.storage.session.get("sessionState");
+    return {
+      paused: (state as StateDoc | undefined)?.settings.paused,
+      rows: (sessionState as SessionSeed | undefined)?.tabs[id],
+    };
+  }, tabId);
+  expect(stored.paused).toBe(false);
+  expect(stored.rows).toEqual([row]);
+});
+
+test("a This-tab override compiles to a session rule confined to its tab and origin", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/this-tab`);
   const tabId = await activeTabId(serviceWorker);
@@ -45,7 +132,8 @@ test("a This-tab override compiles to a session rule confined to its tab and ori
   // tab's requests to its own origin match, so the main frame and same-origin
   // subresources are in scope while cross-origin subresources (a different
   // requestDomain) and every other tab (a different tabId) are structurally
-  // excluded — the confinement promise, before any grant enters the picture.
+  // excluded. Broad access is granted here, so the confinement on show is the
+  // condition's own and not an artifact of a narrow grant.
   expect(rule?.condition.tabIds).toEqual([tabId]);
   expect(rule?.condition.requestDomains).toEqual([originHost]);
   expect(rule?.condition.resourceTypes).toContain("main_frame");
@@ -56,11 +144,9 @@ test("a This-tab override compiles to a session rule confined to its tab and ori
   });
 });
 
-test("cross-tab confinement holds regardless of open same-origin and cross-origin tabs", async ({
-  context,
-  echoServers,
-  serviceWorker,
-}) => {
+test("cross-tab confinement holds regardless of open same-origin and cross-origin tabs", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const first = await context.newPage();
   await first.goto(`${echoServers.h1Url}/tab-a`);
   const firstTabId = await activeTabId(serviceWorker);
@@ -79,31 +165,24 @@ test("cross-tab confinement holds regardless of open same-origin and cross-origi
   expect(sameOriginTabId).not.toBe(firstTabId);
   expect(crossOriginTabId).not.toBe(firstTabId);
 
-  // The session band still names only the tab the override was added to. The
-  // confinement is the rule's condition, not an artifact of missing grants, so
-  // it would hold identically with all-sites granted.
+  // The session band still names only the tab the override was added to, with
+  // all sites granted: the confinement is the rule's condition, not an artifact
+  // of a grant that stops short of the other tabs.
   const rules = await getSessionRules(serviceWorker);
   expect(rules).toHaveLength(1);
   expect(rules[0]?.condition.tabIds).toEqual([firstTabId]);
 });
 
-test("a navigation with no visible url drains the override and it stays ended across a round trip", async ({
-  context,
-  echoServers,
-  serviceWorker,
-}) => {
-  // Headless without an activeTab grant, tab.url is undefined on every
-  // onUpdated, so enforceOverrideLifetime prunes on every navigation. This spec
-  // therefore proves the drain-and-stay-drained lifecycle, not the
-  // same-site-keeps vs cross-site-drops distinction — that distinction is owned
-  // by the unit test in src/test/background.test.ts, which can feed a visible
-  // same-origin url and assert the row survives.
+test("a cross-origin navigation drains the override and it stays ended across a round trip", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/a`);
   const tabId = await activeTabId(serviceWorker);
   const originHost = new URL(echoServers.h1Url).hostname;
 
   await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  expect(await getSessionRules(serviceWorker)).toHaveLength(1);
 
   // A → B: the row is pruned on the hop, draining the session band.
   await page.goto(`${echoServers.h1CrossUrl}/b`);
@@ -119,17 +198,16 @@ test("a navigation with no visible url drains the override and it stays ended ac
     .toBe(0);
 });
 
-test("closing a tab ends its overrides", async ({
-  context,
-  echoServers,
-  serviceWorker,
-}) => {
+test("closing a tab ends its overrides", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/closing`);
   const tabId = await activeTabId(serviceWorker);
   const originHost = new URL(echoServers.h1Url).hostname;
 
   await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  expect(await getSessionRules(serviceWorker)).toHaveLength(1);
 
   await page.close();
   await expect

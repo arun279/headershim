@@ -1,27 +1,11 @@
-import type { Direction, HeaderOp, ResourceGroup, Rule, Scope } from "./model";
+import {
+  RESOURCE_GROUPS,
+  type ResourceGroup,
+  type Rule,
+  type Scope,
+} from "./model";
 
-// Single source of truth lives in model.ts (source of the BadgeColor type);
-// re-exported here so schema/codec validators keep one import hub.
-export { BADGE_COLORS } from "./model";
-
-export const DIRECTIONS: readonly Direction[] = ["request", "response"];
-export const HEADER_OPERATIONS: readonly HeaderOp[] = [
-  "set",
-  "append",
-  "remove",
-];
-const RESOURCE_GROUPS: readonly ResourceGroup[] = [
-  "pages",
-  "subframes",
-  "xhr",
-  "scripts",
-  "stylesheets",
-  "images",
-  "fonts",
-  "media",
-  "websockets",
-  "other",
-];
+export { BADGE_COLORS, DIRECTIONS, HEADER_OPERATIONS } from "./model";
 
 export function hasValidHeaderValue(rule: Record<string, unknown>): boolean {
   const { operation, value } = rule;

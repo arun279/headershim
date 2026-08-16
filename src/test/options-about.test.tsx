@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
 import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
+import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "../core/grants";
 import { read, write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
@@ -53,7 +54,7 @@ describe("options settings", () => {
 
   it("persists the theme choice and stamps data-theme on the root", async () => {
     const root = await mount("#settings");
-    expect(root.querySelectorAll(".settings-row")).toHaveLength(2);
+    expect(root.querySelectorAll(".settings-row")).toHaveLength(3);
     expect(root.querySelector('[role="radiogroup"]')?.className).toBe(
       "segmented",
     );
@@ -79,11 +80,11 @@ describe("options settings", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe(null);
   });
 
-  it("opens the browser shortcut manager from the shortcuts control", async () => {
+  it("opens the browser shortcut manager from the change link", async () => {
     const create = vi.spyOn(fakeBrowser.tabs, "create");
     const root = await mount("#settings");
     const link = [...root.querySelectorAll("a")].find((candidate) =>
-      candidate.textContent?.includes(settings.shortcuts),
+      candidate.textContent?.includes(settings.shortcutsManage),
     );
     if (link === undefined) {
       throw new Error("no shortcuts control");
@@ -94,6 +95,29 @@ describe("options settings", () => {
     expect(create).toHaveBeenCalledWith({
       url: "chrome://extensions/shortcuts",
     });
+  });
+
+  it("lists each command with the key that drives it", async () => {
+    const root = await mount("#settings");
+    await vi.waitFor(() => {
+      if (root.querySelectorAll(".shortcut-list li").length !== 3) {
+        throw new Error("shortcuts are still loading");
+      }
+    });
+    const items = [...root.querySelectorAll(".shortcut-list li")];
+
+    expect(
+      items.map((li) => li.querySelector(".shortcut-desc")?.textContent),
+    ).toEqual([
+      "Open the popup",
+      "Toggle global pause",
+      "Switch to the previous profile",
+    ]);
+    expect(items.map((li) => li.querySelector(".kbd")?.textContent)).toEqual([
+      "⌥⇧H",
+      "⌥⇧P",
+      "⌥⇧K",
+    ]);
   });
 
   it("chooses the shortcut manager supported by the browser runtime", () => {
@@ -127,7 +151,6 @@ describe("options about", () => {
     );
     expect(root.querySelectorAll(".about-description")).toHaveLength(1);
     expect(root.textContent).toContain(text.license);
-    expect(root.textContent).not.toContain(copy.app.tagline);
     expect(
       root.querySelectorAll(".about-card h2, .about-card h3"),
     ).toHaveLength(0);
@@ -136,14 +159,45 @@ describe("options about", () => {
   it("contains none of the removed manifesto sections", () => {
     expect(text).not.toHaveProperty("trustHeading");
     expect(text).not.toHaveProperty("summary");
-    expect(text).not.toHaveProperty("permissions");
     expect(text).not.toHaveProperty("storage");
     expect(text).not.toHaveProperty("neverList");
     expect(text).not.toHaveProperty("security");
     expect(text).not.toHaveProperty("verifyBuild");
   });
 
-  it("links the repository, license, issues, and releases", async () => {
+  // Whether a permission is explained at all is closed by types and by the
+  // build, not here: the rows are mapped from MANIFEST_PERMISSIONS, which is
+  // also what wxt.config.ts feeds the manifest, PERMISSION_REASONS is keyed by
+  // that union so an unexplained permission does not compile, and
+  // manifest-policy.mjs pins the built manifest against its own list. What only
+  // rendering can show is that the page puts them on screen, in that order, in
+  // the shape the disclosure is read in: headed by what the permission does
+  // rather than by the manifest id it maps to, leading with what it is for and
+  // breaking its specifics out under that, and outside the identity card.
+  it("renders one row per permission, its specifics broken out under it", async () => {
+    const root = await mount();
+    const rows = [...root.querySelectorAll(".perm-card .perm-row")];
+
+    for (const row of rows) {
+      // The heading a reader scans is the plain-word one; the manifest id it
+      // maps to sits beside it, not standing in for it.
+      expect(row.querySelector(".perm-title")?.textContent).toBeTruthy();
+      expect(row.querySelector(".perm-head > :first-child")).toBe(
+        row.querySelector(".perm-title"),
+      );
+      expect(row.querySelector(".perm-reason")?.textContent).toBeTruthy();
+      expect(
+        row.querySelectorAll(".perm-details > .perm-detail").length,
+      ).toBeGreaterThan(0);
+    }
+    expect(
+      rows.map((row) => row.querySelector(".perm-id")?.textContent),
+    ).toEqual([...MANIFEST_PERMISSIONS, ALL_SITES_ORIGIN]);
+    // The identity card stays the identity card; the list is its own.
+    expect(root.querySelector(".about-card .perm-row")).toBeNull();
+  });
+
+  it("links the repository, privacy policy, license, issues, and releases", async () => {
     const root = await mount();
     const links = [
       ...root.querySelectorAll<HTMLAnchorElement>(".about-links a.about-link"),
@@ -151,12 +205,14 @@ describe("options about", () => {
 
     expect(links.map((link) => link.href)).toEqual([
       text.links.repositoryUrl,
+      text.links.privacyUrl,
       text.links.licenseUrl,
       text.links.issuesUrl,
       text.links.releasesUrl,
     ]);
     expect(links.map((link) => link.textContent?.replace(" ↗", ""))).toEqual([
       text.links.repository,
+      text.links.privacy,
       text.links.license,
       text.links.issues,
       text.links.releases,

@@ -21,6 +21,8 @@ export function blockedCommitCopy(error: MutationError): string | undefined {
       return headerErrorMessage(error);
     case "enabled-rule-limit-exceeded":
       return copy.errors.ruleCap;
+    case "dynamic-rule-limit-exceeded":
+      return copy.errors.dynamicRuleCap;
     case "regex-rule-limit-exceeded":
       return copy.errors.regexRuleCap;
     case "session-override-limit-exceeded":
