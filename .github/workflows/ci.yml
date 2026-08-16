@@ -28,9 +28,15 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - name: Fetch previous pull request revision
+        if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+        env:
+          PLAYWRIGHT_PREVIOUS_REF: ${{ github.event.before }}
+        run: git fetch --no-tags origin "$PLAYWRIGHT_PREVIOUS_REF"
       - run: pnpm check
         env:
           PLAYWRIGHT_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          PLAYWRIGHT_PREVIOUS_REFS: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.event.before || '' }}
       # Dependency vulnerabilities are gated by the osv-scanner job in
       # security.yml (fail-on-vuln, recursive, with a documented allowlist).
       # The npm registry retired the legacy audit endpoint pnpm audit used, so
