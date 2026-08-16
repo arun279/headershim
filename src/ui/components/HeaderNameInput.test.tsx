@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
+import { COMMON_HEADER_NAMES } from "../../core/header-names";
 import { LiveRegionProvider } from "../a11y/LiveRegion";
 import { copy } from "../copy";
 import { fire, press, render, typeInto } from "../test/render";
@@ -8,19 +9,36 @@ import { HeaderNameInput } from "./HeaderNameInput";
 
 function Harness({
   direction = "request",
+  onBubble,
 }: {
   direction?: "request" | "response";
+  onBubble?: ((key: string) => void) | undefined;
 }) {
   const [value, setValue] = useState("");
   return (
     <LiveRegionProvider>
-      <HeaderNameInput value={value} direction={direction} onInput={setValue} />
+      {/* Stands in for the editor: records a key only when HeaderNameInput
+          left it unprevented, the same signal Sheet's onKeyDown reads. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: test harness stand-in for the editor's onKeyDown listener, not user-facing. */}
+      <div
+        onKeyDown={(event) => {
+          if (!event.defaultPrevented) {
+            onBubble?.(event.key);
+          }
+        }}
+      >
+        <HeaderNameInput
+          value={value}
+          direction={direction}
+          onInput={setValue}
+        />
+      </div>
     </LiveRegionProvider>
   );
 }
 
-function mount() {
-  const root = render(<Harness />);
+function mount(options: { onBubble?: (key: string) => void } = {}) {
+  const root = render(<Harness onBubble={options.onBubble} />);
   return {
     root,
     input: () => root.querySelector('[role="combobox"]') as HTMLInputElement,
@@ -32,33 +50,85 @@ function mount() {
   };
 }
 
+const optionNames = (ctx: ReturnType<typeof mount>) =>
+  ctx.options().map((option) => option.querySelector(".mono")?.textContent);
+
+// Prefix matches lead, substring matches follow.
+const authMatches = [
+  "authorization",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "www-authenticate",
+];
+
+/** Mounts with the list open on "auth", recording keys that reach the editor. */
+function mountBubbling() {
+  const bubbled: string[] = [];
+  const ctx = mount({ onBubble: (key) => bubbled.push(key) });
+  typeInto(ctx.input(), "auth");
+  return { ctx, bubbled };
+}
+
 describe("HeaderNameInput combobox contract", () => {
-  it("stays shut while typing and opens on the chevron, wiring the ARIA contract", () => {
+  it("opens filtered by typing, with nothing active, wiring the ARIA contract", () => {
     const ctx = mount();
     expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
     expect(ctx.input().getAttribute("aria-autocomplete")).toBe("list");
 
-    // The defect: the list opened on every keystroke and painted over the value
-    // field below, so a click meant for the value selected a suggestion instead.
     typeInto(ctx.input(), "auth");
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("true");
+    expect(ctx.input().getAttribute("aria-controls")).toBe(
+      ctx.listbox()?.getAttribute("id"),
+    );
+    expect(ctx.input().hasAttribute("aria-activedescendant")).toBe(false);
+    expect(optionNames(ctx)).toEqual(authMatches);
+  });
+
+  it("closes the list once the field empties back out", () => {
+    const ctx = mount();
+    typeInto(ctx.input(), "auth");
+    expect(ctx.listbox()).not.toBeNull();
+
+    typeInto(ctx.input(), "");
+    expect(ctx.listbox()).toBeNull();
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("keeps the list closed when the query matches nothing", () => {
+    const ctx = mount();
+    typeInto(ctx.input(), "not-a-real-header");
+    expect(ctx.listbox()).toBeNull();
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("toggles the list open and closed from the chevron, filtered or full", () => {
+    const ctx = mount();
+    typeInto(ctx.input(), "auth");
+    expect(ctx.listbox()).not.toBeNull();
+
+    fire(() => ctx.toggle().click());
     expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
     expect(ctx.listbox()).toBeNull();
 
     fire(() => ctx.toggle().click());
     expect(ctx.input().getAttribute("aria-expanded")).toBe("true");
-    expect(ctx.input().getAttribute("aria-controls")).toBe(
-      ctx.listbox()?.getAttribute("id"),
-    );
-    const names = ctx
-      .options()
-      .map((option) => option.querySelector(".mono")?.textContent);
-    // Prefix matches lead, substring matches follow.
-    expect(names).toEqual([
-      "authorization",
-      "proxy-authenticate",
-      "proxy-authorization",
-      "www-authenticate",
-    ]);
+    expect(optionNames(ctx)).toEqual(authMatches);
+  });
+
+  it("still opens the full list from the chevron on an empty field", () => {
+    const ctx = mount();
+    fire(() => ctx.toggle().click());
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("true");
+    expect(ctx.options().length).toBe(COMMON_HEADER_NAMES.length);
+  });
+
+  it("still opens on ArrowDown from a closed list, landing on the first option", () => {
+    const ctx = mount();
+    press(ctx.input(), "ArrowDown");
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("true");
+    const first = ctx.options()[0] as HTMLElement;
+    expect(ctx.input().getAttribute("aria-activedescendant")).toBe(first.id);
+    expect(first.getAttribute("aria-selected")).toBe("true");
   });
 
   it("moves aria-activedescendant with the arrows, wrapping both ways", () => {
@@ -87,13 +157,62 @@ describe("HeaderNameInput combobox contract", () => {
     expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("closes the list and bubbles Enter to the editor when nothing is active", () => {
+    const { ctx, bubbled } = mountBubbling();
+    expect(ctx.input().hasAttribute("aria-activedescendant")).toBe(false);
+
+    press(ctx.input(), "Enter");
+
+    expect(ctx.input().value).toBe("auth");
+    expect(ctx.listbox()).toBeNull();
+    expect(ctx.input().getAttribute("aria-expanded")).toBe("false");
+    expect(bubbled).toEqual(["Enter"]);
+  });
+
+  it("closes the list on Escape before the key reaches the editor", () => {
+    const { ctx, bubbled } = mountBubbling();
+
+    press(ctx.input(), "Escape");
+    expect(ctx.listbox()).toBeNull();
+    expect(ctx.input().value).toBe("auth");
+    expect(bubbled).toEqual([]);
+
+    press(ctx.input(), "Escape");
+    expect(bubbled).toEqual(["Escape"]);
+  });
+
+  it("an option dismissed with Escape is not accepted by a later Enter", () => {
+    const { ctx, bubbled } = mountBubbling();
+    press(ctx.input(), "ArrowDown");
+    press(ctx.input(), "Escape");
+    expect(ctx.listbox()).toBeNull();
+
+    press(ctx.input(), "Enter");
+
+    expect(ctx.input().value).toBe("auth");
+    expect(bubbled).toEqual(["Enter"]);
+  });
+
+  it("a second Enter after accepting a suggestion still reaches the editor", () => {
+    const bubbled: string[] = [];
+    const ctx = mount({ onBubble: (key) => bubbled.push(key) });
+    typeInto(ctx.input(), "www-auth");
+    press(ctx.input(), "ArrowDown");
+    press(ctx.input(), "Enter");
+    expect(ctx.input().value).toBe("www-authenticate");
+    expect(ctx.listbox()).toBeNull();
+
+    press(ctx.input(), "Enter");
+
+    expect(bubbled).toEqual(["Enter"]);
+  });
+
   it("closes the suggestion list when focus leaves the field", () => {
     const ctx = mount();
     const next = document.createElement("input");
     ctx.root.appendChild(next);
     fire(() => ctx.input().focus());
     typeInto(ctx.input(), "auth");
-    fire(() => ctx.toggle().click());
     expect(ctx.listbox()).not.toBeNull();
 
     fire(() => next.focus());
@@ -105,7 +224,6 @@ describe("HeaderNameInput combobox contract", () => {
   it("announces the match count politely, singular and plural", () => {
     const ctx = mount();
     typeInto(ctx.input(), "auth");
-    fire(() => ctx.toggle().click());
     expect(ctx.liveRegion().textContent).toBe(copy.editor.suggestions(4));
     typeInto(ctx.input(), "www-auth");
     expect(ctx.liveRegion().textContent).toBe("1 suggestion");
@@ -114,7 +232,6 @@ describe("HeaderNameInput combobox contract", () => {
   it("shows the option hint in the mute face", () => {
     const ctx = mount();
     typeInto(ctx.input(), "authorization");
-    fire(() => ctx.toggle().click());
     expect(ctx.options()[0]?.textContent).toBe("authorization: credentials");
   });
 

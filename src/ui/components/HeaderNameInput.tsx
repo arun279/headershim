@@ -35,16 +35,23 @@ interface HeaderNameInputProps {
 }
 
 /**
- * Combobox over the bundled common-header list (never fetched). The list opens
- * on ↓ or the trailing chevron, never on a keystroke, so it cannot paint over
- * the value field below; typing then filters an already-open list. ↑/↓ move the
- * active option; Enter accepts it (a closed list lets Enter bubble to commit the
- * rule); Esc closes the list first and only then
- * reaches the editor. Match counts are announced politely. Under the field:
- * the case-honesty microline. Header advisories render in the editor's pinned
- * caution band so they remain visible at the save decision. A pasted
- * `name: value` line is handed to the editor, which splits it across its two
- * fields rather than failing this one's token grammar on the colon.
+ * Combobox over the bundled common-header list (never fetched). Typing that
+ * leaves the field non-empty opens the list, filtered by matchesFor(query),
+ * with no option active; deleting back to empty, or a query with no matches,
+ * closes it. ↓/↑ move the active option once the list is open; the chevron
+ * and ↓ on a closed list still open it directly, with ↓ landing on the first
+ * option, unchanged. Enter accepts the active option only while the list is
+ * open; with the list open and nothing active, or once the list is closed,
+ * the keystroke is left unprevented so it reaches the editor's own handler
+ * — where plain Enter is deliberately inert and Ctrl/Cmd+Enter is the save
+ * chord — leaving a typed name exactly as typed rather than hijacked into a
+ * suggestion. Esc closes the list first and only then reaches the editor.
+ * Match counts are announced politely on every keystroke that changes them,
+ * per the APG autocomplete pattern. Under the field: the case-honesty
+ * microline. Header advisories render in the editor's pinned caution band so
+ * they remain visible at the save decision. A pasted `name: value` line is
+ * handed to the editor, which splits it across its two fields rather than
+ * failing this one's token grammar on the colon.
  */
 export function HeaderNameInput(props: HeaderNameInputProps) {
   const id = useId();
@@ -92,13 +99,17 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     if (!expanded || list === null || input === null) {
       return;
     }
-    openPositionedPopover(list, input);
+    // Prefers above: the list would otherwise sit directly over the value
+    // field below, so a click meant for that field would land on a
+    // suggestion instead.
+    openPositionedPopover(list, input, "start", true);
     return () => closePopover(list);
   }, [expanded, matches.length]);
 
   const select = (name: string) => {
     props.onInput(name);
     setOpen(false);
+    setActiveIndex(undefined);
   };
 
   const listId = `${id}-list`;
@@ -145,8 +156,10 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
           aria-describedby={describedBy === "" ? undefined : describedBy}
           value={props.value}
           onInput={(event) => {
-            props.onInput(event.currentTarget.value);
+            const raw = event.currentTarget.value;
+            props.onInput(raw);
             setActiveIndex(undefined);
+            setOpen(normalizeHeaderName(raw) !== "");
           }}
           onKeyDown={(event) => {
             switch (event.key) {
@@ -173,17 +186,28 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
                 return;
               }
               case "Enter": {
+                if (!expanded) {
+                  return;
+                }
                 const name = active === undefined ? undefined : matches[active];
-                if (open && name !== undefined) {
+                if (name !== undefined) {
                   event.preventDefault();
                   select(name);
+                  return;
                 }
+                // Nothing active: close the list and leave the keystroke
+                // unprevented so it reaches the editor's own handler (plain
+                // Enter is inert there; Ctrl/Cmd+Enter saves), leaving the
+                // typed name exactly as typed rather than hijacked into a
+                // suggestion.
+                setOpen(false);
                 return;
               }
               case "Escape":
                 if (expanded) {
                   event.preventDefault();
                   setOpen(false);
+                  setActiveIndex(undefined);
                 }
                 return;
             }
