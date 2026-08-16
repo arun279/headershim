@@ -43,6 +43,12 @@ describe("siteAccessView", () => {
     return { id, name: id, badgeText: "PR", color: "blue", rules };
   }
 
+  function apiProfile(): Profile {
+    return profile("p1", [
+      rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+    ]);
+  }
+
   const enabledOverride = {
     num: 1,
     tabId: 5,
@@ -126,15 +132,19 @@ describe("siteAccessView", () => {
     expect(siteAccessView(subject, none).needed).toEqual([]);
   });
 
-  it("counts enabled rules in the active profile, matching Needed", () => {
+  it("counts enabled rules in the active profile for a held grant", () => {
     const granted = originPatternForDomain("api.example.com");
     const subject = doc([
       profile("p1", [
-        { ...rule({ type: "domains", domains: ["api.example.com"] }, "all") },
+        {
+          ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+          enabled: false,
+        },
+      ]),
+      profile("p2", [
         {
           ...rule({ type: "domains", domains: ["api.example.com"] }, "all"),
           id: "rule-2",
-          enabled: false,
         },
       ]),
     ]);
@@ -146,7 +156,7 @@ describe("siteAccessView", () => {
         coverage: "full",
         origin: granted,
         domain: "api.example.com",
-        ruleCount: 1,
+        ruleCount: 0,
         grantedOrigins: [granted],
       },
     ]);
@@ -204,11 +214,7 @@ describe("siteAccessView", () => {
   it("keeps narrowed-grant rule and this-tab usage visible and actionable", () => {
     const observed = "https://api.example.com/*";
     const required = originPatternForDomain("api.example.com");
-    const subject = doc([
-      profile("p1", [
-        rule({ type: "domains", domains: ["api.example.com"] }, "all"),
-      ]),
-    ]);
+    const subject = doc([apiProfile()]);
 
     expect(
       siteAccessView(subject, { origins: [observed], allSites: false }, [
@@ -224,11 +230,36 @@ describe("siteAccessView", () => {
           ruleCount: 1,
           thisTabCount: 1,
           grantedOrigins: [observed],
-          limitedTo: observed,
+          coveringOrigins: [observed],
         },
       ],
       granted: [],
     });
+  });
+
+  it("keeps every same-host origin that contributes to a partial row", () => {
+    const origins = [
+      "https://api.example.com/*",
+      "http://api.example.com:8080/*",
+      "https://*.api.example.com/*",
+    ];
+
+    expect(
+      siteAccessView(
+        doc([
+          profile("p1", [
+            rule({ type: "domains", domains: ["api.example.com"] }, "all"),
+          ]),
+        ]),
+        { origins, allSites: false },
+      ).partial,
+    ).toMatchObject([
+      {
+        domain: "api.example.com",
+        grantedOrigins: origins,
+        coveringOrigins: origins,
+      },
+    ]);
   });
 
   it.each(["pattern", "regex"] as const)(
@@ -264,7 +295,7 @@ describe("siteAccessView", () => {
             domain: "api.example.com",
             ruleCount: 1,
             grantedOrigins: [observed],
-            limitedTo: observed,
+            coveringOrigins: [observed],
           },
         ],
         granted: [],
@@ -272,38 +303,39 @@ describe("siteAccessView", () => {
     },
   );
 
-  it("classifies an extension-requested subdomain grant as partial for its parent rule", () => {
-    const observed = "*://*.sub.example.com/*";
-    const subject = doc([
-      profile("p1", [
-        rule({ type: "domains", domains: ["example.com"] }, "all"),
-      ]),
-    ]);
+  it.each([
+    ["https://*.example.com/*", "example.com"],
+    ["https://other.api.example.com/*", "other.api.example.com"],
+  ])(
+    "shows %s as coverage for api.example.com and as its own revocable row",
+    (observed, grantedDomain) => {
+      const subject = doc([apiProfile()]);
 
-    expect(
-      siteAccessView(subject, {
-        origins: [observed],
-        allSites: false,
-      }),
-    ).toMatchObject({
-      needed: [],
-      partial: [
-        {
-          coverage: "partial",
-          domain: "example.com",
-          ruleCount: 1,
-          grantedOrigins: [observed],
-          limitedTo: observed,
-        },
-      ],
-      granted: [
-        {
-          domain: "sub.example.com",
-          ruleCount: 1,
-        },
-      ],
-    });
-  });
+      expect(
+        siteAccessView(subject, {
+          origins: [observed],
+          allSites: false,
+        }),
+      ).toMatchObject({
+        needed: [],
+        partial: [
+          {
+            coverage: "partial",
+            domain: "api.example.com",
+            ruleCount: 1,
+            coveringOrigins: [observed],
+          },
+        ],
+        granted: [
+          {
+            domain: grantedDomain,
+            ruleCount: 1,
+            grantedOrigins: [observed],
+          },
+        ],
+      });
+    },
+  );
 
   it("never lists one domain as both granted and needing access", () => {
     const observed = "https://example.com/*";
@@ -336,7 +368,8 @@ describe("siteAccessView", () => {
           coverage: "partial",
           domain: "example.com",
           ruleCount: 2,
-          limitedTo: observed,
+          grantedOrigins: [observed],
+          coveringOrigins: [observed],
         },
       ],
       granted: [],

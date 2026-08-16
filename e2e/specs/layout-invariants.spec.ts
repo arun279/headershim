@@ -1,8 +1,9 @@
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
-import { copy } from "../../src/ui/copy";
-import { expect, seedState, test } from "../fixtures";
+import { copy, siteAccessCopy } from "../../src/ui/copy";
+import { NARROWED_ORIGIN } from "../echo-ports.mjs";
+import { expect, seedState, stateWithRules, test } from "../fixtures";
 import { pathologicalDoc } from "../fixtures/pathological";
 import {
   collectLayoutOffenders,
@@ -241,6 +242,51 @@ test("popup populated states hold their surface under pathological content", {
   }
 
   await web.close();
+});
+
+test("partial site-access rows hold their surface", {
+  tag: "@narrow-host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  // This build's declared narrow permission is the partial grant under test.
+  expect(
+    await serviceWorker.evaluate(async () => {
+      const permissions = await chrome.permissions.getAll();
+      return permissions.origins ?? [];
+    }),
+  ).toEqual([NARROWED_ORIGIN]);
+
+  const doc = stateWithRules([
+    {
+      direction: "request",
+      operation: "set",
+      header: "x-layout",
+      value: "1",
+      scope: { type: "domains", domains: ["localhost"] },
+      resourceTypes: ["xhr"],
+      initiators: [],
+      enabled: true,
+    },
+  ]);
+  const page = await context.newPage();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const theme of THEMES) {
+    await seedState(serviceWorker, withTheme(doc, theme));
+    for (const width of OPTIONS_WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(optionsUrl(extensionId, "site-access"));
+      await expect(
+        page.getByRole("list", { name: siteAccessCopy.partialHeading }),
+      ).toBeVisible();
+      await measure(
+        page,
+        theme,
+        `options partial site access @${width} (${theme})`,
+      );
+    }
+  }
+
+  await page.close();
 });
 
 async function sweepOptions(

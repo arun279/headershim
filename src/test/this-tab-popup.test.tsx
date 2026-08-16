@@ -376,10 +376,10 @@ describe("popup This-tab overrides", () => {
       copy.readout.heldVerb.set,
     );
     expect(root.querySelector(".status")?.textContent).toContain(
-      "0 changes held on this tab",
+      "0 of 1 change held on this tab",
     );
     expect(root.querySelector(".substatus")?.textContent).toContain(
-      "1 needs access",
+      "1 more needs access",
     );
   });
 

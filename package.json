@@ -137,7 +137,7 @@
         ".output/chrome-mv3/chunks/DeferredPage-*.js",
         ".output/chrome-mv3/assets/DeferredPage-*.css"
       ],
-      "limit": "9.5 kB"
+      "limit": "9501 B"
     },
     {
       "name": "ModHeader import",

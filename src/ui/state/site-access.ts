@@ -22,10 +22,10 @@ export interface SiteAccessEntry {
   readonly ruleCount: number;
   /** Enabled temporary changes using this origin, omitted when there are none. */
   readonly thisTabCount?: number;
-  /** Concrete Chrome grant(s) represented by this one domain-keyed row. */
+  /** Concrete Chrome grants whose own host matches this row. */
   readonly grantedOrigins?: readonly string[];
-  /** The exact narrowed origin to explain on a partial row. */
-  readonly limitedTo?: string;
+  /** Every Chrome grant that supplies some coverage for this row. */
+  readonly coveringOrigins?: readonly string[];
 }
 
 export interface SiteAccessView {
@@ -82,24 +82,26 @@ export function siteAccessView(
     .sort(byDomain);
   const partialDomains = new Set<string>();
   const partial = neededEntries.flatMap((neededEntry) => {
-    const origins = granted.origins.filter(
+    const coveringOrigins = granted.origins.filter(
       (origin) =>
         narrowedGrantUrlFilters(neededEntry.domain, {
           origins: [origin],
           allSites: false,
         }).length !== 0,
     );
-    const limitedTo = origins[0];
-    if (limitedTo === undefined) {
+    if (coveringOrigins.length === 0) {
       return [];
     }
+    const grantedOrigins = coveringOrigins.filter(
+      (origin) => domainFromOriginPattern(origin) === neededEntry.domain,
+    );
     partialDomains.add(neededEntry.domain);
     return [
       {
         ...neededEntry,
         coverage: "partial" as const,
-        grantedOrigins: origins,
-        limitedTo,
+        coveringOrigins,
+        ...(grantedOrigins.length === 0 ? {} : { grantedOrigins }),
       },
     ];
   });

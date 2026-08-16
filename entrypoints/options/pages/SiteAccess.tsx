@@ -2,6 +2,7 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
+  domainFromOriginPattern,
   type GrantSnapshot,
   isAllSitesOrigin,
   requiredOrigins,
@@ -13,6 +14,7 @@ import {
   type TabOverride,
 } from "../../../src/core/model";
 import {
+  snapshot as readPermissions,
   remove as removePermissions,
   request as requestPermissions,
 } from "../../../src/platform/permissions";
@@ -26,7 +28,7 @@ import {
   CheckGlyph,
   TriangleGlyph,
 } from "../../../src/ui/components/readout/glyphs";
-import { Truncate } from "../../../src/ui/components/Truncate";
+import { sentence } from "../../../src/ui/components/sentence";
 import { copy, siteAccessCopy } from "../../../src/ui/copy";
 import {
   type SiteAccessEntry,
@@ -53,80 +55,112 @@ export function SiteAccessPage({
 }) {
   const announce = useAnnounce();
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const pendingRef = useRef(false);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
+  const [pending, setPending] = useState(false);
   const overrides = useSessionOverrides();
   const view = siteAccessView(doc, grants, overrides);
-  const profile = activeProfile(doc);
+  const hasSiteRows =
+    view.needed.length > 0 ||
+    view.partial.length > 0 ||
+    view.granted.length > 0;
   // A sensitive rule cautions only when its honest requirement is broad access:
   // requiredOrigins yields the all-sites origin for all-scope or hostless
   // pattern/regex rules, the only ones widened beyond one-at-a-time host grants.
-  const broadSensitiveCount = (profile?.rules ?? []).filter(
+  const broadSensitiveCount = activeProfile(doc).rules.filter(
     (rule) =>
       rule.enabled &&
       requiredOrigins(rule).some(isAllSitesOrigin) &&
       headerSensitivity(rule).length > 0,
   ).length;
-  // Under the broad grant no rule can want for access, so a per-site list has
-  // nothing left to say; the narrow grants that outlived it are still revocable
-  // and keep the panel. Otherwise the page would answer "granted" and "nothing
-  // granted yet" in the same breath.
-  const showSites =
-    !grants.allSites || view.needed.length > 0 || view.granted.length > 0;
 
   // A grant or revocation reparents the row to the other group, unmounting the
   // button that was clicked; land focus on the stable page heading rather than
   // <body> (WCAG 2.4.3).
   const anchorFocus = () => titleRef.current?.focus();
 
-  // permissions.request must run synchronously in the click gesture; the
-  // refreshed snapshot moves the row, the live region states the outcome.
+  const runPermission = (
+    start: () => Promise<boolean>,
+    success: string,
+    failure: string,
+    collapseAllSites = false,
+  ) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    void start()
+      .then(
+        (completed) => {
+          if (completed) {
+            if (collapseAllSites) setAllSitesOpen(false);
+            announce(success);
+            anchorFocus();
+          } else {
+            announce(failure);
+          }
+        },
+        () => announce(failure),
+      )
+      .finally(() => {
+        pendingRef.current = false;
+        setPending(false);
+      });
+  };
+
   const grant = (entry: SiteAccessEntry) =>
-    void requestPermissions([entry.origin]).then((granted) => {
-      if (granted) {
-        announce(copy.toast.accessGranted);
-        anchorFocus();
-      }
-    });
+    runPermission(
+      () => requestPermissions([entry.origin]),
+      copy.toast.accessGranted,
+      text.notGranted(entry.domain),
+    );
+
+  const broaden = (entry: SiteAccessEntry) =>
+    runPermission(
+      () => requestPermissions([entry.origin]),
+      text.broadened(entry.domain),
+      text.notBroadened(entry.domain),
+    );
 
   const revoke = (entry: SiteAccessEntry) =>
-    void removePermissions([...(entry.grantedOrigins ?? [entry.origin])]).then(
-      (removed) => {
-        if (removed) {
-          announce(
-            grants.allSites
-              ? text.revokedUnderAllSites(entry.domain)
-              : text.revoked(entry.domain),
-          );
-          anchorFocus();
-        }
-      },
+    runPermission(
+      () =>
+        removeCurrentOrigins(
+          (origin) =>
+            !isAllSitesOrigin(origin) &&
+            domainFromOriginPattern(origin) === entry.domain,
+        ),
+      grants.allSites
+        ? text.revokedUnderAllSites(entry.domain)
+        : text.revoked(entry.domain),
+      text.revokeFailed(entry.domain),
     );
 
   const grantAllSites = () =>
-    void requestPermissions([ALL_SITES_ORIGIN]).then((granted) => {
-      if (granted) {
-        setAllSitesOpen(false);
-        announce(text.allSites.on);
-      }
-    });
+    runPermission(
+      () => requestPermissions([ALL_SITES_ORIGIN]),
+      text.allSites.on,
+      text.allSites.notGranted,
+      true,
+    );
 
   const revokeAllSites = () =>
-    void removePermissions(grants.origins.filter(isAllSitesOrigin)).then(
-      (removed) => {
-        if (removed) {
-          announce(text.allSites.revoked);
-        }
-      },
+    runPermission(
+      () => removeCurrentOrigins(isAllSitesOrigin),
+      text.allSites.revoked,
+      text.allSites.revokeFailed,
     );
 
   return (
     <section
-      class="wb-page site-access-page"
+      class="wb-page"
       aria-labelledby="site-access-title"
+      aria-busy={pending ? "true" : undefined}
     >
       <h1 class="wb-title" id="site-access-title" ref={titleRef} tabIndex={-1}>
         {text.title}
       </h1>
+      <p class="sa-guidance">{text.guidance}</p>
+      {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
 
       {grants.allSites && (
         <div class="sa-card sa-all-on">
@@ -136,13 +170,13 @@ export function SiteAccessPage({
             </span>
             {text.allSites.on}
           </p>
-          <Button kind="quiet" onClick={revokeAllSites}>
-            {text.revoke}
+          <Button kind="quiet" disabled={pending} onClick={revokeAllSites}>
+            {text.allSites.revoke}
           </Button>
         </div>
       )}
 
-      {showSites && (
+      {hasSiteRows && (
         <div class="sa-card">
           {view.needed.length > 0 && (
             <SiteGroup
@@ -153,10 +187,11 @@ export function SiteAccessPage({
                   <TriangleGlyph />
                 </span>
               }
-              count={(entry) => `${text.usedBy} ${usageCount(entry)}`}
+              count={usage}
               action={text.grant}
               actionLabel={text.grantLabel}
               pill
+              disabled={pending}
               onAction={grant}
             />
           )}
@@ -165,19 +200,22 @@ export function SiteAccessPage({
               heading={text.partialHeading}
               entries={view.partial}
               glyph={
-                <span class="sa-glyph needed">
-                  <TriangleGlyph />
+                <span class="sa-glyph partial" aria-hidden="true">
+                  ◐
                 </span>
               }
-              count={(entry) =>
-                `${text.neededBy} ${usageCount(entry)} · ${text.partial(
-                  entry.limitedTo ?? entry.domain,
-                )}`
-              }
-              action={text.grant}
-              actionLabel={text.grantLabel}
+              count={(entry) => (
+                <>
+                  {usage(entry)} ·{" "}
+                  {sentence(text.partial(entry.coveringOrigins ?? []))}
+                </>
+              )}
+              action={text.broaden}
+              actionLabel={text.broadenLabel}
               pill
-              onAction={grant}
+              disabled={pending}
+              onAction={broaden}
+              onRevoke={revoke}
             />
           )}
           {view.granted.length > 0 && (
@@ -189,18 +227,19 @@ export function SiteAccessPage({
                   <CheckGlyph />
                 </span>
               }
-              count={usageCount}
+              count={usage}
               action={text.revoke}
               actionLabel={text.revokeLabel}
+              disabled={pending}
               onAction={revoke}
             />
           )}
-          {view.needed.length === 0 &&
-            view.partial.length === 0 &&
-            view.granted.length === 0 && (
-              <p class="sa-empty">{copy.emptyState.siteAccess}</p>
-            )}
-          {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
+        </div>
+      )}
+
+      {!grants.allSites && !hasSiteRows && (
+        <div class="sa-card">
+          <p class="sa-empty">{copy.emptyState.siteAccess}</p>
         </div>
       )}
 
@@ -212,7 +251,6 @@ export function SiteAccessPage({
             type="button"
             class="sa-disclosure"
             aria-expanded={allSitesOpen}
-            aria-controls={allSitesOpen ? "all-sites-details" : undefined}
             onClick={() => setAllSitesOpen((open) => !open)}
           >
             {text.allSites.disclosure}
@@ -227,7 +265,7 @@ export function SiteAccessPage({
                 </p>
               )}
               <div>
-                <Button kind="quiet" onClick={grantAllSites}>
+                <Button kind="quiet" disabled={pending} onClick={grantAllSites}>
                   {text.allSites.button}
                 </Button>
               </div>
@@ -237,6 +275,13 @@ export function SiteAccessPage({
       )}
     </section>
   );
+}
+
+async function removeCurrentOrigins(
+  matches: (origin: string) => boolean,
+): Promise<boolean> {
+  const origins = (await readPermissions()).origins.filter(matches);
+  return origins.length === 0 || removePermissions(origins);
 }
 
 /** Global session usage belongs to this global page, not the popup's tab view. */
@@ -266,17 +311,21 @@ function SiteGroup({
   action,
   actionLabel,
   pill,
+  disabled,
   onAction,
+  onRevoke,
 }: {
   heading: string;
   entries: readonly SiteAccessEntry[];
   glyph: ComponentChildren;
-  count: (entry: SiteAccessEntry) => string;
+  count: (entry: SiteAccessEntry) => ComponentChildren;
   action: string;
   actionLabel: (domain: string) => string;
   /** Granting is the same act the rule rows offer, so it carries the same pill. */
   pill?: boolean;
+  disabled: boolean;
   onAction: (entry: SiteAccessEntry) => void;
+  onRevoke?: (entry: SiteAccessEntry) => void;
 }) {
   return (
     <>
@@ -285,33 +334,40 @@ function SiteGroup({
         {entries.map((entry) => (
           <li key={entry.origin} class="sa-row">
             {glyph}
-            {/* The host you are approving is the row's whole subject, and the
-                registrable domain is in its tail: no character ceiling, and
-                the middle gives way before either end does. */}
-            <Truncate
-              mode="middle"
-              value={entry.domain}
-              class="mono sa-domain"
-            />
+            <span class="mono sa-domain">{entry.domain}</span>
             <span class="sa-count">{count(entry)}</span>
-            {pill === true ? (
-              <button
-                type="button"
-                class="grant"
-                aria-label={actionLabel(entry.domain)}
-                onClick={() => onAction(entry)}
-              >
-                {action}
-              </button>
-            ) : (
-              <Button
-                kind="quiet"
-                label={actionLabel(entry.domain)}
-                onClick={() => onAction(entry)}
-              >
-                {action}
-              </Button>
-            )}
+            <span class="sa-actions">
+              {pill === true ? (
+                <button
+                  type="button"
+                  class="grant"
+                  aria-label={actionLabel(entry.domain)}
+                  disabled={disabled}
+                  onClick={() => onAction(entry)}
+                >
+                  {action}
+                </button>
+              ) : (
+                <Button
+                  kind="quiet"
+                  label={actionLabel(entry.domain)}
+                  disabled={disabled}
+                  onClick={() => onAction(entry)}
+                >
+                  {action}
+                </Button>
+              )}
+              {onRevoke !== undefined && entry.grantedOrigins !== undefined && (
+                <Button
+                  kind="quiet"
+                  label={text.revokeLabel(entry.domain)}
+                  disabled={disabled}
+                  onClick={() => onRevoke(entry)}
+                >
+                  {text.revoke}
+                </Button>
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -319,12 +375,14 @@ function SiteGroup({
   );
 }
 
-function usageCount(entry: SiteAccessEntry): string {
+function usage(entry: SiteAccessEntry): string {
   const counts = [
     ...(entry.ruleCount > 0 ? [text.ruleCount(entry.ruleCount)] : []),
     ...(entry.thisTabCount === undefined
       ? []
       : [text.tabCount(entry.thisTabCount)]),
   ];
-  return counts.length === 0 ? text.ruleCount(0) : counts.join(" · ");
+  return counts.length === 0
+    ? text.unused
+    : `${text.usageLead(entry.coverage)} ${counts.join(" · ")}`;
 }
