@@ -6,7 +6,7 @@ import {
   useState,
 } from "preact/hooks";
 import { browser } from "wxt/browser";
-import { missingGrants } from "../../src/core/grants";
+import { missingGrants, originGranted } from "../../src/core/grants";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
   availableProfileName,
@@ -515,8 +515,10 @@ function Ready({
         />
       </footer>
       <div class="popup-body">
-        {composing && (
+        {composing && tabDomain !== undefined && (
           <ThisTabComposer
+            host={tabDomain}
+            needsGrant={!originGranted(tabDomain, grants)}
             onSubmit={submitThisTab}
             onClose={() => setComposing(false)}
             onCommitted={() => show(copy.toast.changesSaved)}

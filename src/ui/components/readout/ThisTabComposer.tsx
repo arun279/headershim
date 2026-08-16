@@ -28,6 +28,8 @@ export type ThisTabError =
   | { readonly kind: "grant-declined"; readonly host: string };
 
 interface ThisTabComposerProps {
+  host: string;
+  needsGrant: boolean;
   onSubmit: (
     draft: OverrideDraft,
   ) => Promise<Result<TabOverride, ThisTabError>>;
@@ -41,6 +43,8 @@ interface ThisTabComposerProps {
  * the wire bytes. The host grant fires inside the same commit.
  */
 export function ThisTabComposer({
+  host,
+  needsGrant,
   onSubmit,
   onClose,
   onCommitted,
@@ -178,7 +182,10 @@ export function ThisTabComposer({
           {copy.actions.cancel}
         </button>
         <Button kind="primary" onClick={commit}>
-          {copy.readout.addThisTab} <span class="kbd mono">↵</span>
+          {needsGrant
+            ? copy.readout.addThisTabAndAllow(host)
+            : copy.readout.addThisTab}{" "}
+          <span class="kbd mono">↵</span>
         </Button>
       </div>
     </section>
