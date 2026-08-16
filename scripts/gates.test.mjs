@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -15,6 +16,15 @@ import path from "node:path";
 import test from "node:test";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
+// A git hook exports GIT_DIR, which would aim every fixture command at the
+// repository running the suite instead of the scratch repository at its cwd.
+const isolatedEnv = {
+  ...Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+  ),
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+};
 const checker = path.join(
   repositoryRoot,
   "scripts/check-playwright-projects.mjs",
@@ -43,7 +53,11 @@ function report(specs) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: isolatedEnv,
+  }).trim();
 }
 
 function setReport(cwd, value) {
@@ -87,6 +101,10 @@ process.stdout.write(JSON.stringify(value));
   chmodSync(fakePlaywright, 0o755);
   setReport(cwd, initialReport);
   git(cwd, "init", "--initial-branch=main");
+  assert.equal(
+    realpathSync(git(cwd, "rev-parse", "--absolute-git-dir")),
+    path.join(realpathSync(cwd), ".git"),
+  );
   git(cwd, "config", "user.email", "test@example.com");
   git(cwd, "config", "user.name", "Gate Test");
   commit(cwd, "initial state");
@@ -119,7 +137,7 @@ function runChecker(cwd, env = {}) {
       cwd,
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...isolatedEnv,
         GITHUB_BASE_REF: "",
         PLAYWRIGHT_BASE_REF: "",
         PLAYWRIGHT_PREVIOUS_REFS: "",
@@ -388,7 +406,7 @@ printf "verify:%s\\n" "\${PLAYWRIGHT_PREVIOUS_REFS-}"
   return spawnSync(hook, ["origin", "unused"], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...isolatedEnv, PATH: `${bin}:${process.env.PATH}` },
     input,
   });
 }
