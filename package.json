@@ -47,21 +47,21 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
-    "@biomejs/biome": "^2.5.5",
-    "@playwright/test": "1.62.0",
+    "@axe-core/playwright": "^4.13.0",
+    "@biomejs/biome": "^2.5.8",
+    "@playwright/test": "1.62.1",
     "@resvg/resvg-js": "^2.6.2",
-    "@size-limit/file": "^13.0.1",
+    "@size-limit/file": "^13.0.3",
     "@tsconfig/strictest": "^2.0.8",
     "@vitest/coverage-v8": "^4.1.9",
-    "happy-dom": "^20.11.1",
+    "happy-dom": "^20.11.2",
     "jscpd": "^5.0.14",
-    "knip": "^6.29.0",
-    "preact": "^10.29.7",
-    "size-limit": "^13.0.1",
+    "knip": "^6.32.2",
+    "preact": "^10.29.8",
+    "size-limit": "^13.0.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
-    "wxt": "^0.21.1"
+    "wxt": "^0.21.4"
   },
   "size-limit": [
     {
