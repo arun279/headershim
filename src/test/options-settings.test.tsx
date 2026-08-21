@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/options/App";
 import { DEFAULT_PROFILE_NAME, type Profile } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
+import * as permissions from "../platform/permissions";
 import {
   read as readSession,
   write as writeSession,
@@ -92,6 +93,34 @@ describe("erase everything", () => {
     await eraseWith(populated());
 
     expect(await readSession()).toEqual({ nextNum: 1, tabs: {} });
+  });
+
+  it("announces success only after revoking access and clearing overrides", async () => {
+    const pending = Promise.withResolvers<boolean>();
+    const remove = vi
+      .spyOn(permissions, "remove")
+      .mockReturnValueOnce(pending.promise);
+    const root = await eraseWith(populated());
+
+    expect(remove).toHaveBeenCalledOnce();
+    expect(root.querySelector(".toast-msg")).toBeNull();
+    pending.resolve(true);
+    await settle();
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      text.eraseAll.done,
+    );
+  });
+
+  it("reports a failed erase without announcing success", async () => {
+    vi.spyOn(fakeBrowser.permissions, "remove").mockRejectedValueOnce(
+      new Error("rejected"),
+    );
+    const root = await eraseWith(populated());
+
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.eraseFailed,
+    );
+    expect(root.textContent).not.toContain(text.eraseAll.done);
   });
 
   it("restores the erased profiles and rules on undo", async () => {

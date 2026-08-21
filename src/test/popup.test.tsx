@@ -504,6 +504,24 @@ describe("popup readout", () => {
     expect((await read()).profiles[0]?.rules[0]?.enabled).toBe(false);
   });
 
+  it("reports a rejected rule toggle", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    vi.spyOn(fakeBrowser.storage.local, "set").mockRejectedValueOnce(
+      new Error("rejected"),
+    );
+
+    await act(async () => {
+      (
+        root.querySelector('[aria-label="Rule on: x-env"]') as HTMLButtonElement
+      ).click();
+    });
+    await settle();
+
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
+  });
+
   it("keeps the last disabled rule visible and focused for re-enabling", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const disable = root.querySelector<HTMLButtonElement>(
@@ -643,6 +661,23 @@ describe("popup readout", () => {
     press(input, "Enter");
     await settle();
     expect((await read()).profiles[0]?.rules[0]?.value).toBe("production");
+  });
+
+  it("reports a rejected inline value edit", async () => {
+    const { root } = await mount(seededDoc([rule()]), true);
+    fire(() => (root.querySelector(".v-edit") as HTMLButtonElement).click());
+    const input = root.querySelector(".v-input") as HTMLInputElement;
+    vi.spyOn(fakeBrowser.storage.local, "set").mockRejectedValueOnce(
+      new Error("rejected"),
+    );
+
+    typeInto(input, "production");
+    press(input, "Enter");
+    await settle();
+
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
   });
 
   it("opens a secret value edit empty and masked", async () => {

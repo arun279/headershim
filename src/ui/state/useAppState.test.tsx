@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it, vi } from "vitest";
+import { act } from "preact/test-utils";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { compile } from "../../core/compile";
 import type { Profile, StateDoc, TabOverride } from "../../core/model";
@@ -12,7 +13,7 @@ import {
 } from "../../platform/session-store";
 import { write } from "../../platform/store";
 import { atPaint, render, settle } from "../test/render";
-import { useAppState } from "./useAppState";
+import { BOOT_GRACE_MS, useAppState } from "./useAppState";
 
 vi.mock("../../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(7),
@@ -87,6 +88,19 @@ function output(root: HTMLElement): HTMLOutputElement {
   return element;
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function reachUnavailable(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(BOOT_GRACE_MS);
+  });
+}
+
 describe("useAppState", () => {
   it("stays initializing until a valid document arrives", async () => {
     const root = render(<Probe />);
@@ -98,6 +112,55 @@ describe("useAppState", () => {
     await write(state);
     await settle();
     expect(output(root).textContent).toBe("applied:0:0");
+  });
+
+  it("reports unavailable when a boot loader rejects", async () => {
+    vi.spyOn(fakeBrowser.storage.local, "get").mockRejectedValueOnce(
+      new Error("unavailable"),
+    );
+    const root = render(<Probe />);
+    await settle();
+
+    expect(output(root).getAttribute("data-phase")).toBe("unavailable");
+  });
+
+  it("keeps a rejected boot loader unavailable after a document reload", async () => {
+    vi.spyOn(fakeBrowser.permissions, "getAll").mockRejectedValueOnce(
+      new Error("unavailable"),
+    );
+    const root = render(<Probe />);
+    await settle();
+    expect(output(root).getAttribute("data-phase")).toBe("unavailable");
+
+    const state = doc();
+    await publish(state);
+    await write(state);
+    await settle();
+
+    expect(output(root).getAttribute("data-phase")).toBe("unavailable");
+  });
+
+  it("reports unavailable when the document does not arrive in time", async () => {
+    vi.useFakeTimers();
+    const root = render(<Probe />);
+    await reachUnavailable();
+
+    expect(output(root).getAttribute("data-phase")).toBe("unavailable");
+  });
+
+  it("becomes ready when a document arrives after the grace period", async () => {
+    vi.useFakeTimers();
+    const root = render(<Probe />);
+    await reachUnavailable();
+    expect(output(root).getAttribute("data-phase")).toBe("unavailable");
+    const state = doc();
+    await publish(state);
+    await write(state);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(output(root).getAttribute("data-phase")).toBe("ready");
   });
 
   it("reports a newer stored version", async () => {

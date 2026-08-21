@@ -1,6 +1,7 @@
 import { type Browser, browser } from "wxt/browser";
 import type { TabOverride } from "../core/model";
 import type { RulesRevision } from "../core/revision";
+import { isRecord, isTabOverride } from "../core/validation";
 
 const SESSION_KEY = "sessionState";
 const APPLIED_KEY = "appliedRules";
@@ -17,20 +18,26 @@ interface StoredSession {
 
 export async function read(): Promise<SessionState> {
   const stored = await browser.storage.session.get<StoredSession>(SESSION_KEY);
-  const session = stored.sessionState ?? { nextNum: 1, tabs: {} };
-  // Session data can survive an extension update. Overrides created before
-  // per-row toggles existed are on, matching their original behavior.
+  const session = stored.sessionState;
+  if (!isRecord(session)) {
+    return { nextNum: 1, tabs: {} };
+  }
+  const tabs = isRecord(session.tabs)
+    ? Object.fromEntries(
+        Object.entries(session.tabs).flatMap(([tabId, rows]) =>
+          Array.isArray(rows) ? [[tabId, rows.filter(isTabOverride)]] : [],
+        ),
+      )
+    : {};
+  const maxNum = Object.values(tabs)
+    .flat()
+    .reduce((max, { num }) => Math.max(max, num), 0);
   return {
-    ...session,
-    tabs: Object.fromEntries(
-      Object.entries(session.tabs).map(([tabId, rows]) => [
-        tabId,
-        rows.map((row) => ({
-          ...row,
-          enabled: (row as Partial<TabOverride>).enabled ?? true,
-        })),
-      ]),
-    ),
+    nextNum:
+      Number.isSafeInteger(session.nextNum) && session.nextNum > maxNum
+        ? session.nextNum
+        : maxNum + 1,
+    tabs,
   };
 }
 

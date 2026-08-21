@@ -1,8 +1,11 @@
 import {
+  DIRECTIONS,
+  HEADER_OPERATIONS,
   RESOURCE_GROUPS,
   type ResourceGroup,
   type Rule,
   type Scope,
+  type TabOverride,
 } from "./model";
 
 export { BADGE_COLORS, DIRECTIONS, HEADER_OPERATIONS } from "./model";
@@ -61,6 +64,29 @@ export function isGeneratedValue(
 
   const { kind, at } = value;
   return (kind === "uuid" || kind === "timestamp") && typeof at === "string";
+}
+
+export function isTabOverride(value: unknown): value is TabOverride {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const { num, tabId, originHost, direction, operation, header, enabled } =
+    value;
+  return (
+    typeof num === "number" &&
+    Number.isSafeInteger(num) &&
+    num > 0 &&
+    typeof tabId === "number" &&
+    Number.isSafeInteger(tabId) &&
+    tabId >= 0 &&
+    typeof originHost === "string" &&
+    isOneOf(direction, DIRECTIONS) &&
+    isOneOf(operation, HEADER_OPERATIONS) &&
+    typeof header === "string" &&
+    typeof enabled === "boolean" &&
+    hasValidHeaderValue(value)
+  );
 }
 
 export function isStringArray(value: unknown): value is string[] {

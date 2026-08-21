@@ -453,6 +453,28 @@ describe("popup This-tab overrides", () => {
     expect((await readSession()).tabs).toEqual({});
   });
 
+  it.each([
+    ["toggle", '[aria-label="This-tab change on: x-debug-trace"]'],
+    ["removal", '[aria-label="Remove this-tab change: x-debug-trace"]'],
+  ])("reports a rejected override %s", async (_action, selector) => {
+    const root = await mount(createV1Seed(), {
+      nextNum: 2,
+      tabs: { 5: [override()] },
+    });
+    vi.spyOn(fakeBrowser.storage.session, "set").mockRejectedValueOnce(
+      new Error("rejected"),
+    );
+
+    await act(async () => {
+      (root.querySelector(selector) as HTMLButtonElement).click();
+    });
+    await settle();
+
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      copy.errors.saveFailed,
+    );
+  });
+
   it("does not report a removed authorization override as saved", async () => {
     const original = override({
       header: "authorization",

@@ -105,10 +105,14 @@ export function App() {
           {app.phase === "ready" && app.doc.settings.paused && <PauseBanner />}
           {app.phase === "initializing" ? (
             <div aria-busy="true" />
-          ) : app.phase === "newer-store" ? (
+          ) : app.phase === "newer-store" || app.phase === "unavailable" ? (
             <div class="wb-page">
               <EmptyState
-                message={copy.errors.newerStore(app.foundVersion, CURRENT)}
+                message={
+                  app.phase === "newer-store"
+                    ? copy.errors.newerStore(app.foundVersion, CURRENT)
+                    : copy.errors.unavailable
+                }
               />
             </div>
           ) : section === "rules" ? (
