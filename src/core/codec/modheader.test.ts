@@ -27,11 +27,19 @@ async function importFixture(
   validateRegex = acceptRegex,
   existingProfiles: readonly Profile[] = [],
 ): Promise<ImportPlan<ImportPlanWarning>> {
-  const result = await importModHeader(
+  return importParsed(
     JSON.parse(readFileSync(fixture, "utf8")),
-    existingProfiles,
     validateRegex,
+    existingProfiles,
   );
+}
+
+async function importParsed(
+  parsed: unknown,
+  validateRegex = acceptRegex,
+  existingProfiles: readonly Profile[] = [],
+): Promise<ImportPlan<ImportPlanWarning>> {
+  const result = await importModHeader(parsed, existingProfiles, validateRegex);
   if (!result.ok) {
     throw new Error(`fixture import failed: ${result.error.kind}`);
   }
@@ -81,7 +89,20 @@ describe("ModHeader import", () => {
     expect(profile).not.toHaveProperty("enabled");
     expect(nearestBadgeColor("#b03a78")).toBe("magenta");
     expect(nearestBadgeColor("#fff")).toBe("plum");
+    expect(nearestBadgeColor("not-a-color")).toBe("indigo");
     expect(nearestBadgeColor(undefined)).toBe("indigo");
+  });
+
+  it("suffixes profile titles already used earlier in the same import", async () => {
+    const plan = await importParsed([
+      { title: "Development" },
+      { title: "Development" },
+    ]);
+
+    expect(plan.profiles.map(({ name }) => name)).toEqual([
+      "Development",
+      "Development 2",
+    ]);
   });
 
   it("maps request headers and degrades unsupported append operations", async () => {
@@ -243,22 +264,15 @@ describe("ModHeader import", () => {
   });
 
   it("defaults to the all scope when no URL filter is enabled", async () => {
-    const result = await importModHeader(
-      [
-        {
-          title: "Unscoped",
-          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
-          urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
-        },
-      ],
-      [],
-      acceptRegex,
-    );
-    if (!result.ok) {
-      throw new Error(`fixture import failed: ${result.error.kind}`);
-    }
+    const result = await importParsed([
+      {
+        title: "Unscoped",
+        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+        urlFilters: [{ enabled: false, urlRegex: "^https://ignored\\." }],
+      },
+    ]);
 
-    expect(onlyProfile(result.value).rules).toMatchObject([
+    expect(onlyProfile(result).rules).toMatchObject([
       {
         header: "x-debug",
         scope: { type: "all" },
@@ -266,7 +280,57 @@ describe("ModHeader import", () => {
         enabled: true,
       },
     ]);
-    expect(result.value.warnings).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("rejects malformed source rules within a valid profile", async () => {
+    for (const row of [
+      { enabled: "true", name: "X-Bad", value: "on" },
+      { enabled: true, name: " ", value: "on" },
+      { enabled: true, name: "X-Bad", value: 1 },
+      { enabled: true, name: "X-Bad", value: "on", comment: 1 },
+      { enabled: true, name: "X-Bad", operation: "replace", value: "on" },
+    ]) {
+      await expect(
+        importModHeader(
+          [{ title: "Malformed rules", headers: [row] }],
+          [],
+          acceptRegex,
+        ),
+      ).resolves.toEqual({
+        ok: false,
+        error: { kind: "invalid-export" },
+      });
+    }
+  });
+
+  it("drops rules whose values Chrome rejects", async () => {
+    const result = await importParsed([
+      {
+        title: "Invalid values",
+        headers: [
+          { enabled: true, name: "X-Bad", value: "a\0b" },
+          { enabled: true, name: "X-Good", value: "on" },
+          { enabled: true, name: "X-Empty", operation: "set" },
+        ],
+        respHeaders: [{ enabled: true, name: "X-Response", value: "a\0b" }],
+        cookieHeaders: [{ enabled: true, name: "session", value: "a\0b" }],
+        setCookieHeaders: [{ enabled: true, name: "theme", value: "a\0b" }],
+        cspHeaders: [{ enabled: true, name: "default-src", value: "a\0b" }],
+      },
+    ]);
+
+    expect(onlyProfile(result).rules).toMatchObject([
+      { header: "x-good", value: "on" },
+      { header: "x-empty", value: "" },
+    ]);
+    expect(result.warnings).toEqual([
+      { kind: "invalid-value", ruleName: "x-bad" },
+      { kind: "invalid-value", ruleName: "x-response" },
+      { kind: "invalid-value", ruleName: "cookie" },
+      { kind: "invalid-value", ruleName: "set-cookie" },
+      { kind: "invalid-value", ruleName: "content-security-policy" },
+    ]);
   });
 
   it("combines multiple URL filters into one alternation and validates it", async () => {
@@ -347,6 +411,27 @@ describe("ModHeader import", () => {
 
     expect(warnings).toHaveLength(2);
     expect(warnings.map(({ value }) => value)).toEqual(["logout", "health"]);
+  });
+
+  it("describes opaque dropped filters by their source row", async () => {
+    const warnings = warningsOfKind(
+      await importParsed([
+        {
+          title: "Opaque filters",
+          headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+          excludeUrlFilters: [{}],
+        },
+      ]),
+      "exclude-url-filter-dropped",
+    );
+
+    expect(warnings).toEqual([
+      {
+        kind: "exclude-url-filter-dropped",
+        ruleName: "Opaque filters: excludeUrlFilters 1",
+        value: "{}",
+      },
+    ]);
   });
 
   it("itemizes every dropped initiator-domain filter", async () => {
@@ -452,6 +537,22 @@ describe("ModHeader import", () => {
     ).resolves.toEqual({
       ok: false,
       error: { kind: "unrecognized-format" },
+    });
+    await expect(
+      importModHeader([{ headers: [] }], [], acceptRegex),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-export" },
+    });
+    await expect(
+      importModHeader(
+        [{ title: "Malformed", headers: "bad" }],
+        [],
+        acceptRegex,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-export" },
     });
     await expect(
       importModHeader(

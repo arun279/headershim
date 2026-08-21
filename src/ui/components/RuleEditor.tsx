@@ -706,7 +706,7 @@ function mapError(
     case "name-invalid":
     case "name-not-modifiable":
     case "value-required":
-    case "value-line-break":
+    case "value-invalid":
     case "request-append-not-allowed":
       return headerErrorToFieldError(error);
     case "regex-invalid":

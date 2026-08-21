@@ -40,6 +40,11 @@ const cases: {
     detail: sentenceText(strings.invalidRegex("(?=x)")),
   },
   {
+    warning: { kind: "invalid-value", ruleName: "x-bad" },
+    name: "x-bad",
+    detail: strings.invalidValue,
+  },
+  {
     warning: {
       kind: "dynamic-token",
       ruleName: "token rule",

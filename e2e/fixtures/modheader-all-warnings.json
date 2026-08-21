@@ -17,6 +17,12 @@
         "name": "Authorization",
         "value": "Bearer {{uuid}} at {{timestamp}}",
         "comment": "request-time token header"
+      },
+      {
+        "enabled": true,
+        "name": "X-Nul",
+        "value": "bad\u0000value",
+        "comment": "value Chrome rejects"
       }
     ],
     "cookieHeaders": [

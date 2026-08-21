@@ -99,12 +99,13 @@ export function createMutations({ validateRegex }: MutationDeps) {
   // Cap checks run on every mutation that grows the enabled set or its regex
   // subset; shrinking mutations must never be blocked by a doc already at the
   // boundary. Header grammar and pattern/regex scopes are re-validated whenever
-  // a rule enters the enabled set — an imported rule (an untrusted writer) can
-  // carry a name/value that fails validateHeader's HTTP-token/CRLF grammar, an
-  // RE2-invalid regex, or a urlFilter Chrome's grammar rejects, stored disabled
-  // and indistinguishable from a user-disabled one, so the enable gesture is the
-  // last safe gate before the compiler would hand Chrome a rule whose update
-  // rejects the whole atomic batch.
+  // a rule enters the enabled set. A stored rule (the document is validated for
+  // shape, not value grammar) can carry a value Chrome rejects, a name that
+  // fails validateHeader's HTTP-token grammar, an RE2-invalid regex, or a
+  // urlFilter Chrome's grammar rejects, stored disabled and indistinguishable
+  // from a user-disabled one, so the enable gesture is the last safe gate before
+  // the compiler would hand Chrome a rule whose update rejects the whole atomic
+  // batch.
   async function guardCommit(
     prev: StateDoc,
     next: StateDoc,

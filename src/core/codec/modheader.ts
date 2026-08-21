@@ -1,5 +1,9 @@
 import { BADGE_PALETTE } from "../badge";
-import { allowsRequestAppend, normalizeHeaderName } from "../headers";
+import {
+  allowsRequestAppend,
+  isValidHeaderValue,
+  normalizeHeaderName,
+} from "../headers";
 import {
   availableProfileName,
   type BadgeColor,
@@ -106,7 +110,8 @@ export type ModHeaderImportWarning =
       readonly kind:
         | "cookie-semantics-degraded"
         | "set-cookie-semantics-degraded"
-        | "csp-semantics-degraded";
+        | "csp-semantics-degraded"
+        | "invalid-value";
       readonly ruleName: string;
     }
   | {
@@ -222,12 +227,15 @@ async function mapProfile(
   }
 
   const mappings: RuleMapping[] = [];
+  const warnings: ModHeaderImportWarning[] = [];
   for (const row of source.headers ?? []) {
     const parsed = parseSourceRule(row);
     if (parsed === undefined) {
       return err({ kind: "invalid-export" });
     }
-    mappings.push(
+    routeRuleMappingResult(
+      mappings,
+      warnings,
       mapHeaderRule(parsed, "request", scopeResult.value.scope, resourceTypes, {
         profileIndex: plannedProfiles.length,
         ruleIndex: mappings.length,
@@ -239,7 +247,9 @@ async function mapProfile(
     if (parsed === undefined) {
       return err({ kind: "invalid-export" });
     }
-    mappings.push(
+    routeRuleMappingResult(
+      mappings,
+      warnings,
       mapHeaderRule(
         parsed,
         "response",
@@ -257,7 +267,9 @@ async function mapProfile(
     if (parsed?.value === undefined) {
       return err({ kind: "invalid-export" });
     }
-    mappings.push(
+    routeRuleMappingResult(
+      mappings,
+      warnings,
       mapSpecialRule(
         parsed,
         "request",
@@ -279,7 +291,9 @@ async function mapProfile(
     if (parsed?.value === undefined) {
       return err({ kind: "invalid-export" });
     }
-    mappings.push(
+    routeRuleMappingResult(
+      mappings,
+      warnings,
       mapSpecialRule(
         parsed,
         "response",
@@ -301,7 +315,9 @@ async function mapProfile(
     if (parsed?.value === undefined) {
       return err({ kind: "invalid-export" });
     }
-    mappings.push(
+    routeRuleMappingResult(
+      mappings,
+      warnings,
       mapSpecialRule(
         parsed,
         "response",
@@ -319,7 +335,6 @@ async function mapProfile(
     );
   }
 
-  const warnings = mappings.flatMap(({ warnings: rowWarnings }) => rowWarnings);
   // ModHeader url filters are one scope shared by every rule in the profile, so
   // one invalid pattern disables the whole profile. Itemize it once per distinct
   // pattern (naming the profile), never once per rule — the summary counts each
@@ -351,7 +366,7 @@ function mapHeaderRule(
   scope: Scope,
   resourceTypes: ResourceGroup[] | "all",
   location: RuleLocation,
-): RuleMapping {
+): RuleMapping | ModHeaderImportWarning {
   const header = normalizeHeaderName(source.name);
   const requestedOperation = source.operation;
   const operation =
@@ -363,6 +378,9 @@ function mapHeaderRule(
   // The header, not the comment: the warning is about the header, and it is
   // one short token where a comment is free text of any length.
   const ruleName = header;
+  if (operation !== "remove" && !isValidHeaderValue(source.value ?? "")) {
+    return { kind: "invalid-value", ruleName };
+  }
   const warnings: ModHeaderImportWarning[] = [];
   if (operation !== requestedOperation) {
     warnings.push({
@@ -403,11 +421,14 @@ function mapSpecialRule(
   scope: Scope,
   resourceTypes: ResourceGroup[] | "all",
   location: RuleLocation,
-): RuleMapping {
+): RuleMapping | ModHeaderImportWarning {
   // The header the rule ends up writing, the same identifier every other
   // warning on this rule is filed under. A per-cookie source names one cookie,
   // which would file two warnings about one rule under two different names.
   const ruleName = header;
+  if (!isValidHeaderValue(value)) {
+    return { kind: "invalid-value", ruleName };
+  }
   const warnings: ModHeaderImportWarning[] = [{ kind: warningKind, ruleName }];
   appendDynamicTokenWarning(value, ruleName, location, warnings);
 
@@ -426,6 +447,19 @@ function mapSpecialRule(
     ruleName,
     warnings,
   };
+}
+
+function routeRuleMappingResult(
+  mappings: RuleMapping[],
+  warnings: ModHeaderImportWarning[],
+  result: RuleMapping | ModHeaderImportWarning,
+): void {
+  if ("rule" in result) {
+    mappings.push(result);
+    warnings.push(...result.warnings);
+  } else {
+    warnings.push(result);
+  }
 }
 
 async function importScope(

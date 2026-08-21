@@ -30,7 +30,7 @@ export type HeaderErrorClass =
   | "name-invalid"
   | "name-not-modifiable"
   | "value-required"
-  | "value-line-break"
+  | "value-invalid"
   | "request-append-not-allowed";
 
 export const HEADER_ERROR_COPY_IDS = {
@@ -38,7 +38,7 @@ export const HEADER_ERROR_COPY_IDS = {
   "name-invalid": "header-name-invalid",
   "name-not-modifiable": "header-not-modifiable",
   "value-required": "header-value-required",
-  "value-line-break": "header-value-line-break",
+  "value-invalid": "header-value-invalid",
   "request-append-not-allowed": "request-append-not-allowed",
 } as const satisfies Record<HeaderErrorClass, string>;
 
@@ -75,8 +75,8 @@ export type HeaderValidationError =
       readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["value-required"];
     }
   | {
-      readonly kind: "value-line-break";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["value-line-break"];
+      readonly kind: "value-invalid";
+      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["value-invalid"];
     }
   | {
       readonly kind: "request-append-not-allowed";
@@ -308,6 +308,10 @@ export function validateHeaderName(
   return undefined;
 }
 
+export function isValidHeaderValue(value: string): boolean {
+  return !/[\0\r\n]/u.test(value);
+}
+
 export function validateHeader(
   input: HeaderInput,
 ): Result<ValidatedHeader, HeaderValidationError> {
@@ -325,11 +329,11 @@ export function validateHeader(
   if (
     input.operation !== "remove" &&
     input.value !== undefined &&
-    /[\r\n]/.test(input.value)
+    !isValidHeaderValue(input.value)
   ) {
     return err({
-      kind: "value-line-break",
-      copyId: HEADER_ERROR_COPY_IDS["value-line-break"],
+      kind: "value-invalid",
+      copyId: HEADER_ERROR_COPY_IDS["value-invalid"],
     });
   }
 

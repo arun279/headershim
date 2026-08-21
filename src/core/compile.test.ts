@@ -1313,10 +1313,11 @@ describe("dropping inapplicable rules", () => {
   );
 
   it("strips only the enabled rules Chrome would reject, so the batch survives", () => {
+    const nulRule = storedRule(2, { value: "a\0b" });
     const doc = state([
       profile("mixed", [
         storedRule(1),
-        storedRule(2, { value: "a\r\nb" }),
+        nulRule,
         storedRule(3, { header: ":authority" }),
         storedRule(4, {
           scope: { type: "pattern", pattern: "||exämple.com^", hosts: [] },
@@ -1334,6 +1335,7 @@ describe("dropping inapplicable rules", () => {
     ]);
 
     const supported = (regex: string) => !regex.includes("(?=");
+    expect(uncompilableReason(nulRule, supported)).toBe("value");
     expect(compiledIds(doc, supported)).toEqual([1, 6]);
   });
 

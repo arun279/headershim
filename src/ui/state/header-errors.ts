@@ -43,8 +43,8 @@ export function headerErrorMessage(error: HeaderValidationError): string {
       return copy.errors.headerNotModifiable;
     case "value-required":
       return copy.errors.valueRequired;
-    case "value-line-break":
-      return copy.errors.valueLineBreak;
+    case "value-invalid":
+      return copy.errors.valueInvalid;
     case "request-append-not-allowed":
       return copy.errors.appendDisallowed(error.header);
   }
@@ -60,7 +60,7 @@ export function headerErrorToFieldError(
     case "name-not-modifiable":
       return { name: message };
     case "value-required":
-    case "value-line-break":
+    case "value-invalid":
       return { value: message };
     case "request-append-not-allowed":
       return { operation: message };

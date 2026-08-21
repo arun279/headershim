@@ -48,8 +48,8 @@ describe("headerErrorToFieldError", () => {
       { value: copy.errors.valueRequired },
     ],
     [
-      { kind: "value-line-break", copyId: "header-value-line-break" },
-      { value: copy.errors.valueLineBreak },
+      { kind: "value-invalid", copyId: "header-value-invalid" },
+      { value: copy.errors.valueInvalid },
     ],
     [
       {
