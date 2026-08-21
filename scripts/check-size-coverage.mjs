@@ -97,24 +97,35 @@ function startupFiles(entryHtml) {
   return startup;
 }
 
-const violations = [];
-for (const [name, entryHtml] of [
-  ["Popup initial load", "popup.html"],
-  ["Options initial load", "options.html"],
-]) {
+function assertExactEntry(name, expected) {
   const budget = sizeEntries.get(name);
   if (budget === undefined) {
     violations.push(`Missing size-limit entry: ${name}`);
-    continue;
+    return;
   }
-  const startup = startupFiles(entryHtml);
-  for (const file of startup.difference(budget.files)) {
-    violations.push(`${name} does not include startup file ${file}`);
+  for (const file of expected.difference(budget.files)) {
+    violations.push(`${name} does not include expected file ${file}`);
   }
-  for (const file of budget.files.difference(startup)) {
-    violations.push(`${name} includes non-startup file ${file}`);
+  for (const file of budget.files.difference(expected)) {
+    violations.push(`${name} includes unexpected file ${file}`);
   }
 }
+
+const violations = [];
+const popupStartup = startupFiles("popup.html");
+const optionsStartup = startupFiles("options.html");
+assertExactEntry("Popup initial load", popupStartup);
+assertExactEntry("Options initial load", optionsStartup);
+assertExactEntry(
+  "Shared UI runtime",
+  new Set(
+    [...popupStartup.intersection(optionsStartup)].filter(
+      (file) =>
+        file.startsWith(`${outputRoot}/chunks/`) &&
+        path.extname(file) === ".js",
+    ),
+  ),
+);
 
 const budgeted = new Set(
   [...sizeEntries.values()].flatMap(({ files: entryFiles }) => [...entryFiles]),

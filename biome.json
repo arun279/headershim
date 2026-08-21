@@ -18,6 +18,23 @@
   },
   "overrides": [
     {
+      "includes": ["src/core/**", "src/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "wxt/browser": "Extension API access belongs in src/platform or entrypoints"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tokens.css"],
       "formatter": { "enabled": false },
       "linter": {

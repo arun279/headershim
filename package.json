@@ -33,14 +33,13 @@
     "check:size": "pnpm build && node scripts/check-size-coverage.mjs && size-limit",
     "check:manifest": "pnpm build && node scripts/manifest-policy.mjs",
     "check:no-network": "pnpm build && node scripts/check-no-network.mjs",
-    "check:platform": "paths='src/core'; if [ -d src/ui ]; then paths=\"$paths src/ui\"; fi; if grep -R -n -E 'browser[.]|chrome[.]' $paths; then echo 'Extension API references must stay in platform adapters or entrypoints.' >&2; exit 1; fi",
     "check:icons": "node scripts/render-icons.mjs --check",
     "check:overrides": "node scripts/check-overrides.mjs",
     "check:self-contained": "node scripts/check-self-contained.mjs",
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check:test-classes": "node scripts/check-test-classes.mjs",
     "check:host-access-confinement": "node scripts/check-host-access-confinement.mjs",
-    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:platform && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
+    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
     "postinstall": "wxt prepare",
@@ -73,18 +72,11 @@
     {
       "name": "Shared UI runtime",
       "path": [
-        ".output/chrome-mv3/chunks/*.js",
-        "!.output/chrome-mv3/chunks/DeferredPage-*.js",
-        "!.output/chrome-mv3/chunks/InlineRename-*.js",
-        "!.output/chrome-mv3/chunks/RuleEditor-*.js",
-        "!.output/chrome-mv3/chunks/brand-*.js",
-        "!.output/chrome-mv3/chunks/focus-*.js",
-        "!.output/chrome-mv3/chunks/headerLine-*.js",
-        "!.output/chrome-mv3/chunks/modheader-*.js",
-        "!.output/chrome-mv3/chunks/options-*.js",
-        "!.output/chrome-mv3/chunks/popup-*.js"
+        ".output/chrome-mv3/chunks/brand-*.js",
+        ".output/chrome-mv3/chunks/header-errors-*.js",
+        ".output/chrome-mv3/chunks/preload-helper-*.js"
       ],
-      "limit": "27.7 kB"
+      "limit": "29861 B"
     },
     {
       "name": "Popup initial load",
