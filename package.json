@@ -69,7 +69,7 @@
     {
       "name": "Background",
       "path": ".output/chrome-mv3/background.js",
-      "limit": "5750 B"
+      "limit": "6250 B"
     },
     {
       "name": "Shared UI runtime",
@@ -78,7 +78,7 @@
         ".output/chrome-mv3/chunks/header-errors-*.js",
         ".output/chrome-mv3/chunks/preload-helper-*.js"
       ],
-      "limit": "30250 B"
+      "limit": "30750 B"
     },
     {
       "name": "Popup initial load",
@@ -95,7 +95,7 @@
         "!.output/chrome-mv3/assets/RuleEditor-*.css",
         "!.output/chrome-mv3/assets/options-*.css"
       ],
-      "limit": "45750 B"
+      "limit": "46250 B"
     },
     {
       "name": "Options initial load",
@@ -116,7 +116,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "40000 B"
+      "limit": "40500 B"
     },
     {
       "name": "Options rule editor",

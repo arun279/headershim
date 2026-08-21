@@ -1,5 +1,5 @@
 import { entryIsConfirmed, type Projection } from "../../core/applied";
-import { hostUnder } from "../../core/scope";
+import { anchoredOrigin, hostUnder } from "../../core/scope";
 import type { Entry, Placement, RuleKey } from "../../core/verdict";
 import {
   admits,
@@ -129,11 +129,11 @@ function filterContains(
 function authoredScope(entry: Entry): InstalledScope {
   const [first, ...rest] = entry.authored.requestDomains ?? [];
   if (first === undefined) return { kind: "broad" };
-  const origin = exactOrigin(entry.authored.urlFilter ?? "");
+  const origin = anchoredOrigin(entry.authored.urlFilter ?? "");
   return {
     kind: "sites",
     domains: [first, ...rest],
-    ...(origin === undefined ? {} : { origins: [origin] }),
+    ...(origin === undefined ? {} : { origins: [origin.origin] }),
   };
 }
 
@@ -167,17 +167,19 @@ function installedScope(
   const domains = new Set<string>();
   const origins = new Set<string>();
   for (const placement of placements) {
-    const origin = exactOrigin(placement.condition.urlFilter ?? "");
-    if (origin !== undefined) {
-      domains.add(new URL(origin).hostname);
-      if (placement.narrowed) origins.add(origin);
-      continue;
-    }
-    if (placement.condition.requestDomains === undefined) {
+    const origin = anchoredOrigin(placement.condition.urlFilter ?? "");
+    const requestDomains =
+      origin === undefined
+        ? placement.condition.requestDomains
+        : [new URL(origin.origin).hostname];
+    if (requestDomains === undefined) {
       return { kind: "broad" };
     }
-    for (const domain of placement.condition.requestDomains) {
+    for (const domain of requestDomains) {
       domains.add(domain);
+    }
+    if (placement.narrowed && origin !== undefined) {
+      origins.add(origin.origin);
     }
   }
   const [first, ...rest] = domains;
@@ -191,9 +193,4 @@ function installedScope(
           ? {}
           : { origins: [firstOrigin, ...otherOrigins] }),
       };
-}
-
-function exactOrigin(filter: string): string | undefined {
-  const match = /^\|(https?):\/\/(\[[^\]]+\]|[^/^]+)(?:[/^])$/.exec(filter);
-  return match === null ? undefined : `${match[1]}://${match[2]}`;
 }

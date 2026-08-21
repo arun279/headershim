@@ -1,8 +1,10 @@
 import {
   coversSubresourceTypes,
+  dropCoveredNarrowings,
+  type GrantNarrowing,
   type GrantSnapshot,
+  grantNarrowings,
   missingGrants,
-  narrowedGrantUrlFilters,
   originGranted,
 } from "./grants";
 import {
@@ -20,6 +22,7 @@ import type { HeaderOp, Rule, StateDoc, TabOverride } from "./model";
 import {
   type DnrResourceType,
   expandResourceTypes,
+  hostUnder,
   isDomainSupported,
   isRegexFilterSupported,
   originPatternForDomain,
@@ -168,8 +171,12 @@ export function dropInapplicable(
 
 interface NarrowedRule {
   readonly rule: Rule;
-  /** The target is constrained to an exact narrowed grant by the condition. */
+  /** The target is constrained to a narrowed grant by the condition. */
   readonly targetSecured: boolean;
+}
+
+interface GrantCandidate extends GrantNarrowing {
+  readonly fullyGranted: boolean;
 }
 
 interface ApplicableNarrowing {
@@ -180,7 +187,7 @@ interface ApplicableNarrowing {
 // Narrow every scope that carries requestDomains. Pattern and regex scopes keep
 // their authored matcher and lose only ungranted hosts. A domains scope with no
 // fully covered host can still run under Chrome's observed toolbar grant: turn
-// that exact origin into a URL-anchored pattern.
+// that granted origin into a request-domain or URL-anchored pattern.
 function narrowToGranted(
   rule: Rule,
   granted: GrantSnapshot,
@@ -195,46 +202,57 @@ function narrowToGranted(
   const hosts =
     rule.scope.type === "domains" ? rule.scope.domains : rule.scope.hosts;
   const fullyGranted = hosts.filter((host) => originGranted(host, granted));
-  const fullyGrantedSet = new Set(fullyGranted);
-  const narrowed: NarrowedRule[] =
-    fullyGranted.length === 0
+  if (rule.scope.type !== "domains") {
+    return fullyGranted.length === 0
       ? []
       : [
           {
-            rule: {
-              ...rule,
-              scope:
-                rule.scope.type === "domains"
-                  ? { ...rule.scope, domains: fullyGranted }
-                  : { ...rule.scope, hosts: fullyGranted },
-            },
+            rule: { ...rule, scope: { ...rule.scope, hosts: fullyGranted } },
             targetSecured: false,
           },
         ];
-  if (rule.scope.type === "domains") {
-    const seenFilters = new Set<string>();
-    for (const domain of rule.scope.domains) {
-      // A full grant already admits every concrete subset for this domain.
-      // Emitting both would apply append rules twice on the narrower origin.
-      if (fullyGrantedSet.has(domain)) {
-        continue;
-      }
-      for (const urlFilter of narrowedGrantUrlFilters(domain, granted)) {
-        if (!seenFilters.has(urlFilter)) {
-          seenFilters.add(urlFilter);
-          narrowed.push({
-            rule: {
-              ...rule,
-              scope: {
-                type: "pattern",
-                pattern: urlFilter,
-                hosts: [domain],
-              },
-            },
-            targetSecured: true,
-          });
-        }
-      }
+  }
+  const fullyGrantedSet = new Set(fullyGranted);
+  // Overlapping candidates are dropped because append rules would apply twice.
+  const survivors = dropCoveredNarrowings<GrantCandidate>([
+    ...fullyGranted.map((host) => ({ host, fullyGranted: true })),
+    ...rule.scope.domains.flatMap((domain) =>
+      fullyGrantedSet.has(domain)
+        ? []
+        : grantNarrowings(domain, granted).map((narrowing) => ({
+            ...narrowing,
+            fullyGranted: false,
+          })),
+    ),
+  ]);
+  const fullHosts = survivors
+    .filter((candidate) => candidate.fullyGranted)
+    .map((candidate) => candidate.host);
+  const narrowed: NarrowedRule[] =
+    fullHosts.length === 0
+      ? []
+      : [
+          {
+            rule: { ...rule, scope: { ...rule.scope, domains: fullHosts } },
+            targetSecured: false,
+          },
+        ];
+  for (const narrowing of survivors) {
+    if (!narrowing.fullyGranted) {
+      narrowed.push({
+        rule: {
+          ...rule,
+          scope:
+            narrowing.urlFilter === undefined
+              ? { type: "domains", domains: [narrowing.host] }
+              : {
+                  type: "pattern",
+                  pattern: narrowing.urlFilter,
+                  hosts: [narrowing.host],
+                },
+        },
+        targetSecured: true,
+      });
     }
   }
   return narrowed;
@@ -340,6 +358,7 @@ interface DynamicCandidate {
 
 interface SessionNarrowing {
   readonly override: TabOverride;
+  readonly host: string;
   readonly urlFilter: string | undefined;
 }
 
@@ -410,7 +429,9 @@ export function compile(input: CompileInput): Batch {
         band: "session",
         priority: rule.priority,
         condition: copyCondition(rule.condition),
-        narrowed: candidate.urlFilter !== undefined,
+        narrowed:
+          candidate.host !== candidate.override.originHost ||
+          candidate.urlFilter !== undefined,
         tabId: candidate.override.tabId,
       });
     }
@@ -636,10 +657,10 @@ function narrowOverride(
     return [];
   }
   if (originGranted(override.originHost, granted)) {
-    return [{ override, urlFilter: undefined }];
+    return [{ override, host: override.originHost, urlFilter: undefined }];
   }
-  return narrowedGrantUrlFilters(override.originHost, granted).map(
-    (urlFilter) => ({ override, urlFilter }),
+  return grantNarrowings(override.originHost, granted).map(
+    ({ host, urlFilter }) => ({ override, host, urlFilter }),
   );
 }
 
@@ -672,7 +693,7 @@ function emitSessionRules(
   let nextSyntheticNum =
     overrides.reduce((max, override) => Math.max(max, override.num), 0) + 1;
   const seenOverrideNums = new Set<number>();
-  return candidates.map(({ override, urlFilter }, index) => {
+  return candidates.map(({ override, host, urlFilter }, index) => {
     const id = seenOverrideNums.has(override.num)
       ? nextSyntheticNum++
       : override.num;
@@ -681,18 +702,19 @@ function emitSessionRules(
       id,
       priority: SESSION_PRIORITY_TOP - index,
       action: headerAction(override),
-      condition: overrideCondition(override, urlFilter),
+      condition: overrideCondition(override, host, urlFilter),
     };
   });
 }
 
 function overrideCondition(
   override: TabOverride,
+  host = override.originHost,
   urlFilter?: string,
 ): DnrRuleCondition {
   return {
     tabIds: [override.tabId],
-    requestDomains: [override.originHost],
+    requestDomains: [host],
     ...(urlFilter === undefined ? {} : { urlFilter }),
     resourceTypes: expandResourceTypes("all"),
   };
@@ -828,15 +850,18 @@ function grantGap(
   if (targetReached && initiatorReason !== undefined) {
     return initiatorReason;
   }
-  const placedDomains = new Set(
-    placements.flatMap((placement) =>
-      placement.narrowed ? [] : (placement.condition.requestDomains ?? []),
-    ),
+  const placedDomains = placements.flatMap((placement) =>
+    placement.condition.urlFilter === undefined
+      ? (placement.condition.requestDomains ?? [])
+      : [],
   );
   const missing =
     rule.scope.type === "domains"
       ? rule.scope.domains
-          .filter((domain) => !placedDomains.has(domain))
+          .filter(
+            (domain) =>
+              !placedDomains.some((placed) => hostUnder(domain, placed)),
+          )
           .map(originPatternForDomain)
       : missingGrants(rule, granted);
   return missingReason("ungranted", missing);

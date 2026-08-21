@@ -3,8 +3,8 @@ import {
   ALL_SITES_ORIGIN,
   domainFromOriginPattern,
   type GrantSnapshot,
+  grantNarrowings,
   missingGrants,
-  narrowedGrantUrlFilters,
   originGranted,
   originPatternCoverage,
   requiredOrigins,
@@ -158,9 +158,21 @@ describe("origin patterns", () => {
     ).toBe("none");
   });
 
-  it("filters every stored grant that intersects a wider parent rule", () => {
+  it("rejects an invalid origin pattern", () => {
     expect(
-      narrowedGrantUrlFilters("example.com", {
+      originPatternCoverage("https://example.com/*", "not an origin pattern"),
+    ).toBe("none");
+    expect(
+      originGranted("example.com", {
+        origins: ["not an origin pattern"],
+        allSites: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps every stored grant that intersects a wider parent rule", () => {
+    expect(
+      grantNarrowings("example.com", {
         origins: [
           "https://a.example.com/*",
           "https://b.example.com/*",
@@ -168,21 +180,80 @@ describe("origin patterns", () => {
         ],
         allSites: false,
       }),
-    ).toEqual(["|https://a.example.com^", "|https://b.example.com^"]);
+    ).toEqual([
+      { host: "a.example.com", urlFilter: "|https://a.example.com^" },
+      { host: "b.example.com", urlFilter: "|https://b.example.com^" },
+    ]);
   });
 
-  it("preserves wider wildcard and subdomain grant shapes", () => {
+  it("preserves safe wider wildcard and subdomain grant shapes", () => {
     expect(
-      narrowedGrantUrlFilters("example.com", {
+      grantNarrowings("example.com", {
         origins: ["*://example.com/*", "https://*.sub.example.com/*"],
         allSites: false,
       }),
     ).toEqual([
-      "|http://example.com^",
-      "|https://example.com^",
-      "|https://sub.example.com^",
-      "|https://*.sub.example.com^",
+      { host: "example.com", urlFilter: "|http://example.com^" },
+      { host: "example.com", urlFilter: "|https://example.com^" },
+      { host: "sub.example.com", urlFilter: "|https://sub.example.com^" },
     ]);
+  });
+
+  it("keeps an exact-host grant partial for a domain and its subdomains", () => {
+    const granted = { origins: ["*://example.com/*"], allSites: false };
+
+    expect(originGranted("example.com", granted)).toBe(false);
+    expect(grantNarrowings("example.com", granted)).toEqual([
+      { host: "example.com", urlFilter: "|http://example.com^" },
+      { host: "example.com", urlFilter: "|https://example.com^" },
+    ]);
+  });
+
+  it("drops port-specific localhost narrowing covered by a portless anchor", () => {
+    expect(
+      grantNarrowings("localhost", {
+        origins: ["http://localhost/*", "http://localhost:15848/*"],
+        allSites: false,
+      }),
+    ).toEqual([{ host: "localhost", urlFilter: "|http://localhost^" }]);
+  });
+
+  it("never emits a wildcard in any parsed grant narrowing", () => {
+    const schemes = ["*", "http", "https"] as const;
+    const subdomains = [false, true];
+    const ports = [undefined, "8443"] as const;
+
+    for (const scheme of schemes) {
+      for (const includesSubdomains of subdomains) {
+        for (const port of ports) {
+          const origin = `${scheme}://${includesSubdomains ? "*." : ""}example.com${port === undefined ? "" : `:${port}`}/*`;
+          const narrowings = grantNarrowings("example.com", {
+            origins: [origin],
+            allSites: false,
+          });
+          if (
+            !originGranted("example.com", {
+              origins: [origin],
+              allSites: false,
+            })
+          ) {
+            expect(narrowings).not.toEqual([]);
+          }
+          expect(
+            narrowings.every(({ urlFilter }) => !urlFilter?.includes("*")),
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("ignores an unsupported wildcard host pattern", () => {
+    expect(
+      grantNarrowings("example.com", {
+        origins: ["https://*foo.example.com/*"],
+        allSites: false,
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -320,6 +391,43 @@ describe("missingGrants", () => {
         allSites: false,
       }),
     ).toEqual([]);
+  });
+
+  it.each([
+    [
+      "subdomain grants split across schemes",
+      "example.com",
+      ["http://*.example.com/*", "https://*.example.com/*"],
+    ],
+    [
+      "IP grants split across schemes",
+      "127.0.0.1",
+      ["http://127.0.0.1/*", "https://127.0.0.1/*"],
+    ],
+  ])("joins %s", (_, domain, origins) => {
+    const subject = rule({ type: "domains", domains: [domain] }, ["pages"]);
+    const granted = { origins, allSites: false };
+
+    expect(originGranted(domain, granted)).toBe(true);
+    expect(missingGrants(subject, granted)).toEqual([]);
+  });
+
+  it("keeps a single concrete-scheme subdomain grant partial", () => {
+    const subject = rule({ type: "domains", domains: ["example.com"] }, [
+      "pages",
+    ]);
+    const granted = { origins: ["https://*.example.com/*"], allSites: false };
+
+    expect(
+      originPatternCoverage(
+        "https://*.example.com/*",
+        originPatternForDomain("example.com"),
+      ),
+    ).toBe("partial");
+    expect(originGranted("example.com", granted)).toBe(false);
+    expect(missingGrants(subject, granted)).toEqual([
+      originPatternForDomain("example.com"),
+    ]);
   });
 
   it("accepts a parent-domain grant for a required subdomain", () => {

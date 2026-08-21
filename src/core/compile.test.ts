@@ -105,6 +105,33 @@ const granting = (...domains: string[]): GrantSnapshot => ({
   origins: domains.map(originPatternForDomain),
   allSites: false,
 });
+const supportAll = () => true;
+
+function compiledNarrowedAppendRule(
+  domains: string[],
+  origins: string[],
+): DnrRule[] {
+  const doc = state([
+    profile("overlap", [
+      storedRule(1, {
+        header: "accept",
+        operation: "append",
+        scope: { type: "domains", domains },
+      }),
+    ]),
+  ]);
+  return compileDynamic(
+    dropInapplicable(doc, supportAll, { origins, allSites: false }),
+  );
+}
+
+function expectNarrowedToSubdomain(compiled: DnrRule[]): void {
+  expect(compiled).toHaveLength(1);
+  expect(compiled[0]?.condition).toEqual(
+    expect.objectContaining({ requestDomains: ["sub.example.com"] }),
+  );
+  expect(compiled[0]?.condition.urlFilter).toBeUndefined();
+}
 
 function placementKeys(batch: ReturnType<typeof compileCore>): string[] {
   return batch.entries.flatMap((entry) =>
@@ -1007,7 +1034,6 @@ describe("dynamic rule compilation", () => {
 });
 
 describe("dropping inapplicable rules", () => {
-  const supportAll = () => true;
   const compiledIds = (
     doc: StateDoc,
     supported: (regex: string) => boolean,
@@ -1172,28 +1198,95 @@ describe("dropping inapplicable rules", () => {
     expect(compiled[0]?.condition.urlFilter).toBeUndefined();
   });
 
-  it("deduplicates overlapping domains narrowed to the same exact origin", () => {
+  it("deduplicates a forward-nested full grant and no-filter narrowing", () => {
+    expectNarrowedToSubdomain(
+      compiledNarrowedAppendRule(
+        ["example.com", "sub.example.com"],
+        ["*://*.sub.example.com/*"],
+      ),
+    );
+  });
+
+  it("deduplicates a reverse-nested full grant and no-filter narrowing", () => {
+    expectNarrowedToSubdomain(
+      compiledNarrowedAppendRule(
+        ["example.com", "api.sub.example.com"],
+        ["*://*.sub.example.com/*"],
+      ),
+    );
+  });
+
+  it("keeps exact-origin overlap deduplicated", () => {
+    const compiled = compiledNarrowedAppendRule(
+      ["example.com", "sub.example.com"],
+      ["https://sub.example.com/*"],
+    );
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition).toEqual(
+      expect.objectContaining({ requestDomains: ["sub.example.com"] }),
+    );
+    expect(compiled[0]?.condition.urlFilter).toBe("|https://sub.example.com^");
+  });
+
+  it("drops a ported anchor covered by a portless sibling from another domain", () => {
+    const compiled = compiledNarrowedAppendRule(
+      ["example.com", "a.b.example.com"],
+      ["https://a.b.example.com:8443/*", "https://*.example.com/*"],
+    );
+
+    expect(compiled.map((rule) => rule.condition)).toEqual([
+      expect.objectContaining({
+        requestDomains: ["example.com"],
+        urlFilter: "|https://example.com^",
+      }),
+      expect.objectContaining({
+        requestDomains: ["a.b.example.com"],
+        urlFilter: "|https://a.b.example.com^",
+      }),
+    ]);
+  });
+
+  it("counts a no-filter narrowing as placement for its contained domain", () => {
     const doc = state([
-      profile("overlap", [
+      profile("grant-gap", [
         storedRule(1, {
-          header: "accept",
-          operation: "append",
           scope: {
             type: "domains",
-            domains: ["example.com", "sub.example.com"],
+            domains: ["example.com", "api.sub.example.com"],
           },
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
-        origins: ["https://sub.example.com/*"],
-        allSites: false,
-      }),
+    const batch = compile({
+      doc,
+      overrides: [],
+      granted: { origins: ["*://*.sub.example.com/*"], allSites: false },
+      isRegexSupported: supportAll,
+    });
+
+    expect(batch.entries[0]?.grantGap).toEqual({
+      kind: "ungranted",
+      missing: ["*://*.example.com/*"],
+    });
+  });
+
+  it("drops a nested narrowing covered by a fully granted rule domain", () => {
+    const compiled = compiledNarrowedAppendRule(
+      ["example.com", "sub.example.com"],
+      ["*://*.sub.example.com/*", "https://deep.sub.example.com/*"],
     );
 
-    expect(compiled).toHaveLength(1);
-    expect(compiled[0]?.condition.urlFilter).toBe("|https://sub.example.com^");
+    expectNarrowedToSubdomain(compiled);
+  });
+
+  it("drops a nested narrowing covered by a wider domain narrowing", () => {
+    const compiled = compiledNarrowedAppendRule(
+      ["example.com"],
+      ["*://*.sub.example.com/*", "https://deep.sub.example.com/*"],
+    );
+
+    expectNarrowedToSubdomain(compiled);
   });
 
   it("keeps an extension-requested subdomain grant live for a parent-domain rule", () => {
@@ -1213,9 +1306,36 @@ describe("dropping inapplicable rules", () => {
 
     expect(compiled).toHaveLength(1);
     expect(compiled[0]?.condition).toMatchObject({
-      requestDomains: ["example.com"],
-      urlFilter: "||sub.example.com^",
+      requestDomains: ["sub.example.com"],
     });
+    expect(compiled[0]?.condition.urlFilter).toBeUndefined();
+  });
+
+  it("does not double-apply a fully granted child domain", () => {
+    const doc = state([
+      profile("covered-domains", [
+        storedRule(1, {
+          header: "accept",
+          operation: "append",
+          scope: {
+            type: "domains",
+            domains: ["example.com", "api.example.com"],
+          },
+        }),
+      ]),
+    ]);
+    const compiled = compileDynamic(
+      dropInapplicable(doc, supportAll, {
+        origins: ["*://*.example.com/*"],
+        allSites: false,
+      }),
+    );
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition).toMatchObject({
+      requestDomains: ["example.com"],
+    });
+    expect(compiled[0]?.condition.urlFilter).toBeUndefined();
   });
 
   it("compiles every narrowed grant for one rule independent of grant order", () => {
@@ -1545,12 +1665,45 @@ describe("session rule compilation", () => {
     ]);
   });
 
+  it("deduplicates overlapping narrowed override grants", () => {
+    const override = { ...sessionOverride(1), originHost: "example.com" };
+    const compiled = compileSession([override], false, {
+      origins: ["*://*.sub.example.com/*", "https://deep.sub.example.com/*"],
+      allSites: false,
+    });
+
+    expect(compiled).toHaveLength(1);
+    expect(compiled[0]?.condition).toMatchObject({
+      requestDomains: ["sub.example.com"],
+    });
+  });
+
   it("keeps an override under a parent-domain grant", () => {
     const override = { ...sessionOverride(1), originHost: "api.example.com" };
     const compiled = compileSession([override], false, granting("example.com"));
 
     expect(compiled).toHaveLength(1);
     expect(compiled[0]?.condition.requestDomains).toEqual(["api.example.com"]);
+  });
+
+  it("confines an override to a granted subdomain", () => {
+    const override = { ...sessionOverride(1), originHost: "example.com" };
+    const granted = {
+      origins: ["*://*.sub.example.com/*"],
+      allSites: false,
+    };
+    const condition = compileSession([override], false, granted)[0]?.condition;
+
+    expect(condition).toMatchObject({ requestDomains: ["sub.example.com"] });
+    expect(condition?.urlFilter).toBeUndefined();
+    expect(
+      compile({
+        doc: state([]),
+        overrides: [override],
+        granted,
+        isRegexSupported: () => true,
+      }).entries[0]?.standing,
+    ).toMatchObject({ kind: "placed", placements: [{ narrowed: true }] });
   });
 
   it("keeps an override under all-sites access", () => {

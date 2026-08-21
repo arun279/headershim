@@ -2,9 +2,9 @@ import {
   coversSubresourceTypes,
   domainFromOriginPattern,
   type GrantSnapshot,
+  grantNarrowings,
   isAllSitesOrigin,
   missingGrants,
-  narrowedGrantUrlFilters,
   originGranted,
 } from "../../core/grants";
 import {
@@ -84,7 +84,7 @@ export function siteAccessView(
   const partial = neededEntries.flatMap((neededEntry) => {
     const coveringOrigins = granted.origins.filter(
       (origin) =>
-        narrowedGrantUrlFilters(neededEntry.domain, {
+        grantNarrowings(neededEntry.domain, {
           origins: [origin],
           allSites: false,
         }).length !== 0,
@@ -125,8 +125,7 @@ export function siteAccessView(
           (override) =>
             override.enabled &&
             (originGranted(override.originHost, rowGrant) ||
-              narrowedGrantUrlFilters(override.originHost, rowGrant).length !==
-                0),
+              grantNarrowings(override.originHost, rowGrant).length !== 0),
         ).length;
         return {
           ...entry(origins[0] ?? domain, { ruleCount, thisTabCount }, "full"),
@@ -196,7 +195,7 @@ function ruleUsesGrant(
     (host) =>
       originGranted(host, rowGrant) ||
       (rule.scope.type === "domains" &&
-        narrowedGrantUrlFilters(host, rowGrant).length !== 0),
+        grantNarrowings(host, rowGrant).length !== 0),
   );
 }
 

@@ -438,6 +438,35 @@ describe("tab projection", () => {
     });
   });
 
+  it("projects a matching narrowed anchor as placed and a different scheme as ungranted", () => {
+    const rule = storedRule(1, {
+      scope: { type: "domains", domains: ["h"] },
+    });
+    const { applied } = compiledApplied([rule], [], {
+      origins: ["https://h/*"],
+      allSites: false,
+    });
+    const key = ruleKey("active", rule.id, 0);
+
+    expect(
+      projectTab(applied, {
+        tabId: 42,
+        host: "h",
+        origin: "https://h",
+      }).get(key)?.outcome,
+    ).toEqual({ kind: "runs" });
+    expect(
+      projectTab(applied, {
+        tabId: 42,
+        host: "h",
+        origin: "http://h",
+      }).get(key)?.outcome,
+    ).toEqual({
+      kind: "absent",
+      reason: { kind: "ungranted", missing: ["*://*.h/*"] },
+    });
+  });
+
   it("does not widen an exact subdomain placement to its parent domain", () => {
     const rule = storedRule(1, {
       scope: { type: "domains", domains: ["example.com"] },
@@ -452,6 +481,17 @@ describe("tab projection", () => {
     ).toMatchObject({
       scope: { kind: "sites", domains: ["api.example.com"] },
     });
+  });
+
+  it("keeps a hostless anchored pattern scoped to its origin", () => {
+    const rule = storedRule(1, {
+      scope: { type: "pattern", pattern: "|https://example.com^", hosts: [] },
+    });
+    const { applied } = compiledApplied([rule]);
+
+    expect(
+      projectFleet(applied).get(ruleKey("active", rule.id, 0))?.outcome,
+    ).toMatchObject({ scope: { kind: "sites", domains: ["example.com"] } });
   });
 
   it("keeps an exact port grant distinct from its host", () => {
