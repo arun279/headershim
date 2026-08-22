@@ -47,7 +47,8 @@ export function ChangeLine({
       : outcomeReason(change.outcome, change.source === "override");
   // A caveat states a wire consequence, so it says nothing for a change that
   // will never reach the wire (a refusal, an over-limit rule, one shadowed by
-  // another), gated the same way the popup's transport count is.
+  // another). A change that is only a grant away still carries it, so this
+  // gates on canRun rather than on the narrower running test behind the counts.
   const caveat = canRun(change.outcome)
     ? caveatNote(change.caveats, change.header, change.operation)
     : undefined;

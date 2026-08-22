@@ -1,5 +1,4 @@
 import type { Projection } from "../../../src/core/applied";
-import { normalizeHeaderName } from "../../../src/core/headers";
 import type { StateDoc } from "../../../src/core/model";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
@@ -20,6 +19,7 @@ import {
   canRun,
   displayTone,
   grantAction,
+  transportKey,
   verb,
 } from "../../../src/ui/dispositionCopy";
 import {
@@ -145,6 +145,23 @@ function TapeLine({ row }: { row: TapeRow }) {
   );
 }
 
+// A caveat states a wire consequence, so it says nothing for a row that will
+// never reach the wire: a refusal, an over-limit rule, or one shadowed by
+// another. A row that is only a grant away still carries it, so this gates on
+// canRun rather than on the narrower running test behind the popup's counts.
+function caveatWord(row: TapeRow): string | undefined {
+  if (!canRun(row.outcome)) return undefined;
+  const family = row.caveats.includes("h1-only")
+    ? "h1-only"
+    : row.caveats.includes("h2-breaking")
+      ? "h2-breaking"
+      : undefined;
+  if (family === undefined) return undefined;
+  const key = transportKey(family, row.header);
+  // caveatsFor folds host into h1-only, and the options table has no host word.
+  return key === "host" ? text.caveat.h1Only : text.caveat[key];
+}
+
 function statusLabel(row: TapeRow): string {
   if (row.paused && row.outcome.kind !== "absent") return text.status.paused;
   if (row.outcome.kind === "shadowed") return text.status.overridden;
@@ -165,17 +182,4 @@ function statusLabel(row: TapeRow): string {
       : text.status.refused;
   }
   return text.status.live;
-}
-
-// A caveat states a wire consequence, so it says nothing for a row that will
-// never reach the wire: a refusal, an over-limit rule, or one shadowed by
-// another, gated the same way the popup's transport count is.
-function caveatWord(row: TapeRow): string | undefined {
-  if (!canRun(row.outcome)) return undefined;
-  if (row.caveats.includes("h1-only")) return text.caveat.h1Only;
-  if (!row.caveats.includes("h2-breaking")) return undefined;
-  const header = normalizeHeaderName(row.header);
-  if (header === "te") return text.caveat.te;
-  if (header === "content-length") return text.caveat.contentLength;
-  return text.caveat.h2Breaking;
 }

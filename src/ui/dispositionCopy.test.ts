@@ -3,6 +3,7 @@ import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { HeaderOp } from "../core/model";
 import type { AbsentReason, UncompilableReason } from "../core/verdict";
 import { copy } from "./copy";
+import { copy as optionsCopy } from "./copy.options";
 import {
   caveatNote,
   controlTone,
@@ -10,6 +11,8 @@ import {
   outcomeReason,
   outcomeTone,
   type Tone,
+  transportKey,
+  transportNote,
   verb,
 } from "./dispositionCopy";
 import type {
@@ -223,6 +226,57 @@ const TRANSPORT_NOTE_CASES = [
   readonly caveats: readonly Caveat[];
   readonly expected: string;
 }[];
+
+const TRANSPORT_WORD_CASES = [
+  {
+    header: "connection",
+    family: "h1-only",
+    key: "h1Only",
+    advisory:
+      "Takes effect on HTTP/1.1 only; HTTP/2 has no such header and drops the change.",
+    traffic: "HTTP/1.1 only",
+  },
+  {
+    header: "transfer-encoding",
+    family: "h1-only",
+    key: "h1Only",
+    advisory:
+      "Takes effect on HTTP/1.1 only; HTTP/2 has no such header and drops the change.",
+    traffic: "HTTP/1.1 only",
+  },
+  {
+    header: "te",
+    family: "h2-breaking",
+    key: "te",
+    advisory:
+      "HTTP/2 allows te only as trailers; any other value makes requests fail there. HTTP/1.1 sends it as written.",
+    traffic: "trailers only on HTTP/2",
+  },
+  {
+    header: "content-length",
+    family: "h2-breaking",
+    key: "contentLength",
+    advisory:
+      "Sent as written on HTTP/1.1, even when it contradicts the body. On HTTP/2, requests fail when it does.",
+    traffic: "mismatch breaks HTTP/2",
+  },
+  {
+    header: "keep-alive",
+    family: "h2-breaking",
+    key: "h2Breaking",
+    advisory:
+      "Takes effect on HTTP/1.1; on HTTP/2 this header makes requests fail.",
+    traffic: "breaks on HTTP/2",
+  },
+  {
+    header: "upgrade",
+    family: "h2-breaking",
+    key: "h2Breaking",
+    advisory:
+      "Takes effect on HTTP/1.1; on HTTP/2 this header makes requests fail.",
+    traffic: "breaks on HTTP/2",
+  },
+] as const;
 
 const VERB_CASES = {
   set: {
@@ -438,6 +492,17 @@ describe("caveatNote", () => {
       caveatNote(["security-response"], "content-security-policy", "remove"),
     ).toBe(copy.advisories.removesSecurityResponse("content-security-policy"));
   });
+});
+
+describe("transportKey", () => {
+  it.each(TRANSPORT_WORD_CASES)(
+    "maps $header to its literal transport copy",
+    ({ header, family, key, advisory, traffic }) => {
+      expect(transportKey(family, header)).toBe(key);
+      expect(transportNote(family, header)).toBe(advisory);
+      expect(optionsCopy.options.traffic.caveat[key]).toBe(traffic);
+    },
+  );
 });
 
 describe("grantAction", () => {
