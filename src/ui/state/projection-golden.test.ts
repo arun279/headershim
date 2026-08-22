@@ -119,7 +119,7 @@ function surfaces(doc: StateDoc, projection: Applied) {
       overrides: [],
       tab: { tabId: 1, host: HOST, origin: `https://${HOST}` },
     }),
-    fleet: fleetRules(projection, doc).filter(
+    fleet: fleetRules(projection).filter(
       (rule) => !rule.ruleId.startsWith(FILLER),
     ),
   };

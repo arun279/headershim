@@ -77,7 +77,7 @@ export function RulesPage({
     );
   }, [editing, Editor]);
 
-  const fleet = fleetRules(projection, doc);
+  const fleet = fleetRules(projection);
 
   const editProfile =
     editing === undefined

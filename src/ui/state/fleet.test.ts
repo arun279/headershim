@@ -80,7 +80,7 @@ describe("fleetRules", () => {
       allSites: false,
     });
 
-    expect(fleetRules(applied, doc)).toEqual([
+    expect(fleetRules(applied)).toEqual([
       expect.objectContaining({
         key: ruleKey("staging", "credential", 0),
         profileId: "staging",
@@ -139,7 +139,7 @@ describe("fleet grouping", () => {
       }),
     ];
     const doc = document([profile("staging", rules)]);
-    const fleet = fleetRules(compileApplied(doc), doc);
+    const fleet = fleetRules(compileApplied(doc));
 
     const sites = groupBySite(fleet);
     expect(sites.map((group) => group.host)).toEqual([
@@ -185,9 +185,7 @@ describe("fleet grouping", () => {
     });
     const doc = document([profile("staging", [live, off])]);
 
-    expect(
-      groupByHeader(fleetRules(compileApplied(doc), doc))[0],
-    ).toMatchObject({
+    expect(groupByHeader(fleetRules(compileApplied(doc)))[0]).toMatchObject({
       siteCount: 1,
       broad: false,
     });
@@ -207,7 +205,7 @@ describe("tapeRows", () => {
       origins: ["https://api.example.com/*"],
       allSites: false,
     });
-    const rows = tapeRows(groupBySite(fleetRules(applied, doc)), applied);
+    const rows = tapeRows(groupBySite(fleetRules(applied)), applied);
 
     expect(
       rows.find((row) => row.host === "api.example.com")?.outcome.kind,
@@ -250,7 +248,7 @@ describe("tapeRows", () => {
       origins: ["*://*.a.test/*", "*://*.b.test/*"],
       allSites: false,
     });
-    const fleet = fleetRules(applied, doc);
+    const fleet = fleetRules(applied);
     const groups = groupBySite(fleet);
     const rows = tapeRows(groups, applied);
 

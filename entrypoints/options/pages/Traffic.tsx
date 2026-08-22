@@ -1,5 +1,4 @@
 import type { Projection } from "../../../src/core/applied";
-import type { StateDoc } from "../../../src/core/model";
 import { request as requestPermissions } from "../../../src/platform/permissions";
 import { EmptyState } from "../../../src/ui/components/EmptyState";
 import {
@@ -40,14 +39,8 @@ const text = optionsCopy.options.traffic;
  * happened. A rule that is off would do nothing, and nothing is what this page
  * omits. Values are never carried here, so a secret cannot reach it.
  */
-export function TrafficPage({
-  doc,
-  projection,
-}: {
-  doc: StateDoc;
-  projection: Projection;
-}) {
-  const fleet = fleetRules(projection, doc);
+export function TrafficPage({ projection }: { projection: Projection }) {
+  const fleet = fleetRules(projection);
   const rows = tapeRows(groupBySite(fleet), projection);
 
   return (

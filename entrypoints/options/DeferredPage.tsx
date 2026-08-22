@@ -45,7 +45,7 @@ export function DeferredPage({
     return <SiteAccessPage doc={doc} grants={grants} />;
   }
   if (section === "traffic") {
-    return <TrafficPage doc={doc} projection={projection} />;
+    return <TrafficPage projection={projection} />;
   }
   if (section === "import-export") {
     return <ImportExportPage doc={doc} mutations={mutations} />;

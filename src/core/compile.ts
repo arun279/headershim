@@ -19,7 +19,7 @@ import {
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "./limits";
-import type { HeaderOp, Rule, StateDoc, TabOverride } from "./model";
+import type { HeaderOp, Profile, Rule, StateDoc, TabOverride } from "./model";
 import {
   type DnrResourceType,
   expandResourceTypes,
@@ -377,7 +377,7 @@ export function compile(input: CompileInput): Batch {
         storedEntry(
           key,
           profile.id,
-          profile.name,
+          profile,
           doc.activeProfileId,
           rule,
           granted,
@@ -624,7 +624,7 @@ function pushPlacement(
 function storedEntry(
   key: RuleKey,
   profileId: string,
-  profileName: string,
+  profile: Profile,
   activeProfileId: string,
   rule: Rule,
   granted: GrantSnapshot,
@@ -634,12 +634,22 @@ function storedEntry(
 ): Entry {
   return {
     key,
+    source: "rule",
     profileId,
+    ruleId: rule.id,
+    profileName: profile.name,
+    badgeText: profile.badgeText,
+    color: profile.color,
     label: rule.comment?.trim() || `${rule.header} rule`,
     stage: rule.direction,
     headerKey: normalizeHeaderName(rule.header),
     header: rule.header,
     operation: rule.operation,
+    ...(rule.value === undefined ? {} : { value: rule.value }),
+    ...(rule.generated === undefined ? {} : { generated: rule.generated }),
+    scope: rule.scope,
+    enabled: rule.enabled,
+    ...(rule.comment === undefined ? {} : { comment: rule.comment }),
     authored: compileRuleCondition(rule),
     standing:
       rule.enabled && profileId === activeProfileId
@@ -653,7 +663,7 @@ function storedEntry(
         : {
             kind: "absent",
             reason: rule.enabled
-              ? { kind: "other-profile", profileName }
+              ? { kind: "other-profile", profileName: profile.name }
               : { kind: "off" },
           },
     grantGap:
@@ -774,6 +784,7 @@ function overrideEntry(
         };
   return {
     key,
+    source: "override",
     profileId,
     label: `${override.header} rule`,
     stage: override.direction,

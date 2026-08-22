@@ -1,16 +1,7 @@
 import type { Projection } from "../../core/applied";
-import { normalizeHeaderName } from "../../core/headers";
-import type {
-  BadgeColor,
-  Direction,
-  HeaderOp,
-  Profile,
-  Rule,
-  Scope,
-  StateDoc,
-} from "../../core/model";
+import type { Direction, HeaderOp, Scope } from "../../core/model";
 import { originPatternForDomain } from "../../core/scope";
-import { type RuleKey, ruleKey } from "../../core/verdict";
+import type { RuleKey, StoredEntry } from "../../core/verdict";
 import { isSecretHeader, ruleValueSummary } from "../secret";
 import { projectFleet } from "./fleet-project";
 import {
@@ -26,7 +17,7 @@ interface FleetProvenance {
   readonly profileId: string;
   readonly name: string;
   readonly badgeText: string;
-  readonly color: BadgeColor;
+  readonly color: StoredEntry["color"];
 }
 
 export interface FleetRule {
@@ -49,50 +40,47 @@ export interface FleetRule {
   readonly comment?: string;
 }
 
-export function fleetRules(projection: Projection, doc: StateDoc): FleetRule[] {
+export function fleetRules(projection: Projection): FleetRule[] {
   const projected = projectFleet(projection);
-  return doc.profiles.flatMap((profile) =>
-    profile.rules.flatMap((rule, index) => {
-      const occurrence = profile.rules
-        .slice(0, index)
-        .filter((candidate) => candidate.id === rule.id).length;
-      const line = projected.get(ruleKey(profile.id, rule.id, occurrence));
-      return line === undefined
-        ? []
-        : [fleetRule(profile, rule, line, projection.batch.paused)];
-    }),
-  );
+  return projection.batch.entries.flatMap((entry) => {
+    if (entry.source !== "rule") {
+      return [];
+    }
+    const line = projected.get(entry.key);
+    return line === undefined
+      ? []
+      : [fleetRule(entry, line, projection.batch.paused)];
+  });
 }
 
 function fleetRule(
-  profile: Profile,
-  rule: Rule,
+  entry: StoredEntry,
   line: Line<FleetOutcome>,
   paused: boolean,
 ): FleetRule {
   const display =
-    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
+    entry.operation === "remove" ? undefined : ruleValueSummary(entry);
   return {
     key: line.key,
-    profileId: profile.id,
-    ruleId: rule.id,
+    profileId: entry.profileId,
+    ruleId: entry.ruleId,
     provenance: {
-      profileId: profile.id,
-      name: profile.name,
-      badgeText: profile.badgeText,
-      color: profile.color,
+      profileId: entry.profileId,
+      name: entry.profileName,
+      badgeText: entry.badgeText,
+      color: entry.color,
     },
-    direction: rule.direction,
-    operation: rule.operation,
-    scope: rule.scope,
-    header: rule.header,
-    headerKey: normalizeHeaderName(rule.header),
+    direction: entry.stage,
+    operation: entry.operation,
+    scope: entry.scope,
+    header: entry.header,
+    headerKey: entry.headerKey,
     ...(display === undefined ? {} : { display }),
-    secret: isSecretHeader(rule.header),
-    ...(rule.comment === undefined || rule.comment === ""
+    secret: isSecretHeader(entry.header),
+    ...(entry.comment === undefined || entry.comment === ""
       ? {}
-      : { comment: rule.comment }),
-    enabled: rule.enabled,
+      : { comment: entry.comment }),
+    enabled: entry.enabled,
     paused,
     outcome: line.outcome,
     caveats: line.caveats,
@@ -103,7 +91,7 @@ function fleetRule(
       line.outcome.kind === "shadowed" ||
       line.outcome.kind === "runs-if-matched"
         ? line.outcome.scope.kind === "broad"
-        : rule.scope.type !== "domains",
+        : entry.scope.type !== "domains",
   };
 }
 

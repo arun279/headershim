@@ -7,16 +7,16 @@ import type {
   Direction,
   HeaderOp,
   Profile,
-  Rule,
   StateDoc,
   TabOverride,
 } from "../../core/model";
 import { scopeCondition } from "../../core/scope";
 import {
+  type Batch,
   type Entry,
   overrideKey,
   type RuleKey,
-  ruleKey,
+  type StoredEntry,
 } from "../../core/verdict";
 import {
   headerValueSummary,
@@ -81,7 +81,12 @@ export function computeReadout({
   tab,
 }: ReadoutInput): TabReadout {
   const projected = projectTab(projection, tab);
-  const saved = savedChanges(doc, projected, projection.batch.paused);
+  const saved = savedChanges(
+    projection.batch.entries,
+    doc.activeProfileId,
+    projected,
+    projection.batch.paused,
+  );
   const temporary = overrideChanges(
     overrides,
     projected,
@@ -110,48 +115,42 @@ export function computeReadout({
 }
 
 function savedChanges(
-  doc: StateDoc,
+  entries: readonly Entry[],
+  activeProfileId: string,
   projected: ReadonlyMap<RuleKey, Line<TabOutcome>>,
   paused: boolean,
 ): TabChange[] {
-  const profile = doc.profiles.find(
-    (candidate) => candidate.id === doc.activeProfileId,
-  );
-  if (profile === undefined) return [];
-  const occurrences = new Map<string, number>();
-  return profile.rules.flatMap((rule) => {
-    const occurrence = occurrences.get(rule.id) ?? 0;
-    occurrences.set(rule.id, occurrence + 1);
-    const line = projected.get(ruleKey(profile.id, rule.id, occurrence));
-    return line === undefined
-      ? []
-      : [storedChange(profile, rule, line, paused)];
+  return entries.flatMap((entry) => {
+    if (entry.profileId !== activeProfileId || entry.source !== "rule") {
+      return [];
+    }
+    const line = projected.get(entry.key);
+    return line === undefined ? [] : [storedChange(entry, line, paused)];
   });
 }
 
 function storedChange(
-  profile: Profile,
-  rule: Rule,
+  entry: StoredEntry,
   line: Line<TabOutcome>,
   paused: boolean,
 ): TabChange {
-  const display = ruleDisplay(rule);
-  const wider = widerReach(rule);
+  const display = ruleDisplay(entry);
+  const wider = widerReach(entry.scope);
   return {
     key: line.key,
     source: "rule",
-    profileId: profile.id,
-    ruleId: rule.id,
-    direction: rule.direction,
-    operation: rule.operation,
-    header: rule.header,
+    profileId: entry.profileId,
+    ruleId: entry.ruleId,
+    direction: entry.stage,
+    operation: entry.operation,
+    header: entry.header,
     ...(display === undefined ? {} : { display }),
-    secret: isSecretHeader(rule.header),
-    enabled: rule.enabled,
+    secret: isSecretHeader(entry.header),
+    enabled: entry.enabled,
     paused,
     outcome: line.outcome,
     caveats: line.caveats,
-    ...(rule.value === undefined ? {} : { value: rule.value }),
+    ...(entry.value === undefined ? {} : { value: entry.value }),
     ...(wider === undefined ? {} : { widerReach: wider }),
   };
 }
@@ -287,7 +286,7 @@ function summarize(
 }
 
 function ruleDisplay(
-  rule: Pick<Rule, "operation" | "generated" | "header" | "value">,
+  rule: Pick<StoredEntry, "operation" | "generated" | "header" | "value">,
 ): string | undefined {
   return rule.operation === "remove" ? undefined : ruleValueSummary(rule);
 }
@@ -312,9 +311,6 @@ export function previewSwitch(
     return { drops: [], adds: [] };
   }
   const projected = projectTab(preview(projection.batch), tab);
-  const activeEntries: Entry[] = [];
-  const targetEntries: Entry[] = [];
-  const rules = new Map<RuleKey, Rule>();
   const targetBatch = compile({
     doc: {
       v: 1,
@@ -331,28 +327,8 @@ export function previewSwitch(
     isRegexSupported,
   });
   const targetProjected = projectTab(preview(targetBatch), tab);
-  const occurrences = new Map<string, number>();
-  for (const rule of targetProfile.rules) {
-    const occurrence = occurrences.get(rule.id) ?? 0;
-    occurrences.set(rule.id, occurrence + 1);
-    rules.set(ruleKey(targetProfile.id, rule.id, occurrence), rule);
-  }
-  for (const entry of projection.batch.entries) {
-    const outcome = projected.get(entry.key)?.outcome;
-    if (
-      entry.key.startsWith("rule:") &&
-      (outcome?.kind === "runs" || outcome?.kind === "runs-if-matched")
-    ) {
-      activeEntries.push(entry);
-    }
-  }
-  for (const entry of targetBatch.entries) {
-    const outcome = targetProjected.get(entry.key)?.outcome;
-    if (outcome?.kind === "runs" || outcome?.kind === "runs-if-matched") {
-      const rule = rules.get(entry.key);
-      if (rule !== undefined) targetEntries.push(entry);
-    }
-  }
+  const activeEntries = runningRules(projection.batch, projected);
+  const targetEntries = runningRules(targetBatch, targetProjected);
   const current = new Set(activeEntries.map((entry) => entry.headerKey));
   const target = new Set(targetEntries.map((entry) => entry.headerKey));
   const drops = new Set<string>();
@@ -361,9 +337,8 @@ export function previewSwitch(
   }
   const adds: { header: string; display?: string }[] = [];
   for (const entry of targetEntries) {
-    const rule = rules.get(entry.key);
     if (!current.has(entry.headerKey)) {
-      const display = rule === undefined ? undefined : ruleDisplay(rule);
+      const display = ruleDisplay(entry);
       adds.push({
         header: entry.header,
         ...(display === undefined ? {} : { display }),
@@ -374,8 +349,21 @@ export function previewSwitch(
   return { drops: [...drops], adds };
 }
 
-function widerReach(rule: Rule): number | "broad" | undefined {
-  const { requestDomains } = scopeCondition(rule.scope);
+function runningRules(
+  batch: Batch,
+  projected: ReadonlyMap<RuleKey, Line<TabOutcome>>,
+): StoredEntry[] {
+  return batch.entries.flatMap((entry) => {
+    const outcome = projected.get(entry.key)?.outcome;
+    return entry.source === "rule" &&
+      (outcome?.kind === "runs" || outcome?.kind === "runs-if-matched")
+      ? [entry]
+      : [];
+  });
+}
+
+function widerReach(scope: StoredEntry["scope"]): number | "broad" | undefined {
+  const { requestDomains } = scopeCondition(scope);
   if (requestDomains === undefined) return "broad";
   const others = requestDomains.length - 1;
   return others > 0 ? others : undefined;
