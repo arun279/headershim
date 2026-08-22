@@ -1,6 +1,6 @@
 import type { Direction } from "../../../core/model";
 import { outcomeTone } from "../../dispositionCopy";
-import type { FleetOutcome, TabOutcome } from "../../state/project";
+import type { Outcome } from "../../state/project";
 
 export function DirectionGlyph({ direction }: { direction: Direction }) {
   return (
@@ -14,7 +14,7 @@ export function StatusGlyph({
   outcome,
   paused,
 }: {
-  outcome: FleetOutcome | Extract<TabOutcome, { readonly kind: "shadowed" }>;
+  outcome: Outcome;
   paused: boolean;
 }) {
   const tone = outcomeTone(outcome);

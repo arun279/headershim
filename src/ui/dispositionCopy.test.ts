@@ -15,14 +15,7 @@ import {
   transportNote,
   verb,
 } from "./dispositionCopy";
-import type {
-  Caveat,
-  FleetOutcome,
-  TabOutcome,
-  Undecidable,
-} from "./state/project";
-
-type Outcome = TabOutcome | FleetOutcome;
+import type { Caveat, Outcome, Undecidable } from "./state/project";
 
 const OUTCOMES = {
   runs: { kind: "runs" },
@@ -126,7 +119,7 @@ const UNDECIDABLE_OUTCOMES = {
   },
 } as const satisfies Record<
   Undecidable,
-  Extract<TabOutcome, { readonly kind: "runs-if-matched" }>
+  Extract<Outcome, { readonly kind: "runs-if-matched" }>
 >;
 
 const REFUSAL_CASES = {

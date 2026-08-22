@@ -3,6 +3,7 @@ import {
   classifyHeaderName,
   isSecurityResponseHeader,
 } from "../../core/headers";
+import type { Direction, HeaderOp } from "../../core/model";
 import {
   anchorAdmits,
   hostUnder,
@@ -25,17 +26,31 @@ export type Undecidable = "url-filter" | "regex-filter" | "initiator-domains";
 
 export type Caveat = "h1-only" | "h2-breaking" | "security-response";
 
-export type TabOutcome =
+export type Outcome =
   | { readonly kind: "runs" }
-  | { readonly kind: "runs-if-matched"; readonly undecidable: Undecidable }
+  | {
+      readonly kind: "runs-if-matched";
+      readonly scope?: InstalledScope;
+      readonly undecidable: Undecidable;
+    }
   | {
       readonly kind: "shadowed";
+      readonly scope?: InstalledScope;
       readonly by: RuleKey;
       readonly label: string;
     }
-  | { readonly kind: "pending" }
+  | { readonly kind: "pending"; readonly scope?: InstalledScope }
   | { readonly kind: "elsewhere" }
-  | { readonly kind: "absent"; readonly reason: AbsentReason };
+  | { readonly kind: "absent"; readonly reason: AbsentReason }
+  | {
+      readonly kind: "placed";
+      readonly scope: InstalledScope;
+    }
+  | {
+      readonly kind: "partial";
+      readonly scope: InstalledScope;
+      readonly reason: AbsentReason;
+    };
 
 export type InstalledScope =
   | {
@@ -45,42 +60,31 @@ export type InstalledScope =
     }
   | { readonly kind: "broad" };
 
-export type FleetOutcome =
-  | {
-      readonly kind: "placed";
-      readonly scope: InstalledScope;
-    }
-  | {
-      readonly kind: "runs-if-matched";
-      readonly scope: InstalledScope;
-      readonly undecidable: Undecidable;
-    }
-  | {
-      readonly kind: "partial";
-      readonly scope: InstalledScope;
-      readonly reason: AbsentReason;
-    }
-  | {
-      readonly kind: "shadowed";
-      readonly scope: InstalledScope;
-      readonly by: RuleKey;
-      readonly label: string;
-    }
-  | { readonly kind: "pending"; readonly scope: InstalledScope }
-  | { readonly kind: "absent"; readonly reason: AbsentReason };
-
-export interface Line<O> {
+export interface Line {
   readonly key: RuleKey;
-  readonly outcome: O;
+  readonly outcome: Outcome;
   readonly caveats: readonly Caveat[];
 }
 
-type TabCandidate = Exclude<TabOutcome, { readonly kind: "absent" }>;
+export interface HeaderChange extends Line {
+  readonly direction: Direction;
+  readonly operation: HeaderOp;
+  readonly header: string;
+  readonly display?: string;
+  readonly secret: boolean;
+  readonly enabled: boolean;
+  readonly paused: boolean;
+}
+
+type TabCandidate = Extract<
+  Outcome,
+  { readonly kind: "runs" | "runs-if-matched" | "shadowed" | "elsewhere" }
+>;
 
 export function projectTab(
   projection: Projection,
   tab: TabContext,
-): ReadonlyMap<RuleKey, Line<TabOutcome>> {
+): ReadonlyMap<RuleKey, Line> {
   const entries = new Map(
     projection.batch.entries.map((entry) => [entry.key, entry]),
   );
@@ -114,7 +118,7 @@ function resolvePlaced(
   entry: Entry,
   candidate: TabCandidate | undefined,
   tab: TabContext,
-): TabOutcome {
+): Outcome {
   if (
     entry.grantGap !== undefined &&
     (candidate === undefined || candidate.kind === "elsewhere") &&
