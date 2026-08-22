@@ -2,6 +2,8 @@ import { normalizeHeaderName } from "./headers";
 import {
   BADGE_COLORS,
   createDefaultProfile,
+  DIRECTIONS,
+  HEADER_OPERATIONS,
   isNormalizedBadgeText,
   type Profile,
   type Rule,
@@ -10,8 +12,6 @@ import {
 } from "./model";
 import { err, ok, type Result } from "./result";
 import {
-  DIRECTIONS,
-  HEADER_OPERATIONS,
   hasValidHeaderValue,
   isGeneratedValue,
   isOneOf,

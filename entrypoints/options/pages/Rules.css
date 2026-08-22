@@ -84,6 +84,9 @@
 .fleet-row.amber .spine {
   background: var(--amber);
 }
+.fleet-row.doubt .spine {
+  background: var(--ink3);
+}
 .fleet-row.stop .spine {
   background: var(--stop);
 }
@@ -106,6 +109,9 @@
 }
 .fleet-row.amber .op {
   color: var(--amber);
+}
+.fleet-row.doubt .op {
+  color: var(--ink3);
 }
 .fleet-row.stop .op {
   color: var(--stop);
@@ -167,6 +173,12 @@
 }
 .fleet-open .why.amber .dot {
   background: var(--amber);
+}
+.fleet-open .why.doubt {
+  color: var(--ink3);
+}
+.fleet-open .why.doubt .dot {
+  background: var(--ink3);
 }
 .fleet-open .why.rest {
   color: var(--ink3);

@@ -655,7 +655,6 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       {
         error: {
           kind: "name-not-modifiable",
-          copyId: "header-not-modifiable",
         },
       },
     );
@@ -672,7 +671,6 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
       {
         error: {
           kind: "request-append-not-allowed",
-          copyId: "request-append-not-allowed",
           header: "x-custom-token",
         },
       },

@@ -1,11 +1,14 @@
 import { headerSensitivity, normalizeHeaderName } from "../headers";
 import {
   availableProfileName,
+  BADGE_COLORS,
   type BadgeColor,
   createProfile,
   createRule,
+  DIRECTIONS,
   type Direction,
   deriveBadgeText,
+  HEADER_OPERATIONS,
   type HeaderOp,
   isStoredProfileNameValid,
   normalizeBadgeText,
@@ -18,9 +21,6 @@ import {
 } from "../model";
 import { err, ok, type Result } from "../result";
 import {
-  BADGE_COLORS,
-  DIRECTIONS,
-  HEADER_OPERATIONS,
   hasValidHeaderValue,
   isGeneratedValue,
   isOneOf,

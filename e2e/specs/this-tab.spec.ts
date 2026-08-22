@@ -100,7 +100,7 @@ test("the shipped build keeps an ungranted This-tab row out of the session band"
   });
 
   // The band is empty because the grant filter dropped the row, and not because
-  // there was nothing to compile: compileSession returns an empty band outright
+  // there was nothing to emit: a paused document yields an empty band outright
   // while the profile is paused, and the background prunes a tab's rows on a
   // navigation or a close. Both leave a trace, and neither is what happened.
   const stored = await serviceWorker.evaluate(async (id) => {

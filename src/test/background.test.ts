@@ -2,12 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
-import {
-  compileDynamic,
-  compileSession,
-  type DnrRule,
-  revisionOf,
-} from "../core/compile";
+import { type DnrRule, emitRules, revisionOf } from "../core/compile";
 import type { GrantSnapshot } from "../core/grants";
 import { MAX_DYNAMIC_RULES } from "../core/limits";
 import {
@@ -46,6 +41,25 @@ let dnr: ReturnType<typeof installDnr>;
 // which revoke first.
 const RULE_ORIGIN = "*://*.example.com/*";
 const RULE_GRANT: GrantSnapshot = { origins: [RULE_ORIGIN], allSites: false };
+const supportAll = () => true;
+
+function emitDynamic(doc: StateDoc): DnrRule[] {
+  return emitRules({
+    doc,
+    overrides: [],
+    granted: RULE_GRANT,
+    isRegexSupported: supportAll,
+  }).dynamic;
+}
+
+function emitSession(overrides: readonly TabOverride[]): DnrRule[] {
+  return emitRules({
+    doc: createV1Seed(),
+    overrides,
+    granted: RULE_GRANT,
+    isRegexSupported: supportAll,
+  }).session;
+}
 
 beforeEach(async () => {
   dnr = installDnr();
@@ -166,7 +180,7 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledExactlyOnceWith({
       removeRuleIds: [],
-      addRules: compileDynamic(doc),
+      addRules: emitDynamic(doc),
     });
     expect(dnr.updateSessionRules).not.toHaveBeenCalled();
   });
@@ -245,7 +259,7 @@ describe("background lifecycle", () => {
     start();
     await settle();
 
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     await expectPublishedRevision();
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
   });
@@ -276,13 +290,13 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
   });
 
   it("makes no DNR writes when already converged", async () => {
     const doc = withRule(createV1Seed(), "x-one");
     await writeState(doc);
-    dnr.fake.dynamicRules = compileDynamic(doc);
+    dnr.fake.dynamicRules = emitDynamic(doc);
     dnr.updateDynamicRules.mockClear();
     dnr.updateSessionRules.mockClear();
 
@@ -332,7 +346,7 @@ describe("background lifecycle", () => {
       expect(dnr.getDynamicRules).toHaveBeenCalledTimes(3);
     });
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     await expectPublishedRevision();
   });
 
@@ -362,7 +376,7 @@ describe("background lifecycle", () => {
     start();
 
     await vi.waitFor(async () => {
-      expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+      expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     });
     expect(dnr.updateDynamicRules).toHaveBeenCalledOnce();
     await expectPublishedRevision();
@@ -371,7 +385,7 @@ describe("background lifecycle", () => {
   it("keeps a converged revision through a transient read failure", async () => {
     const doc = withRule(createV1Seed(), "x-one");
     await writeState(doc);
-    dnr.fake.dynamicRules = compileDynamic(doc);
+    dnr.fake.dynamicRules = emitDynamic(doc);
     dnr.getDynamicRules.mockRejectedValueOnce(new Error("transient readback"));
     start();
     await vi.waitFor(() => {
@@ -489,9 +503,9 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledExactlyOnceWith({
       removeRuleIds: [99],
-      addRules: compileDynamic(doc),
+      addRules: emitDynamic(doc),
     });
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
   });
 
   // Invoking the action hands the extension activeTab, which is host access for
@@ -510,7 +524,7 @@ describe("background lifecycle", () => {
     await fakeBrowser.permissions.request({ origins: [RULE_ORIGIN] });
     await settle();
 
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
 
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     await settle();
@@ -533,9 +547,7 @@ describe("background lifecycle", () => {
     await fakeBrowser.permissions.request({ origins: [RULE_ORIGIN] });
     await settle();
 
-    expect(await dnr.fake.getSessionRules()).toEqual(
-      compileSession([row], false, RULE_GRANT),
-    );
+    expect(await dnr.fake.getSessionRules()).toEqual(emitSession([row]));
 
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
     await settle();
@@ -549,7 +561,7 @@ describe("background lifecycle", () => {
     // stale installed rule without waiting for another browser event.
     const row = override(5, "app.example.com");
     await seedRows(row);
-    dnr.fake.sessionRules = compileSession([row], false, RULE_GRANT);
+    dnr.fake.sessionRules = emitSession([row]);
     await fakeBrowser.permissions.remove({ origins: [RULE_ORIGIN] });
 
     start();
@@ -610,9 +622,9 @@ describe("background lifecycle", () => {
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(2);
     expect(dnr.updateDynamicRules.mock.calls[1]?.[0]?.removeRuleIds).toEqual(
-      compileDynamic(docA).map((rule) => rule.id),
+      emitDynamic(docA).map((rule) => rule.id),
     );
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(docB));
     expect(setBadgeText).not.toHaveBeenCalledWith({ text: "DE" });
     expect(setBadgeText).toHaveBeenCalledWith({ text: "NW" });
   });
@@ -630,7 +642,7 @@ describe("background lifecycle", () => {
     await writeState(docA);
     await settle();
 
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(docB));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(docB));
     await expectPublishedRevision();
   });
 
@@ -645,7 +657,7 @@ describe("background lifecycle", () => {
     await settle();
 
     expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(2);
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     await expectPublishedRevision();
     expect(removeSession).not.toHaveBeenCalledWith("appliedRules");
   });
@@ -673,7 +685,7 @@ describe("background lifecycle", () => {
     });
     await settle();
 
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     await expectPublishedRevision();
   });
 
@@ -686,7 +698,7 @@ describe("background lifecycle", () => {
     start();
     await settle();
 
-    const dynamic = compileDynamic(doc);
+    const dynamic = emitDynamic(doc);
     expect(await dnr.fake.getDynamicRules()).toEqual(dynamic);
     expect(await dnr.fake.getSessionRules()).toEqual([]);
     expect(dnr.updateSessionRules).toHaveBeenCalledTimes(3);
@@ -704,11 +716,7 @@ describe("background lifecycle", () => {
     start();
     await settle();
 
-    const session = compileSession(
-      (await readSessionState()).tabs[5] ?? [],
-      false,
-      RULE_GRANT,
-    );
+    const session = emitSession((await readSessionState()).tabs[5] ?? []);
     expect(dnr.updateDynamicRules).toHaveBeenCalledTimes(3);
     expect(dnr.updateSessionRules).toHaveBeenCalledOnce();
     expect(await dnr.fake.getDynamicRules()).toEqual([]);
@@ -791,7 +799,7 @@ describe("background lifecycle", () => {
     start();
     await settle();
 
-    const expected = compileDynamic(overflow);
+    const expected = emitDynamic(overflow);
     expect(await dnr.fake.getDynamicRules()).toEqual(expected);
     expect(dnr.updateDynamicRules).toHaveBeenCalledExactlyOnceWith({
       removeRuleIds: [installed.id],
@@ -912,7 +920,7 @@ describe("background lifecycle", () => {
     const doc = withRule(createV1Seed(), "x-live");
     await writeState(doc);
     await settle();
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(doc));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(doc));
     const corrupt = { v: 1, profiles: "gone" };
 
     await fakeBrowser.storage.local.set({ state: corrupt });
@@ -939,7 +947,7 @@ describe("background lifecycle", () => {
 
     expect(await storedValue("state")).toEqual(stored);
     expect(await quarantinedValue()).toBeUndefined();
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(stored));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(stored));
   });
 
   it("repairs a dangling active profile id to the first profile without quarantining", async () => {
@@ -953,7 +961,7 @@ describe("background lifecycle", () => {
 
     expect(await storedValue("state")).toEqual(repaired);
     expect(await quarantinedValue()).toBeUndefined();
-    expect(await dnr.fake.getDynamicRules()).toEqual(compileDynamic(repaired));
+    expect(await dnr.fake.getDynamicRules()).toEqual(emitDynamic(repaired));
   });
 
   it("refuses to write when the store is newer than this build", async () => {
@@ -1007,10 +1015,7 @@ describe("background lifecycle", () => {
     await writeState(doc);
     await seedRows(row);
     await settle();
-    await expectRuleSets(
-      compileDynamic(doc),
-      compileSession([row], false, RULE_GRANT),
-    );
+    await expectRuleSets(emitDynamic(doc), emitSession([row]));
 
     await triggerCommand("toggle-pause");
     await settle();
@@ -1018,10 +1023,7 @@ describe("background lifecycle", () => {
 
     await triggerCommand("toggle-pause");
     await settle();
-    await expectRuleSets(
-      compileDynamic(doc),
-      compileSession([row], false, RULE_GRANT),
-    );
+    await expectRuleSets(emitDynamic(doc), emitSession([row]));
   });
 
   it("drops a tab's session rows when the tab closes", async () => {
@@ -1040,9 +1042,7 @@ describe("background lifecycle", () => {
     await settle();
 
     expect((await readSessionState()).tabs).toEqual({ 7: [kept] });
-    expect(await dnr.fake.getSessionRules()).toEqual(
-      compileSession([kept], false, RULE_GRANT),
-    );
+    expect(await dnr.fake.getSessionRules()).toEqual(emitSession([kept]));
   });
 
   it("ends overrides on an origin change but keeps them for same-origin updates", async () => {

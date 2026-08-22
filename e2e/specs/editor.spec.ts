@@ -19,6 +19,31 @@ async function ruleCount(worker: Worker): Promise<number> {
   );
 }
 
+test("the options editor loads only after New rule", async ({
+  context,
+  extensionId,
+}) => {
+  const page = await context.newPage();
+  const editorRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/\/RuleEditor-.*\.js$/u.test(new URL(request.url()).pathname)) {
+      editorRequests.push(request.url());
+    }
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
+  await expect(
+    page.getByRole("button", { name: copy.options.allRules.newRule }),
+  ).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  expect(editorRequests).toEqual([]);
+
+  await page
+    .getByRole("button", { name: copy.options.allRules.newRule })
+    .click();
+  await expect.poll(() => editorRequests).not.toEqual([]);
+});
+
 test("editor controls never save or leave the sheet by themselves", async ({
   context,
   extensionId,

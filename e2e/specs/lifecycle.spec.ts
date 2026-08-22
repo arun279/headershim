@@ -1,4 +1,5 @@
-import { compileDynamic, type DnrRule } from "../../src/core/compile";
+import { type DnrRule, emitRules } from "../../src/core/compile";
+import type { GrantSnapshot } from "../../src/core/grants";
 import { createRule, type StateDoc } from "../../src/core/model";
 import { planReconcile } from "../../src/core/reconcile";
 import { createV1Seed } from "../../src/core/schema";
@@ -12,6 +13,16 @@ import {
 
 const HEADER = "x-headershim-e2e";
 const VALUE = "verified";
+const ALL_SITES: GrantSnapshot = { origins: [], allSites: true };
+
+function emitDynamic(doc: StateDoc): DnrRule[] {
+  return emitRules({
+    doc,
+    overrides: [],
+    granted: ALL_SITES,
+    isRegexSupported: () => true,
+  }).dynamic;
+}
 
 function ruleDoc(domain: string): StateDoc {
   const seed = createV1Seed();
@@ -40,7 +51,7 @@ test("seeded rule reconciles into DNR and reads back normalized-equal", {
   tag: "@host-access",
 }, async ({ serviceWorker }) => {
   const doc = ruleDoc("localhost");
-  const desired = compileDynamic(doc);
+  const desired = emitDynamic(doc);
 
   await seedState(serviceWorker, doc);
   await expect
@@ -79,7 +90,7 @@ test("reconcile repairs direct dynamic-rule corruption and converges", {
   tag: "@host-access",
 }, async ({ serviceWorker }) => {
   const doc = ruleDoc("localhost");
-  const desired = compileDynamic(doc);
+  const desired = emitDynamic(doc);
   await seedState(serviceWorker, doc);
   await expect
     .poll(
@@ -153,7 +164,7 @@ test("granted rule modifies the header on the wire", {
 }, async ({ context, serviceWorker, echoServers }) => {
   const doc = ruleDoc("localhost");
   await seedState(serviceWorker, doc);
-  const desired = compileDynamic(doc);
+  const desired = emitDynamic(doc);
   await expect
     .poll(() => getDynamicRules(serviceWorker).then((rules) => rules.length))
     .toBe(desired.length);

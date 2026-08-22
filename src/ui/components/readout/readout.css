@@ -288,6 +288,9 @@
 .change-line.amber .spine {
   background: var(--amber);
 }
+.change-line.doubt .spine {
+  background: var(--ink3);
+}
 .change-line.stop .spine {
   background: var(--stop);
 }
@@ -308,6 +311,9 @@
 .op svg {
   width: 16px;
   height: 16px;
+}
+.change-line.doubt .op {
+  color: var(--ink3);
 }
 .change-line.amber .op {
   color: var(--amber);
@@ -418,6 +424,12 @@
 }
 .why.amber .dot {
   background: var(--amber);
+}
+.why.doubt {
+  color: var(--ink3);
+}
+.why.doubt .dot {
+  background: var(--ink3);
 }
 .why.rest {
   color: var(--ink3);
@@ -543,7 +555,6 @@
   color: var(--ink);
   font-weight: 700;
 }
-.tk-swaptarget,
 .tk-held {
   margin-top: 6px;
   font-size: 12px;

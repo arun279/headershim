@@ -403,7 +403,6 @@ describe("popup readout", () => {
     expect(
       root.querySelector(".swapfield .btn.primary")?.textContent,
     ).toContain(copy.token.replace);
-    expect(root.querySelector(".tk-swaptarget")).toBeNull();
     expect(root.querySelector(".tk-val")).toBeNull();
 
     typeInto(field, SWAP_TO);

@@ -25,23 +25,6 @@ export const REQUEST_APPEND_HEADERS = [
   "x-forwarded-for",
 ] as const;
 
-export type HeaderErrorClass =
-  | "name-required"
-  | "name-invalid"
-  | "name-not-modifiable"
-  | "value-required"
-  | "value-invalid"
-  | "request-append-not-allowed";
-
-export const HEADER_ERROR_COPY_IDS = {
-  "name-required": "header-name-required",
-  "name-invalid": "header-name-invalid",
-  "name-not-modifiable": "header-not-modifiable",
-  "value-required": "header-value-required",
-  "value-invalid": "header-value-invalid",
-  "request-append-not-allowed": "request-append-not-allowed",
-} as const satisfies Record<HeaderErrorClass, string>;
-
 export type HeaderAdvisoryClass =
   | "h1-only"
   | "h2-breaking"
@@ -49,62 +32,23 @@ export type HeaderAdvisoryClass =
   | "credential"
   | "security-response";
 
-export const HEADER_ADVISORY_COPY_IDS = {
-  "h1-only": "header-h1-only",
-  "h2-breaking": "header-h2-breaking",
-  "host-http2": "header-host-http2",
-  credential: "header-credential",
-  "security-response": "header-security-response",
-} as const satisfies Record<HeaderAdvisoryClass, string>;
-
 export type HeaderValidationError =
-  | {
-      readonly kind: "name-required";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["name-required"];
-    }
-  | {
-      readonly kind: "name-invalid";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["name-invalid"];
-    }
-  | {
-      readonly kind: "name-not-modifiable";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["name-not-modifiable"];
-    }
-  | {
-      readonly kind: "value-required";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["value-required"];
-    }
-  | {
-      readonly kind: "value-invalid";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["value-invalid"];
-    }
+  | { readonly kind: "name-required" }
+  | { readonly kind: "name-invalid" }
+  | { readonly kind: "name-not-modifiable" }
+  | { readonly kind: "value-required" }
+  | { readonly kind: "value-invalid" }
   | {
       readonly kind: "request-append-not-allowed";
-      readonly copyId: (typeof HEADER_ERROR_COPY_IDS)["request-append-not-allowed"];
       readonly header: string;
     };
 
 type HeaderAdvisory =
-  | {
-      readonly kind: "h1-only";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["h1-only"];
-    }
-  | {
-      readonly kind: "h2-breaking";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["h2-breaking"];
-    }
-  | {
-      readonly kind: "host-http2";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["host-http2"];
-    }
-  | {
-      readonly kind: "credential";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["credential"];
-    }
-  | {
-      readonly kind: "security-response";
-      readonly copyId: (typeof HEADER_ADVISORY_COPY_IDS)["security-response"];
-    };
+  | { readonly kind: "h1-only" }
+  | { readonly kind: "h2-breaking" }
+  | { readonly kind: "host-http2" }
+  | { readonly kind: "credential" }
+  | { readonly kind: "security-response" };
 
 type SensitivityAdvisory = Extract<
   HeaderAdvisory,
@@ -227,26 +171,11 @@ export function classifyHeaderName(
       direction !== "request"
         ? []
         : H1_ONLY_HEADERS.has(normalized)
-          ? [
-              {
-                kind: "h1-only",
-                copyId: HEADER_ADVISORY_COPY_IDS["h1-only"],
-              },
-            ]
+          ? [{ kind: "h1-only" }]
           : H2_BREAKING_HEADERS.has(normalized)
-            ? [
-                {
-                  kind: "h2-breaking",
-                  copyId: HEADER_ADVISORY_COPY_IDS["h2-breaking"],
-                },
-              ]
+            ? [{ kind: "h2-breaking" }]
             : normalized === "host"
-              ? [
-                  {
-                    kind: "host-http2",
-                    copyId: HEADER_ADVISORY_COPY_IDS["host-http2"],
-                  },
-                ]
+              ? [{ kind: "host-http2" }]
               : [],
   };
 }
@@ -263,16 +192,10 @@ export function headerSensitivity(
   const advisories: SensitivityAdvisory[] = [];
 
   if (input.operation !== "remove" && isSecretHeader(header)) {
-    advisories.push({
-      kind: "credential",
-      copyId: HEADER_ADVISORY_COPY_IDS.credential,
-    });
+    advisories.push({ kind: "credential" });
   }
   if (input.direction === "response" && isSecurityResponseHeader(header)) {
-    advisories.push({
-      kind: "security-response",
-      copyId: HEADER_ADVISORY_COPY_IDS["security-response"],
-    });
+    advisories.push({ kind: "security-response" });
   }
 
   return advisories;
@@ -288,22 +211,13 @@ export function validateHeaderName(
   header: string,
 ): HeaderValidationError | undefined {
   if (header.length === 0) {
-    return {
-      kind: "name-required",
-      copyId: HEADER_ERROR_COPY_IDS["name-required"],
-    };
+    return { kind: "name-required" };
   }
   if (header.startsWith(":")) {
-    return {
-      kind: "name-not-modifiable",
-      copyId: HEADER_ERROR_COPY_IDS["name-not-modifiable"],
-    };
+    return { kind: "name-not-modifiable" };
   }
   if (!HTTP_TOKEN.test(header)) {
-    return {
-      kind: "name-invalid",
-      copyId: HEADER_ERROR_COPY_IDS["name-invalid"],
-    };
+    return { kind: "name-invalid" };
   }
   return undefined;
 }
@@ -321,20 +235,14 @@ export function validateHeader(
     return err(nameError);
   }
   if (input.operation !== "remove" && input.value === undefined) {
-    return err({
-      kind: "value-required",
-      copyId: HEADER_ERROR_COPY_IDS["value-required"],
-    });
+    return err({ kind: "value-required" });
   }
   if (
     input.operation !== "remove" &&
     input.value !== undefined &&
     !isValidHeaderValue(input.value)
   ) {
-    return err({
-      kind: "value-invalid",
-      copyId: HEADER_ERROR_COPY_IDS["value-invalid"],
-    });
+    return err({ kind: "value-invalid" });
   }
 
   const classification = classifyHeaderName(header, input.direction);
@@ -343,11 +251,7 @@ export function validateHeader(
     input.operation === "append" &&
     classification.requestAppend === "disallowed"
   ) {
-    return err({
-      kind: "request-append-not-allowed",
-      copyId: HEADER_ERROR_COPY_IDS["request-append-not-allowed"],
-      header,
-    });
+    return err({ kind: "request-append-not-allowed", header });
   }
 
   return ok({

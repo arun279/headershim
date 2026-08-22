@@ -1,18 +1,59 @@
+import type { Page } from "@playwright/test";
+import type { Tone } from "../../src/ui/dispositionCopy";
 import {
   expect,
+  openPopup,
   seedState,
   seedStateAndWait,
   stateWithRules,
   test,
 } from "../fixtures";
 
+const TONE_KEYS = {
+  live: true,
+  doubt: true,
+  amber: true,
+  stop: true,
+  rest: true,
+} as const satisfies Record<Tone, true>;
+
+const TONES = Object.keys(TONE_KEYS) as Tone[];
+
+async function toneColors(
+  page: Page,
+  rowClass: "change-line" | "fleet-row",
+  elementClass: "spine" | "op",
+): Promise<string[]> {
+  return page.evaluate(
+    ({ rowClass, elementClass, tones }) => {
+      const fixture = document.createElement("div");
+      fixture.innerHTML = tones
+        .map(
+          (tone) =>
+            `<div class="${rowClass} ${tone}"><span class="${elementClass}"></span></div>`,
+        )
+        .join("");
+      document.body.append(fixture);
+      const colors = [
+        ...fixture.querySelectorAll<HTMLElement>(`.${elementClass}`),
+      ].map((element) =>
+        elementClass === "spine"
+          ? getComputedStyle(element).backgroundColor
+          : getComputedStyle(element).color,
+      );
+      fixture.remove();
+      return colors;
+    },
+    { rowClass, elementClass, tones: TONES },
+  );
+}
+
 // Three correctness questions the unit runner cannot see, because each turns on
 // the real CSS cascade: a base card recipe beating its row modifier by bundle
-// emit order, a running rule's spine borrowing the at-rest grey, and a popup
-// change row painting a whole-row hover highlight it has no click to justify.
-// Only a real browser resolves them, so this drives the real surfaces and reads
-// the resolved layout, colour, and hover. Each fails only if its specific defect
-// returns.
+// emit order, a tone the stylesheets never name falling through to the running
+// hue, and a popup change row painting a whole-row hover highlight it has no
+// click to justify. Only a real browser resolves them, so this reads resolved
+// layout, colour, and hover. Each fails only if its specific defect returns.
 
 test("@host-access the all-sites card lays out as a row, not a centred column", async ({
   context,
@@ -27,7 +68,7 @@ test("@host-access the all-sites card lays out as a row, not a centred column", 
   );
 });
 
-test("@host-access a per-request rule wears the running spine, not the at-rest grey", async ({
+test("@host-access every rule tone paints its own spine on both row surfaces", async ({
   context,
   extensionId,
   serviceWorker,
@@ -66,15 +107,21 @@ test("@host-access a per-request rule wears the running spine, not the at-rest g
   await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
   await expect(page.locator(".fleet-row.doubt")).toBeVisible();
 
-  const spineOf = (state: string) =>
-    page
-      .locator(`.fleet-row.${state} .spine`)
-      .first()
-      .evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(new Set(await toneColors(page, "fleet-row", "spine")).size).toBe(
+    TONES.length,
+  );
+  expect(new Set(await toneColors(page, "fleet-row", "op")).size).toBe(
+    TONES.length,
+  );
 
-  // A rule Chrome settles per request is running, not at rest: its spine wears
-  // the live hue, never the grey the file used to share with the at-rest rows.
-  expect(await spineOf("doubt")).toBe(await spineOf("live"));
+  const popup = await context.newPage();
+  await openPopup(popup, extensionId, serviceWorker, stateWithRules([]));
+  expect(new Set(await toneColors(popup, "change-line", "spine")).size).toBe(
+    TONES.length,
+  );
+  expect(new Set(await toneColors(popup, "change-line", "op")).size).toBe(
+    TONES.length,
+  );
 });
 
 // A popup change row carries only the controls it truly has: a value-edit

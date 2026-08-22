@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyHeaderName,
-  HEADER_ADVISORY_COPY_IDS,
-  HEADER_ERROR_COPY_IDS,
   headerSensitivity,
   isSecretHeader,
   isValidHeaderValue,
@@ -54,7 +52,6 @@ describe("header name validation", () => {
       ok: false,
       error: {
         kind: "name-required",
-        copyId: "header-name-required",
       },
     });
 
@@ -69,7 +66,6 @@ describe("header name validation", () => {
         ok: false,
         error: {
           kind: "name-invalid",
-          copyId: "header-name-invalid",
         },
       });
     }
@@ -80,7 +76,6 @@ describe("header name validation", () => {
       ok: false,
       error: {
         kind: "name-not-modifiable",
-        copyId: "header-not-modifiable",
       },
     });
   });
@@ -107,7 +102,6 @@ describe("header value validation", () => {
         ok: false,
         error: {
           kind: "value-required",
-          copyId: "header-value-required",
         },
       });
       expect(
@@ -131,7 +125,6 @@ describe("header value validation", () => {
         ok: false,
         error: {
           kind: "value-invalid",
-          copyId: "header-value-invalid",
         },
       });
     }
@@ -209,7 +202,6 @@ describe("request append classification", () => {
       ok: false,
       error: {
         kind: "request-append-not-allowed",
-        copyId: "request-append-not-allowed",
         header: "x-custom-token",
       },
     });
@@ -240,7 +232,7 @@ describe("header advisories", () => {
   it("classifies the names HTTP/2 drops as h1-only", () => {
     for (const header of ["connection", "transfer-encoding"]) {
       expect(classifyHeaderName(header, "request").advisories).toEqual([
-        { kind: "h1-only", copyId: "header-h1-only" },
+        { kind: "h1-only" },
       ]);
     }
   });
@@ -248,7 +240,7 @@ describe("header advisories", () => {
   it("classifies the names that fail requests on HTTP/2 as h2-breaking", () => {
     for (const header of ["content-length", "keep-alive", "te", "upgrade"]) {
       expect(classifyHeaderName(header, "request").advisories).toEqual([
-        { kind: "h2-breaking", copyId: "header-h2-breaking" },
+        { kind: "h2-breaking" },
       ]);
     }
   });
@@ -273,18 +265,18 @@ describe("header advisories", () => {
 
   it("classifies host with its dedicated advisory", () => {
     expect(classifyHeaderName(" HOST ", "request").advisories).toEqual([
-      { kind: "host-http2", copyId: "header-host-http2" },
+      { kind: "host-http2" },
     ]);
   });
 
   it("classifies permitted hop-by-hop appends independently of their advisory family", () => {
     const families = {
-      connection: [{ kind: "h1-only", copyId: "header-h1-only" }],
-      "keep-alive": [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
-      te: [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
+      connection: [{ kind: "h1-only" }],
+      "keep-alive": [{ kind: "h2-breaking" }],
+      te: [{ kind: "h2-breaking" }],
       trailer: [],
-      "transfer-encoding": [{ kind: "h1-only", copyId: "header-h1-only" }],
-      upgrade: [{ kind: "h2-breaking", copyId: "header-h2-breaking" }],
+      "transfer-encoding": [{ kind: "h1-only" }],
+      upgrade: [{ kind: "h2-breaking" }],
     };
     for (const [header, advisories] of Object.entries(families)) {
       expect(classifyHeaderName(header, "request")).toEqual({
@@ -311,29 +303,11 @@ describe("header advisories", () => {
       expect(isSecretHeader(header)).toBe(false);
     }
   });
-
-  it("maps each error and advisory class to one distinct copy id", () => {
-    const errorClasses = Object.keys(HEADER_ERROR_COPY_IDS);
-    const errorCopyIds = Object.values(HEADER_ERROR_COPY_IDS);
-    const advisoryClasses = Object.keys(HEADER_ADVISORY_COPY_IDS);
-    const advisoryCopyIds = Object.values(HEADER_ADVISORY_COPY_IDS);
-
-    expect(new Set(errorClasses).size).toBe(errorClasses.length);
-    expect(new Set(errorCopyIds).size).toBe(errorCopyIds.length);
-    expect(new Set(advisoryClasses).size).toBe(advisoryClasses.length);
-    expect(new Set(advisoryCopyIds).size).toBe(advisoryCopyIds.length);
-    expect(new Set([...errorCopyIds, ...advisoryCopyIds]).size).toBe(
-      errorCopyIds.length + advisoryCopyIds.length,
-    );
-  });
 });
 
 describe("header sensitivity", () => {
-  const credential = { kind: "credential", copyId: "header-credential" };
-  const securityResponse = {
-    kind: "security-response",
-    copyId: "header-security-response",
-  };
+  const credential = { kind: "credential" };
+  const securityResponse = { kind: "security-response" };
 
   it("cautions on any credential the rule writes, whichever direction carries it", () => {
     expect(headerSensitivity(input({ header: "authorization" }))).toEqual([

@@ -9,8 +9,6 @@ import {
 } from "./model";
 import { webOriginFromUrl } from "./scope";
 
-export { BADGE_COLORS, DIRECTIONS, HEADER_OPERATIONS } from "./model";
-
 export function hasValidHeaderValue(rule: Record<string, unknown>): boolean {
   const { operation, value } = rule;
   return operation === "remove"

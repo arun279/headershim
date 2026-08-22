@@ -110,67 +110,6 @@ export interface CompileInput {
   readonly isRegexSupported: (regex: string) => boolean;
 }
 
-/**
- * The compiler's view of the stored doc: only the rules that will actually be
- * applied. Two things keep a rule out, and both have to be settled here.
- *
- * A rule Chrome rejects takes the whole atomic batch down with it, and an
- * untrusted writer can seed one: an import preserves each rule's enabled flag
- * and scope verbatim, and the profile command activates a stored profile
- * without passing the commit guard. Dropping it first means one bad rule cannot
- * freeze the live ruleset.
- *
- * A rule whose origins are not granted has to be absent too, because host
- * access is not fixed: invoking the action, by click or by the extension's
- * keyboard command, hands over activeTab, which is a real host grant for that
- * tab, and declarativeNetRequestWithHostAccess applies any installed rule that
- * matches it. Leaving an ungranted rule installed puts it one gesture away from
- * sending the header the user refused. Keeping it out is what makes "needs
- * access" a state the product enforces rather than a label it prints.
- *
- * Every host-named scope runs on each requestDomains entry independently, so
- * an incomplete set of grants narrows it to the fully covered hosts rather than
- * dropping it whole. A toolbar-narrowed domains grant is compiled as an exact
- * URL prefix, keeping Chrome's granted scheme/host/port subset live while
- * preventing activeTab from widening the condition.
- *
- * The stored doc is untouched; only the compiler's view of it is filtered.
- * Regex validity needs the browser's RE2 (async), so the caller resolves it
- * into `isRegexSupported`.
- */
-export function dropInapplicable(
-  state: StateDoc,
-  isRegexSupported: (regex: string) => boolean,
-  granted: GrantSnapshot,
-): StateDoc {
-  const bySource = new Map<number, Rule[]>();
-  for (const { sourceIndex, rule } of collectApplicableRules(
-    state,
-    granted,
-    isRegexSupported,
-  )) {
-    const rules = bySource.get(sourceIndex);
-    if (rules === undefined) {
-      bySource.set(sourceIndex, [rule]);
-    } else {
-      rules.push(rule);
-    }
-  }
-  return {
-    ...state,
-    profiles: state.profiles.map((profile) =>
-      profile.id === state.activeProfileId
-        ? {
-            ...profile,
-            rules: profile.rules.flatMap((rule, index) =>
-              rule.enabled ? (bySource.get(index) ?? []) : [rule],
-            ),
-          }
-        : profile,
-    ),
-  };
-}
-
 interface NarrowedRule {
   readonly rule: Rule;
   /** The target is constrained to a narrowed grant by the condition. */
@@ -513,37 +452,6 @@ function compileInput(input: CompileInput): CompiledInput {
   };
 }
 
-export function compileDynamic(state: StateDoc): DnrRule[] {
-  return state.settings.paused
-    ? []
-    : emitDynamicRules(
-        eligibleDynamicRules(
-          state.profiles
-            .find((profile) => profile.id === state.activeProfileId)
-            ?.rules.filter((rule) => rule.enabled) ?? [],
-        ),
-      );
-}
-
-/**
- * An ungranted this-tab row must stay out of the installed batch. Invoking the
- * action provides activeTab, which would otherwise make that row take effect.
- */
-export function compileSession(
-  overrides: readonly TabOverride[],
-  paused: boolean,
-  granted: GrantSnapshot,
-): DnrRule[] {
-  return paused
-    ? []
-    : emitSessionRules(
-        collectSessionOverrides(overrides, granted).slice(
-          0,
-          MAX_SESSION_OVERRIDES,
-        ),
-      );
-}
-
 interface DynamicBand {
   readonly candidates: DynamicCandidate[];
   readonly rules: DnrRule[];
@@ -599,6 +507,11 @@ function emitDynamicRules(rules: readonly Rule[]): DnrRule[] {
   }));
 }
 
+/**
+ * Only Chrome-valid rules enter the batch because DNR rejects it atomically.
+ * Ungranted rules stay out too: activeTab would otherwise make them effective
+ * after the user declined persistent access.
+ */
 function collectApplicableRules(
   state: StateDoc,
   granted: GrantSnapshot,

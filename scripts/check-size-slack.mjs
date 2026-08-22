@@ -39,7 +39,7 @@ for (const result of results) {
       changed = true;
       continue;
     }
-    if (target > result.sizeLimit) {
+    if (result.size > result.sizeLimit) {
       console.error(
         `${result.name} measures ${result.size} B, above its ${result.sizeLimit} B limit. size:record only lowers limits. Raise it in package.json yourself, and say in the commit message what you tried first.`,
       );

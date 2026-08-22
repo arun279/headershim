@@ -6,6 +6,7 @@ import {
 } from "../headers";
 import {
   availableProfileName,
+  BADGE_COLORS,
   type BadgeColor,
   type HeaderOp,
   normalizeBadgeText,
@@ -15,7 +16,7 @@ import {
   type Scope,
 } from "../model";
 import { err, ok, type Result } from "../result";
-import { BADGE_COLORS, isRecord } from "../validation";
+import { isRecord } from "../validation";
 import { detectImportFormat } from "./detect";
 import {
   type ImportError,

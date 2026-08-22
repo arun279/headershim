@@ -358,7 +358,6 @@ export const copy = {
       bySite: "By site",
       byHeader: "By header",
       newRule: "New rule",
-      ruleCount: (count: number) => `${count} ${rules(count)}`,
       // A site group's header: the domain and how many rules land on it.
       siteRules: (count: number) => `${count} ${rules(count)}`,
       crossSite: "Cross-site rules",
@@ -422,9 +421,7 @@ export const copy = {
     },
     profiles: {
       title: "Profiles",
-      new: "+ New",
       newProfile: "New profile",
-      listLabel: "Profiles",
       // The name a fresh profile is created under before the user renames it;
       // availableProfileName resolves collisions ("New profile 2", …).
       newName: "New profile",
