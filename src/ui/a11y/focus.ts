@@ -14,6 +14,26 @@ export function getFocusable(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
 }
 
+/** Wraps Tab at a list's boundaries and leaves interior traversal to the browser. */
+function wrapFocusAtBoundaries(event: KeyboardEvent, root: HTMLElement): void {
+  if (event.key !== "Tab") return;
+  const focusable = getFocusable(root);
+  const [first] = focusable;
+  const last = focusable.at(-1);
+  if (first === undefined || last === undefined) {
+    event.preventDefault();
+    return;
+  }
+  const active = root.ownerDocument.activeElement;
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 const REMOVAL_GROUP = ".this-tab-rows, .domain-chips, .grant-chips";
 const REMOVAL_ITEM = "li, .domain-chip, .grant-chip";
 
@@ -80,32 +100,12 @@ export function useFocusTrap(
       ).focus();
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const focusable = getFocusable(container);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0] as HTMLElement;
-      const last = focusable[focusable.length - 1] as HTMLElement;
-      const activeEl = container.ownerDocument.activeElement;
-      if (event.shiftKey && activeEl === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && activeEl === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
+    const onKeyDown = (event: KeyboardEvent) =>
+      wrapFocusAtBoundaries(event, container);
 
-    if (trapFocus) {
-      container.addEventListener("keydown", onKeyDown);
-    }
+    if (trapFocus) container.addEventListener("keydown", onKeyDown);
     return () => {
-      if (trapFocus) {
-        container.removeEventListener("keydown", onKeyDown);
-      }
+      if (trapFocus) container.removeEventListener("keydown", onKeyDown);
       previouslyFocused?.focus();
     };
   }, [active, containerRef, focusOnActivate, initialFocus, trapFocus]);

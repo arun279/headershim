@@ -183,6 +183,10 @@ function Ready({
         : { origin: tabOrigin, host: originHost(tabOrigin) },
     [tabOrigin],
   );
+  const tabContext = useMemo(
+    () => ({ tabId, host: tab?.host, origin: tab?.origin }),
+    [tab, tabId],
+  );
   const globalNeedsAccess = activeProfile.rules.some(
     (rule) => rule.enabled && missingGrants(rule, grants).length > 0,
   );
@@ -192,9 +196,9 @@ function Ready({
         applied: live,
         doc,
         overrides,
-        tab: { tabId, host: tab?.host, origin: tab?.origin },
+        tab: tabContext,
       }),
-    [doc, live, overrides, tab, tabId],
+    [doc, live, overrides, tabContext],
   );
 
   const reportBlockedCommit = (error: MutationError, fallback?: string) => {
@@ -480,7 +484,7 @@ function Ready({
         previousProfileId={doc.previousProfileId}
         switchShortcut={switchShortcut}
         projection={live}
-        tab={{ tabId, host: tab?.host, origin: tab?.origin }}
+        tab={tabContext}
         grants={grants}
         overrides={overrides}
         isRegexSupported={isRegexSupported}

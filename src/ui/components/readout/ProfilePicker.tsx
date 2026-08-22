@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Projection } from "../../../core/applied";
 import type { GrantSnapshot } from "../../../core/grants";
 import type { Profile, TabOverride } from "../../../core/model";
-import { copy, type Sentence, sentenceText } from "../../copy";
+import { copy, type Sentence } from "../../copy";
 import type { TabContext } from "../../state/project";
 import { previewSwitch, type SwitchPreview } from "../../state/readout";
 import { InlineRename } from "../InlineRename";
@@ -30,12 +30,10 @@ export interface ProfilePickerProps {
 }
 
 /**
- * The profile switch. Exclusive by default (one on, the rest off) and
- * consequence-first: the closed chip's description names what the profile
- * shortcut would change on this tab, its target row carries the accelerator so
- * the key is discoverable, and inside the menu hovering or focusing any profile
- * previews its own switch, so the answer is never locked behind the act of
- * switching.
+ * The profile switch. Exclusive by default (one on, the rest off): the
+ * shortcut's target row carries the accelerator so the key is discoverable,
+ * and inside the menu hovering or focusing any profile previews its own switch,
+ * so the answer is never locked behind the act of switching.
  */
 export function ProfilePicker({
   profiles,
@@ -99,23 +97,6 @@ export function ProfilePicker({
       ? undefined
       : profiles.find((profile) => profile.id === previewId);
 
-  // The chip describes the switch its own shortcut would make: the flip back to
-  // the profile you were last on, the one the profile shortcut activates.
-  const flipTarget = profiles.find(
-    (profile) => profile.id === previousProfileId,
-  );
-  const switchHint =
-    flipTarget === undefined
-      ? undefined
-      : switchHintText(
-          projection,
-          flipTarget,
-          tab,
-          grants,
-          isRegexSupported,
-          overrides,
-        );
-
   return (
     <div class="picker">
       <button
@@ -125,7 +106,6 @@ export function ProfilePicker({
         aria-expanded={open}
         aria-controls="profile-switch-pop"
         aria-label={copy.readout.switcher.chipLabel}
-        title={switchHint}
         onClick={() => setPickerOpen(!openRef.current)}
       >
         <ProfileBadge
@@ -274,25 +254,6 @@ function switchDiff(preview: SwitchPreview): SwitchDiff {
   };
 }
 
-/** The switch consequence as one plain line, for the closed chip's description. */
-function switchHintText(
-  projection: Projection,
-  to: Profile,
-  tab: TabContext,
-  grants: GrantSnapshot,
-  isRegexSupported: (regex: string) => boolean,
-  overrides: readonly TabOverride[],
-): string | undefined {
-  const diff = switchDiff(
-    previewSwitch(projection, to, tab, grants, isRegexSupported, overrides),
-  );
-  if (diff.empty) return undefined;
-  const parts = [copy.readout.switcher.previewLead(to.name)];
-  if (diff.drop !== undefined) parts.push(sentenceText(diff.drop));
-  if (diff.add !== undefined) parts.push(sentenceText(diff.add));
-  return parts.join(", ");
-}
-
 function SwitchPreviewPanel({
   projection,
   to,
@@ -308,8 +269,12 @@ function SwitchPreviewPanel({
   overrides: readonly TabOverride[];
   isRegexSupported: (regex: string) => boolean;
 }) {
-  const diff = switchDiff(
-    previewSwitch(projection, to, tab, grants, isRegexSupported, overrides),
+  const diff = useMemo(
+    () =>
+      switchDiff(
+        previewSwitch(projection, to, tab, grants, isRegexSupported, overrides),
+      ),
+    [projection, to, tab, grants, isRegexSupported, overrides],
   );
   if (diff.empty) {
     return null;

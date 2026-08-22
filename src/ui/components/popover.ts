@@ -1,5 +1,3 @@
-import { getFocusable } from "../a11y/focus";
-
 /**
  * Opens a Popover API surface and clamps it to the popup with fixed pixels.
  * `preferAbove` flips the default below-the-trigger placement to above
@@ -65,22 +63,4 @@ export function closePopover(popover: HTMLElement | null) {
     }
   }
   popover.removeAttribute("data-popover-open");
-}
-
-/** Keeps Tab and Shift+Tab cycling through a menu's controls. */
-export function trapPopoverFocus(event: KeyboardEvent, root: HTMLElement) {
-  if (event.key !== "Tab") {
-    return;
-  }
-  const items = getFocusable(root);
-  if (items.length === 0) {
-    event.preventDefault();
-    return;
-  }
-  const active = items.indexOf(document.activeElement as HTMLElement);
-  const next = event.shiftKey
-    ? (active - 1 + items.length) % items.length
-    : (active + 1) % items.length;
-  event.preventDefault();
-  items[next]?.focus();
 }

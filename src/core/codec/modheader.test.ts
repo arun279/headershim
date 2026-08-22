@@ -571,6 +571,16 @@ describe("ModHeader import", () => {
     });
     await expect(
       importModHeader(
+        [{ title: "Malformed", resourceFilters: [{}] }],
+        [],
+        acceptRegex,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-export" },
+    });
+    await expect(
+      importModHeader(
         [{ title: "Malformed", headers: "bad" }],
         [],
         acceptRegex,
