@@ -3,13 +3,7 @@ import { compile } from "../../core/compile";
 import type { GrantSnapshot } from "../../core/grants";
 import { normalizeHeaderName } from "../../core/headers";
 import { enabledRulesFit } from "../../core/limits";
-import type {
-  Direction,
-  HeaderOp,
-  Profile,
-  StateDoc,
-  TabOverride,
-} from "../../core/model";
+import type { Profile, StateDoc, TabOverride } from "../../core/model";
 import { scopeCondition } from "../../core/scope";
 import {
   type Batch,
@@ -24,28 +18,17 @@ import {
   ruleValueSummary,
 } from "../secret";
 import {
-  type Caveat,
+  type HeaderChange,
   type Line,
   projectTab,
   type TabContext,
-  type TabOutcome,
 } from "./project";
 
-export interface TabChange {
-  readonly key: RuleKey;
+export interface TabChange extends HeaderChange {
   readonly source: "rule" | "override";
   readonly profileId?: string;
   readonly ruleId?: string;
   readonly overrideNum?: number;
-  readonly direction: Direction;
-  readonly operation: HeaderOp;
-  readonly header: string;
-  readonly display?: string;
-  readonly secret: boolean;
-  readonly enabled: boolean;
-  readonly paused: boolean;
-  readonly outcome: TabOutcome;
-  readonly caveats: readonly Caveat[];
   readonly value?: string;
   readonly widerReach?: number | "broad";
 }
@@ -117,7 +100,7 @@ export function computeReadout({
 function savedChanges(
   entries: readonly Entry[],
   activeProfileId: string,
-  projected: ReadonlyMap<RuleKey, Line<TabOutcome>>,
+  projected: ReadonlyMap<RuleKey, Line>,
   paused: boolean,
 ): TabChange[] {
   return entries.flatMap((entry) => {
@@ -131,7 +114,7 @@ function savedChanges(
 
 function storedChange(
   entry: StoredEntry,
-  line: Line<TabOutcome>,
+  line: Line,
   paused: boolean,
 ): TabChange {
   const display = ruleDisplay(entry);
@@ -157,7 +140,7 @@ function storedChange(
 
 function overrideChanges(
   overrides: readonly TabOverride[],
-  projected: ReadonlyMap<RuleKey, Line<TabOutcome>>,
+  projected: ReadonlyMap<RuleKey, Line>,
   paused: boolean,
 ): TabChange[] {
   const occurrences = new Map<number, number>();
@@ -351,7 +334,7 @@ export function previewSwitch(
 
 function runningRules(
   batch: Batch,
-  projected: ReadonlyMap<RuleKey, Line<TabOutcome>>,
+  projected: ReadonlyMap<RuleKey, Line>,
 ): StoredEntry[] {
   return batch.entries.flatMap((entry) => {
     const outcome = projected.get(entry.key)?.outcome;

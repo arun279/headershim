@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Applied } from "../../core/applied";
+import { type Applied, confirm } from "../../core/applied";
+import { compile } from "../../core/compile";
 import type { GrantSnapshot } from "../../core/grants";
 import type { Profile, Rule, StateDoc } from "../../core/model";
 import { ruleKey } from "../../core/verdict";
@@ -118,6 +119,30 @@ describe("fleetRules", () => {
         crossSite: false,
         comment: "API credential",
       }),
+    ]);
+  });
+
+  it("holds a placed rule at pending while an absent one keeps its reason", () => {
+    const doc = document([
+      profile("staging", [rule("flag", 1), rule("off", 2, { enabled: false })]),
+    ]);
+    const pending = confirm(
+      compile({
+        doc,
+        overrides: [],
+        granted: ALL_SITES,
+        isRegexSupported: () => true,
+      }),
+      { dynamic: "dynamic", session: "session" },
+      { dynamic: "stale", session: "stale" },
+    );
+
+    expect(fleetRules(pending).map((entry) => entry.outcome)).toEqual([
+      {
+        kind: "pending",
+        scope: { kind: "sites", domains: ["api.example.com"] },
+      },
+      { kind: "absent", reason: { kind: "off" } },
     ]);
   });
 });

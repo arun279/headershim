@@ -1,16 +1,16 @@
 import type { Projection } from "../../core/applied";
 import type { Direction, HeaderOp, Scope } from "../../core/model";
 import { originPatternForDomain } from "../../core/scope";
-import type { RuleKey, StoredEntry } from "../../core/verdict";
+import type { StoredEntry } from "../../core/verdict";
 import { isSecretHeader, ruleValueSummary } from "../secret";
 import { projectFleet } from "./fleet-project";
 import {
   type Caveat,
-  type FleetOutcome,
+  type HeaderChange,
   type InstalledScope,
   type Line,
+  type Outcome,
   projectTab,
-  type TabOutcome,
 } from "./project";
 
 interface FleetProvenance {
@@ -20,21 +20,11 @@ interface FleetProvenance {
   readonly color: StoredEntry["color"];
 }
 
-export interface FleetRule {
-  readonly key: RuleKey;
+export interface FleetRule extends HeaderChange {
   readonly profileId: string;
   readonly ruleId: string;
   readonly provenance: FleetProvenance;
   readonly headerKey: string;
-  readonly direction: Direction;
-  readonly operation: HeaderOp;
-  readonly header: string;
-  readonly display?: string;
-  readonly secret: boolean;
-  readonly enabled: boolean;
-  readonly paused: boolean;
-  readonly outcome: FleetOutcome;
-  readonly caveats: readonly Caveat[];
   readonly scope: Scope;
   readonly crossSite: boolean;
   readonly comment?: string;
@@ -53,13 +43,10 @@ export function fleetRules(projection: Projection): FleetRule[] {
   });
 }
 
-function fleetRule(
-  entry: StoredEntry,
-  line: Line<FleetOutcome>,
-  paused: boolean,
-): FleetRule {
+function fleetRule(entry: StoredEntry, line: Line, paused: boolean): FleetRule {
   const display =
     entry.operation === "remove" ? undefined : ruleValueSummary(entry);
+  const installed = outcomeScope(line.outcome);
   return {
     key: line.key,
     profileId: entry.profileId,
@@ -85,13 +72,9 @@ function fleetRule(
     outcome: line.outcome,
     caveats: line.caveats,
     crossSite:
-      line.outcome.kind === "placed" ||
-      line.outcome.kind === "partial" ||
-      line.outcome.kind === "pending" ||
-      line.outcome.kind === "shadowed" ||
-      line.outcome.kind === "runs-if-matched"
-        ? line.outcome.scope.kind === "broad"
-        : entry.scope.type !== "domains",
+      installed === undefined
+        ? entry.scope.type !== "domains"
+        : installed.kind === "broad",
   };
 }
 
@@ -106,7 +89,7 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
   const crossSite: FleetRule[] = [];
   for (const rule of fleet) {
     if (rule.scope.type === "domains") {
-      const installed = installedScope(rule.outcome);
+      const installed = outcomeScope(rule.outcome);
       const installedDomains = new Set<string>();
       if (installed?.kind === "sites") {
         for (const domain of installed.domains) {
@@ -120,7 +103,7 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
         }
       }
     } else {
-      const installed = installedScope(rule.outcome);
+      const installed = outcomeScope(rule.outcome);
       if (installed?.kind === "sites") {
         for (const domain of installed.domains) push(domains, domain, rule);
       } else {
@@ -155,7 +138,7 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
       let broad = false;
       let allSites = false;
       for (const rule of rules) {
-        const installed = installedScope(rule.outcome);
+        const installed = outcomeScope(rule.outcome);
         if (installed === undefined) continue;
         if (installed.kind === "broad") {
           broad = true;
@@ -183,9 +166,7 @@ export interface TapeRow {
   readonly direction: Direction;
   readonly operation: HeaderOp;
   readonly header: string;
-  readonly outcome:
-    | FleetOutcome
-    | Extract<TabOutcome, { readonly kind: "shadowed" }>;
+  readonly outcome: Outcome;
   readonly caveats: readonly Caveat[];
   readonly paused: boolean;
 }
@@ -225,8 +206,8 @@ export function tapeRows(
   );
 }
 
-function installedScope(outcome: FleetOutcome): InstalledScope | undefined {
-  return outcome.kind === "absent" ? undefined : outcome.scope;
+function outcomeScope(outcome: Outcome): InstalledScope | undefined {
+  return "scope" in outcome ? outcome.scope : undefined;
 }
 
 function outcomeAtSite(
@@ -245,7 +226,7 @@ function outcomeAtSite(
   if (
     group.kind !== "domain" ||
     (rule.outcome.kind !== "partial" && rule.outcome.kind !== "pending") ||
-    rule.outcome.scope.kind === "broad" ||
+    rule.outcome.scope?.kind !== "sites" ||
     rule.outcome.scope.origins?.some(
       (origin) => new URL(origin).hostname === group.host,
     ) === true ||
