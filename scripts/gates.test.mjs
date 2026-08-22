@@ -33,6 +33,10 @@ const checker = path.join(
   repositoryRoot,
   "scripts/check-playwright-projects.mjs",
 );
+const releaseZipChecker = path.join(
+  repositoryRoot,
+  "scripts/check-release-zip.mjs",
+);
 const hook = path.join(repositoryRoot, ".githooks/pre-push");
 const zero = "0".repeat(40);
 
@@ -143,6 +147,35 @@ function runChecker(cwd, env = {}) {
       env: { ...isolatedEnv, ...env },
     },
   );
+}
+
+function runReleaseZipChecker(cwd, zipPath) {
+  return spawnSync(process.execPath, [releaseZipChecker, zipPath], {
+    cwd,
+    encoding: "utf8",
+    env: isolatedEnv,
+  });
+}
+
+function createReleaseZipFixture(t) {
+  const cwd = mkdtempSync(path.join(tmpdir(), "headershim-release-zip-"));
+  t.after(() => rmSync(cwd, { recursive: true }));
+  const buildDir = path.join(cwd, ".output", "chrome-mv3");
+  mkdirSync(path.join(buildDir, "chunks"), { recursive: true });
+  writeFileSync(path.join(buildDir, "manifest.json"), "{}\n");
+  writeFileSync(path.join(buildDir, "background.js"), "export {};\n");
+  writeFileSync(path.join(buildDir, "chunks", "popup.js"), "export {};\n");
+  execFileSync("zip", ["-qr", path.join(cwd, "exact.zip"), "."], {
+    cwd: buildDir,
+    env: isolatedEnv,
+  });
+  copyFileSync(path.join(cwd, "exact.zip"), path.join(cwd, "with-map.zip"));
+  writeFileSync(path.join(cwd, "extra.map"), "{}\n");
+  execFileSync("zip", ["-q", path.join(cwd, "with-map.zip"), "extra.map"], {
+    cwd,
+    env: isolatedEnv,
+  });
+  return cwd;
 }
 
 test("the project checker compares the working tree with committed HEAD", (t) => {
@@ -388,6 +421,18 @@ test("the project checker rejects HEAD as an explicit base", (t) => {
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /must name a commit before HEAD/);
+});
+
+test("the release zip checker matches the archive to the built extension", (t) => {
+  const cwd = createReleaseZipFixture(t);
+
+  const withMap = runReleaseZipChecker(cwd, path.join(cwd, "with-map.zip"));
+  const exact = runReleaseZipChecker(cwd, path.join(cwd, "exact.zip"));
+
+  assert.equal(withMap.status, 1);
+  assert.match(withMap.stderr, /extra\.map/);
+  assert.equal(exact.status, 0);
+  assert.match(exact.stdout, /Release zip check passed/);
 });
 
 function runHook(t, input, cwd = repositoryRoot) {

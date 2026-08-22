@@ -42,6 +42,7 @@
     "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
+    "zip": "wxt zip && node scripts/check-release-zip.mjs",
     "postinstall": "wxt prepare",
     "prepare": "git config core.hooksPath .githooks"
   },
