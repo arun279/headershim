@@ -1,5 +1,5 @@
 import type { ReadonlyDnrRule, ReadonlyDnrRuleCondition } from "./compile";
-import type { Direction, HeaderOp } from "./model";
+import type { BadgeColor, Direction, HeaderOp, Rule } from "./model";
 
 export type RuleKey = `rule:${string}` | `tab:${number}:${number}`;
 
@@ -58,7 +58,7 @@ export type Standing =
     }
   | { readonly kind: "absent"; readonly reason: AbsentReason };
 
-export interface Entry {
+interface EntryBase {
   readonly key: RuleKey;
   readonly profileId: string;
   readonly label: string;
@@ -70,6 +70,24 @@ export interface Entry {
   readonly standing: Standing;
   readonly grantGap: AbsentReason | undefined;
 }
+
+export interface StoredEntry
+  extends EntryBase,
+    Readonly<
+      Pick<Rule, "value" | "generated" | "scope" | "enabled" | "comment">
+    > {
+  readonly source: "rule";
+  readonly ruleId: string;
+  readonly profileName: string;
+  readonly badgeText: string;
+  readonly color: BadgeColor;
+}
+
+interface OverrideEntry extends EntryBase {
+  readonly source: "override";
+}
+
+export type Entry = StoredEntry | OverrideEntry;
 
 export interface PlacedRef {
   readonly key: RuleKey;

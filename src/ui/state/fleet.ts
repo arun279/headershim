@@ -1,109 +1,80 @@
 import type { Projection } from "../../core/applied";
-import { normalizeHeaderName } from "../../core/headers";
-import type {
-  BadgeColor,
-  Direction,
-  HeaderOp,
-  Profile,
-  Rule,
-  Scope,
-  StateDoc,
-} from "../../core/model";
+import type { Direction, HeaderOp, Scope } from "../../core/model";
 import { originPatternForDomain } from "../../core/scope";
-import { type RuleKey, ruleKey } from "../../core/verdict";
+import type { StoredEntry } from "../../core/verdict";
 import { isSecretHeader, ruleValueSummary } from "../secret";
 import { projectFleet } from "./fleet-project";
 import {
   type Caveat,
-  type FleetOutcome,
+  type HeaderChange,
   type InstalledScope,
   type Line,
+  type Outcome,
   projectTab,
-  type TabOutcome,
 } from "./project";
 
 interface FleetProvenance {
   readonly profileId: string;
   readonly name: string;
   readonly badgeText: string;
-  readonly color: BadgeColor;
+  readonly color: StoredEntry["color"];
 }
 
-export interface FleetRule {
-  readonly key: RuleKey;
+export interface FleetRule extends HeaderChange {
   readonly profileId: string;
   readonly ruleId: string;
   readonly provenance: FleetProvenance;
   readonly headerKey: string;
-  readonly direction: Direction;
-  readonly operation: HeaderOp;
-  readonly header: string;
-  readonly display?: string;
-  readonly secret: boolean;
-  readonly enabled: boolean;
-  readonly paused: boolean;
-  readonly outcome: FleetOutcome;
-  readonly caveats: readonly Caveat[];
   readonly scope: Scope;
   readonly crossSite: boolean;
   readonly comment?: string;
 }
 
-export function fleetRules(projection: Projection, doc: StateDoc): FleetRule[] {
+export function fleetRules(projection: Projection): FleetRule[] {
   const projected = projectFleet(projection);
-  return doc.profiles.flatMap((profile) =>
-    profile.rules.flatMap((rule, index) => {
-      const occurrence = profile.rules
-        .slice(0, index)
-        .filter((candidate) => candidate.id === rule.id).length;
-      const line = projected.get(ruleKey(profile.id, rule.id, occurrence));
-      return line === undefined
-        ? []
-        : [fleetRule(profile, rule, line, projection.batch.paused)];
-    }),
-  );
+  return projection.batch.entries.flatMap((entry) => {
+    if (entry.source !== "rule") {
+      return [];
+    }
+    const line = projected.get(entry.key);
+    return line === undefined
+      ? []
+      : [fleetRule(entry, line, projection.batch.paused)];
+  });
 }
 
-function fleetRule(
-  profile: Profile,
-  rule: Rule,
-  line: Line<FleetOutcome>,
-  paused: boolean,
-): FleetRule {
+function fleetRule(entry: StoredEntry, line: Line, paused: boolean): FleetRule {
   const display =
-    rule.operation === "remove" ? undefined : ruleValueSummary(rule);
+    entry.operation === "remove" ? undefined : ruleValueSummary(entry);
+  const installed = outcomeScope(line.outcome);
   return {
     key: line.key,
-    profileId: profile.id,
-    ruleId: rule.id,
+    profileId: entry.profileId,
+    ruleId: entry.ruleId,
     provenance: {
-      profileId: profile.id,
-      name: profile.name,
-      badgeText: profile.badgeText,
-      color: profile.color,
+      profileId: entry.profileId,
+      name: entry.profileName,
+      badgeText: entry.badgeText,
+      color: entry.color,
     },
-    direction: rule.direction,
-    operation: rule.operation,
-    scope: rule.scope,
-    header: rule.header,
-    headerKey: normalizeHeaderName(rule.header),
+    direction: entry.stage,
+    operation: entry.operation,
+    scope: entry.scope,
+    header: entry.header,
+    headerKey: entry.headerKey,
     ...(display === undefined ? {} : { display }),
-    secret: isSecretHeader(rule.header),
-    ...(rule.comment === undefined || rule.comment === ""
+    secret: isSecretHeader(entry.header),
+    ...(entry.comment === undefined || entry.comment === ""
       ? {}
-      : { comment: rule.comment }),
-    enabled: rule.enabled,
+      : { comment: entry.comment }),
+    enabled: entry.enabled,
     paused,
     outcome: line.outcome,
     caveats: line.caveats,
     crossSite:
-      line.outcome.kind === "placed" ||
-      line.outcome.kind === "partial" ||
-      line.outcome.kind === "pending" ||
-      line.outcome.kind === "shadowed" ||
-      line.outcome.kind === "runs-if-matched"
-        ? line.outcome.scope.kind === "broad"
-        : rule.scope.type !== "domains",
+      installed === undefined
+        ? entry.scope.type !== "domains"
+        : installed.kind === "broad",
   };
 }
 
@@ -118,7 +89,7 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
   const crossSite: FleetRule[] = [];
   for (const rule of fleet) {
     if (rule.scope.type === "domains") {
-      const installed = installedScope(rule.outcome);
+      const installed = outcomeScope(rule.outcome);
       const installedDomains = new Set<string>();
       if (installed?.kind === "sites") {
         for (const domain of installed.domains) {
@@ -132,7 +103,7 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
         }
       }
     } else {
-      const installed = installedScope(rule.outcome);
+      const installed = outcomeScope(rule.outcome);
       if (installed?.kind === "sites") {
         for (const domain of installed.domains) push(domains, domain, rule);
       } else {
@@ -167,7 +138,7 @@ export function groupByHeader(fleet: readonly FleetRule[]): HeaderGroup[] {
       let broad = false;
       let allSites = false;
       for (const rule of rules) {
-        const installed = installedScope(rule.outcome);
+        const installed = outcomeScope(rule.outcome);
         if (installed === undefined) continue;
         if (installed.kind === "broad") {
           broad = true;
@@ -195,9 +166,7 @@ export interface TapeRow {
   readonly direction: Direction;
   readonly operation: HeaderOp;
   readonly header: string;
-  readonly outcome:
-    | FleetOutcome
-    | Extract<TabOutcome, { readonly kind: "shadowed" }>;
+  readonly outcome: Outcome;
   readonly caveats: readonly Caveat[];
   readonly paused: boolean;
 }
@@ -237,8 +206,8 @@ export function tapeRows(
   );
 }
 
-function installedScope(outcome: FleetOutcome): InstalledScope | undefined {
-  return outcome.kind === "absent" ? undefined : outcome.scope;
+function outcomeScope(outcome: Outcome): InstalledScope | undefined {
+  return "scope" in outcome ? outcome.scope : undefined;
 }
 
 function outcomeAtSite(
@@ -257,7 +226,7 @@ function outcomeAtSite(
   if (
     group.kind !== "domain" ||
     (rule.outcome.kind !== "partial" && rule.outcome.kind !== "pending") ||
-    rule.outcome.scope.kind === "broad" ||
+    rule.outcome.scope?.kind !== "sites" ||
     rule.outcome.scope.origins?.some(
       (origin) => new URL(origin).hostname === group.host,
     ) === true ||

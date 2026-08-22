@@ -3,12 +3,9 @@ import { normalizeHeaderName } from "../core/headers";
 import type { HeaderOp } from "../core/model";
 import type { AbsentReason } from "../core/verdict";
 import { copy } from "./copy";
-import type { Caveat, FleetOutcome, TabOutcome } from "./state/project";
+import type { Caveat, Outcome } from "./state/project";
 
 export type Tone = "live" | "doubt" | "amber" | "stop" | "rest";
-
-type Outcome = TabOutcome | FleetOutcome;
-type OutcomeKind = Outcome["kind"];
 
 const OUTCOMES = {
   runs: { tone: "live", active: true },
@@ -23,7 +20,7 @@ const OUTCOMES = {
   placed: { tone: "live", active: true },
   partial: { tone: "amber", active: true },
 } as const satisfies Record<
-  OutcomeKind,
+  Outcome["kind"],
   {
     readonly tone: Tone;
     readonly active: boolean;

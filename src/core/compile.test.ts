@@ -373,12 +373,21 @@ describe("batch compilation", () => {
     expect(batch.entries).toEqual([
       {
         key: ruleKey("active", "rule-1", 0),
+        source: "rule",
         profileId: "active",
+        ruleId: "rule-1",
+        profileName: "active",
+        badgeText: "ac",
+        color: "blue",
         label: "response trace",
         stage: "response",
         headerKey: "x-trace",
         header: "X-Trace",
         operation: "append",
+        value: "on",
+        scope: { type: "domains", domains: ["example.com"] },
+        enabled: true,
+        comment: "response trace",
         authored: {
           requestDomains: ["example.com"],
           resourceTypes: ["websocket"],
@@ -485,6 +494,7 @@ describe("batch compilation", () => {
     expect(batch.entries).toEqual([
       {
         key: overrideKey(7, 0),
+        source: "override",
         profileId: "active",
         label: "X-Override rule",
         stage: "response",

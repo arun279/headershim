@@ -4,35 +4,28 @@ import type { Entry, Placement, RuleKey } from "../../core/verdict";
 import {
   admits,
   caveatsFor,
-  type FleetOutcome,
   type InstalledScope,
   type Line,
+  type Outcome,
   resourceTypesContain,
+  type Undecidable,
 } from "./project";
 
 export function projectFleet(
   projection: Projection,
-): ReadonlyMap<RuleKey, Line<FleetOutcome>> {
+): ReadonlyMap<RuleKey, Line> {
   const shadowed = fullyShadowed(projection.batch);
   return new Map(
     projection.batch.entries.map((entry) => {
-      const scope =
-        entry.standing.kind === "placed"
-          ? installedScope(entry.standing.placements)
-          : authoredScope(entry);
-      const blocker = shadowed.get(entry.key);
-      const outcome: FleetOutcome = !entryIsConfirmed(projection, entry)
-        ? { kind: "pending", scope }
-        : entry.standing.kind === "absent"
+      const outcome: Outcome =
+        entry.standing.kind === "absent"
           ? { kind: "absent", reason: entry.standing.reason }
-          : blocker === undefined
-            ? fleetPlacement(entry, entry.standing.placements)
-            : {
-                kind: "shadowed",
-                scope,
-                by: blocker.key,
-                label: blocker.label,
-              };
+          : installedOutcome(
+              projection,
+              entry,
+              entry.standing.placements,
+              shadowed.get(entry.key),
+            );
       return [
         entry.key,
         {
@@ -43,6 +36,39 @@ export function projectFleet(
       ];
     }),
   );
+}
+
+// Every reachable site-wide outcome describes a placed entry, so the scope it
+// carries is the one the placements installed.
+function installedOutcome(
+  projection: Projection,
+  entry: Entry,
+  placements: readonly [Placement, ...Placement[]],
+  blocker: Entry | undefined,
+): Outcome {
+  const scope = installedScope(placements);
+  if (!entryIsConfirmed(projection, entry)) {
+    return { kind: "pending", scope };
+  }
+  if (blocker !== undefined) {
+    return { kind: "shadowed", scope, by: blocker.key, label: blocker.label };
+  }
+  if (entry.grantGap !== undefined) {
+    return { kind: "partial", scope, reason: entry.grantGap };
+  }
+  const undecidable = undecidableAuthored(entry.authored);
+  return undecidable === undefined
+    ? { kind: "placed", scope }
+    : { kind: "runs-if-matched", scope, undecidable };
+}
+
+function undecidableAuthored(
+  authored: Entry["authored"],
+): Undecidable | undefined {
+  if (authored.regexFilter !== undefined) return "regex-filter";
+  if (authored.urlFilter !== undefined) return "url-filter";
+  if (authored.initiatorDomains !== undefined) return "initiator-domains";
+  return undefined;
 }
 
 function fullyShadowed(
@@ -124,41 +150,6 @@ function filterContains(
   return (
     earlier.urlFilter === undefined || earlier.urlFilter === later.urlFilter
   );
-}
-
-function authoredScope(entry: Entry): InstalledScope {
-  const [first, ...rest] = entry.authored.requestDomains ?? [];
-  if (first === undefined) return { kind: "broad" };
-  const origin = anchoredOrigin(entry.authored.urlFilter ?? "");
-  return {
-    kind: "sites",
-    domains: [first, ...rest],
-    ...(origin === undefined ? {} : { origins: [origin.origin] }),
-  };
-}
-
-function fleetPlacement(
-  entry: Entry,
-  placements: readonly [Placement, ...Placement[]],
-): Exclude<FleetOutcome, { readonly kind: "absent" }> {
-  const scope = installedScope(placements);
-  if (entry.grantGap !== undefined) {
-    return { kind: "partial", scope, reason: entry.grantGap };
-  }
-  if (entry.authored.regexFilter !== undefined) {
-    return { kind: "runs-if-matched", scope, undecidable: "regex-filter" };
-  }
-  if (entry.authored.urlFilter !== undefined) {
-    return { kind: "runs-if-matched", scope, undecidable: "url-filter" };
-  }
-  if (entry.authored.initiatorDomains !== undefined) {
-    return {
-      kind: "runs-if-matched",
-      scope,
-      undecidable: "initiator-domains",
-    };
-  }
-  return { kind: "placed", scope };
 }
 
 function installedScope(
