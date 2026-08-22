@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { fire, pasteInto, press, render } from "../test/render";
 import { ValueField } from "./ValueField";
 
@@ -33,8 +33,8 @@ describe("ValueField generate menu", () => {
     expect(ctx.generateButton().getAttribute("aria-haspopup")).toBe("menu");
     fire(() => ctx.generateButton().click());
     expect(ctx.menuItems().map((item) => item.textContent)).toEqual([
-      copy.editor.generateUuid,
-      copy.editor.generateTimestamp,
+      editorCopy.editor.generateUuid,
+      editorCopy.editor.generateTimestamp,
     ]);
     expect(document.activeElement).toBe(ctx.menuItems()[0]);
   });
@@ -69,7 +69,7 @@ describe("ValueField multiline control", () => {
     fire(() => ctx.input().setSelectionRange(7, 7));
     pasteInto(ctx.input(), "one\ntwo");
     expect(ctx.onInput).toHaveBeenCalledWith("before one twoafter");
-    expect(ctx.root.textContent).toContain(copy.editor.newlineRemoved);
+    expect(ctx.root.textContent).toContain(editorCopy.editor.newlineRemoved);
   });
 
   // What a copied token actually carries. Trailing whitespace is the
@@ -78,40 +78,44 @@ describe("ValueField multiline control", () => {
     const ctx = mount({ value: "" });
     pasteInto(ctx.input(), "Bearer eyJhbGciOi.J9\n");
     expect(ctx.onInput).toHaveBeenCalledWith("Bearer eyJhbGciOi.J9");
-    expect(ctx.root.textContent).not.toContain(copy.editor.newlineRemoved);
+    expect(ctx.root.textContent).not.toContain(
+      editorCopy.editor.newlineRemoved,
+    );
   });
 
   it("clears the line-break note after clean input", () => {
     const ctx = mount({ value: "before after" });
     fire(() => ctx.input().setSelectionRange(7, 7));
     pasteInto(ctx.input(), "one\ntwo");
-    expect(ctx.root.textContent).toContain(copy.editor.newlineRemoved);
+    expect(ctx.root.textContent).toContain(editorCopy.editor.newlineRemoved);
 
     fire(() => {
       ctx.input().value = "clean";
       ctx.input().dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    expect(ctx.root.textContent).not.toContain(copy.editor.newlineRemoved);
+    expect(ctx.root.textContent).not.toContain(
+      editorCopy.editor.newlineRemoved,
+    );
   });
 });
 
 describe("ValueField standing note", () => {
   it("says a plain value is used exactly as typed, not as a template", () => {
     const ctx = mount();
-    expect(ctx.root.textContent).toContain(copy.valueNote.literal);
+    expect(ctx.root.textContent).toContain(editorCopy.valueNote.literal);
   });
 
   it("replaces the literal note with the freeze time and regenerates the kind", () => {
     const ctx = mount({
       generated: { kind: "timestamp", at: "2026-07-12T14:03:00.000Z" },
     });
-    expect(ctx.root.textContent).not.toContain(copy.valueNote.literal);
+    expect(ctx.root.textContent).not.toContain(editorCopy.valueNote.literal);
     expect(ctx.root.textContent).toContain(
-      copy.valueNote.frozen("2026-07-12T14:03:00.000Z"),
+      editorCopy.valueNote.frozen("2026-07-12T14:03:00.000Z"),
     );
     const regenerate = [...ctx.root.querySelectorAll("button")].find(
-      (button) => button.textContent === copy.actions.regenerate,
+      (button) => button.textContent === editorCopy.actions.regenerate,
     ) as HTMLButtonElement;
     fire(() => regenerate.click());
     expect(ctx.onGenerate).toHaveBeenCalledExactlyOnceWith("timestamp");

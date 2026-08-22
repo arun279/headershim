@@ -1,3 +1,4 @@
+import { copy as optionsCopy } from "../ui/copy.options";
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +16,7 @@ import { copy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
 
-const text = copy.options.settings;
+const text = optionsCopy.options.settings;
 
 async function mount(profiles: Profile[]): Promise<HTMLElement> {
   await write(stateDoc(profiles));

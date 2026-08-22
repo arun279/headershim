@@ -1,3 +1,4 @@
+import { siteAccessCopy } from "../ui/copy.options";
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +9,7 @@ import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
 import { write as writeSession } from "../platform/session-store";
 import { write } from "../platform/store";
-import { copy, sentenceText, siteAccessCopy } from "../ui/copy";
+import { copy, sentenceText } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
 
@@ -550,7 +551,7 @@ describe("options site access", () => {
     expect(root.querySelector(".sa-card")?.textContent).toContain(
       text.allSites.on,
     );
-    expect(root.textContent).not.toContain(copy.emptyState.siteAccess);
+    expect(root.textContent).not.toContain(siteAccessCopy.empty);
   });
 
   it("keeps narrow grants visible and individually revocable under all-sites access", async () => {
@@ -664,7 +665,7 @@ describe("options site access", () => {
         ],
       }),
     ]);
-    expect(withNote.textContent).toContain(text.initiatorNote);
+    expect(withNote.textContent).toContain(copy.siteAccess.initiatorNote);
   });
 
   it("omits the note for navigation-only rules", async () => {
@@ -678,6 +679,6 @@ describe("options site access", () => {
         ],
       }),
     ]);
-    expect(root.textContent).not.toContain(text.initiatorNote);
+    expect(root.textContent).not.toContain(copy.siteAccess.initiatorNote);
   });
 });

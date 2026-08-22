@@ -1,3 +1,4 @@
+import { copy as optionsCopy } from "../ui/copy.options";
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,13 +7,13 @@ import { App } from "../../entrypoints/options/App";
 import { shortcutManagerUrl } from "../../entrypoints/options/pages/Settings";
 import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "../core/grants";
 import { read, write } from "../platform/store";
-import { copy, sentenceText } from "../ui/copy";
+import { sentenceText } from "../ui/copy";
 import { profile, resetFixtures, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
 import { THEME_CACHE_KEY } from "../ui/theme";
 
-const text = copy.options.about;
-const settings = copy.options.settings;
+const text = optionsCopy.options.about;
+const settings = optionsCopy.options.settings;
 
 async function mount(hash = "#about"): Promise<HTMLElement> {
   await write(stateDoc([profile("p1")]));

@@ -2,6 +2,8 @@ import type { Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
+import { copy as editorCopy } from "../../src/ui/copy.editor";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import { expect, openPopup, test } from "../fixtures";
 
 async function readState(worker: Worker): Promise<StateDoc> {
@@ -33,13 +35,13 @@ test("the options editor loads only after New rule", async ({
 
   await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
   await expect(
-    page.getByRole("button", { name: copy.options.allRules.newRule }),
+    page.getByRole("button", { name: optionsCopy.options.allRules.newRule }),
   ).toBeVisible();
   await page.waitForLoadState("networkidle");
   expect(editorRequests).toEqual([]);
 
   await page
-    .getByRole("button", { name: copy.options.allRules.newRule })
+    .getByRole("button", { name: optionsCopy.options.allRules.newRule })
     .click();
   await expect.poll(() => editorRequests).not.toEqual([]);
 });
@@ -54,7 +56,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await expect(editor).toBeVisible();
   // The editor owns the whole surface: the popup's own readout is unmounted,
@@ -65,7 +67,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect(page.locator(".foot")).toHaveCount(0);
 
   const name = editor.getByRole("combobox", {
-    name: copy.editor.labels.headerName,
+    name: editorCopy.editor.labels.headerName,
   });
   await name.fill("x-explicit-only");
 
@@ -73,64 +75,64 @@ test("editor controls never save or leave the sheet by themselves", async ({
   // enclosing label, while the checked state is still read back by role.
   await editor
     .locator("label.segmented-option", {
-      hasText: copy.editor.direction.response,
+      hasText: copy.readout.direction.response,
     })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.direction.response }),
+    editor.getByRole("radio", { name: copy.readout.direction.response }),
   ).toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   const operation = editor.getByRole("radio", {
-    name: copy.editor.operation.remove,
+    name: copy.readout.verb.remove,
   });
   await editor
     .locator("label.segmented-option", {
-      hasText: copy.editor.operation.remove,
+      hasText: copy.readout.verb.remove,
     })
     .click();
   await expect(operation).toBeChecked();
   await expect(
-    editor.getByRole("textbox", { name: copy.editor.labels.value }),
+    editor.getByRole("textbox", { name: editorCopy.editor.labels.value }),
   ).toHaveCount(0);
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
     .locator("label.segmented-option", {
-      hasText: copy.editor.scopeType.pattern,
+      hasText: editorCopy.editor.scopeType.pattern,
     })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.scopeType.pattern }),
+    editor.getByRole("radio", { name: editorCopy.editor.scopeType.pattern }),
   ).toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
     .locator("label.segmented-option", {
-      hasText: copy.editor.scopeType.regex,
+      hasText: editorCopy.editor.scopeType.regex,
     })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.scopeType.regex }),
+    editor.getByRole("radio", { name: editorCopy.editor.scopeType.regex }),
   ).toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   const allSites = editor.getByRole("radio", {
-    name: copy.editor.allSites,
+    name: editorCopy.editor.allSites,
   });
   await editor
-    .locator("label.segmented-option", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: editorCopy.editor.allSites })
     .click();
   await expect(allSites).toBeChecked();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   const resourceTypes = editor.getByRole("button", {
-    name: `${copy.editor.labels.resourceTypes} · ${copy.editor.allTypes}`,
+    name: `${editorCopy.editor.labels.resourceTypes} · ${editorCopy.editor.allTypes}`,
   });
   await resourceTypes.click();
   await expect(resourceTypes).toHaveAttribute("aria-expanded", "true");
@@ -138,7 +140,7 @@ test("editor controls never save or leave the sheet by themselves", async ({
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   const pages = editor.getByRole("checkbox", {
-    name: copy.resourceTypes.groups.pages,
+    name: editorCopy.resourceTypes.groups.pages,
   });
   await pages.click();
   await expect(pages).not.toBeChecked();
@@ -149,11 +151,11 @@ test("editor controls never save or leave the sheet by themselves", async ({
     .getByRole("button", { name: copy.actions.cancel, exact: true })
     .click();
   await expect(
-    editor.getByText(copy.editor.discardConfirm.title, { exact: true }),
+    editor.getByText(editorCopy.editor.discardConfirm.title, { exact: true }),
   ).toBeVisible();
   await editor
     .getByRole("button", {
-      name: copy.editor.discardConfirm.discard,
+      name: editorCopy.editor.discardConfirm.discard,
       exact: true,
     })
     .click();
@@ -178,38 +180,38 @@ test("Create rule is the only pointer action that saves a draft", {
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await editor
-    .getByRole("combobox", { name: copy.editor.labels.headerName })
+    .getByRole("combobox", { name: editorCopy.editor.labels.headerName })
     .fill("x-created-explicitly");
   const value = editor.getByRole("textbox", {
-    name: copy.editor.labels.value,
+    name: editorCopy.editor.labels.value,
   });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
   await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("created");
   await editor
-    .locator("label.segmented-option", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: editorCopy.editor.allSites })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.allSites }),
+    editor.getByRole("radio", { name: editorCopy.editor.allSites }),
   ).toBeChecked();
 
   // Moving focus and clicking inert editor chrome are ordinary draft actions.
   // Neither is permission to save.
   await value.focus();
-  await editor.getByRole("radio", { name: copy.editor.operation.set }).focus();
+  await editor.getByRole("radio", { name: copy.readout.verb.set }).focus();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
   await editor
-    .getByRole("heading", { name: copy.editor.heading("new", "Default") })
+    .getByRole("heading", { name: editorCopy.editor.heading("new", "Default") })
     .click();
   await expect(editor).toBeVisible();
   await expect.poll(() => ruleCount(serviceWorker)).toBe(0);
 
   await editor
-    .getByRole("button", { name: copy.actions.createRule, exact: true })
+    .getByRole("button", { name: editorCopy.actions.createRule, exact: true })
     .click();
   await expect(editor).toBeHidden();
   // The commit is announced, so a save that silently gives no feedback fails
@@ -238,22 +240,22 @@ test("plain Enter stays in Value while the commit chord creates the rule", {
   await page.keyboard.press("n");
 
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await editor
-    .getByRole("combobox", { name: copy.editor.labels.headerName })
+    .getByRole("combobox", { name: editorCopy.editor.labels.headerName })
     .fill("x-created-by-chord");
   const value = editor.getByRole("textbox", {
-    name: copy.editor.labels.value,
+    name: editorCopy.editor.labels.value,
   });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
   await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("chord");
   await editor
-    .locator("label.segmented-option", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: editorCopy.editor.allSites })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.allSites }),
+    editor.getByRole("radio", { name: editorCopy.editor.allSites }),
   ).toBeChecked();
 
   await value.focus();

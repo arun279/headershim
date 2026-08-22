@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ALL_SITES_ORIGIN, MANIFEST_PERMISSIONS } from "../core/grants";
 import { MINIMUM_CHROME_VERSION } from "../core/limits";
-import { copy, sentenceText, siteAccessCopy } from "./copy";
+import { copy, sentenceText } from "./copy";
+import { copy as editorCopy } from "./copy.editor";
+import { copy as optionsCopy, siteAccessCopy } from "./copy.options";
 
 const privacyPolicy = readFileSync(
   new URL("../../PRIVACY.md", import.meta.url),
@@ -15,7 +17,7 @@ const readme = readFileSync(
 
 /** One About row read end to end: its lead sentence plus every detail under it. */
 function permissionRow(name: string): string {
-  const row = copy.options.about.permissions.items.find(
+  const row = optionsCopy.options.about.permissions.items.find(
     (item) => item.name === name,
   );
   if (row === undefined) {
@@ -111,11 +113,13 @@ describe("copy", () => {
   });
 
   it("names every site a commit will ask Chrome for, not a count", () => {
-    expect(copy.actions.andSites(["api.example.com"])).toBe("api.example.com");
-    expect(copy.actions.andSites(["api.example.com", "example.com"])).toBe(
-      "api.example.com and example.com",
+    expect(editorCopy.actions.andSites(["api.example.com"])).toBe(
+      "api.example.com",
     );
-    expect(copy.actions.andSites(["a.test", "b.test", "c.test"])).toBe(
+    expect(
+      editorCopy.actions.andSites(["api.example.com", "example.com"]),
+    ).toBe("api.example.com and example.com");
+    expect(editorCopy.actions.andSites(["a.test", "b.test", "c.test"])).toBe(
       "a.test, b.test and c.test",
     );
   });
@@ -127,13 +131,13 @@ describe("copy", () => {
     expect(copy.toast.lastProfileDeleted("Only")).toBe(
       "Profile 'Only' deleted; a new empty Default replaces it",
     );
-    expect(copy.actions.createRuleAndAllow("api.example.com")).toBe(
+    expect(editorCopy.actions.createRuleAndAllow("api.example.com")).toBe(
       "Create rule and allow api.example.com",
     );
     expect(copy.readout.addThisTabAndAllow("api.example.com")).toBe(
       "Add and allow api.example.com",
     );
-    expect(copy.actions.saveChangesAndAllow("api.example.com")).toBe(
+    expect(editorCopy.actions.saveChangesAndAllow("api.example.com")).toBe(
       "Save changes and allow api.example.com",
     );
     expect(copy.errors.grantDeclined("api.example.com")).toContain(
@@ -151,12 +155,12 @@ describe("copy", () => {
     );
     // Formats the freeze instant to the minute in UTC; the Regenerate action
     // renders as a button after it, so the reading is "Frozen at … · Regenerate".
-    expect(copy.valueNote.frozen("2026-07-12T14:03:27.000Z")).toBe(
+    expect(editorCopy.valueNote.frozen("2026-07-12T14:03:27.000Z")).toBe(
       "Frozen at 2026-07-12 14:03 UTC. This exact value is used every time, not regenerated.",
     );
-    expect(copy.editor.suggestions(1)).toBe("1 suggestion");
-    expect(copy.editor.suggestions(6)).toBe("6 suggestions");
-    expect(sentenceText(copy.editor.savedAs("x-feature-override"))).toBe(
+    expect(editorCopy.editor.suggestions(1)).toBe("1 suggestion");
+    expect(editorCopy.editor.suggestions(6)).toBe("6 suggestions");
+    expect(sentenceText(editorCopy.editor.savedAs("x-feature-override"))).toBe(
       "saved as x-feature-override",
     );
   });
@@ -197,10 +201,10 @@ describe("copy", () => {
     expect(copy.errors.regexRuleCap).toContain(
       "caps regex-scoped rules at 1,000",
     );
-    expect(copy.options.profiles.nameTaken("Staging")).toBe(
+    expect(copy.profiles.nameTaken("Staging")).toBe(
       "'Staging' is taken. Use a different name.",
     );
-    expect(copy.options.settings.eraseAll).toEqual({
+    expect(optionsCopy.options.settings.eraseAll).toEqual({
       action: "Start over",
       confirmTitle: "Start over?",
       confirmBody:
@@ -209,19 +213,25 @@ describe("copy", () => {
     });
     // One canonical label per state across the popup and the options
     // Active-changes surface: no per-surface drift.
-    expect(copy.options.traffic.status.unconfirmed).toBe("decided per request");
-    expect(copy.options.traffic.status.needsAccess).toBe("needs access");
+    expect(optionsCopy.options.traffic.status.unconfirmed).toBe(
+      "decided per request",
+    );
+    expect(optionsCopy.options.traffic.status.needsAccess).toBe("needs access");
     expect(copy.readout.unconfirmed(3)).toContain(
-      copy.options.traffic.status.unconfirmed,
+      optionsCopy.options.traffic.status.unconfirmed,
     );
     // The tape's caveat words, one per family in the same lowercase register.
     // te and content-length each get their own: "breaks on HTTP/2" is false
     // for te's one allowed value, and false for a content-length that agrees
     // with the body, so both name their condition instead of the failure.
-    expect(copy.options.traffic.caveat.h1Only).toBe("HTTP/1.1 only");
-    expect(copy.options.traffic.caveat.h2Breaking).toBe("breaks on HTTP/2");
-    expect(copy.options.traffic.caveat.te).toBe("trailers only on HTTP/2");
-    expect(copy.options.traffic.caveat.contentLength).toBe(
+    expect(optionsCopy.options.traffic.caveat.h1Only).toBe("HTTP/1.1 only");
+    expect(optionsCopy.options.traffic.caveat.h2Breaking).toBe(
+      "breaks on HTTP/2",
+    );
+    expect(optionsCopy.options.traffic.caveat.te).toBe(
+      "trailers only on HTTP/2",
+    );
+    expect(optionsCopy.options.traffic.caveat.contentLength).toBe(
       "mismatch breaks HTTP/2",
     );
     // The per-line reason stays the honest sentence that never presumes a match.
@@ -256,17 +266,19 @@ describe("copy", () => {
     expect(siteAccessCopy.allSites.warning).toContain(
       "you can revoke this access here at any time.",
     );
-    expect(copy.options.about).not.toHaveProperty("theme");
-    expect(sentenceText(copy.options.about.build("1.2.0", "a1b2c3d"))).toBe(
-      "HeaderShim v1.2.0 · commit a1b2c3d",
+    expect(optionsCopy.options.about).not.toHaveProperty("theme");
+    expect(
+      sentenceText(optionsCopy.options.about.build("1.2.0", "a1b2c3d")),
+    ).toBe("HeaderShim v1.2.0 · commit a1b2c3d");
+    expect(optionsCopy.options.about.description).not.toContain("ModHeader");
+    expect(optionsCopy.options.importExport.instruction).toContain(
+      "ModHeader export",
     );
-    expect(copy.options.about.description).not.toContain("ModHeader");
-    expect(copy.options.importExport.instruction).toContain("ModHeader export");
-    expect(copy.options.about.license).toBe(
+    expect(optionsCopy.options.about.license).toBe(
       "Open source under the MIT license. Provided as is, without warranty.",
     );
-    expect(copy.options.settings.theme.label).toBe("Theme");
-    expect(Object.keys(copy.options.about).sort()).toEqual(
+    expect(optionsCopy.options.settings.theme.label).toBe("Theme");
+    expect(Object.keys(optionsCopy.options.about).sort()).toEqual(
       [
         "build",
         "description",
@@ -333,7 +345,7 @@ describe("copy", () => {
   // to add to what it carries, which is where the platform's own names for the
   // storage areas live.
   it("carries every About permission sentence in the privacy policy verbatim", () => {
-    for (const item of copy.options.about.permissions.items) {
+    for (const item of optionsCopy.options.about.permissions.items) {
       for (const text of [item.reason, ...item.details]) {
         expect(
           privacyPolicy,
@@ -356,7 +368,7 @@ describe("copy", () => {
     expect(aboutStorage).toContain("stored on this device without encryption");
     expect(aboutRulesEngine).toContain("to every site it matches");
 
-    expect(copy.options.importExport.secretsReminder).toContain(
+    expect(optionsCopy.options.importExport.secretsReminder).toContain(
       "Treat it like a credentials file.",
     );
     expect(aboutStorage).toContain("Treat it like a credentials file.");
@@ -417,6 +429,8 @@ describe("copy", () => {
       }
     };
     collect(copy);
+    collect(optionsCopy);
+    collect(editorCopy);
 
     expect(strings.length).toBeGreaterThan(100);
     for (const text of strings) {

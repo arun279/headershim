@@ -8,7 +8,9 @@ import {
   type StateDoc,
 } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
-import { copy, siteAccessCopy } from "../../src/ui/copy";
+import { copy } from "../../src/ui/copy";
+import { copy as editorCopy } from "../../src/ui/copy.editor";
+import { copy as optionsCopy, siteAccessCopy } from "../../src/ui/copy.options";
 import {
   expect,
   seedState,
@@ -265,7 +267,7 @@ test("every populated popup state passes axe in both themes", {
       .click();
     await expect(
       populated.getByRole("dialog", {
-        name: copy.editor.heading("new", "Default"),
+        name: editorCopy.editor.heading("new", "Default"),
       }),
     ).toBeVisible();
     await analyze(populated, `popup rule editor (${theme})`, theme);
@@ -308,13 +310,13 @@ test("every options page passes axe in both themes", async ({
   // page's <h1> under the right hash fails here rather than passing on the mere
   // presence of some heading.
   const sections = [
-    { hash: "rules", title: copy.options.allRules.title },
-    { hash: "profiles", title: copy.options.profiles.title },
+    { hash: "rules", title: optionsCopy.options.allRules.title },
+    { hash: "profiles", title: optionsCopy.options.profiles.title },
     { hash: "site-access", title: siteAccessCopy.title },
-    { hash: "traffic", title: copy.options.traffic.title },
-    { hash: "import-export", title: copy.options.importExport.title },
-    { hash: "settings", title: copy.options.settings.title },
-    { hash: "about", title: copy.options.about.title },
+    { hash: "traffic", title: optionsCopy.options.traffic.title },
+    { hash: "import-export", title: optionsCopy.options.importExport.title },
+    { hash: "settings", title: optionsCopy.options.settings.title },
+    { hash: "about", title: optionsCopy.options.about.title },
   ];
 
   for (const theme of THEMES) {

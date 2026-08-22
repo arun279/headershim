@@ -1,6 +1,6 @@
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
-import { copy, siteAccessCopy } from "../../src/ui/copy";
+import { copy as optionsCopy, siteAccessCopy } from "../../src/ui/copy.options";
 import { seedStateAndWait } from "../fixtures";
 
 export const THEMES = ["light", "dark"] as const;
@@ -14,13 +14,13 @@ export const OPTIONS_WIDTHS = [360, 768, 1280] as const;
 export const OPTIONS_HOST = "example.com";
 
 export const OPTIONS_ROUTES = [
-  { hash: "rules", title: copy.options.allRules.title },
-  { hash: "profiles", title: copy.options.profiles.title },
+  { hash: "rules", title: optionsCopy.options.allRules.title },
+  { hash: "profiles", title: optionsCopy.options.profiles.title },
   { hash: "site-access", title: siteAccessCopy.title },
-  { hash: "traffic", title: copy.options.traffic.title },
-  { hash: "import-export", title: copy.options.importExport.title },
-  { hash: "settings", title: copy.options.settings.title },
-  { hash: "about", title: copy.options.about.title },
+  { hash: "traffic", title: optionsCopy.options.traffic.title },
+  { hash: "import-export", title: optionsCopy.options.importExport.title },
+  { hash: "settings", title: optionsCopy.options.settings.title },
+  { hash: "about", title: optionsCopy.options.about.title },
 ] as const;
 
 export function withTheme(doc: StateDoc, theme: Theme): StateDoc {

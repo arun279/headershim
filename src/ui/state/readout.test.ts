@@ -335,7 +335,7 @@ describe("computeReadout", () => {
       operation: "set",
       header: "X-Request-ID",
       value: "",
-      display: copy.rules.generated(copy.editor.generatedKind.uuid),
+      display: copy.rules.generated(copy.rules.generatedKind.uuid),
       secret: false,
       enabled: true,
       paused: false,

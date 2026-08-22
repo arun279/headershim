@@ -16,6 +16,7 @@ import { Button } from "../../../src/ui/components/Button";
 import { ImportSummary } from "../../../src/ui/components/ImportSummary";
 import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
+import { copy as optionsCopy } from "../../../src/ui/copy.options";
 import { blockedCommitCopy } from "../../../src/ui/state/commit-copy";
 import type { Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../../../src/ui/state/useToast";
@@ -50,7 +51,7 @@ export function ImportExportPage({
   const [importError, setImportError] = useState<string | undefined>(undefined);
   const [applyError, setApplyError] = useState<string | undefined>(undefined);
   const [exportId, setExportId] = useState(doc.profiles[0]?.id ?? "");
-  const text = copy.options.importExport;
+  const text = optionsCopy.options.importExport;
 
   const clear = () => {
     setPlan(undefined);

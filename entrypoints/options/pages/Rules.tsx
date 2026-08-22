@@ -15,6 +15,7 @@ import { ToastHost } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
 import { HeaderValue, Truncate } from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
+import { copy as optionsCopy } from "../../../src/ui/copy.options";
 import { loadDeferred } from "../../../src/ui/deferred";
 import {
   caveatNote,
@@ -34,7 +35,7 @@ import type { Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../../../src/ui/state/useToast";
 import "./Rules.css";
 
-const text = copy.options.allRules;
+const text = optionsCopy.options.allRules;
 
 type Lens = "site" | "header";
 type Editing = { profileId: string; ruleId: string | undefined };
@@ -159,7 +160,7 @@ export function RulesPage({
         )}
         {Editor === undefined ? (
           <div class="editor-loading" role="status" aria-busy="true">
-            {copy.options.rules.loadingEditor}
+            {optionsCopy.options.rules.loadingEditor}
           </div>
         ) : (
           <Editor
@@ -469,7 +470,7 @@ function FleetWhy({
     rule.outcome.kind === "runs-if-matched"
       ? {
           tone: "doubt" as const,
-          label: copy.options.traffic.status.unconfirmed,
+          label: optionsCopy.options.traffic.status.unconfirmed,
         }
       : outcomeReason(rule.outcome, false);
   const caveat = caveatNote(rule.caveats, rule.header, rule.operation);

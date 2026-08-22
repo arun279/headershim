@@ -3,6 +3,8 @@ import { COMMON_HEADER_NAMES } from "../../src/core/header-names";
 import type { StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
+import { copy as editorCopy } from "../../src/ui/copy.editor";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import {
   expect,
   openPopup,
@@ -49,7 +51,9 @@ test("the new-rule shortcut opens the editor", async ({
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
   await page.keyboard.press("n");
   await expect(
-    page.getByRole("dialog", { name: copy.editor.heading("new", "Default") }),
+    page.getByRole("dialog", {
+      name: editorCopy.editor.heading("new", "Default"),
+    }),
   ).toBeVisible();
 });
 
@@ -92,25 +96,27 @@ test("plain Enter stays in a field while the commit chord saves", {
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await page.keyboard.press("n");
   await expect(editor).toBeVisible();
 
   await editor
-    .getByRole("combobox", { name: copy.editor.labels.headerName })
+    .getByRole("combobox", { name: editorCopy.editor.labels.headerName })
     .fill("x-commit-chord");
-  const value = editor.getByRole("textbox", { name: copy.editor.labels.value });
+  const value = editor.getByRole("textbox", {
+    name: editorCopy.editor.labels.value,
+  });
   await expect(value).toHaveJSProperty("tagName", "TEXTAREA");
   await expect(value).toHaveClass(/\bvalue-input\b/);
   await value.fill("not-yet-committed");
   // The radio input is .sr-only, so the pointer click lands on the visible
   // enclosing label; the checked state is still read back by role.
   await editor
-    .locator("label.segmented-option", { hasText: copy.editor.allSites })
+    .locator("label.segmented-option", { hasText: editorCopy.editor.allSites })
     .click();
   await expect(
-    editor.getByRole("radio", { name: copy.editor.allSites }),
+    editor.getByRole("radio", { name: editorCopy.editor.allSites }),
   ).toBeChecked();
 
   // Plain Enter from the value textarea neither saves nor mangles the field.
@@ -122,7 +128,7 @@ test("plain Enter stays in a field while the commit chord saves", {
 
   // Plain Enter from another field is just as inert.
   await editor
-    .getByRole("combobox", { name: copy.editor.labels.headerName })
+    .getByRole("combobox", { name: editorCopy.editor.labels.headerName })
     .focus();
   await page.keyboard.press("Enter");
   await expect(editor).toBeVisible();
@@ -149,13 +155,13 @@ test("typing opens the header suggestion list, and Esc closes only that", async 
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await page.keyboard.press("n");
   await expect(editor).toBeVisible();
 
   const name = editor.getByRole("combobox", {
-    name: copy.editor.labels.headerName,
+    name: editorCopy.editor.labels.headerName,
   });
   const expectedName = COMMON_HEADER_NAMES.find((entry) =>
     entry.startsWith("auth"),
@@ -184,7 +190,7 @@ test("Esc on a clean draft closes without committing", async ({
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await page.keyboard.press("n");
   await expect(editor).toBeVisible();
@@ -204,30 +210,30 @@ test("Esc on a dirty draft guards, then a bare Esc closes the popup", async ({
   const page = await context.newPage();
   await openPopup(page, extensionId, serviceWorker, createV1Seed());
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await page.keyboard.press("n");
   await expect(editor).toBeVisible();
   await editor
-    .getByRole("textbox", { name: copy.editor.labels.value })
+    .getByRole("textbox", { name: editorCopy.editor.labels.value })
     .fill("dirty-draft");
   await page.keyboard.press("Escape");
   await expect(
-    editor.getByText(copy.editor.discardConfirm.title, { exact: true }),
+    editor.getByText(editorCopy.editor.discardConfirm.title, { exact: true }),
   ).toBeVisible();
   await expect(
     editor.getByRole("button", {
-      name: copy.editor.discardConfirm.keepEditing,
+      name: editorCopy.editor.discardConfirm.keepEditing,
     }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(
-    editor.getByText(copy.editor.discardConfirm.title, { exact: true }),
+    editor.getByText(editorCopy.editor.discardConfirm.title, { exact: true }),
   ).toBeHidden();
 
   await page.keyboard.press("Escape");
   const discard = editor.getByRole("button", {
-    name: copy.editor.discardConfirm.discard,
+    name: editorCopy.editor.discardConfirm.discard,
     exact: true,
   });
   await discard.focus();
@@ -306,26 +312,26 @@ test("options rules can be created and edited from the keyboard", {
   await page.goto(`chrome-extension://${extensionId}/options.html#rules`);
 
   const newRule = page.getByRole("button", {
-    name: copy.options.allRules.newRule,
+    name: optionsCopy.options.allRules.newRule,
   });
   await expect(newRule).toBeVisible();
   await newRule.focus();
   await page.keyboard.press("Enter");
 
   const createDialog = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await expect(createDialog).toBeVisible();
   const name = createDialog.getByRole("combobox", {
-    name: copy.editor.labels.headerName,
+    name: editorCopy.editor.labels.headerName,
   });
   await expect(name).toBeFocused();
   await page.keyboard.type("x-options-keyboard");
   await createDialog
-    .getByRole("textbox", { name: copy.editor.labels.value })
+    .getByRole("textbox", { name: editorCopy.editor.labels.value })
     .fill("created");
   const domain = createDialog.getByRole("textbox", {
-    name: copy.editor.domainInputLabel,
+    name: editorCopy.editor.domainInputLabel,
   });
   await domain.fill("example.com");
   await domain.press("Enter");
@@ -333,10 +339,10 @@ test("options rules can be created and edited from the keyboard", {
     "example.com",
   );
   const domainsScope = createDialog.getByRole("radio", {
-    name: copy.editor.scopeType.domains,
+    name: editorCopy.editor.scopeType.domains,
   });
   const allSitesScope = createDialog.getByRole("radio", {
-    name: copy.editor.allSites,
+    name: editorCopy.editor.allSites,
   });
   await expect(domainsScope).toBeChecked();
   // A radio is keyboard-operable even while .sr-only, so focus lands on it and
@@ -348,7 +354,7 @@ test("options rules can be created and edited from the keyboard", {
   await expect(domainsScope).not.toBeChecked();
 
   const create = createDialog.getByRole("button", {
-    name: copy.actions.createRule,
+    name: editorCopy.actions.createRule,
     exact: true,
   });
   await create.focus();
@@ -364,14 +370,14 @@ test("options rules can be created and edited from the keyboard", {
   await page.keyboard.press("Enter");
 
   const editDialog = page.getByRole("dialog", {
-    name: copy.editor.heading("edit", "Default"),
+    name: editorCopy.editor.heading("edit", "Default"),
   });
   await expect(editDialog).toBeVisible();
   await editDialog
-    .getByRole("textbox", { name: copy.editor.labels.value })
+    .getByRole("textbox", { name: editorCopy.editor.labels.value })
     .fill("edited");
   const save = editDialog.getByRole("button", {
-    name: copy.actions.saveChanges,
+    name: editorCopy.actions.saveChanges,
     exact: true,
   });
   await save.focus();

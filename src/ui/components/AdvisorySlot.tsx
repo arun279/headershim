@@ -36,12 +36,12 @@ export function AdvisorySlot({
   }
 
   return (
-    <aside class="advisory-slot" aria-label={copy.editor.caution}>
+    <aside class="advisory-slot" aria-label={copy.headerFields.caution}>
       <span class="advisory-icon" aria-hidden="true">
         ▲
       </span>
       <div>
-        <strong>{copy.editor.caution}</strong>
+        <strong>{copy.headerFields.caution}</strong>
         {advisories.map((advisory) => (
           <p key={advisory.kind}>{advisoryCopy(advisory.kind, header)}</p>
         ))}

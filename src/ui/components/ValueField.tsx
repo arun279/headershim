@@ -1,6 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Rule } from "../../core/model";
-import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import {
   closePopover,
   openPositionedPopover,
@@ -40,7 +40,7 @@ export function ValueField(props: ValueFieldProps) {
   return (
     <div class="editor-field">
       <label class="editor-label" for={`${id}-input`}>
-        {copy.editor.labels.value}
+        {editorCopy.editor.labels.value}
       </label>
       <div class="editor-control">
         <div class="value-row">
@@ -90,8 +90,8 @@ export function ValueField(props: ValueFieldProps) {
         </div>
         <p class="editor-micro" id={`${id}-note`}>
           {generated === undefined
-            ? copy.valueNote.literal
-            : copy.valueNote.frozen(generated.at)}
+            ? editorCopy.valueNote.literal
+            : editorCopy.valueNote.frozen(generated.at)}
           {generated !== undefined && onGenerate !== undefined && (
             <>
               {" · "}
@@ -100,14 +100,14 @@ export function ValueField(props: ValueFieldProps) {
                 class="link-btn"
                 onClick={() => onGenerate(generated.kind)}
               >
-                {copy.actions.regenerate}
+                {editorCopy.actions.regenerate}
               </button>
             </>
           )}
         </p>
         {newlineRemoved && (
           <p class="editor-micro value-newline-note" id={`${id}-newline-note`}>
-            {copy.editor.newlineRemoved}
+            {editorCopy.editor.newlineRemoved}
           </p>
         )}
         {props.error !== undefined && (
@@ -161,14 +161,14 @@ function GenerateMenu({
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        {copy.editor.generate} <span aria-hidden="true">▾</span>
+        {editorCopy.editor.generate} <span aria-hidden="true">▾</span>
       </button>
       {open && (
         <div
           class="menu-pop generate-menu"
           popover="manual"
           role="menu"
-          aria-label={copy.editor.generate}
+          aria-label={editorCopy.editor.generate}
           ref={menuRef}
           onKeyDown={(event) => {
             if (event.key === "Tab" && menuRef.current !== null) {
@@ -217,7 +217,7 @@ function GenerateMenu({
             class="menu-item"
             onClick={() => pick("uuid")}
           >
-            {copy.editor.generateUuid}
+            {editorCopy.editor.generateUuid}
           </button>
           <button
             type="button"
@@ -226,7 +226,7 @@ function GenerateMenu({
             class="menu-item"
             onClick={() => pick("timestamp")}
           >
-            {copy.editor.generateTimestamp}
+            {editorCopy.editor.generateTimestamp}
           </button>
         </div>
       )}

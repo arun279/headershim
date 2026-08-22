@@ -9,7 +9,7 @@ import { COMMON_HEADER_NAMES } from "../../core/header-names";
 import { normalizeHeaderName, validateHeaderName } from "../../core/headers";
 import type { Direction } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
-import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { headerErrorMessage } from "../state/header-errors";
 import { closePopover, openPositionedPopover } from "./popover";
 import { sentence } from "./sentence";
@@ -89,7 +89,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
 
   useEffect(() => {
     if (expanded) {
-      announce(copy.editor.suggestions(matches.length));
+      announce(editorCopy.editor.suggestions(matches.length));
     }
   }, [expanded, matches.length, announce]);
 
@@ -131,7 +131,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
   return (
     <div class="editor-field">
       <label class="editor-label" for={`${id}-input`}>
-        {copy.editor.labels.headerName}
+        {editorCopy.editor.labels.headerName}
       </label>
       <div class="editor-control combobox">
         <input
@@ -141,7 +141,9 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
             props.inputRef?.(element);
           }}
           class="field mono"
-          placeholder={copy.editor.placeholders.headerName[props.direction]}
+          placeholder={
+            editorCopy.editor.placeholders.headerName[props.direction]
+          }
           type="text"
           spellcheck={false}
           autocomplete="off"
@@ -262,8 +264,10 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
                 onClick={() => select(name)}
               >
                 <span class="mono">{name}</span>
-                {copy.headerHints[name] !== undefined && (
-                  <span class="combo-hint">: {copy.headerHints[name]}</span>
+                {editorCopy.headerHints[name] !== undefined && (
+                  <span class="combo-hint">
+                    : {editorCopy.headerHints[name]}
+                  </span>
                 )}
               </div>
             ))}
@@ -277,7 +281,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
       ) : (
         showCase && (
           <p class="editor-micro" id={caseId}>
-            {sentence(copy.editor.savedAs(normalized))}
+            {sentence(editorCopy.editor.savedAs(normalized))}
           </p>
         )
       )}

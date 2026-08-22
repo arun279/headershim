@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ModHeaderImportWarning } from "../core/codec/modheader";
-import { copy, sentenceText } from "../ui/copy";
+import { sentenceText } from "../ui/copy";
+import { copy as optionsCopy } from "../ui/copy.options";
 import { importWarningCopy } from "../ui/state/import-warning-copy";
 
-const strings = copy.options.importExport.warnings;
+const strings = optionsCopy.options.importExport.warnings;
 
 const cases: {
   warning: ModHeaderImportWarning;

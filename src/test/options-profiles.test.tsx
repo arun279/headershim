@@ -4,6 +4,7 @@ import { App } from "../../entrypoints/options/App";
 import type { Profile } from "../core/model";
 import { read, write } from "../platform/store";
 import { copy } from "../ui/copy";
+import { copy as optionsCopy } from "../ui/copy.options";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, press, render, settle, typeInto } from "../ui/test/render";
 
@@ -95,7 +96,7 @@ function confirmDeleteModal(root: HTMLElement): void {
   fire(() =>
     findButton(
       within(root, ".modal-card"),
-      copy.options.profiles.deleteConfirm.confirm,
+      optionsCopy.options.profiles.deleteConfirm.confirm,
     ).click(),
   );
 }
@@ -108,7 +109,7 @@ function cardAction(root: HTMLElement, index: number, label: string): void {
 
 /** Opens the first card's inline rename and returns its field. */
 function openRename(root: HTMLElement): HTMLInputElement {
-  cardAction(root, 0, copy.options.profiles.rename);
+  cardAction(root, 0, optionsCopy.options.profiles.rename);
   return within(root, ".profile-name-input") as HTMLInputElement;
 }
 
@@ -126,13 +127,13 @@ describe("workbench frame", () => {
     expect(root.querySelector(".wb-version")?.textContent).toMatch(/^v/);
     const links = [...root.querySelectorAll<HTMLAnchorElement>(".wb-nav-link")];
     expect(links.map((link) => link.textContent)).toEqual([
-      copy.options.nav.allRules,
-      copy.options.nav.profiles,
-      copy.options.nav.siteAccess,
-      copy.options.nav.traffic,
-      copy.options.nav.importExport,
-      copy.options.nav.settings,
-      copy.options.nav.about,
+      optionsCopy.options.nav.allRules,
+      optionsCopy.options.nav.profiles,
+      optionsCopy.options.nav.siteAccess,
+      optionsCopy.options.nav.traffic,
+      optionsCopy.options.nav.importExport,
+      optionsCopy.options.nav.settings,
+      optionsCopy.options.nav.about,
     ]);
     // The default route is the fleet; its nav link carries the marker.
     expect(links[0]?.getAttribute("aria-current")).toBe("page");
@@ -194,12 +195,12 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
-    const create = findButton(root, copy.options.profiles.newProfile);
+    const create = findButton(root, optionsCopy.options.profiles.newProfile);
     expect(create.className).toBe("btn primary");
     fire(() => create.click());
     await settle();
 
-    expect(cardNames(root)).toEqual(["Default", copy.options.profiles.newName]);
+    expect(cardNames(root)).toEqual(["Default", copy.profiles.newName]);
     // The new card is open (its badge editor and actions are showing).
     expect(root.querySelector(".profile-detail")).not.toBeNull();
     expect((await read()).profiles).toHaveLength(2);
@@ -213,7 +214,7 @@ describe("profile lifecycle", () => {
     const hintId = input.getAttribute("aria-describedby");
     if (hintId === null) throw new Error("rename field names no commit keys");
     expect(within(root, `#${hintId}`).textContent).toBe(
-      copy.options.profiles.renameHint,
+      copy.profiles.renameHint,
     );
   });
 
@@ -276,7 +277,7 @@ describe("profile lifecycle", () => {
     await settle();
 
     expect(root.querySelector(".toast-msg")?.textContent).toBe(
-      copy.options.profiles.nameTaken("Staging"),
+      copy.profiles.nameTaken("Staging"),
     );
     expect((await read()).profiles[0]?.name).toBe("Default");
   });
@@ -290,7 +291,7 @@ describe("profile lifecycle", () => {
     ]);
     const root = await mount();
 
-    cardAction(root, 0, copy.options.profiles.clone);
+    cardAction(root, 0, optionsCopy.options.profiles.clone);
     await settle();
 
     expect(cardNames(root)).toContain("Auth copy");
@@ -308,16 +309,16 @@ describe("profile lifecycle", () => {
     ]);
     const root = await mount();
 
-    cardAction(root, 0, copy.options.profiles.delete);
+    cardAction(root, 0, optionsCopy.options.profiles.delete);
     const modal = within(root, ".modal-card");
     expect(modal.querySelector(".modal-title")?.textContent).toBe(
-      copy.options.profiles.deleteConfirm.title("Alpha"),
+      optionsCopy.options.profiles.deleteConfirm.title("Alpha"),
     );
     // The confirm reads as destructive, never byte-identical to the Cancel
     // beside it (the shared quiet skin was the defect).
     const confirm = findButton(
       modal,
-      copy.options.profiles.deleteConfirm.confirm,
+      optionsCopy.options.profiles.deleteConfirm.confirm,
     );
     expect(confirm.className).toBe("btn destructive");
     expect(confirm.className).not.toBe(
@@ -351,7 +352,7 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Empty" }), profile("p2")]);
     const root = await mount();
 
-    cardAction(root, 0, copy.options.profiles.delete);
+    cardAction(root, 0, optionsCopy.options.profiles.delete);
     const body = within(root, ".modal-text").textContent;
     expect(body).not.toContain("will be deleted");
     expect(body).toContain("Site grants are not changed");
@@ -360,7 +361,7 @@ describe("profile lifecycle", () => {
   it("retires the whole delete confirmation when a later mutation supersedes it", async () => {
     const root = await mountTwoProfiles();
 
-    cardAction(root, 0, copy.options.profiles.delete);
+    cardAction(root, 0, optionsCopy.options.profiles.delete);
     confirmDeleteModal(root);
     await settle();
     expect(root.querySelector(".toast-msg")?.textContent).toBe(
@@ -370,7 +371,9 @@ describe("profile lifecycle", () => {
     // Creating another profile is a fresh mutation: the whole confirmation goes,
     // not just its Undo, so a sentence about a deleted profile cannot linger
     // above a list a new profile now sits in.
-    fire(() => findButton(root, copy.options.profiles.newProfile).click());
+    fire(() =>
+      findButton(root, optionsCopy.options.profiles.newProfile).click(),
+    );
     await settle();
     expect(root.querySelector(".toast-msg")).toBeNull();
   });
@@ -379,7 +382,7 @@ describe("profile lifecycle", () => {
     await seed([profile("p1", { name: "Only" })]);
     const root = await mount();
 
-    cardAction(root, 0, copy.options.profiles.delete);
+    cardAction(root, 0, optionsCopy.options.profiles.delete);
     confirmDeleteModal(root);
     await settle();
 
@@ -501,7 +504,7 @@ describe("reorder", () => {
 
     expect(cardNames(root)).toEqual(["Beta", "Alpha", "Gamma"]);
     expect(root.querySelector('.sr-only[role="status"]')?.textContent).toBe(
-      copy.options.profiles.reordered("Alpha", 2),
+      optionsCopy.options.profiles.reordered("Alpha", 2),
     );
   });
 
@@ -537,7 +540,7 @@ describe("badge editor", () => {
       root,
       ".badge-swatches",
     ).querySelector<HTMLInputElement>(
-      `input[aria-label="${copy.options.badge.colorNames.teal}"]`,
+      `input[aria-label="${optionsCopy.options.badge.colorNames.teal}"]`,
     );
     fire(() => teal?.click());
     await settle();

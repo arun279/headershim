@@ -35,6 +35,49 @@
       }
     },
     {
+      "includes": ["entrypoints/popup/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**/copy.options"],
+                    "message": "Popup startup code must not load options-only copy"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/components/readout/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "wxt/browser": "Extension API access belongs in src/platform or entrypoints"
+                },
+                "patterns": [
+                  {
+                    "group": ["**/copy.options"],
+                    "message": "Popup startup code must not load options-only copy"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/tokens.css"],
       "formatter": { "enabled": false },
       "linter": {

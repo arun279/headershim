@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { COMMON_HEADER_NAMES } from "../../core/header-names";
 import { LiveRegionProvider } from "../a11y/LiveRegion";
 import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { fire, press, render, typeInto } from "../test/render";
 import { HeaderNameInput } from "./HeaderNameInput";
 
@@ -224,7 +225,7 @@ describe("HeaderNameInput combobox contract", () => {
   it("announces the match count politely, singular and plural", () => {
     const ctx = mount();
     typeInto(ctx.input(), "auth");
-    expect(ctx.liveRegion().textContent).toBe(copy.editor.suggestions(4));
+    expect(ctx.liveRegion().textContent).toBe(editorCopy.editor.suggestions(4));
     typeInto(ctx.input(), "www-auth");
     expect(ctx.liveRegion().textContent).toBe("1 suggestion");
   });
@@ -273,12 +274,12 @@ describe("HeaderNameInput combobox contract", () => {
     expect(
       (request.querySelector('[role="combobox"]') as HTMLInputElement)
         .placeholder,
-    ).toBe(copy.editor.placeholders.headerName.request);
+    ).toBe(editorCopy.editor.placeholders.headerName.request);
 
     const response = render(<Harness direction="response" />);
     expect(
       (response.querySelector('[role="combobox"]') as HTMLInputElement)
         .placeholder,
-    ).toBe(copy.editor.placeholders.headerName.response);
+    ).toBe(editorCopy.editor.placeholders.headerName.response);
   });
 });

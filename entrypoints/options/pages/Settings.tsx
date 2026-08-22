@@ -10,12 +10,13 @@ import { Modal } from "../../../src/ui/components/Modal";
 import { Segmented } from "../../../src/ui/components/Segmented";
 import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
+import { copy as optionsCopy } from "../../../src/ui/copy.options";
 import type { Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../../../src/ui/state/useToast";
 import { applyTheme, type Theme } from "../../../src/ui/theme";
 import "./Settings.css";
 
-const text = copy.options.settings;
+const text = optionsCopy.options.settings;
 export function shortcutManagerUrl(runtime: object): string {
   return "getBrowserInfo" in runtime
     ? "about:addons"

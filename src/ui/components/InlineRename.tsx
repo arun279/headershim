@@ -38,7 +38,7 @@ export function InlineRename({ value, onCommit, onClose }: InlineRenameProps) {
       <input
         class="profile-name-input inset-field"
         type="text"
-        aria-label={copy.options.profiles.nameLabel}
+        aria-label={copy.profiles.nameLabel}
         aria-describedby={hintId}
         defaultValue={value}
         ref={input}
@@ -59,7 +59,7 @@ export function InlineRename({ value, onCommit, onClose }: InlineRenameProps) {
         }}
       />
       <span class="inline-rename-hint" id={hintId}>
-        {copy.options.profiles.renameHint}
+        {copy.profiles.renameHint}
       </span>
     </div>
   );

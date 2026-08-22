@@ -2,6 +2,7 @@ import { useId } from "preact/hooks";
 import type { ImportPlan } from "../../core/codec/headershim";
 import type { ImportPlanWarning } from "../../core/codec/modheader";
 import { copy } from "../copy";
+import { copy as optionsCopy } from "../copy.options";
 import { importWarningCopy } from "../state/import-warning-copy";
 import { Button } from "./Button";
 import { sentence } from "./sentence";
@@ -31,7 +32,7 @@ export function ImportSummary({
   onCancel,
 }: ImportSummaryProps) {
   const headingId = useId();
-  const text = copy.options.importExport;
+  const text = optionsCopy.options.importExport;
 
   return (
     <section class="import-summary" aria-labelledby={headingId}>

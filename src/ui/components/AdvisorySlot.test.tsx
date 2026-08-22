@@ -17,7 +17,9 @@ describe("AdvisorySlot", () => {
       <AdvisorySlot header="te" direction="request" operation="set" />,
     );
     const advisory = root.querySelector(".advisory-slot");
-    expect(advisory?.getAttribute("aria-label")).toBe(copy.editor.caution);
+    expect(advisory?.getAttribute("aria-label")).toBe(
+      copy.headerFields.caution,
+    );
     expect(advisory?.querySelector(".advisory-icon")?.textContent).toBe("▲");
     expect(advisory?.textContent).toContain(copy.advisories.te);
   });

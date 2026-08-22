@@ -1,27 +1,20 @@
 /**
- * The single source of every user-facing string. Components do not inline copy;
- * they read it from here so wording stays consistent and reviewable in one place.
- * Strings follow a consistent voice: the platform is named as the actor,
- * cause precedes impact precedes next step, and exact names are always shown.
+ * User-facing copy shared by the popup and options surfaces; options-only copy
+ * lives in copy.options.ts and editor-only copy in copy.editor.ts. Components
+ * read their strings from these modules rather than inlining them, so wording
+ * stays consistent and reviewable. Strings follow a consistent voice: the
+ * platform is named as the actor, cause precedes impact precedes next step, and
+ * exact names are always shown.
  */
 
 import { BRAND_NAME } from "../brand";
-import {
-  ALL_SITES_ORIGIN,
-  MANIFEST_PERMISSIONS,
-  type ManifestPermission,
-} from "../core/grants";
 import {
   MAX_DOC_BYTES,
   MAX_ENABLED_RULES,
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "../core/limits";
-import {
-  type BadgeColor,
-  DEFAULT_PROFILE_NAME,
-  type ResourceGroup,
-} from "../core/model";
+import { DEFAULT_PROFILE_NAME } from "../core/model";
 
 /**
  * A sentence is a segment list so the wire-facing tokens inside it (hostnames,
@@ -37,130 +30,19 @@ export function sentenceText(sentence: Sentence): string {
     .join("");
 }
 
-const data = (value: string | number): SentencePart => ({
+export const data = (value: string | number): SentencePart => ({
   data: String(value),
 });
 
-const rules = (n: number) => (n === 1 ? "rule" : "rules");
-const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
-const changes = (n: number) => (n === 1 ? "change" : "changes");
-const sites = (n: number) => (n === 1 ? "site" : "sites");
-// Kept outside `copy.options` so popup builds that need other options wording
-// do not carry this page-only copy.
-export const siteAccessCopy = {
-  title: "Site access",
-  neededHeading: "Needed but not granted",
-  partialHeading: "Limited access",
-  grantedHeading: "Granted",
-  guidance:
-    "Add rules in the popup or rule editor, and this-tab changes in the popup. Grant access there or here. Chrome's controls can also add, limit, or remove access.",
-  usageLead: (coverage: "full" | "partial" | "none") =>
-    coverage === "none" ? "Needed by" : "Used by",
-  partial: (origins: readonly string[]): Sentence => [
-    "Covers only ",
-    data(andList(origins.map((origin) => origin.replace(/\/\*$/, "")))),
-  ],
-  ruleCount: (count: number) => `${count} ${rules(count)}`,
-  tabCount: (count: number) => `${count} tab ${changes(count)}`,
-  unused: "Not used by an active rule or tab change",
-  grant: "Grant",
-  grantLabel: (domain: string) => `Grant access to ${domain}`,
-  broaden: "Broaden",
-  broadenLabel: (domain: string) => `Broaden access to ${domain}`,
-  broadened: (domain: string) => `Access to ${domain} broadened`,
-  notBroadened: (domain: string) => `Access to ${domain} was not broadened`,
-  grantOriginsLabel: (origins: readonly string[]) =>
-    `Grant access to ${andList(origins)}`,
-  revoke: "Revoke",
-  revokeLabel: (domain: string) => `Remove grant for ${domain}`,
-  revoked: (domain: string) => `No direct grant for ${domain}`,
-  revokedUnderAllSites: (domain: string) =>
-    `No direct grant for ${domain}; all-sites access still covers it`,
-  notGranted: (domain: string) => `Access to ${domain} was not granted`,
-  revokeFailed: (domain: string) =>
-    `Site grant for ${domain} could not be removed`,
-  // The standing note: shown while any enabled rule reaches
-  // subresources without naming the pages that start those requests.
-  initiatorNote:
-    "Requests started by other pages also need those pages granted.",
-  allSites: {
-    heading: "Allow on all sites",
-    consequence: `This gives ${BRAND_NAME} access to every website instead of asking one site at a time.`,
-    disclosure: "Review all-sites access",
-    // Chrome shows this exact warning before it can grant broad access.
-    warning:
-      'Chrome will warn: "Read and change all your data on all websites". Your rules still only apply where their scopes say, and you can revoke this access here at any time.',
-    sensitive: (count: number) =>
-      count === 1
-        ? "1 enabled rule attaches a credential or changes a security header and needs all-sites access to run. Allowing all sites lets it run wherever it matches."
-        : `${count} enabled rules attach a credential or change a security header and need all-sites access to run. Allowing all sites lets them run wherever they match.`,
-    button: "Allow on all sites",
-    on: "All-sites access is on",
-    revoke: "Revoke all-sites access",
-    revoked: "All-sites access is off",
-    notGranted: "All-sites access was not granted",
-    revokeFailed: "All-sites access could not be revoked",
-  },
-};
+export const changes = (n: number) => (n === 1 ? "change" : "changes");
+export const sites = (n: number) => (n === 1 ? "site" : "sites");
 
 // Every site a grant will ask Chrome for, named, so the button that fires the
 // request states the same reach Chrome's own dialog will list.
-const andList = (items: readonly string[]) =>
+export const andList = (items: readonly string[]) =>
   items.length <= 1
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} and ${items.slice(-1).join("")}`;
-
-/**
- * Why each declared permission is there, keyed by the ids the manifest is built
- * from, so a permission cannot reach the manifest without a reason to show
- * beside it. The title is the row's heading, in the words the product uses
- * elsewhere; the manifest id sits under it as the mapping. One lead sentence
- * answers what the permission is for; the details under it are one fact each, so
- * a reader looking for where a header value ends up finds that line instead of a
- * paragraph. Plain words here; the storage-area and API literals stay in
- * PRIVACY.md, which maps the two vocabularies. Every string below is also a
- * sentence of PRIVACY.md, and copy.test.ts holds the two together.
- */
-interface PermissionReason {
-  readonly title: string;
-  readonly reason: string;
-  readonly details: readonly string[];
-}
-
-const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
-  declarativeNetRequestWithHostAccess: {
-    title: "Changing headers",
-    reason: `${BRAND_NAME} applies your header rules through Chrome's rules engine, which runs a rule only where Chrome's own host access covers the request. The engine does not hand ${BRAND_NAME} request or response content.`,
-    details: [
-      "A request rule sends the value you typed to every site it matches and you have granted, so where that value goes is limited by the rule's scope and by the sites you have granted. A response rule changes what this browser sees.",
-      "While header changes are running, each rule you turn on in the active profile that Chrome accepts, and whose sites you have granted, is handed to the rules engine as a dynamic rule, with the header value in the clear. A rule in a profile that is not active is not, and neither is one still waiting on a site grant. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage.",
-      "Turning the rule off, deleting it, switching to another profile, revoking a site the rule needs, or pausing every header change takes it back out of the dynamic ruleset.",
-      "A this-tab change goes to the session ruleset instead, which Chrome clears when the browser shuts down.",
-    ],
-  },
-  storage: {
-    title: "Storing your rules",
-    reason: `${BRAND_NAME} keeps your rules, profiles, and settings in Chrome's local extension storage, in this browser on this device.`,
-    details: [
-      "Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file.",
-      "Chrome's synced storage is not used, so nothing is copied to your Google account.",
-      "The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.",
-      "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the origin it belongs to (scheme, host, and port), the direction, the operation, the header name, the value you typed, and whether it is on.",
-      `${BRAND_NAME} removes it when you close the tab or when the tab navigates away from that origin, and Chrome clears session storage when the browser shuts down.`,
-      `If ${BRAND_NAME} cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data.`,
-    ],
-  },
-  activeTab: {
-    title: "Reading the current tab",
-    reason:
-      "Opening the popup on a site reads that tab's address and reduces it to an origin (scheme, host, and port), to show what applies there and prefill a new rule's scope.",
-    details: [
-      "Full addresses are not stored.",
-      `Chrome reports that tab's address as it navigates, for as long as the tab stays on that site, and ${BRAND_NAME} uses that to end a this-tab change when the tab leaves the site it was made for.`,
-      `Opening the popup is a gesture Chrome answers with temporary host access to that tab, which lasts while the tab stays on that site. That access is Chrome's to give and take back; the access a rule needs is the site grant you approve, and ${BRAND_NAME} asks for that separately.`,
-    ],
-  },
-};
 
 /** "5h 18m" / "8m" / "3d 4h", the coarsest two units that stay honest. */
 function duration(ms: number): string {
@@ -241,7 +123,7 @@ export const copy = {
     grant: "Grant",
     // A rule Chrome can only run with broad access says so on the button, so the
     // click is honest before Chrome's own all-sites dialog appears.
-    grantAllSites: siteAccessCopy.allSites.button,
+    grantAllSites: "Allow on all sites",
     // The switch on a popup line is the rule's switch, not this tab's, so a rule
     // that reaches past this tab says how far before anyone flips it.
     widerReach: {
@@ -333,295 +215,24 @@ export const copy = {
     replace: "Replace",
     cancel: "Cancel",
   },
-
-  // The full-tab options surface: frame, profile management, and bulk actions.
-  options: {
-    nav: {
-      label: "Sections",
-      groupRules: "Rules",
-      groupManage: "Manage",
-      allRules: "All rules",
-      profiles: "Profiles",
-      importExport: "Import & export",
-      siteAccess: "Site access",
-      traffic: "Active changes",
-      settings: "Settings",
-      about: "About",
-    },
-    version: (version: string) => `v${version}`,
-
-    // Every rule across every profile, in one severity grammar, grouped by the
-    // site it lands on or the header it carries.
-    allRules: {
-      title: "All rules",
-      lensLabel: "Group rules",
-      bySite: "By site",
-      byHeader: "By header",
-      newRule: "New rule",
-      // A site group's header: the domain and how many rules land on it.
-      siteRules: (count: number) => `${count} ${rules(count)}`,
-      crossSite: "Cross-site rules",
-      crossSiteNote:
-        "Pattern, regex, and all-sites rules, whichever tab they meet.",
-      // A header group's blast radius.
-      reaches: (siteCount: number, broad: boolean): Sentence => [
-        "reaches ",
-        data(siteCount),
-        ` ${sites(siteCount)}`,
-        ...(broad ? [" plus every site a pattern matches"] : []),
-      ],
-      allReach: (scopeName: string): Sentence => ["reaches ", scopeName],
-      broadReach: "reaches every matching site",
-      sharedRule: (siteCount: number) =>
-        `one shared rule · switch affects all ${siteCount} sites`,
-      scope: {
-        all: "all sites",
-      },
-      // Direction is what two otherwise identical rows differ by, so the name
-      // that reaches assistive technology carries it too.
-      editRule: (direction: string, header: string) =>
-        `Edit rule: ${direction} ${header}`,
-      notActiveProfile: (name: string) => `in ${name}, not the active profile`,
-      empty: "No rules yet.",
-    },
-
-    // Every switched-on change in the active profile, and where each one stands.
-    // It reads the stored rules, never the wire, so no line here may speak of a
-    // request: none has been observed, and one may never be made. Off rules are
-    // not active and never appear, which is why the page is named for what it
-    // shows and not for the whole configured set, which All rules already holds.
-    traffic: {
-      title: "Active changes",
-      status: {
-        live: "live",
-        unconfirmed: "decided per request",
-        needsAccess: "needs access",
-        refused: "refused by Chrome",
-        overLimit: "rule limit reached",
-        overridden: "overridden",
-        outOfSync: "not applied yet",
-        paused: "paused",
-      },
-      // A second, independent word beside the status, never in its place: the
-      // header's transport caveat in the same lowercase register. The full
-      // sentences live in `advisories`; te gets its own word because "breaks
-      // on HTTP/2" is false for the one value HTTP/2 allows it.
-      caveat: {
-        h1Only: "HTTP/1.1 only",
-        h2Breaking: "breaks on HTTP/2",
-        te: "trailers only on HTTP/2",
-        contentLength: "mismatch breaks HTTP/2",
-      },
-      crossSiteHost: "cross-site",
-      // Empty means the active profile has nothing switched on: either its rules
-      // are all off or it holds none. Both read the same here, and neither is a
-      // cue to turn on a rule that may not exist, so the line only states the
-      // fact.
-      empty: "No changes are switched on.",
-    },
-    profiles: {
-      title: "Profiles",
-      newProfile: "New profile",
-      // The name a fresh profile is created under before the user renames it;
-      // availableProfileName resolves collisions ("New profile 2", …).
-      newName: "New profile",
-      ruleCount: (count: number) => `${count} ${rules(count)}`,
-      nameLabel: "Profile name",
-      renameHint: "Press Enter to save, Esc to cancel",
-      rename: "Rename",
-      clone: "Clone",
-      delete: "Delete",
-      activeLabel: (name: string) => `Active profile: ${name}`,
-      reorderHandle: (name: string) =>
-        `Reorder ${name}; press the arrow keys to move it`,
-      reordered: (name: string, position: number) =>
-        `${name}, moved to position ${position}`,
-      nameTaken: (name: string) => `'${name}' is taken. Use a different name.`,
-      deleteConfirm: {
-        title: (name: string) => `Delete profile '${name}'?`,
-        body: (count: number) =>
-          `${count === 0 ? "" : `Its ${count} ${rules(count)} will be deleted. `}Site grants are not changed.`,
-        confirm: "Delete profile",
-      },
-    },
-    badge: {
-      textLabel: "Badge text",
-      colorLabel: "Badge color",
-      colorNames: {
-        indigo: "Indigo",
-        blue: "Blue",
-        teal: "Teal",
-        green: "Green",
-        plum: "Plum",
-        magenta: "Magenta",
-        crimson: "Crimson",
-        slate: "Slate",
-      } satisfies Record<BadgeColor, string>,
-    },
-    rules: {
-      loadingEditor: "Loading rule editor…",
-    },
-    importExport: {
-      title: "Import & export",
-      importHeading: "Import",
-      instruction: `${BRAND_NAME} JSON or ModHeader export, detected automatically.`,
-      choose: "Choose file…",
-      fileInputLabel: `Import a ${BRAND_NAME} or ModHeader export`,
-      exportHeading: "Export",
-      // The file carries profiles and rules, not the site access, theme, pause,
-      // or active-profile state that stay with this browser, so the label names
-      // what it can carry rather than claiming everything.
-      exportAll: "Export all profiles",
-      exportOne: "Export one profile",
-      exportChoiceLabel: "Profile to export",
-      // A standing hint between the Export heading and the export buttons, read
-      // before a download rather than raised by one. It names what the file
-      // holds and what it does not: site access is a browser permission state a
-      // file cannot carry back, since each origin needs its own grant gesture.
-      secretsReminder:
-        "This file holds your profiles and rules. Treat it like a credentials file. Site access stays in this browser, not the file.",
-      exportFilename: "headershim-export.json",
-      profileFilename: (slug: string) => `headershim-${slug}.json`,
-      summaryHeading: "Import summary",
-      addsLead: "Adds these profiles and keeps the ones you have:",
-      needAttention: (count: number) =>
-        count === 1
-          ? "1 item needs attention:"
-          : `${count} items need attention:`,
-      import: "Import",
-      convert: "Convert to frozen value",
-      imported: (count: number) =>
-        `Imported ${count} ${profiles(count)}, turned off. Turn them on when you're ready.`,
-      exported: (filename: string) => `Exported ${filename}`,
-      warnings: {
-        credentialHeader: (header: string): Sentence => [
-          "Carries a credential in ",
-          data(header),
-          ". Check where this rule reaches before you turn it on.",
-        ],
-        securityResponseHeader: (header: string): Sentence => [
-          "Changes ",
-          data(header),
-          ", a protection sites send. Check where this rule reaches before you turn it on.",
-        ],
-        appendDegraded: (header: string): Sentence => [
-          "Chrome only allows appending to a fixed set of request headers, and ",
-          data(header),
-          " isn't one of them, so it was imported as Set.",
-        ],
-        cookieSemantics:
-          "Imported as a whole-header append on cookie; per-cookie merge behaves differently.",
-        setCookieSemantics:
-          "Imported as Set on set-cookie; a set collapses multiple Set-Cookie headers into one.",
-        cspSemantics:
-          "Browsers combine CSPs restrictively; this cannot loosen a page's own policy.",
-        invalidRegex: (pattern: string): Sentence => [
-          "This pattern isn't valid RE2, so the rule was imported disabled: ",
-          data(pattern),
-        ],
-        invalidValue:
-          "Not imported. Header values can't contain line breaks or NUL characters.",
-        dynamicToken:
-          "Contains a request-time token Chrome extensions can no longer compute.",
-        droppedExcludeUrl: `Dropped. ${BRAND_NAME} has no per-rule URL exclusion in this version.`,
-        droppedInitiatorDomain: `Dropped. ${BRAND_NAME} has no initiator scoping in this version.`,
-        droppedTab: "Dropped. Use This-tab overrides for per-tab needs.",
-        droppedUrlReplacement: `Dropped. ${BRAND_NAME} changes headers only.`,
-      },
-    },
-    settings: {
-      title: "Settings",
-      theme: {
-        label: "Theme",
-        options: { system: "System", light: "Light", dark: "Dark" },
-      },
-      shortcuts: "Keyboard shortcuts",
-      shortcutsManage: "Change",
-      shortcutUnset: "Not set",
-      // What each command does, in display order. Chrome returns no label for
-      // the reserved action command, so these live here and pair with the live
-      // key the browser reports for each.
-      commands: [
-        { name: "_execute_action", label: "Open the popup" },
-        { name: "toggle-pause", label: "Toggle global pause" },
-        { name: "previous-profile", label: "Switch to the previous profile" },
-      ],
-      eraseAll: {
-        action: "Start over",
-        confirmTitle: "Start over?",
-        confirmBody:
-          "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, and clears any This-tab overrides. Undo restores only the configuration, not site access or This-tab overrides.",
-        done: "Configuration replaced",
-      },
-    },
-    about: {
-      title: "About",
-      build: (version: string, commit: string): Sentence => [
-        `${BRAND_NAME} v`,
-        data(version),
-        " · commit ",
-        data(commit),
-      ],
-      description: `${BRAND_NAME} modifies HTTP request and response headers using scoped rules, profiles, and tab-specific overrides.`,
-      license:
-        "Open source under the MIT license. Provided as is, without warranty.",
-      // The three permissions the manifest declares, in the order it declares
-      // them, then the optional site access it asks for at runtime.
-      permissions: {
-        heading: "Permissions",
-        items: [
-          ...MANIFEST_PERMISSIONS.map((name) => ({
-            name,
-            ...PERMISSION_REASONS[name],
-          })),
-          {
-            name: ALL_SITES_ORIGIN,
-            title: "Site access",
-            reason: `${BRAND_NAME} asks Chrome for the sites a rule's scope needs, and the grants you approve are the host access it asks for.`,
-            details: [
-              "A rule scoped to named domains asks for those domains. A rule scoped to all sites asks for all sites, whether the request comes from that rule's own Grant button or from the Site access page, and it is a request you can decline.",
-              "The Site access page lists every grant and revokes any of them.",
-              `While a site is granted, Chrome reports the address of every tab that navigates there, not only the tab the popup was opened on. ${BRAND_NAME} reduces each one to an origin. Full addresses are not stored.`,
-            ],
-          },
-        ],
-      },
-      links: {
-        repository: "Repository",
-        repositoryUrl: "https://github.com/arun279/headershim",
-        privacy: "Privacy",
-        privacyUrl:
-          "https://github.com/arun279/headershim/blob/main/PRIVACY.md",
-        license: "License",
-        licenseUrl: "https://github.com/arun279/headershim/blob/main/LICENSE",
-        issues: "Issues",
-        issuesUrl: "https://github.com/arun279/headershim/issues",
-        releases: "Releases",
-        releasesUrl: "https://github.com/arun279/headershim/releases",
-      },
-    },
-  },
-
   actions: {
-    createRule: "Create rule",
-    createRuleAndAllow: (host: string) => `Create rule and allow ${host}`,
-    saveChanges: "Save changes",
-    saveChangesAndAllow: (host: string) => `Save changes and allow ${host}`,
-    // The sites a commit will ask Chrome for, named in full. The permission
-    // prompt closes the popup, so this is the last disclosure the user reads.
-    andSites: andList,
     // activeTab reload handed to the user after a grant lands; there is no
     // automatic reload (locus of control).
     reloadTab: "Reload tab",
     cancel: "Cancel",
     undo: "Undo",
-    regenerate: "Regenerate",
     options: "Options",
   },
 
   toast: {
     ruleCreated: "Rule created",
     changesSaved: "Changes saved",
+    ruleDeleted: "Rule deleted",
+    profileDeleted: (name: string) => `Profile '${name}' deleted`,
+    // Deleting the last profile leaves one behind: a fresh empty Default takes
+    // its place, so the toast says so rather than reading as a no-op.
+    lastProfileDeleted: (name: string) =>
+      `Profile '${name}' deleted; a new empty ${DEFAULT_PROFILE_NAME} replaces it`,
     // Confirms a grant landed, and says only that: a grant means the host is
     // permitted, while whether a rule runs there turns on pause, the active
     // profile, and Chrome taking the rule. The popup pairs it with a Reload-tab
@@ -629,12 +240,6 @@ export const copy = {
     // surfaces raise it on its own.
     accessGranted: "Access granted",
     // "· Undo" is the toast's action button, not part of the message.
-    ruleDeleted: "Rule deleted",
-    profileDeleted: (name: string) => `Profile '${name}' deleted`,
-    // Deleting the last profile leaves one behind: a fresh empty Default takes
-    // its place, so the toast says so rather than reading as a no-op.
-    lastProfileDeleted: (name: string) =>
-      `Profile '${name}' deleted; a new empty ${DEFAULT_PROFILE_NAME} replaces it`,
   },
 
   rules: {
@@ -645,161 +250,59 @@ export const copy = {
     redacted: "[hidden]",
     emptyValue: "(empty)",
     generated: (kind: string) => `${kind} · generated`,
+    generatedKind: { uuid: "UUID", timestamp: "Timestamp" },
     editValueHint: "Enter saves · Esc cancels",
   },
 
-  emptyState: {
-    siteAccess: "No individual sites to show.",
+  // The popup borrows these leaves from options-only concerns.
+  profiles: {
+    // The name a fresh profile is created under before the user renames it;
+    // availableProfileName resolves collisions ("New profile 2", …).
+    newName: "New profile",
+    nameLabel: "Profile name",
+    renameHint: "Press Enter to save, Esc to cancel",
+    nameTaken: (name: string) => `'${name}' is taken. Use a different name.`,
   },
 
-  scopeSummary: {
-    allSites: "all sites",
+  allRules: {
+    notActiveProfile: (name: string) => `in ${name}, not the active profile`,
   },
 
-  resourceTypes: {
-    groups: {
-      pages: "Pages",
-      subframes: "Subframes",
-      xhr: "XHR/fetch",
-      scripts: "Scripts",
-      stylesheets: "Stylesheets",
-      images: "Images",
-      fonts: "Fonts",
-      media: "Media",
-      websockets: "WebSockets",
-      other: "Other",
-    } satisfies Record<ResourceGroup, string>,
-    count: (n: number) => `${n} types`,
+  siteAccess: {
+    // The standing note: shown while any enabled rule reaches
+    // subresources without naming the pages that start those requests.
+    initiatorNote:
+      "Requests started by other pages also need those pages granted.",
   },
 
-  editor: {
-    heading: (mode: "new" | "edit", profile: string) =>
-      `${mode === "new" ? "New rule" : "Edit rule"} · ${profile}`,
-    close: "Close editor",
-    delete: "Delete rule",
-    discardConfirm: {
-      title: "Discard this rule?",
-      keepEditing: "Keep editing",
-      discard: "Discard",
-    },
-    labels: {
-      direction: "Direction",
-      operation: "Operation",
-      headerName: "Header name",
-      value: "Value",
-      profile: "Profile",
-      scope: "Scope",
-      comment: "Comment",
-      resourceTypes: "Resource types",
-    },
-    // A header name has one shape, but the example that teaches it belongs to a
-    // direction: a request header on the request side, a response header on the
-    // response side, so the hint is never a header the chosen side can't carry.
-    // A value has no such example: the field takes whatever this header carries,
-    // and an example of one header's value is wrong on every other header.
-    placeholders: {
-      headerName: { request: "authorization", response: "set-cookie" },
-    },
-    // A pasted `name: value` line lands split across the two fields rather than
-    // failing the name's token grammar on the colon.
+  headerFields: {
+    direction: "Direction",
+    operation: "Operation",
+    headerName: "Header name",
+    value: "Value",
+    headerNamePlaceholder: { request: "authorization", response: "set-cookie" },
     pastedLineSplit: "Pasted header split into name and value.",
-    direction: { request: "Request", response: "Response" },
-    operation: { set: "Set", append: "Append", remove: "Remove" },
-    savedAs: (name: string): Sentence => ["saved as ", data(name)],
-    suggestions: (n: number) => (n === 1 ? "1 suggestion" : `${n} suggestions`),
-    scopeType: {
-      domains: "Domains",
-      pattern: "URL pattern",
-      regex: "Regex",
-    },
-    allSites: "All sites",
-    allSitesHelper: "matches every website",
-    domainsHelper:
-      "matches this domain and its subdomains, on any scheme and port",
-    requestTarget:
-      "Runs on requests to these hosts, which may differ from the page you are viewing.",
-    addDomain: "+ add",
-    addChipHint: "Press Enter to add",
-    domainInputLabel: "Add domain",
-    removeDomain: (domain: string) => `Remove ${domain}`,
-    // The escape hatch for a pattern/regex rule: bound the grant to named hosts
-    // instead of all sites. A regex names no host Chrome can scope a permission
-    // to, so an empty list is an honest all-sites request, said here before the
-    // save button repeats it.
-    grantHostsLabel: "Grant on hosts",
-    grantHostInputLabel: "Add host",
-    grantHostsAllSites: "Leave empty and this rule needs access to all sites.",
-    grantHostsBounded:
-      "This rule matches only the hosts listed here, and needs access to just them.",
-    // Two lines, not one glued by a separator: at the popup's width the second
-    // wraps under the first, so a middle dot between them orphans on its own. The
-    // first names the recommended anchored form; the second states what Chrome
-    // compiles a pattern with no anchor into, which is the reach that leaks.
-    patternHint: [
-      [
-        data("||example.com^"),
-        " matches the site, its subdomains, and every path.",
-      ],
-      [
-        "Without ",
-        data("||"),
-        ", a pattern matches anywhere in the URL, including the query string.",
-      ],
-    ] satisfies readonly Sentence[],
-    // Regex is the one scope that can bind to subdomains without the domain, so
-    // the hint carries that idiom; the leading ^ also shows the anchoring a bare
-    // regex lacks, the same reach the pattern hint warns about.
-    regexHint: [
-      "Chrome matches this as an RE2 regex. ",
-      data("^https?://[^/]+\\.example\\.com/"),
-      " matches subdomains only, not the domain itself.",
-    ] satisfies Sentence,
-    allTypes: "All types",
-    generate: "Generate",
-    generateUuid: "UUID",
-    generateTimestamp: "Timestamp (ISO 8601)",
-    generatedKind: { uuid: "UUID", timestamp: "Timestamp" },
-    newlineRemoved: "Line breaks removed. A header value is a single line.",
     caution: "Caution",
-  },
-
-  // Optional one-word context after a suggested name ("authorization: credentials").
-  headerHints: {
-    authorization: "credentials",
-    "user-agent": "client identity",
-    "content-type": "media type",
-    "content-security-policy": "content policy",
-    cookie: "stored cookies",
-    "set-cookie": "cookie to store",
-    origin: "requesting origin",
-    referer: "linking page",
-    accept: "acceptable media types",
-    "accept-language": "preferred languages",
-    "accept-encoding": "acceptable encodings",
-    "cache-control": "caching directives",
-    "access-control-allow-origin": "CORS origins",
-    "x-forwarded-for": "client address",
-    host: "target authority",
-    etag: "resource version",
-    location: "redirect target",
-  } as Partial<Record<string, string>>,
-
-  // The note under the value field, always present so the field is never silent
-  // about how the value is treated: a hand-typed value is used verbatim, and a
-  // generated one is frozen at a moment and never recomputed. Neither is a
-  // template that fills in per request.
-  valueNote: {
-    literal: "This value is used exactly as typed. It is not a template.",
-    frozen: (at: string) =>
-      `Frozen at ${at.slice(0, 10)} ${at.slice(11, 16)} UTC. This exact value is used every time, not regenerated.`,
   },
 
   errors: {
     pageLoad:
       "This page could not be loaded. Reload the extension to try again.",
-    saveFailed: "Couldn't save this change. Try again.",
+    grantDeclined: (host: string) =>
+      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready.`,
+    ruleCounter: (enabled: number) =>
+      `${enabled.toLocaleString("en-US")} of ${MAX_ENABLED_RULES.toLocaleString("en-US")} enabled rules.`,
+    importParse:
+      "This file isn't valid JSON, so nothing was imported and nothing was changed. If it came from ModHeader, export it again with Profile → Export → JSON.",
+    importNewer: (fileVersion: number, supportedVersion: number) =>
+      `This file was exported by a newer ${BRAND_NAME} (format ${fileVersion}; this version reads up to ${supportedVersion}). Update ${BRAND_NAME}, then import again. Nothing was changed.`,
+    importUnrecognized: `This file is valid JSON but isn't a ${BRAND_NAME} or ModHeader export, so nothing was imported and nothing was changed. ${BRAND_NAME} reads its own exports and ModHeader profile exports only.`,
+    importTooLarge: `This file is far larger than any export ${BRAND_NAME} can hold, so it wasn't read and nothing was changed. Check you picked the right file.`,
+    importUnreadable:
+      "This file couldn't be read, so nothing was imported and nothing was changed. If it moved or changed since you picked it, pick it again.",
     eraseFailed:
       "Couldn't finish erasing. Check Site access and This tab, then try again.",
+    saveFailed: "Couldn't save this change. Try again.",
     unavailable:
       "Couldn't load saved state. Reload the extension from chrome://extensions and try again.",
     regexInvalid:
@@ -808,8 +311,6 @@ export const copy = {
       "This pattern compiles to more than Chrome's 2 KB limit for a single rule. Shorten or split it.",
     patternInvalid:
       "Chrome's rule engine can't use this URL pattern. A pattern can't contain non-ASCII characters (write an internationalized domain in its punycode form) and can't start with '||*'. Fix the pattern, or switch this scope to a regex.",
-    grantDeclined: (host: string) =>
-      `Saved, but not running. You declined access to ${host}, so this rule can't change anything there. Grant access when you're ready.`,
     // A this-tab change has no life beyond the grant, so a decline leaves
     // nothing to save: the draft stays here rather than becoming a dead row.
     thisTabDeclined: (host: string) =>
@@ -819,19 +320,9 @@ export const copy = {
     ruleCap: `Chrome caps extensions at 5,000 header rules, and enabling this would pass ${BRAND_NAME}'s safe limit of ${MAX_ENABLED_RULES.toLocaleString("en-US")}. Disable or delete rules you're not using, or turn off a profile.`,
     dynamicRuleCap:
       "This profile would expand past Chrome's 5,000-rule limit because rules that name several sites can require one installed rule per site. Use fewer sites or split the profile.",
-    ruleCounter: (enabled: number) =>
-      `${enabled.toLocaleString("en-US")} of ${MAX_ENABLED_RULES.toLocaleString("en-US")} enabled rules.`,
     regexRuleCap: `Chrome separately caps regex-scoped rules at ${MAX_REGEX_RULES.toLocaleString("en-US")}, and enabling this would pass that limit. Disable or delete regex rules you're not using, or switch some scopes to URL patterns.`,
     storageBudget: `Chrome gives an extension limited local storage, and this change would pass ${BRAND_NAME}'s safe budget of ${MAX_DOC_BYTES / (1024 * 1024)} MB. Shorten long header values, or delete rules you're not using.`,
     sessionCap: `Chrome caps temporary tab rules, and this would pass ${BRAND_NAME}'s limit of ${MAX_SESSION_OVERRIDES.toLocaleString("en-US")}. Remove a temporary override you're done with, or save this one as a rule instead.`,
-    importParse:
-      "This file isn't valid JSON, so nothing was imported and nothing was changed. If it came from ModHeader, export it again with Profile → Export → JSON.",
-    importNewer: (fileVersion: number, supportedVersion: number) =>
-      `This file was exported by a newer ${BRAND_NAME} (format ${fileVersion}; this version reads up to ${supportedVersion}). Update ${BRAND_NAME}, then import again. Nothing was changed.`,
-    importUnrecognized: `This file is valid JSON but isn't a ${BRAND_NAME} or ModHeader export, so nothing was imported and nothing was changed. ${BRAND_NAME} reads its own exports and ModHeader profile exports only.`,
-    importTooLarge: `This file is far larger than any export ${BRAND_NAME} can hold, so it wasn't read and nothing was changed. Check you picked the right file.`,
-    importUnreadable:
-      "This file couldn't be read, so nothing was imported and nothing was changed. If it moved or changed since you picked it, pick it again.",
     headerNotModifiable:
       "Header names starting with ':' are HTTP/2 internals that Chrome doesn't let any extension touch. To change the host a server sees, the request would have to use HTTP/1.1. For most modern sites that isn't possible.",
     headerNameRequired: "Every rule needs a header name. Type one to save.",

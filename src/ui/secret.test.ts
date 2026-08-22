@@ -31,6 +31,6 @@ describe("headerValueSummary", () => {
         value: "",
         generated: { kind: "uuid", at: "2026-07-12T14:03:00.000Z" },
       }),
-    ).toBe(copy.rules.generated(copy.editor.generatedKind.uuid));
+    ).toBe(copy.rules.generated(copy.rules.generatedKind.uuid));
   });
 });

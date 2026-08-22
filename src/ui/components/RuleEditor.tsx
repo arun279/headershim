@@ -24,6 +24,7 @@ import type {
 import type { Result } from "../../core/result";
 import { isHostnameShaped, originPatternForDomain } from "../../core/scope";
 import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import {
   headerErrorToFieldError,
   headerValueEmptyErrors,
@@ -213,7 +214,7 @@ export function RuleEditor(props: RuleEditorProps) {
         if (granted === true) {
           props.onGranted?.();
         } else {
-          props.onGrantDeclined?.(copy.actions.andSites(grant.sites));
+          props.onGrantDeclined?.(editorCopy.actions.andSites(grant.sites));
         }
       }
       props.onClose();
@@ -300,7 +301,7 @@ export function RuleEditor(props: RuleEditorProps) {
   };
 
   const mode = props.rule === undefined ? "new" : "edit";
-  const title = copy.editor.heading(mode, props.profileName);
+  const title = editorCopy.editor.heading(mode, props.profileName);
   const commitGrant = planCommitGrant(
     toRuleDraft(draft, props.rule),
     props.grants,
@@ -309,14 +310,14 @@ export function RuleEditor(props: RuleEditorProps) {
   const saveLabel =
     commitGrant === undefined
       ? mode === "new"
-        ? copy.actions.createRule
-        : copy.actions.saveChanges
+        ? editorCopy.actions.createRule
+        : editorCopy.actions.saveChanges
       : mode === "new"
-        ? copy.actions.createRuleAndAllow(
-            copy.actions.andSites(commitGrant.sites),
+        ? editorCopy.actions.createRuleAndAllow(
+            editorCopy.actions.andSites(commitGrant.sites),
           )
-        : copy.actions.saveChangesAndAllow(
-            copy.actions.andSites(commitGrant.sites),
+        : editorCopy.actions.saveChangesAndAllow(
+            editorCopy.actions.andSites(commitGrant.sites),
           );
 
   return (
@@ -328,7 +329,11 @@ export function RuleEditor(props: RuleEditorProps) {
       onKeyDown={onKeyDown}
       header={
         <>
-          <Button kind="ghost" label={copy.editor.close} onClick={requestClose}>
+          <Button
+            kind="ghost"
+            label={editorCopy.editor.close}
+            onClick={requestClose}
+          >
             <CloseGlyph />
           </Button>
           <h1 class="editor-title">{title}</h1>
@@ -348,7 +353,7 @@ export function RuleEditor(props: RuleEditorProps) {
             {confirmDiscard ? (
               <>
                 <strong class="discard-title">
-                  {copy.editor.discardConfirm.title}
+                  {editorCopy.editor.discardConfirm.title}
                 </strong>
                 {/* Losing the draft is the outcome that cannot be taken back,
                     so keeping it is the drawn button and discarding is the bare
@@ -359,7 +364,7 @@ export function RuleEditor(props: RuleEditorProps) {
                   class="editor-cancel"
                   onClick={props.onClose}
                 >
-                  {copy.editor.discardConfirm.discard}
+                  {editorCopy.editor.discardConfirm.discard}
                 </button>
                 <button
                   type="button"
@@ -367,7 +372,7 @@ export function RuleEditor(props: RuleEditorProps) {
                   ref={keepEditingRef}
                   onClick={keepEditing}
                 >
-                  {copy.editor.discardConfirm.keepEditing}
+                  {editorCopy.editor.discardConfirm.keepEditing}
                 </button>
               </>
             ) : (
@@ -380,7 +385,7 @@ export function RuleEditor(props: RuleEditorProps) {
                     disabled={busy}
                     onClick={props.onDelete}
                   >
-                    {copy.editor.delete}
+                    {editorCopy.editor.delete}
                   </Button>
                 )}
                 <button
@@ -441,7 +446,7 @@ export function RuleEditor(props: RuleEditorProps) {
 
         {pastedLineSplit && (
           <p class="editor-micro" role="status">
-            {copy.editor.pastedLineSplit}
+            {editorCopy.editor.pastedLineSplit}
           </p>
         )}
 
@@ -534,7 +539,7 @@ function CommentDisclosure({
             than mid-word; the separator travels with it so it cannot be left
             hanging on a line of its own. */}
         <span class="disclosure-label">
-          {copy.editor.labels.comment}
+          {editorCopy.editor.labels.comment}
           {!open && summary !== "" && (
             <Truncate
               mode="end"
@@ -553,7 +558,7 @@ function CommentDisclosure({
       {open && (
         <div id={`${id}-panel`}>
           <label class="sr-only" for={id}>
-            {copy.editor.labels.comment}
+            {editorCopy.editor.labels.comment}
           </label>
           <input
             id={id}
@@ -587,7 +592,7 @@ function ProfileField({
   return (
     <div class="editor-field">
       <label class="editor-label" for={id}>
-        {copy.editor.labels.profile}
+        {editorCopy.editor.labels.profile}
       </label>
       <select
         id={id}
@@ -793,7 +798,7 @@ function planCommitGrant(
   if (requiredOrigins(draft).some(isAllSitesOrigin)) {
     return {
       origins: [ALL_SITES_ORIGIN],
-      sites: [copy.scopeSummary.allSites],
+      sites: [editorCopy.scopeSummary.allSites],
     };
   }
   const targets = targetHosts(draft.scope);

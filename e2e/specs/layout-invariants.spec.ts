@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
-import { copy, siteAccessCopy } from "../../src/ui/copy";
+import { copy } from "../../src/ui/copy";
+import { copy as editorCopy } from "../../src/ui/copy.editor";
+import { siteAccessCopy } from "../../src/ui/copy.options";
 import { NARROWED_ORIGIN } from "../echo-ports.mjs";
 import {
   activeTabId,
@@ -333,10 +335,10 @@ test("this-tab composer offers Add without a grant when a narrowed grant covers 
     await measure(composer, theme, `popup narrow this-tab composer (${theme})`);
 
     await composer
-      .getByRole("textbox", { name: copy.editor.labels.headerName })
+      .getByRole("textbox", { name: editorCopy.editor.labels.headerName })
       .fill("x-headershim-this-tab");
     await composer
-      .getByRole("textbox", { name: copy.editor.labels.value })
+      .getByRole("textbox", { name: editorCopy.editor.labels.value })
       .fill("on");
     await commit.click();
     await expect

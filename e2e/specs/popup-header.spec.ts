@@ -2,6 +2,7 @@ import type { Worker } from "@playwright/test";
 import { createRule, type StateDoc } from "../../src/core/model";
 import { createV1Seed } from "../../src/core/schema";
 import { copy } from "../../src/ui/copy";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import { expect, seedState, test } from "../fixtures";
 
 async function readState(worker: Worker): Promise<StateDoc> {
@@ -59,10 +60,10 @@ test("a popup-created profile becomes active without reloading", async ({
     .click();
   const created = "QA headers";
   await page
-    .getByRole("textbox", { name: copy.options.profiles.nameLabel })
+    .getByRole("textbox", { name: copy.profiles.nameLabel })
     .fill(created);
   await page
-    .getByRole("textbox", { name: copy.options.profiles.nameLabel })
+    .getByRole("textbox", { name: copy.profiles.nameLabel })
     .press("Enter");
   await expect(page.locator(".prof .lbl")).toHaveText(created);
   expect(page.url()).toBe(url);
@@ -111,7 +112,7 @@ test("the popup options button opens the About page", async ({
   await expect(
     options.getByRole("heading", {
       level: 1,
-      name: copy.options.about.title,
+      name: optionsCopy.options.about.title,
     }),
   ).toBeVisible();
 });
