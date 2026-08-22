@@ -35,6 +35,8 @@ pnpm verify
 
 `pnpm zip` builds the release archive and checks that it exactly matches `.output/chrome-mv3` with no source maps.
 
+`pnpm size:record` lowers size limits to the current bounded slack grain after intentional size reductions.
+
 The Playwright project gate compares the working tree with committed `HEAD` and the default-branch merge base. The pre-push hook and pull-request CI also compare the prior remote revision through `PLAYWRIGHT_PREVIOUS_REFS`. A deliberate removal needs one `{ "base", "test", "reason" }` acknowledgement for each reported comparison commit that contained the test. Acknowledgements become inactive when their comparison commit is no longer used.
 
 ## License
