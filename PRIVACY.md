@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-27
+Last updated: 2026-08-22
 
 HeaderShim keeps your rules, profiles, and settings in Chrome's local extension storage, in this browser on this device. A value you type can itself be sensitive, such as an Authorization token or a Cookie value, because setting those headers is what the extension does. Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file. Chrome's synced storage is not used, so nothing is copied to your Google account. The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.
 
