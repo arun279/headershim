@@ -231,6 +231,12 @@ describe("copy", () => {
     expect(copy.errors.newerStore(2, 1)).toContain(
       "format 2; this version reads up to 1",
     );
+    expect(copy.errors.eraseFailed).toBe(
+      "Couldn't finish erasing. Check Site access and This tab, then try again.",
+    );
+    expect(copy.errors.unavailable).toBe(
+      "Couldn't load saved state. Reload the extension from chrome://extensions and try again.",
+    );
   });
 
   it("keeps README manifest facts aligned with their constants", () => {

@@ -36,7 +36,7 @@ export function SettingsPage({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const [confirmErase, setConfirmErase] = useState(false);
   const [keys, setKeys] = useState<Record<string, string>>({});
-  const { toast, showUndoable, flash, dismiss } = useToast();
+  const { toast, show, showUndoable, flash, dismiss } = useToast();
 
   // The bound key for each command, read back from the browser so the row shows
   // the shortcut a user actually has (including any they rebound) rather than a
@@ -60,20 +60,25 @@ export function SettingsPage({
   // dropped. Undo restores the document alone: a revoked grant needs its own
   // gesture to return, and a live override belongs to its tab, not to a saved
   // document.
-  const erase = () => {
+  const erase = async () => {
     setConfirmErase(false);
-    void mutations.replaceDoc(createV1Seed()).then((outcome) => {
+    try {
+      const outcome = await mutations.replaceDoc(createV1Seed());
       if (!outcome.ok) {
         flash(outcome.error);
         return;
       }
-      void removePermissions([...grants.origins]);
-      void clearOverrides();
+      await Promise.all([
+        removePermissions([...grants.origins]),
+        clearOverrides(),
+      ]);
       showUndoable(text.eraseAll.done, () =>
         mutations.replaceDoc(outcome.value),
       );
       titleRef.current?.focus();
-    });
+    } catch {
+      show(copy.errors.eraseFailed);
+    }
   };
 
   return (

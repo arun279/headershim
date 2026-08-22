@@ -21,8 +21,11 @@ import {
 import { readRaw, subscribe as subscribeStore } from "../../platform/store";
 import { activeTabId } from "../../platform/tabs";
 
+export const BOOT_GRACE_MS = 3000;
+
 export type AppState =
   | { readonly phase: "initializing" }
+  | { readonly phase: "unavailable" }
   | { readonly phase: "newer-store"; readonly foundVersion: number }
   | {
       readonly phase: "ready";
@@ -57,12 +60,18 @@ export function useAppState(): AppState {
     readonly revision: RulesRevision;
   }>();
   const [tabId, setTabId] = useState<number | undefined>(undefined);
-  const [booted, setBooted] = useState(false);
+  const [boot, setBoot] = useState<"pending" | "ready" | "failed">("pending");
+  const [graceElapsed, setGraceElapsed] = useState(false);
 
   useEffect(() => {
     let disposed = false;
     let docGeneration = 0;
     let appliedGeneration = 0;
+    const graceTimer = setTimeout(() => setGraceElapsed(true), BOOT_GRACE_MS);
+    const setLoadedDoc = (source: DocSource) => {
+      clearTimeout(graceTimer);
+      setDocSource(source);
+    };
     const assign =
       <T>(set: (value: T) => void) =>
       (value: T) => {
@@ -80,14 +89,11 @@ export function useAppState(): AppState {
       if (outcome.ok) {
         const isRegexSupported = await resolveRegexSupport(outcome.value);
         if (!disposed && generation === docGeneration) {
-          setDocSource({ doc: outcome.value, isRegexSupported });
+          setLoadedDoc({ doc: outcome.value, isRegexSupported });
         }
       } else if (outcome.error.kind === "newer-store") {
-        setDocSource({ newerVersion: outcome.error.foundVersion });
+        setLoadedDoc({ newerVersion: outcome.error.foundVersion });
       }
-      // A missing or corrupt doc stays in the initializing phase: the
-      // background quarantines and reseeds, and that write lands here through
-      // the storage subscription.
     };
     const loadGrants = () => grantSnapshot().then(assign(setGrants));
     const loadSession = () => readSession().then(assign(setSession));
@@ -107,7 +113,10 @@ export function useAppState(): AppState {
       loadSession(),
       loadApplied(),
       activeTabId().then(assign(setTabId)),
-    ]).then(() => assign(setBooted)(true));
+    ]).then(
+      () => assign(setBoot)("ready"),
+      () => assign(setBoot)("failed"),
+    );
 
     const unsubscribe = [
       subscribeStore(() => void loadDoc()),
@@ -117,6 +126,7 @@ export function useAppState(): AppState {
     ];
     return () => {
       disposed = true;
+      clearTimeout(graceTimer);
       for (const dispose of unsubscribe) {
         dispose();
       }
@@ -151,14 +161,20 @@ export function useAppState(): AppState {
     };
   }, [batch]);
 
-  if (!booted || docSource === undefined || grants === undefined) {
-    return { phase: "initializing" };
-  }
-  if ("newerVersion" in docSource) {
+  if (docSource && "newerVersion" in docSource) {
     return { phase: "newer-store", foundVersion: docSource.newerVersion };
   }
 
-  if (batch === undefined) {
+  if (boot === "failed" || (graceElapsed && docSource === undefined)) {
+    return { phase: "unavailable" };
+  }
+
+  if (
+    boot !== "ready" ||
+    docSource === undefined ||
+    grants === undefined ||
+    batch === undefined
+  ) {
     return { phase: "initializing" };
   }
 

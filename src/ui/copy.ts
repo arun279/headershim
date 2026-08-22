@@ -799,6 +799,10 @@ export const copy = {
     pageLoad:
       "This page could not be loaded. Reload the extension to try again.",
     saveFailed: "Couldn't save this change. Try again.",
+    eraseFailed:
+      "Couldn't finish erasing. Check Site access and This tab, then try again.",
+    unavailable:
+      "Couldn't load saved state. Reload the extension from chrome://extensions and try again.",
     regexInvalid:
       "This pattern isn't valid RE2, the regex dialect Chrome's rule engine uses. RE2 has no lookahead or backreferences. Fix the pattern, or switch this scope to a URL pattern.",
     regexOversize:

@@ -68,16 +68,17 @@ const mutations = createMutations({ validateRegex: isRegexSupported });
 export function App() {
   const app = useAppState();
 
-  if (app.phase === "initializing") {
+  if (app.phase !== "ready") {
+    const message =
+      app.phase === "newer-store"
+        ? copy.errors.newerStore(app.foundVersion, CURRENT)
+        : app.phase === "unavailable"
+          ? copy.errors.unavailable
+          : undefined;
     // Local data lands within a frame; a skeleton would only flash.
-    return <main class="popup" aria-busy="true" />;
-  }
-  if (app.phase === "newer-store") {
     return (
-      <main class="popup">
-        <EmptyState
-          message={copy.errors.newerStore(app.foundVersion, CURRENT)}
-        />
+      <main class="popup" aria-busy={message === undefined}>
+        {message !== undefined && <EmptyState message={message} />}
       </main>
     );
   }
@@ -127,6 +128,21 @@ function Ready({
     dismiss();
   };
 
+  const run = (
+    // biome-ignore lint/suspicious/noConfusingVoidType: mutation completion has no value
+    mutation: Promise<Result<unknown, MutationError> | void>,
+    fallback?: string,
+  ) => {
+    void mutation.then(
+      (outcome) => {
+        if (outcome !== undefined && !outcome.ok) {
+          reportBlockedCommit(outcome.error, fallback);
+        }
+      },
+      () => show(copy.errors.saveFailed),
+    );
+  };
+
   useEffect(() => {
     void activeTabDomain().then((host) => {
       setTabDomain(host);
@@ -156,7 +172,7 @@ function Ready({
   useEffect(() => {
     if (pruned || !tabResolved || tabId === undefined) return;
     setPruned(true);
-    void pruneForeignOrigins(tabId, tabDomain);
+    run(pruneForeignOrigins(tabId, tabDomain));
   }, [pruned, tabResolved, tabId, tabDomain]);
 
   // An Undo outlives the render that armed it, so a write reads the rule as it
@@ -180,17 +196,6 @@ function Ready({
       }),
     [doc, live, tabId, tabDomain, tabOrigin, overrides],
   );
-
-  const run = <T,>(
-    mutation: Promise<Result<T, MutationError>>,
-    fallback?: string,
-  ) => {
-    void mutation.then((outcome) => {
-      if (!outcome.ok) {
-        reportBlockedCommit(outcome.error, fallback);
-      }
-    });
-  };
 
   const reportBlockedCommit = (error: MutationError, fallback?: string) => {
     const message = blockedCommitCopy(error) ?? fallback;
@@ -223,7 +228,7 @@ function Ready({
   const toggleChange = (change: TabChange, next: boolean) => {
     if (change.source === "override") {
       if (tabId !== undefined && change.overrideNum !== undefined) {
-        void setOverrideEnabled(tabId, change.overrideNum, next);
+        run(setOverrideEnabled(tabId, change.overrideNum, next));
       }
       return;
     }
@@ -251,11 +256,11 @@ function Ready({
   const writeChangeValue = async (
     change: TabChange,
     value: string,
-  ): Promise<boolean> => {
+  ): Promise<Result<unknown, MutationError> | undefined> => {
     if (change.source === "override") {
       if (tabId === undefined || change.overrideNum === undefined) {
         show(copy.errors.saveFailed);
-        return false;
+        return;
       }
       const outcome = await updateOverrideValue(
         tabId,
@@ -263,32 +268,27 @@ function Ready({
         value,
       );
       if (!outcome.ok) {
-        show(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
-        return false;
+        return outcome;
       }
       if (outcome.value === undefined) {
         show(copy.errors.saveFailed);
-        return false;
+        return;
       }
-      return true;
+      return outcome;
     }
     const rule = docRef.current.profiles
       .find((profile) => profile.id === change.profileId)
       ?.rules.find((candidate) => candidate.id === change.ruleId);
     if (rule === undefined || change.profileId === undefined) {
       show(copy.errors.saveFailed);
-      return false;
+      return;
     }
     const { id: _id, num: _num, generated: _generated, ...unchanged } = rule;
     const outcome = await mutations.saveRule(change.profileId, rule.id, {
       ...unchanged,
       value,
     });
-    if (!outcome.ok) {
-      show(blockedCommitCopy(outcome.error) ?? copy.errors.saveFailed);
-      return false;
-    }
-    return true;
+    return outcome;
   };
 
   // A value edit overwrites bytes that may be the only copy of a live
@@ -299,11 +299,22 @@ function Ready({
     value: string,
   ): Promise<boolean> => {
     const previous = change.value ?? "";
-    if (!(await writeChangeValue(change, value))) return false;
+    let outcome: Result<unknown, MutationError> | undefined;
+    try {
+      outcome = await writeChangeValue(change, value);
+    } catch {
+      show(copy.errors.saveFailed);
+      return false;
+    }
+    if (outcome === undefined) return false;
+    if (!outcome.ok) {
+      reportBlockedCommit(outcome.error, copy.errors.saveFailed);
+      return false;
+    }
     raise(copy.toast.changesSaved, {
       label: copy.actions.undo,
       run: () => {
-        void writeChangeValue(change, previous);
+        run(writeChangeValue(change, previous), copy.errors.saveFailed);
         dismiss();
       },
     });
@@ -312,7 +323,7 @@ function Ready({
 
   const removeChange = (change: TabChange) => {
     if (tabId !== undefined && change.overrideNum !== undefined) {
-      void removeOverride(tabId, change.overrideNum);
+      run(removeOverride(tabId, change.overrideNum));
     }
   };
 

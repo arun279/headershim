@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { fakeBrowser } from "wxt/testing/fake-browser";
 import { createV1Seed } from "../core/schema";
 import type { SessionState } from "./session-store";
 import {
@@ -58,5 +59,56 @@ describe("platform storage", () => {
     });
     await clearAppliedRevision();
     expect(await getAppliedRevision()).toBeUndefined();
+  });
+
+  it("cleans malformed session rows and advances stale sequence numbers", async () => {
+    await fakeBrowser.storage.session.set({
+      sessionState: {
+        nextNum: 1,
+        tabs: {
+          4: [
+            {
+              num: 7,
+              tabId: 4,
+              originHost: "api.example",
+              direction: "request",
+              operation: "set",
+              header: "x-debug",
+              value: "enabled",
+              enabled: true,
+            },
+            "not a row",
+            { num: 8 },
+          ],
+          5: "not rows",
+        },
+      },
+    });
+
+    expect(await readSession()).toEqual({
+      nextNum: 8,
+      tabs: {
+        4: [
+          {
+            num: 7,
+            tabId: 4,
+            originHost: "api.example",
+            direction: "request",
+            operation: "set",
+            header: "x-debug",
+            value: "enabled",
+            enabled: true,
+          },
+        ],
+      },
+    });
+  });
+
+  it("drops a non-record tab collection", async () => {
+    await fakeBrowser.storage.session.set({
+      sessionState: { nextNum: 4, tabs: "not tabs" },
+    });
+
+    expect(await readSession()).toEqual({ nextNum: 4, tabs: {} });
   });
 });
