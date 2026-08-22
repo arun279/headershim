@@ -1,6 +1,6 @@
 import type { Worker } from "@playwright/test";
 import { validateUrlFilter } from "../../src/core/scope";
-import { expect, getDynamicRules, test } from "../fixtures";
+import { expect, test } from "../fixtures";
 
 // validateUrlFilter's whole premise is that Chrome refuses exactly these
 // urlFilter forms and sinks the atomic updateDynamicRules batch when it sees
@@ -53,20 +53,11 @@ test("validateUrlFilter gates exactly the urlFilter forms Chrome rejects", async
   }
 
   expect(validateUrlFilter(ACCEPTED_PATTERN).ok).toBe(true);
+  // updateDynamicRules is atomic, so resolving is Chrome accepting the form.
+  // Reading the ruleset back would race the background, which removes any rule
+  // outside its own batch on its next pass.
   const rejection = await tryInstall(serviceWorker, ACCEPTED_PATTERN);
   expect(rejection).toBeNull();
-  // getDynamicRules is eventually consistent: the read-back can lag the resolved
-  // updateDynamicRules, so poll for the accepted rule to land instead of reading
-  // once.
-  await expect
-    .poll(
-      async () =>
-        (await getDynamicRules(serviceWorker)).some(
-          (rule) => rule.condition.urlFilter === ACCEPTED_PATTERN,
-        ),
-      { timeout: 15_000 },
-    )
-    .toBe(true);
 
   await serviceWorker.evaluate(
     (id) =>
