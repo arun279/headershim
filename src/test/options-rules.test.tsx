@@ -1,3 +1,5 @@
+import { copy as editorCopy } from "../ui/copy.editor";
+import { copy as optionsCopy, siteAccessCopy } from "../ui/copy.options";
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,12 +11,12 @@ import { originPatternForDomain } from "../core/scope";
 import { setAppliedRevision } from "../platform/session-store";
 import { read, write } from "../platform/store";
 import { TRUNCATION_LIMITS } from "../ui/components/Truncate";
-import { copy, siteAccessCopy } from "../ui/copy";
+import { copy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { fire, render, settle } from "../ui/test/render";
 import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
-const text = copy.options.allRules;
+const text = optionsCopy.options.allRules;
 
 /** One enabled rule in one profile: the smallest list that has a row to act on. */
 function oneRule(): Profile[] {
@@ -194,7 +196,9 @@ describe("all rules", () => {
     expect(row.querySelector(".fleet-scope")?.textContent).toBe(
       "held.example.com",
     );
-    expect(row.textContent).toContain(text.notActiveProfile("Inactive"));
+    expect(row.textContent).toContain(
+      copy.allRules.notActiveProfile("Inactive"),
+    );
     expect(row.querySelector('[role="switch"]')?.className).toBe("sw sw-inert");
   });
 
@@ -289,7 +293,7 @@ describe("all rules", () => {
     const root = await mount();
 
     expect(within(root, ".fleet-open .v").textContent).toBe(
-      copy.rules.generated(copy.editor.generatedKind.uuid),
+      copy.rules.generated(copy.rules.generatedKind.uuid),
     );
   });
 
@@ -468,7 +472,7 @@ describe("rule delete", () => {
       }
     });
 
-    fire(() => findButton(root, copy.editor.delete).click());
+    fire(() => findButton(root, editorCopy.editor.delete).click());
     await settle();
     expect((await read()).profiles[0]?.rules).toEqual([]);
     expect(root.textContent).toContain(copy.toast.ruleDeleted);
@@ -508,7 +512,7 @@ describe("active changes", () => {
     const root = await mount("#traffic");
 
     expect(root.querySelector("#traffic-title")?.textContent).toBe(
-      copy.options.traffic.title,
+      optionsCopy.options.traffic.title,
     );
     const rows = [...root.querySelectorAll(".tape-row")];
     expect(rows.length).toBe(3);
@@ -521,13 +525,13 @@ describe("active changes", () => {
     );
     expect(caveated?.classList.contains("amber")).toBe(true);
     expect(caveated?.querySelector(".tape-status")?.textContent).toBe(
-      copy.options.traffic.status.live,
+      optionsCopy.options.traffic.status.live,
     );
     expect(caveated?.querySelector(".tape-caveat")?.textContent).toBe(
-      copy.options.traffic.caveat.h1Only,
+      optionsCopy.options.traffic.caveat.h1Only,
     );
     expect(root.querySelector(".tape-row.stop .tape-status")?.textContent).toBe(
-      copy.options.traffic.status.refused,
+      optionsCopy.options.traffic.status.refused,
     );
     expect(root.querySelector(".tape-row.stop .tape-caveat")).toBeNull();
     // The page carries header names, never values, so a secret cannot reach it.
@@ -577,7 +581,7 @@ describe("active changes", () => {
       siteAccessCopy.grant,
     );
     expect(row.querySelector(".tape-caveat")?.textContent).toBe(
-      copy.options.traffic.caveat.h1Only,
+      optionsCopy.options.traffic.caveat.h1Only,
     );
     expect(row.querySelector(".tape-status")).toBeNull();
   });
@@ -601,10 +605,10 @@ describe("active changes", () => {
     // HTTP/2" is false for the one value HTTP/2 allows it.
     expect(row.querySelector(".tape-action")).toBeNull();
     expect(row.querySelector(".tape-status")?.textContent).toBe(
-      copy.options.traffic.status.needsAccess,
+      optionsCopy.options.traffic.status.needsAccess,
     );
     expect(row.querySelector(".tape-caveat")?.textContent).toBe(
-      copy.options.traffic.caveat.te,
+      optionsCopy.options.traffic.caveat.te,
     );
   });
 
@@ -680,8 +684,8 @@ describe("active changes", () => {
       (row) => row.querySelector(".tape-status")?.textContent,
     );
 
-    expect(statuses).toContain(copy.options.traffic.status.live);
-    expect(statuses).toContain(copy.options.traffic.status.overridden);
+    expect(statuses).toContain(optionsCopy.options.traffic.status.live);
+    expect(statuses).toContain(optionsCopy.options.traffic.status.overridden);
   });
 
   it("reports a refused security header as refused", async () => {
@@ -708,7 +712,7 @@ describe("active changes", () => {
     const row = root.querySelector(".tape-row");
     expect(row?.classList.contains("stop")).toBe(true);
     expect(row?.querySelector(".tape-status")?.textContent).toBe(
-      copy.options.traffic.status.refused,
+      optionsCopy.options.traffic.status.refused,
     );
   });
 
@@ -750,7 +754,7 @@ describe("active changes", () => {
 
     expect(root.querySelector(".tape-list")).toBeNull();
     expect(within(root, ".tape-empty").textContent).toContain(
-      copy.options.traffic.empty,
+      optionsCopy.options.traffic.empty,
     );
     expect(root.textContent).not.toContain("Turn a rule on");
   });

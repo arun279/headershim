@@ -36,7 +36,7 @@ export function ruleValueSummary(
     (rule.value === undefined || rule.value === "") &&
     rule.generated !== undefined
   ) {
-    return copy.rules.generated(copy.editor.generatedKind[rule.generated.kind]);
+    return copy.rules.generated(copy.rules.generatedKind[rule.generated.kind]);
   }
   return headerValueSummary(rule.header, rule.value);
 }

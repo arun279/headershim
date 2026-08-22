@@ -6,6 +6,7 @@ import {
   type Scope,
 } from "../../core/model";
 import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { ChipField } from "./ChipField";
 import { Segmented } from "./Segmented";
 import { sentence } from "./sentence";
@@ -61,7 +62,7 @@ export function ScopeEditor(props: ScopeEditorProps) {
     <>
       <div class="editor-field">
         <span class="editor-label" id={`${id}-label`}>
-          {copy.editor.labels.scope}
+          {editorCopy.editor.labels.scope}
         </span>
         <div class="editor-control">
           <SegmentedType
@@ -73,26 +74,26 @@ export function ScopeEditor(props: ScopeEditorProps) {
             <>
               <ChipField
                 id={`${id}-domains`}
-                inputLabel={copy.editor.domainInputLabel}
-                placeholder={copy.editor.addDomain}
+                inputLabel={editorCopy.editor.domainInputLabel}
+                placeholder={editorCopy.editor.addDomain}
                 values={scope.domains}
                 variant="domain"
                 invalid={props.error !== undefined}
-                removeLabel={copy.editor.removeDomain}
+                removeLabel={editorCopy.editor.removeDomain}
                 onChange={(domains) => props.onScope({ ...scope, domains })}
               />
               <p class="editor-micro">
                 {crossPageSubresources
-                  ? copy.editor.requestTarget
-                  : copy.editor.domainsHelper}
+                  ? editorCopy.editor.requestTarget
+                  : editorCopy.editor.domainsHelper}
               </p>
             </>
           )}
           {scope.type === "pattern" && (
             <UrlScopeField
               id={id}
-              label={copy.editor.scopeType.pattern}
-              hint={copy.editor.patternHint.map((line, index) => (
+              label={editorCopy.editor.scopeType.pattern}
+              hint={editorCopy.editor.patternHint.map((line, index) => (
                 <p class="editor-micro" key={index}>
                   {sentence(line)}
                 </p>
@@ -108,9 +109,11 @@ export function ScopeEditor(props: ScopeEditorProps) {
           {scope.type === "regex" && (
             <UrlScopeField
               id={id}
-              label={copy.editor.scopeType.regex}
+              label={editorCopy.editor.scopeType.regex}
               hint={
-                <p class="editor-micro">{sentence(copy.editor.regexHint)}</p>
+                <p class="editor-micro">
+                  {sentence(editorCopy.editor.regexHint)}
+                </p>
               }
               invalid={props.error !== undefined && !hostError}
               hostInvalid={hostError}
@@ -121,7 +124,7 @@ export function ScopeEditor(props: ScopeEditorProps) {
             />
           )}
           {scope.type === "all" && (
-            <p class="editor-micro">{copy.editor.allSitesHelper}</p>
+            <p class="editor-micro">{editorCopy.editor.allSitesHelper}</p>
           )}
           {props.error !== undefined && (
             <p class="editor-error" role="alert">
@@ -207,19 +210,19 @@ function GrantHosts({
     <>
       <ChipField
         id={id}
-        label={copy.editor.grantHostsLabel}
-        inputLabel={copy.editor.grantHostInputLabel}
-        placeholder={copy.editor.addDomain}
+        label={editorCopy.editor.grantHostsLabel}
+        inputLabel={editorCopy.editor.grantHostInputLabel}
+        placeholder={editorCopy.editor.addDomain}
         values={hosts}
         variant="grant"
         invalid={invalid}
-        removeLabel={copy.editor.removeDomain}
+        removeLabel={editorCopy.editor.removeDomain}
         onChange={onChange}
       />
       <p class="editor-micro">
         {hosts.length === 0
-          ? copy.editor.grantHostsAllSites
-          : copy.editor.grantHostsBounded}
+          ? editorCopy.editor.grantHostsAllSites
+          : editorCopy.editor.grantHostsBounded}
       </p>
     </>
   );
@@ -248,8 +251,8 @@ function SegmentedType({
         value: segment,
         label:
           segment === "all"
-            ? copy.editor.allSites
-            : copy.editor.scopeType[segment],
+            ? editorCopy.editor.allSites
+            : editorCopy.editor.scopeType[segment],
       }))}
       onChange={onType}
     />
@@ -296,7 +299,8 @@ function ResourceTypes({
           aria-invalid={error !== undefined ? true : undefined}
           onClick={() => setOpen((current) => !current)}
         >
-          {copy.editor.labels.resourceTypes} · {typesSummary(resourceTypes)}{" "}
+          {editorCopy.editor.labels.resourceTypes} ·{" "}
+          {typesSummary(resourceTypes)}{" "}
           <span
             class={open ? "disclosure-chevron open" : "disclosure-chevron"}
             aria-hidden="true"
@@ -308,7 +312,7 @@ function ResourceTypes({
           <fieldset
             class="rt-grid"
             id={`${id}-panel`}
-            aria-label={copy.editor.labels.resourceTypes}
+            aria-label={editorCopy.editor.labels.resourceTypes}
           >
             {RESOURCE_GROUPS.map((group) => (
               <label class="rt-item" key={group}>
@@ -317,7 +321,7 @@ function ResourceTypes({
                   checked={selected.includes(group)}
                   onChange={() => toggle(group)}
                 />
-                {copy.resourceTypes.groups[group]}
+                {editorCopy.resourceTypes.groups[group]}
               </label>
             ))}
           </fieldset>
@@ -334,10 +338,12 @@ function ResourceTypes({
 
 function typesSummary(resourceTypes: ResourceGroup[] | "all"): string {
   if (resourceTypes === "all") {
-    return copy.editor.allTypes;
+    return editorCopy.editor.allTypes;
   }
-  const names = resourceTypes.map((group) => copy.resourceTypes.groups[group]);
+  const names = resourceTypes.map(
+    (group) => editorCopy.resourceTypes.groups[group],
+  );
   return names.length > 0 && names.length <= 2
     ? names.join(", ")
-    : copy.resourceTypes.count(names.length);
+    : editorCopy.resourceTypes.count(names.length);
 }

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { BADGE_COLORS, type BadgeColor } from "../../core/model";
-import { copy } from "../copy";
+import { copy as optionsCopy } from "../copy.options";
 import "./BadgeEditor.css";
 
 interface BadgeEditorProps {
@@ -43,7 +43,7 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
         {text}
       </span>
       <label class="badge-text-field">
-        <span class="silk">{copy.options.badge.textLabel}</span>
+        <span class="silk">{optionsCopy.options.badge.textLabel}</span>
         <input
           ref={input}
           class="badge-text-input inset-field mono"
@@ -56,7 +56,7 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
       <div
         class="badge-swatches"
         role="radiogroup"
-        aria-label={copy.options.badge.colorLabel}
+        aria-label={optionsCopy.options.badge.colorLabel}
       >
         {BADGE_COLORS.map((swatch) => (
           <label
@@ -70,7 +70,7 @@ export function BadgeEditor({ badgeText, color, onChange }: BadgeEditorProps) {
               name={groupName}
               value={swatch}
               checked={swatch === color}
-              aria-label={copy.options.badge.colorNames[swatch]}
+              aria-label={optionsCopy.options.badge.colorNames[swatch]}
               onChange={() => onChange(text, swatch)}
             />
           </label>

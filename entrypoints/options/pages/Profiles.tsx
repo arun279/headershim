@@ -13,11 +13,12 @@ import { ProfileList } from "../../../src/ui/components/ProfileList";
 import { PlusGlyph } from "../../../src/ui/components/readout/glyphs";
 import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
+import { copy as optionsCopy } from "../../../src/ui/copy.options";
 import type { MutationError, Mutations } from "../../../src/ui/state/mutations";
 import { useToast } from "../../../src/ui/state/useToast";
 import "./Profiles.css";
 
-const text = copy.options.profiles;
+const text = optionsCopy.options.profiles;
 
 /**
  * Profile management: create, rename, clone, delete (confirm + undo), reorder,
@@ -57,7 +58,7 @@ export function ProfilesPage({
 
   const create = () => {
     void mutations
-      .createProfile(availableProfileName(text.newName, doc.profiles))
+      .createProfile(availableProfileName(copy.profiles.newName, doc.profiles))
       .then((outcome) => {
         if (outcome.ok) {
           dismiss();
@@ -110,7 +111,7 @@ export function ProfilesPage({
         </div>
         <Button kind="primary" onClick={create}>
           <PlusGlyph />
-          {copy.options.profiles.newProfile}
+          {optionsCopy.options.profiles.newProfile}
         </Button>
       </div>
 

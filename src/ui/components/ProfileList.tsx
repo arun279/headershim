@@ -2,7 +2,7 @@ import type { JSX } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { BadgeColor, Profile } from "../../core/model";
 import { useAnnounce } from "../a11y/LiveRegion";
-import { copy } from "../copy";
+import { copy as optionsCopy } from "../copy.options";
 import { BadgeEditor } from "./BadgeEditor";
 import { Button } from "./Button";
 import { InlineRename } from "./InlineRename";
@@ -63,7 +63,7 @@ export function ProfileList(props: ProfileListProps) {
     }
     props.onReorder(profile.id, to);
     setPendingFocus(profile.id);
-    announce(copy.options.profiles.reordered(profile.name, to + 1));
+    announce(optionsCopy.options.profiles.reordered(profile.name, to + 1));
   };
 
   const onDragEnter = (target: Profile) => {
@@ -163,7 +163,7 @@ function ProfileCard(props: ProfileCardProps) {
         <button
           type="button"
           class="drag-handle"
-          aria-label={copy.options.profiles.reorderHandle(profile.name)}
+          aria-label={optionsCopy.options.profiles.reorderHandle(profile.name)}
           draggable
           ref={props.handleRef}
           onKeyDown={onHandleKeyDown}
@@ -204,7 +204,7 @@ function ProfileCard(props: ProfileCardProps) {
           </button>
         )}
         <span class="profile-rulecount">
-          {copy.options.profiles.ruleCount(profile.rules.length)}
+          {optionsCopy.options.profiles.ruleCount(profile.rules.length)}
         </span>
         <label class="profile-activate">
           <input
@@ -212,7 +212,7 @@ function ProfileCard(props: ProfileCardProps) {
             type="radio"
             name="active-profile"
             checked={props.active}
-            aria-label={copy.options.profiles.activeLabel(profile.name)}
+            aria-label={optionsCopy.options.profiles.activeLabel(profile.name)}
             onChange={props.onActivate}
           />
           <span class="radio-dot" aria-hidden="true" />
@@ -227,13 +227,13 @@ function ProfileCard(props: ProfileCardProps) {
           />
           <div class="profile-actions">
             <Button kind="quiet" onClick={() => setRenaming(true)}>
-              {copy.options.profiles.rename}
+              {optionsCopy.options.profiles.rename}
             </Button>
             <Button kind="quiet" onClick={props.onClone}>
-              {copy.options.profiles.clone}
+              {optionsCopy.options.profiles.clone}
             </Button>
             <Button kind="quiet" onClick={props.onDelete}>
-              {copy.options.profiles.delete}
+              {optionsCopy.options.profiles.delete}
             </Button>
           </div>
         </div>

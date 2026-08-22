@@ -4,6 +4,7 @@ import type { GrantSnapshot } from "../../core/grants";
 import type { Rule, RuleDraft } from "../../core/model";
 import { err, ok, type Result } from "../../core/result";
 import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import type { MutationError } from "../state/mutations";
 import {
   atPaint,
@@ -129,7 +130,7 @@ async function pressEnterThenSave(
 
 function discardDirtyDraft(ctx: ReturnType<typeof mount>) {
   const discard = [...ctx.root.querySelectorAll(".editor-actions button")].find(
-    (button) => button.textContent === copy.editor.discardConfirm.discard,
+    (button) => button.textContent === editorCopy.editor.discardConfirm.discard,
   ) as HTMLButtonElement;
   fire(() => discard.click());
 }
@@ -184,7 +185,7 @@ function deleteButton(
   ctx: ReturnType<typeof mount>,
 ): HTMLButtonElement | undefined {
   return [...ctx.root.querySelectorAll(".editor-actions button")].find(
-    (button) => button.textContent === copy.editor.delete,
+    (button) => button.textContent === editorCopy.editor.delete,
   ) as HTMLButtonElement | undefined;
 }
 
@@ -222,7 +223,7 @@ describe("RuleEditor commit model", () => {
       "New rule · Default",
     );
     const headerExit = root.querySelector(
-      `.sheet-head button[aria-label="${copy.editor.close}"]`,
+      `.sheet-head button[aria-label="${editorCopy.editor.close}"]`,
     );
     expect(headerExit?.querySelector("svg")).not.toBeNull();
     expect(root.querySelector(".sheet-head")?.firstElementChild).toBe(
@@ -234,10 +235,10 @@ describe("RuleEditor commit model", () => {
       ),
     ).toHaveLength(1);
     expect(root.querySelector(".editor-actions")?.textContent).toContain(
-      copy.actions.createRule,
+      editorCopy.actions.createRule,
     );
     expect(ctx.nameInput().placeholder).toBe(
-      copy.editor.placeholders.headerName.request,
+      editorCopy.editor.placeholders.headerName.request,
     );
     // The value field carries no example: what a value looks like is decided by
     // the header named above it, so one header's example is wrong on the rest.
@@ -251,7 +252,7 @@ describe("RuleEditor commit model", () => {
     // under <main>), so Esc would be silently dropped.
     const ctx = mount();
     expect(document.activeElement).toBe(ctx.nameInput());
-    expect(ctx.root.textContent).toContain(copy.editor.domainsHelper);
+    expect(ctx.root.textContent).toContain(editorCopy.editor.domainsHelper);
   });
 
   it("hands focus to the first rejected field when a submit is refused", async () => {
@@ -285,8 +286,8 @@ describe("RuleEditor commit model", () => {
 
     const labelOf = (field: HTMLElement) =>
       ctx.root.querySelector(`label[for="${field.id}"]`)?.textContent;
-    expect(labelOf(ctx.nameInput())).toBe(copy.editor.labels.headerName);
-    expect(labelOf(ctx.valueInput())).toBe(copy.editor.labels.value);
+    expect(labelOf(ctx.nameInput())).toBe(editorCopy.editor.labels.headerName);
+    expect(labelOf(ctx.valueInput())).toBe(editorCopy.editor.labels.value);
     expect(ctx.nameInput().closest(".editor-field")).not.toBe(
       ctx.valueInput().closest(".editor-field"),
     );
@@ -298,7 +299,7 @@ describe("RuleEditor commit model", () => {
 
     expect(ctx.nameInput().value).toBe("Authorization");
     expect(ctx.valueInput().value).toBe("Bearer eyJhbGciOi.J9");
-    expect(ctx.root.textContent).toContain(copy.editor.pastedLineSplit);
+    expect(ctx.root.textContent).toContain(editorCopy.editor.pastedLineSplit);
 
     await saveDraft(ctx);
     expect(ctx.onSave).toHaveBeenCalledExactlyOnceWith(
@@ -315,7 +316,9 @@ describe("RuleEditor commit model", () => {
     const ctx = mount();
     pasteInto(ctx.nameInput(), "x-request-id");
     expect(ctx.valueInput().value).toBe("");
-    expect(ctx.root.textContent).not.toContain(copy.editor.pastedLineSplit);
+    expect(ctx.root.textContent).not.toContain(
+      editorCopy.editor.pastedLineSplit,
+    );
   });
 
   it("commits from the explicit primary action with the draft as typed", async () => {
@@ -349,15 +352,18 @@ describe("RuleEditor commit model", () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "x-custom");
     press(ctx.nameInput(), "Escape");
-    expect(ctx.root.textContent).toContain(copy.editor.discardConfirm.title);
+    expect(ctx.root.textContent).toContain(
+      editorCopy.editor.discardConfirm.title,
+    );
     expect(ctx.onClose).not.toHaveBeenCalled();
 
     const keep = [...ctx.root.querySelectorAll(".editor-actions button")].find(
-      (button) => button.textContent === copy.editor.discardConfirm.keepEditing,
+      (button) =>
+        button.textContent === editorCopy.editor.discardConfirm.keepEditing,
     ) as HTMLButtonElement;
     fire(() => keep.click());
     expect(ctx.root.textContent).not.toContain(
-      copy.editor.discardConfirm.title,
+      editorCopy.editor.discardConfirm.title,
     );
 
     press(ctx.nameInput(), "Escape");
@@ -384,8 +390,8 @@ describe("RuleEditor commit model", () => {
     );
 
     cancel.click();
-    expect(await focused).toBe(copy.editor.discardConfirm.keepEditing);
-    expect(cancel.textContent).toBe(copy.editor.discardConfirm.discard);
+    expect(await focused).toBe(editorCopy.editor.discardConfirm.keepEditing);
+    expect(cancel.textContent).toBe(editorCopy.editor.discardConfirm.discard);
   });
 
   it("Esc during an in-flight save waits for the outcome instead of pretending to revert", async () => {
@@ -418,7 +424,9 @@ describe("RuleEditor commit model", () => {
     expect(ctx.root.querySelector('[role="listbox"]')).toBeNull();
     expect(ctx.onClose).not.toHaveBeenCalled();
     press(ctx.nameInput(), "Escape");
-    expect(ctx.root.textContent).toContain(copy.editor.discardConfirm.title);
+    expect(ctx.root.textContent).toContain(
+      editorCopy.editor.discardConfirm.title,
+    );
     discardDirtyDraft(ctx);
     expect(ctx.onClose).toHaveBeenCalledOnce();
   });
@@ -619,7 +627,8 @@ describe("RuleEditor commit model", () => {
     typeInto(ctx.nameInput(), "x-custom");
     typeInto(ctx.valueInput(), "v1");
     const commentToggle = [...ctx.root.querySelectorAll(".disclosure")].find(
-      (button) => button.textContent?.includes(copy.editor.labels.comment),
+      (button) =>
+        button.textContent?.includes(editorCopy.editor.labels.comment),
     ) as HTMLButtonElement;
     fire(() => commentToggle.click());
     const comment = ctx.root.querySelector(
@@ -698,7 +707,7 @@ describe("RuleEditor blocking errors (exact copy, input preserved)", () => {
     typeInto(ctx.valueInput(), "v1");
     const disclosure = () =>
       [...ctx.root.querySelectorAll(".disclosure")].find((button) =>
-        button.textContent?.includes(copy.editor.labels.resourceTypes),
+        button.textContent?.includes(editorCopy.editor.labels.resourceTypes),
       ) as HTMLButtonElement;
     fire(() => disclosure().click());
     for (const box of ctx.root.querySelectorAll<HTMLInputElement>(
@@ -787,7 +796,7 @@ describe("RuleEditor delete", () => {
     fire(() => (deleteButton(ctx) as HTMLButtonElement).click());
     expect(onDelete).toHaveBeenCalledOnce();
     expect(ctx.root.textContent).not.toContain(
-      copy.editor.discardConfirm.title,
+      editorCopy.editor.discardConfirm.title,
     );
   });
 });
@@ -831,7 +840,7 @@ describe("RuleEditor advisories and value field", () => {
     const ctx = mount();
     typeInto(ctx.nameInput(), "te");
     const advisory = ctx.root.querySelector(".advisory-slot");
-    expect(advisory?.textContent).toContain(copy.editor.caution);
+    expect(advisory?.textContent).toContain(copy.headerFields.caution);
     expect(advisory?.textContent).toContain(copy.advisories.te);
     expect(advisory?.parentElement?.classList.contains("sheet-pinned")).toBe(
       true,
@@ -849,23 +858,23 @@ describe("RuleEditor advisories and value field", () => {
     const ctx = mount();
     openGenerateMenu(ctx);
     const uuid = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.generateUuid,
+      (item) => item.textContent === editorCopy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => uuid.click());
     const first = ctx.valueInput().value;
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     // The generated value drops the literal note; hand-editing brings it back.
-    expect(ctx.root.textContent).not.toContain(copy.valueNote.literal);
+    expect(ctx.root.textContent).not.toContain(editorCopy.valueNote.literal);
 
     openGenerateMenu(ctx);
     const again = [...ctx.root.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent === copy.editor.generateUuid,
+      (item) => item.textContent === editorCopy.editor.generateUuid,
     ) as HTMLButtonElement;
     fire(() => again.click());
     expect(ctx.valueInput().value).not.toBe(first);
 
     typeInto(ctx.valueInput(), "hand-edited");
-    expect(ctx.root.textContent).toContain(copy.valueNote.literal);
+    expect(ctx.root.textContent).toContain(editorCopy.valueNote.literal);
   });
 
   it("shows the freeze time for a saved generated value", () => {
@@ -876,7 +885,7 @@ describe("RuleEditor advisories and value field", () => {
       }),
     });
     expect(ctx.root.textContent).toContain(
-      copy.valueNote.frozen("2026-07-12T14:03:27.000Z"),
+      editorCopy.valueNote.frozen("2026-07-12T14:03:27.000Z"),
     );
   });
 });
@@ -885,7 +894,7 @@ describe("RuleEditor grant moment", () => {
   it("folds an ungranted host into the primary action and closes after commit", async () => {
     const ctx = mount({ grants: NARROW, prefillDomain: "api.example.com" });
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow("api.example.com"),
+      editorCopy.actions.createRuleAndAllow("api.example.com"),
     );
     await fillAndCommit(ctx, "authorization");
     expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([
@@ -1013,7 +1022,7 @@ describe("RuleEditor grant moment", () => {
     fire(() => allSites.click());
 
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
+      editorCopy.actions.createRuleAndAllow(editorCopy.scopeSummary.allSites),
     );
     await fillAndCommit(ctx, "authorization");
 
@@ -1032,7 +1041,7 @@ describe("RuleEditor grant moment", () => {
     ) as HTMLInputElement;
     fire(() => allSites.click());
 
-    expect(ctx.saveButton().textContent).toBe(copy.actions.createRule);
+    expect(ctx.saveButton().textContent).toBe(editorCopy.actions.createRule);
   });
 
   it("keeps a declined rule and reports its honest blocked outcome", async () => {
@@ -1103,7 +1112,7 @@ describe("RuleEditor grant moment", () => {
     const ctx = mountPageRule(scope);
 
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.saveChangesAndAllow(copy.scopeSummary.allSites),
+      editorCopy.actions.saveChangesAndAllow(editorCopy.scopeSummary.allSites),
     );
     await commitEditedValue(ctx);
 
@@ -1130,7 +1139,7 @@ describe("RuleEditor grant moment", () => {
 
     // With no host to grant, the honest request is all-sites and the button says so.
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow(copy.scopeSummary.allSites),
+      editorCopy.actions.createRuleAndAllow(editorCopy.scopeSummary.allSites),
     );
 
     const hostInput = ctx.root.querySelector(
@@ -1142,7 +1151,7 @@ describe("RuleEditor grant moment", () => {
 
     // A named host bounds the grant back to per-site.
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow("google.com"),
+      editorCopy.actions.createRuleAndAllow("google.com"),
     );
 
     typeInto(ctx.nameInput(), "authorization");
@@ -1179,7 +1188,7 @@ describe("RuleEditor grant moment", () => {
     );
     expect(chip.some((text) => text?.includes("api.acme.dev"))).toBe(true);
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.saveChangesAndAllow("api.acme.dev"),
+      editorCopy.actions.saveChangesAndAllow("api.acme.dev"),
     );
   });
 
@@ -1189,7 +1198,7 @@ describe("RuleEditor grant moment", () => {
       allSites: false,
     };
     const ctx = mount({ grants: granted, prefillDomain: "api.example.com" });
-    expect(ctx.saveButton().textContent).toBe(copy.actions.createRule);
+    expect(ctx.saveButton().textContent).toBe(editorCopy.actions.createRule);
     await fillAndCommit(ctx, "authorization");
     expect(ctx.onClose).toHaveBeenCalledOnce();
     expect(ctx.onRequestGrant).not.toHaveBeenCalled();
@@ -1203,7 +1212,7 @@ describe("RuleEditor grant moment", () => {
     const ctx = mount({ grants: granted, prefillDomain: "api.example.com" });
 
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow("api.example.com"),
+      editorCopy.actions.createRuleAndAllow("api.example.com"),
     );
   });
 
@@ -1217,7 +1226,7 @@ describe("RuleEditor grant moment", () => {
     fire(() => press(ctx.chipInput(), "Enter"));
 
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow("api.example.com and example.com"),
+      editorCopy.actions.createRuleAndAllow("api.example.com and example.com"),
     );
 
     ctx.onRequestGrant.mockResolvedValueOnce(false);
@@ -1243,7 +1252,7 @@ describe("RuleEditor grant moment", () => {
       tabDomain: "app.example.com",
     });
     expect(ctx.saveButton().textContent).toBe(
-      copy.actions.createRuleAndAllow("app.example.com"),
+      editorCopy.actions.createRuleAndAllow("app.example.com"),
     );
     await fillAndCommit(ctx, "authorization");
     expect(ctx.onRequestGrant).toHaveBeenCalledExactlyOnceWith([

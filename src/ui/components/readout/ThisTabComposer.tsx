@@ -115,9 +115,9 @@ export function ThisTabComposer({
       {/* The inputs carry their names for assistive technology already; these
           put the same two words on screen over the fields they name. */}
       <div class="cfields-labels" aria-hidden="true">
-        <span class="silk cfl-name">{copy.editor.labels.headerName}</span>
+        <span class="silk cfl-name">{copy.headerFields.headerName}</span>
         {operation !== "remove" && (
-          <span class="silk cfl-val">{copy.editor.labels.value}</span>
+          <span class="silk cfl-val">{copy.headerFields.value}</span>
         )}
       </div>
       <div class="cfields">
@@ -125,8 +125,8 @@ export function ThisTabComposer({
           ref={headerRef}
           class="cin name mono"
           value={header}
-          placeholder={copy.editor.placeholders.headerName[direction]}
-          aria-label={copy.editor.labels.headerName}
+          placeholder={copy.headerFields.headerNamePlaceholder[direction]}
+          aria-label={copy.headerFields.headerName}
           spellcheck={false}
           autocomplete="off"
           onInput={(event) => {
@@ -153,7 +153,7 @@ export function ThisTabComposer({
             <input
               class="cin val mono"
               value={value}
-              aria-label={copy.editor.labels.value}
+              aria-label={copy.headerFields.value}
               spellcheck={false}
               autocomplete="off"
               onInput={(event) => setValue(event.currentTarget.value)}
@@ -169,7 +169,7 @@ export function ThisTabComposer({
       />
       {pastedLineSplit && (
         <p class="c-note" role="status">
-          {copy.editor.pastedLineSplit}
+          {copy.headerFields.pastedLineSplit}
         </p>
       )}
       {error !== undefined && (

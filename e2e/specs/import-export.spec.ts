@@ -20,11 +20,12 @@ import {
 } from "../../src/core/model";
 import { err, ok } from "../../src/core/result";
 import { createV1Seed } from "../../src/core/schema";
-import { copy, type Sentence } from "../../src/ui/copy";
+import type { Sentence } from "../../src/ui/copy";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import { importWarningCopy } from "../../src/ui/state/import-warning-copy";
 import { expect, seedState, test } from "../fixtures";
 
-const strings = copy.options.importExport;
+const strings = optionsCopy.options.importExport;
 const ALL_WARNINGS_FIXTURE = fileURLToPath(
   new URL("../fixtures/modheader-all-warnings.json", import.meta.url),
 );

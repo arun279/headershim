@@ -2,7 +2,8 @@
 import { useState } from "preact/hooks";
 import { describe, expect, it } from "vitest";
 import type { ResourceGroup } from "../../core/model";
-import { copy, sentenceText } from "../copy";
+import { sentenceText } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { fire, focusOut, press, render, typeInto } from "../test/render";
 import { type ScopeDraft, ScopeEditor } from "./ScopeEditor";
 
@@ -71,8 +72,8 @@ describe("ScopeEditor match type", () => {
     fire(() => ctx.radios()[1]?.click());
     expect(ctx.root.querySelector('[aria-label="URL pattern"]')).not.toBeNull();
     expect(ctx.micros()).toEqual([
-      ...copy.editor.patternHint.map((line) => sentenceText(line)),
-      copy.editor.grantHostsAllSites,
+      ...editorCopy.editor.patternHint.map((line) => sentenceText(line)),
+      editorCopy.editor.grantHostsAllSites,
     ]);
     expect(ctx.micros()[1]).toContain("query string");
   });
@@ -82,8 +83,8 @@ describe("ScopeEditor match type", () => {
     fire(() => ctx.radios()[2]?.click());
     expect(ctx.root.querySelector('[aria-label="Regex"]')).not.toBeNull();
     expect(ctx.micros()).toEqual([
-      sentenceText(copy.editor.regexHint),
-      copy.editor.grantHostsAllSites,
+      sentenceText(editorCopy.editor.regexHint),
+      editorCopy.editor.grantHostsAllSites,
     ]);
     expect(ctx.micros()[0]).toContain("subdomains only");
   });
@@ -98,7 +99,7 @@ describe("ScopeEditor match type", () => {
       false,
       true,
     ]);
-    expect(ctx.micros()).toEqual([copy.editor.allSitesHelper]);
+    expect(ctx.micros()).toEqual([editorCopy.editor.allSitesHelper]);
   });
 });
 
@@ -123,7 +124,7 @@ describe("ScopeEditor domain chips", () => {
     const hint = described
       .split(" ")
       .map((id) => ctx.root.querySelector(`#${id}`))
-      .find((node) => node?.textContent === copy.editor.addChipHint);
+      .find((node) => node?.textContent === editorCopy.editor.addChipHint);
     expect(hint?.className).toBe("sr-only");
   });
 
@@ -144,7 +145,7 @@ describe("ScopeEditor domain chips", () => {
 
     const x = ctx.root.querySelector(".domain-chip-x") as HTMLButtonElement;
     expect(x.getAttribute("aria-label")).toBe(
-      copy.editor.removeDomain("api.example.com"),
+      editorCopy.editor.removeDomain("api.example.com"),
     );
     fire(() => x.click());
     expect(ctx.chips()).toEqual([]);
@@ -152,19 +153,19 @@ describe("ScopeEditor domain chips", () => {
 
   it("carries the subdomain helper line", () => {
     const ctx = mount();
-    expect(ctx.micros()).toContain(copy.editor.domainsHelper);
-    expect(ctx.micros()).not.toContain(copy.editor.requestTarget);
+    expect(ctx.micros()).toContain(editorCopy.editor.domainsHelper);
+    expect(ctx.micros()).not.toContain(editorCopy.editor.requestTarget);
   });
 
   it("replaces it with the request-target caveat for subresource-only rules", () => {
     const ctx = mount({ initialTypes: ["xhr"] });
-    expect(ctx.micros()).toContain(copy.editor.requestTarget);
-    expect(ctx.micros()).not.toContain(copy.editor.domainsHelper);
+    expect(ctx.micros()).toContain(editorCopy.editor.requestTarget);
+    expect(ctx.micros()).not.toContain(editorCopy.editor.domainsHelper);
   });
 
   it("keeps the caveat for cross-page resources selected with subframes", () => {
     const ctx = mount({ initialTypes: ["subframes", "xhr"] });
-    expect(ctx.micros()).toEqual([copy.editor.requestTarget]);
+    expect(ctx.micros()).toEqual([editorCopy.editor.requestTarget]);
   });
 
   it("moves focus to a surviving chip control when a middle chip is removed", () => {
@@ -185,7 +186,7 @@ describe("ScopeEditor domain chips", () => {
     expect(ctx.chips()).toEqual(["a.example.com", "c.example.com"]);
     expect(document.activeElement).not.toBe(document.body);
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      copy.editor.removeDomain("c.example.com"),
+      editorCopy.editor.removeDomain("c.example.com"),
     );
   });
 });
@@ -202,7 +203,7 @@ describe("ScopeEditor grant hosts", () => {
   it("bounds a regex to a typed host and flips the disclosure to per-site", () => {
     const ctx = mount();
     fire(() => ctx.radios()[2]?.click());
-    expect(ctx.micros()).toContain(copy.editor.grantHostsAllSites);
+    expect(ctx.micros()).toContain(editorCopy.editor.grantHostsAllSites);
 
     typeInto(grantInput(ctx.root), "Google.com");
     press(grantInput(ctx.root), "Enter");
@@ -211,16 +212,16 @@ describe("ScopeEditor grant hosts", () => {
         (chip) => chip.textContent,
       ),
     ).toEqual(["google.com"]);
-    expect(ctx.micros()).toContain(copy.editor.grantHostsBounded);
-    expect(ctx.micros()).not.toContain(copy.editor.grantHostsAllSites);
+    expect(ctx.micros()).toContain(editorCopy.editor.grantHostsBounded);
+    expect(ctx.micros()).not.toContain(editorCopy.editor.grantHostsAllSites);
   });
 });
 
 describe("ScopeEditor resource types", () => {
   it("defaults to All types without adding a second helper line", () => {
     const ctx = mount();
-    expect(ctx.disclosure().textContent).toContain(copy.editor.allTypes);
-    expect(ctx.micros()).toEqual([copy.editor.domainsHelper]);
+    expect(ctx.disclosure().textContent).toContain(editorCopy.editor.allTypes);
+    expect(ctx.micros()).toEqual([editorCopy.editor.domainsHelper]);
   });
 
   it("opens a checkbox group of the ten groupings, all checked by default", () => {
@@ -236,7 +237,9 @@ describe("ScopeEditor resource types", () => {
     const ctx = mount();
     fire(() => ctx.disclosure().click());
     fire(() => ctx.checkboxes()[0]?.click());
-    expect(ctx.disclosure().textContent).toContain(copy.resourceTypes.count(9));
+    expect(ctx.disclosure().textContent).toContain(
+      editorCopy.resourceTypes.count(9),
+    );
   });
 
   it("names one or two selected groups outright", () => {
@@ -262,6 +265,6 @@ describe("ScopeEditor resource types", () => {
     const other = ctx.checkboxes().at(-1) as HTMLInputElement;
     expect(other.checked).toBe(false);
     fire(() => other.click());
-    expect(ctx.disclosure().textContent).toContain(copy.editor.allTypes);
+    expect(ctx.disclosure().textContent).toContain(editorCopy.editor.allTypes);
   });
 });

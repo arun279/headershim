@@ -1,10 +1,10 @@
 import type { ComponentChildren } from "preact";
 import { browser } from "wxt/browser";
 import { sentence } from "../../../src/ui/components/sentence";
-import { copy } from "../../../src/ui/copy";
+import { copy as optionsCopy } from "../../../src/ui/copy.options";
 import "./About.css";
 
-const text = copy.options.about;
+const text = optionsCopy.options.about;
 
 /**
  * A compact identity card with the build, product description, and links, and

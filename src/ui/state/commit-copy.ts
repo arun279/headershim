@@ -41,7 +41,7 @@ export function blockedCommitCopy(error: MutationError): string | undefined {
     case "scope-empty":
       return copy.errors.scopeEmpty.all;
     case "profile-name-unavailable":
-      return copy.options.profiles.nameTaken(error.name);
+      return copy.profiles.nameTaken(error.name);
     case "store-unavailable":
       return copy.errors.saveFailed;
     case "not-found":

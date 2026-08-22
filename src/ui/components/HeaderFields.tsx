@@ -32,19 +32,19 @@ export function HeaderFields<D extends HeaderDraft>({
     <div class="editor-primary-grid">
       <SegmentedField
         name={`${idBase}-dir`}
-        label={copy.editor.labels.direction}
+        label={copy.headerFields.direction}
         options={DIRECTIONS}
         selected={draft.direction}
-        optionLabel={(value) => copy.editor.direction[value]}
+        optionLabel={(value) => copy.readout.direction[value]}
         onPick={(direction) => update((current) => ({ ...current, direction }))}
       />
 
       <SegmentedField
         name={`${idBase}-op`}
-        label={copy.editor.labels.operation}
+        label={copy.headerFields.operation}
         options={HEADER_OPERATIONS}
         selected={draft.operation}
-        optionLabel={(value) => copy.editor.operation[value]}
+        optionLabel={(value) => copy.readout.verb[value]}
         error={errors.operation}
         onPick={(operation) => update((current) => ({ ...current, operation }))}
       />

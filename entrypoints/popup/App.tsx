@@ -208,7 +208,7 @@ function Ready({
 
   const newProfile = async () => {
     const outcome = await mutations.createProfile(
-      availableProfileName(copy.options.profiles.newName, doc.profiles),
+      availableProfileName(copy.profiles.newName, doc.profiles),
     );
     if (!outcome.ok) {
       reportBlockedCommit(outcome.error);

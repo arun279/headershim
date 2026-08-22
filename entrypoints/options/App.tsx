@@ -7,6 +7,7 @@ import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { EmptyState } from "../../src/ui/components/EmptyState";
 import { PauseBanner } from "../../src/ui/components/PauseBanner";
 import { copy } from "../../src/ui/copy";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import { loadDeferred } from "../../src/ui/deferred";
 import { createMutations } from "../../src/ui/state/mutations";
 import { useAppState } from "../../src/ui/state/useAppState";
@@ -32,20 +33,20 @@ interface NavGroup {
 
 const GROUPS: readonly NavGroup[] = [
   {
-    label: copy.options.nav.groupRules,
+    label: optionsCopy.options.nav.groupRules,
     sections: [
-      { id: "rules", label: copy.options.nav.allRules },
-      { id: "profiles", label: copy.options.nav.profiles },
+      { id: "rules", label: optionsCopy.options.nav.allRules },
+      { id: "profiles", label: optionsCopy.options.nav.profiles },
     ],
   },
   {
-    label: copy.options.nav.groupManage,
+    label: optionsCopy.options.nav.groupManage,
     sections: [
-      { id: "site-access", label: copy.options.nav.siteAccess },
-      { id: "traffic", label: copy.options.nav.traffic },
-      { id: "import-export", label: copy.options.nav.importExport },
-      { id: "settings", label: copy.options.nav.settings },
-      { id: "about", label: copy.options.nav.about },
+      { id: "site-access", label: optionsCopy.options.nav.siteAccess },
+      { id: "traffic", label: optionsCopy.options.nav.traffic },
+      { id: "import-export", label: optionsCopy.options.nav.importExport },
+      { id: "settings", label: optionsCopy.options.nav.settings },
+      { id: "about", label: optionsCopy.options.nav.about },
     ],
   },
 ];
@@ -97,7 +98,9 @@ export function App() {
         <div class="wb-nav">
           <div class="wb-brand">
             <Wordmark />
-            <span class="wb-version mono">{copy.options.version(VERSION)}</span>
+            <span class="wb-version mono">
+              {optionsCopy.options.version(VERSION)}
+            </span>
           </div>
           <SectionNav current={section} />
         </div>
@@ -182,7 +185,7 @@ function SectionNav({ current }: { current: SectionId }) {
   return (
     <nav
       class="wb-nav-groups"
-      aria-label={copy.options.nav.label}
+      aria-label={optionsCopy.options.nav.label}
       onKeyDown={onKeyDown}
     >
       {GROUPS.map((group) => (

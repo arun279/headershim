@@ -281,7 +281,7 @@ describe("popup readout", () => {
     );
 
     expect(root.querySelector(".change-line .v")?.textContent).toBe(
-      copy.rules.generated(copy.editor.generatedKind.uuid),
+      copy.rules.generated(copy.rules.generatedKind.uuid),
     );
   });
 
@@ -976,17 +976,15 @@ describe("popup profile switch", () => {
     const hintId = input.getAttribute("aria-describedby");
     if (hintId === null) throw new Error("rename field names no commit keys");
     expect(root.querySelector(`#${hintId}`)?.textContent).toBe(
-      copy.options.profiles.renameHint,
+      copy.profiles.renameHint,
     );
   });
 
   it("creates, focuses, and names a new profile from the picker", async () => {
     const { root } = await mount(seededDoc([rule()]), true);
     const input = await openNewProfileName(root);
-    expect(input.value).toBe(copy.options.profiles.newName);
-    expect(input.getAttribute("aria-label")).toBe(
-      copy.options.profiles.nameLabel,
-    );
+    expect(input.value).toBe(copy.profiles.newName);
+    expect(input.getAttribute("aria-label")).toBe(copy.profiles.nameLabel);
     expect(document.activeElement).toBe(input);
 
     typeInto(input, "QA headers");
@@ -1020,9 +1018,7 @@ describe("popup profile switch", () => {
     expect(document.activeElement).toBe(
       root.querySelector('[aria-current="true"]'),
     );
-    expect((await read()).profiles[1]?.name).toBe(
-      copy.options.profiles.newName,
-    );
+    expect((await read()).profiles[1]?.name).toBe(copy.profiles.newName);
     expect(close).not.toHaveBeenCalled();
     close.mockRestore();
   });

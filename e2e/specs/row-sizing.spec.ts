@@ -1,5 +1,6 @@
 import { createV1Seed } from "../../src/core/schema";
-import { copy } from "../../src/ui/copy";
+import { copy as editorCopy } from "../../src/ui/copy.editor";
+import { copy as optionsCopy } from "../../src/ui/copy.options";
 import { expect, seedState, stateWithRules, test } from "../fixtures";
 
 // The wire-byte row (verb, header, arrow, value) is one shared rule across the
@@ -181,10 +182,10 @@ test("a long status takes the header's room down to a legible floor, and the ops
   // Exactly one row states the wide status, which is what picks the two rows
   // apart below. The narrow status on the other row is seeded, not checked.
   const longStatusRow = rows.filter({
-    hasText: copy.options.traffic.status.refused,
+    hasText: optionsCopy.options.traffic.status.refused,
   });
   const shortStatusRow = rows.filter({
-    hasNotText: copy.options.traffic.status.refused,
+    hasNotText: optionsCopy.options.traffic.status.refused,
   });
   await expect(longStatusRow).toHaveCount(1);
 
@@ -294,16 +295,16 @@ test("a wide window fills the rules column and still bounds the editor", async (
   expect(mainWidth - columnWidth).toBeLessThan(24);
 
   await page
-    .getByRole("button", { name: copy.options.allRules.newRule })
+    .getByRole("button", { name: optionsCopy.options.allRules.newRule })
     .click();
 
   const editor = page.getByRole("dialog", {
-    name: copy.editor.heading("new", "Default"),
+    name: editorCopy.editor.heading("new", "Default"),
   });
   await expect(editor).toBeVisible();
 
   const nameBox = await editor
-    .getByRole("combobox", { name: copy.editor.labels.headerName })
+    .getByRole("combobox", { name: editorCopy.editor.labels.headerName })
     .boundingBox();
   expect(nameBox?.width ?? 0).toBeLessThan(640);
 });

@@ -1,3 +1,4 @@
+import { copy as optionsCopy } from "../ui/copy.options";
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +33,7 @@ const SAME_NAMED_TOKENS = JSON.stringify([
   },
 ]);
 
-const text = copy.options.importExport;
+const text = optionsCopy.options.importExport;
 
 function stubRegex(): void {
   Object.assign(fakeBrowser.declarativeNetRequest, {

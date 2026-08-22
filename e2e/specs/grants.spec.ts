@@ -1,4 +1,4 @@
-import { siteAccessCopy } from "../../src/ui/copy";
+import { siteAccessCopy } from "../../src/ui/copy.options";
 import { NARROW_H1_PORT, NARROWED_ORIGIN } from "../echo-ports.mjs";
 import {
   expect,

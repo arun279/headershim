@@ -5,19 +5,26 @@ import path from "node:path";
 // Enforces the no-em-dash rule on user-facing copy by construction: an em-dash
 // (or an en-dash used as one) in shipped copy fails the build. House voice uses
 // periods, commas, colons, or a restructure instead. Code comments are exempt,
-// so TSX comments are stripped before the scan; copy.ts is scanned whole since
-// every character in it ships as prose.
+// so TSX comments are stripped before the scan; each copy module is scanned
+// whole since every character in it ships as prose.
 
 const root = path.resolve(import.meta.dirname, "..");
 const SELF_PATH = "scripts/check-em-dash.mjs";
 
-// Whole-file scans: the single copy source is prose end to end, comments
-// included, and the privacy policy is a product surface the About page links,
-// so every line of it is read by users too. The build scripts are prose end to
-// end as well, read by anyone who opens the repository, so they hold the same
-// rule; this file is the one exception, since it has to contain the characters
-// it bans.
-const PROSE_FILES = new Set(["src/ui/copy.ts", "PRIVACY.md"]);
+// Whole-file scans: each copy module is prose end to end, comments included,
+// and the privacy policy is a product surface the About page links, so every
+// line of it is read by users too. The build scripts are prose end to end as
+// well, read by anyone who opens the repository, so they hold the same rule;
+// this file is the one exception, since it has to contain the characters it
+// bans.
+const PROSE_FILES = new Set(["PRIVACY.md"]);
+
+function isCopyModule(file) {
+  return (
+    file === "src/ui/copy.ts" ||
+    (/^src\/ui\/copy\.[^.]+\.ts$/.test(file) && !file.endsWith(".test.ts"))
+  );
+}
 
 function isScript(file) {
   return file.startsWith("scripts/") && file !== SELF_PATH;
@@ -52,7 +59,11 @@ function copyFiles() {
   }).split("\n");
   const kept = [];
   for (const file of tracked) {
-    const isCopy = PROSE_FILES.has(file) || isScript(file) || isCopyTsx(file);
+    const isCopy =
+      isCopyModule(file) ||
+      PROSE_FILES.has(file) ||
+      isScript(file) ||
+      isCopyTsx(file);
     if (isCopy && existsSync(path.join(root, file))) {
       kept.push(file);
     }
@@ -63,7 +74,7 @@ function copyFiles() {
 const violations = [];
 for (const file of copyFiles()) {
   const raw = readFileSync(path.join(root, file), "utf8");
-  const whole = PROSE_FILES.has(file) || isScript(file);
+  const whole = isCopyModule(file) || PROSE_FILES.has(file) || isScript(file);
   const scanned = whole ? raw : stripComments(raw);
   scanned.split("\n").forEach((line, index) => {
     if (DASHES.test(line)) {

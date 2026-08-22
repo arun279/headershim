@@ -11,7 +11,11 @@ import {
   TRUNCATION_LIMITS,
   Truncate,
 } from "../../../src/ui/components/Truncate";
-import { copy, siteAccessCopy } from "../../../src/ui/copy";
+import { copy } from "../../../src/ui/copy";
+import {
+  copy as optionsCopy,
+  siteAccessCopy,
+} from "../../../src/ui/copy.options";
 import {
   canRun,
   displayTone,
@@ -26,7 +30,7 @@ import {
 } from "../../../src/ui/state/fleet";
 import "./Traffic.css";
 
-const text = copy.options.traffic;
+const text = optionsCopy.options.traffic;
 
 /**
  * Every change the compiled ruleset carries and where each one stands: applying,

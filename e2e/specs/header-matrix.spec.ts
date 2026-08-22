@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { RuleDraft } from "../../src/core/model";
-import { copy, siteAccessCopy } from "../../src/ui/copy";
+import { copy } from "../../src/ui/copy";
+import { copy as optionsCopy, siteAccessCopy } from "../../src/ui/copy.options";
 import type { EchoServers } from "../echo-servers";
 import {
   expect,
@@ -151,7 +152,7 @@ const h2Drafts: readonly RuleDraft[] = [
   },
 ];
 
-const traffic = copy.options.traffic;
+const traffic = optionsCopy.options.traffic;
 
 // What HTTP/2 did with a set rule HTTP/1.1 carried verbatim: the same bytes
 // arrive, the request succeeds without the header, the navigation itself dies,

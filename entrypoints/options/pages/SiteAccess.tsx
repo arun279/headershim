@@ -29,7 +29,8 @@ import {
   TriangleGlyph,
 } from "../../../src/ui/components/readout/glyphs";
 import { sentence } from "../../../src/ui/components/sentence";
-import { copy, siteAccessCopy } from "../../../src/ui/copy";
+import { copy } from "../../../src/ui/copy";
+import { siteAccessCopy } from "../../../src/ui/copy.options";
 import {
   type SiteAccessEntry,
   siteAccessView,
@@ -160,7 +161,9 @@ export function SiteAccessPage({
         {text.title}
       </h1>
       <p class="sa-guidance">{text.guidance}</p>
-      {view.initiatorNote && <p class="sa-note">{text.initiatorNote}</p>}
+      {view.initiatorNote && (
+        <p class="sa-note">{copy.siteAccess.initiatorNote}</p>
+      )}
 
       {grants.allSites && (
         <div class="sa-card sa-all-on">
@@ -239,7 +242,7 @@ export function SiteAccessPage({
 
       {!grants.allSites && !hasSiteRows && (
         <div class="sa-card">
-          <p class="sa-empty">{copy.emptyState.siteAccess}</p>
+          <p class="sa-empty">{text.empty}</p>
         </div>
       )}
 

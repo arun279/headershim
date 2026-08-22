@@ -177,7 +177,7 @@ describe("popup This-tab overrides", () => {
       "Bearer eyJhbGciOi.J9",
     );
     expect(root.querySelector(".c-note")?.textContent).toBe(
-      copy.editor.pastedLineSplit,
+      copy.headerFields.pastedLineSplit,
     );
   });
 
@@ -235,13 +235,13 @@ describe("popup This-tab overrides", () => {
           ".compose .editor-primary-field legend",
         ),
       ].map((legend) => legend.textContent),
-    ).toEqual([copy.editor.labels.direction, copy.editor.labels.operation]);
+    ).toEqual([copy.headerFields.direction, copy.headerFields.operation]);
     // On screen too, not only for assistive technology.
     expect(
       [
         ...root.querySelectorAll<HTMLElement>(".compose .cfields-labels span"),
       ].map((label) => label.textContent),
-    ).toEqual([copy.editor.labels.headerName, copy.editor.labels.value]);
+    ).toEqual([copy.headerFields.headerName, copy.headerFields.value]);
 
     const groups = [
       ...root.querySelectorAll<HTMLElement>(".compose .segmented"),
@@ -255,13 +255,13 @@ describe("popup This-tab overrides", () => {
       ),
     ).toEqual([
       [
-        [copy.editor.direction.request, true],
-        [copy.editor.direction.response, false],
+        [copy.readout.direction.request, true],
+        [copy.readout.direction.response, false],
       ],
       [
-        [copy.editor.operation.set, true],
-        [copy.editor.operation.append, false],
-        [copy.editor.operation.remove, false],
+        [copy.readout.verb.set, true],
+        [copy.readout.verb.append, false],
+        [copy.readout.verb.remove, false],
       ],
     ]);
 

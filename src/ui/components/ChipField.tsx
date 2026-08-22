@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { isHostnameShaped } from "../../core/scope";
 import { focusOnRemoval } from "../a11y/focus";
-import { copy } from "../copy";
+import { copy as editorCopy } from "../copy.editor";
 import { TRUNCATION_LIMITS, Truncate } from "./Truncate";
 import "./ChipField.css";
 
@@ -121,7 +121,7 @@ export function ChipField(props: ChipFieldProps) {
             a reader who cannot see the placeholder. Printed, it repeats the
             placeholder from the far edge of a field with no room to hold it. */}
         <span class="sr-only" id={hintId}>
-          {copy.editor.addChipHint}
+          {editorCopy.editor.addChipHint}
         </span>
       </div>
     </div>

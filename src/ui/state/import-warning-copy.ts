@@ -1,5 +1,6 @@
 import type { ImportPlanWarning } from "../../core/codec/modheader";
-import { copy, type Sentence } from "../copy";
+import type { Sentence } from "../copy";
+import { copy as optionsCopy } from "../copy.options";
 
 /**
  * Maps one warning from an import plan to its display parts: a name (the rule it
@@ -10,7 +11,7 @@ export function importWarningCopy(warning: ImportPlanWarning): {
   readonly name: string;
   readonly detail: Sentence;
 } {
-  const strings = copy.options.importExport.warnings;
+  const strings = optionsCopy.options.importExport.warnings;
   switch (warning.kind) {
     case "credential":
       return {

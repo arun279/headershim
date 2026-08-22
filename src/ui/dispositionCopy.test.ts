@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { HeaderOp } from "../core/model";
 import type { AbsentReason, UncompilableReason } from "../core/verdict";
-import { copy, siteAccessCopy } from "./copy";
+import { copy } from "./copy";
 import {
   caveatNote,
   controlTone,
@@ -387,7 +387,7 @@ describe("outcomeReason", () => {
         outcomeReason(absent(ABSENT_REASONS["ungranted-initiator"]), temporary),
       ).toEqual({
         tone: "amber",
-        label: siteAccessCopy.initiatorNote,
+        label: copy.siteAccess.initiatorNote,
       });
     }
   });

@@ -2,7 +2,7 @@ import { isAllSitesOrigin } from "../core/grants";
 import { normalizeHeaderName } from "../core/headers";
 import type { HeaderOp } from "../core/model";
 import type { AbsentReason } from "../core/verdict";
-import { copy, siteAccessCopy } from "./copy";
+import { copy } from "./copy";
 import type { Caveat, FleetOutcome, TabOutcome } from "./state/project";
 
 export type Tone = "live" | "doubt" | "amber" | "stop" | "rest";
@@ -165,7 +165,7 @@ function absentReason(
   if (reason.kind === "other-profile") {
     return {
       tone: ABSENT_TONES[reason.kind],
-      label: copy.options.allRules.notActiveProfile(reason.profileName),
+      label: copy.allRules.notActiveProfile(reason.profileName),
     };
   }
   if (reason.kind === "refused") {
@@ -183,7 +183,7 @@ function absentReason(
   if (reason.kind === "ungranted-initiator") {
     return {
       tone: ABSENT_TONES[reason.kind],
-      label: siteAccessCopy.initiatorNote,
+      label: copy.siteAccess.initiatorNote,
     };
   }
   if (reason.kind === "over-limit") {
