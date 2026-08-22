@@ -39,15 +39,7 @@ const ABSENT_TONES = {
   "over-limit": "stop",
 } as const satisfies Record<AbsentReason["kind"], Tone>;
 
-/**
- * Whether a change is running now, could run once its match resolves, or is a
- * grant away from running: the cases worth stating a wire consequence for. A
- * refusal, an over-limit rule, and a rule shadowed by another are not, since
- * nothing the reader does on this row changes that. The popup's transport
- * count and every surface that renders a transport caveat gate on this, so
- * they can never disagree about which changes it is worth naming a wire
- * consequence for.
- */
+/** Whether an outcome is not shadowed and any absent or partial reason is missing access. */
 export function canRun(outcome: Outcome): boolean {
   if (outcome.kind === "shadowed") return false;
   if (outcome.kind === "absent" || outcome.kind === "partial") {
@@ -196,23 +188,28 @@ function absentReason(
   return undefined;
 }
 
-/**
- * The full sentence behind a transport caveat. One family sentence, except
- * where a header's measured truth differs from its family's: host keeps its
- * canonical reason, and te and content-length carry their value conditions.
- * The rule surfaces and the editor advisory both resolve through here, so no
- * two surfaces can state different transport truths for one header.
- */
 export function transportNote(
   family: Extract<Caveat, "h1-only" | "h2-breaking">,
   header: string,
 ): string {
+  return copy.advisories[transportKey(family, header)];
+}
+
+/**
+ * One family sentence, except where a header's measured truth differs from
+ * its family's: host keeps its canonical reason, and te and content-length
+ * carry their value conditions.
+ */
+export function transportKey(
+  family: Extract<Caveat, "h1-only" | "h2-breaking">,
+  header: string,
+): "host" | "h1Only" | "h2Breaking" | "te" | "contentLength" {
   const name = normalizeHeaderName(header);
-  if (name === "host") return copy.advisories.host;
-  if (family === "h1-only") return copy.advisories.h1Only;
-  if (name === "te") return copy.advisories.te;
-  if (name === "content-length") return copy.advisories.contentLength;
-  return copy.advisories.h2Breaking;
+  if (name === "host") return "host";
+  if (family === "h1-only") return "h1Only";
+  if (name === "te") return "te";
+  if (name === "content-length") return "contentLength";
+  return "h2Breaking";
 }
 
 export function caveatNote(
