@@ -5,6 +5,7 @@ import {
   HEADER_ERROR_COPY_IDS,
   headerSensitivity,
   isSecretHeader,
+  isValidHeaderValue,
   normalizeHeaderName,
   REQUEST_APPEND_HEADERS,
   validateHeader,
@@ -86,6 +87,18 @@ describe("header name validation", () => {
 });
 
 describe("header value validation", () => {
+  it.each([
+    ["plain ASCII", "on", true],
+    ["NUL", "one\0two", false],
+    ["CR", "one\rtwo", false],
+    ["LF", "one\ntwo", false],
+    ["non-ASCII", "café", true],
+    ["tab", "one\ttwo", true],
+    ["leading space", " value", true],
+  ])("answers the Chrome value grammar for %s", (_name, value, expected) => {
+    expect(isValidHeaderValue(value)).toBe(expected);
+  });
+
   it("requires a value for set and append while allowing an empty value", () => {
     for (const operation of ["set", "append"] as const) {
       expect(
@@ -112,13 +125,13 @@ describe("header value validation", () => {
     }
   });
 
-  it("rejects every CR and LF form without altering other free text", () => {
-    for (const value of ["one\rtwo", "one\ntwo", "one\r\ntwo"]) {
+  it("rejects NUL, CR, and LF without altering other free text", () => {
+    for (const value of ["one\0two", "one\rtwo", "one\ntwo", "one\r\ntwo"]) {
       expect(validateHeader(input({ value }))).toEqual({
         ok: false,
         error: {
-          kind: "value-line-break",
-          copyId: "header-value-line-break",
+          kind: "value-invalid",
+          copyId: "header-value-invalid",
         },
       });
     }

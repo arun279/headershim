@@ -181,6 +181,48 @@ export const DNR_CONTRACT_CASES: readonly DnrContractCase[] = [
     accepted: false,
   },
   {
+    name: "accepts a non-ASCII header value",
+    rule: {
+      ...baseRule,
+      id: baseRule.id + 43,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [
+          { header: "x-contract", operation: "set", value: "café" },
+        ],
+      },
+    },
+    accepted: true,
+  },
+  {
+    name: "accepts a tab in a header value",
+    rule: {
+      ...baseRule,
+      id: baseRule.id + 44,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [
+          { header: "x-contract", operation: "set", value: "yes\tno" },
+        ],
+      },
+    },
+    accepted: true,
+  },
+  {
+    name: "accepts a leading space in a header value",
+    rule: {
+      ...baseRule,
+      id: baseRule.id + 45,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [
+          { header: "x-contract", operation: "set", value: " yes" },
+        ],
+      },
+    },
+    accepted: true,
+  },
+  {
     name: "rejects a zero rule identifier",
     rule: { ...baseRule, id: 0 },
     accepted: false,

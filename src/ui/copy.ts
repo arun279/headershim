@@ -225,7 +225,7 @@ export const copy = {
       header: "Chrome won't accept this header name",
       append:
         "Chrome accepts this header name, but only allows appending to a fixed set of request headers. Use Set instead.",
-      value: "Chrome won't accept a line break in the value",
+      value: "Chrome won't send a value with a line break or a NUL character",
       pattern: "Chrome won't accept this URL pattern",
       regex: "Chrome won't accept this regular expression",
       domains: "Chrome won't accept this rule's sites",
@@ -522,6 +522,8 @@ export const copy = {
           "This pattern isn't valid RE2, so the rule was imported disabled: ",
           data(pattern),
         ],
+        invalidValue:
+          "Not imported. Header values can't contain line breaks or NUL characters.",
         dynamicToken:
           "Contains a request-time token Chrome extensions can no longer compute.",
         droppedExcludeUrl: `Dropped. ${BRAND_NAME} has no per-rule URL exclusion in this version.`,
@@ -840,8 +842,8 @@ export const copy = {
       "This isn't a legal header name. Letters, digits, and hyphens are the safe set.",
     valueRequired:
       "Set and append need a value. Type one, or switch the operation to Remove.",
-    valueLineBreak:
-      "Header values can't contain line breaks. Remove them to save.",
+    valueInvalid:
+      "Header values can't contain line breaks or NUL characters. Remove them to save.",
     domainInvalid:
       "This isn't a hostname Chrome can match. Enter one like example.com, with no scheme, port, path, or wildcard.",
     scopeEmpty: {

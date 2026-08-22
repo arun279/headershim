@@ -8,6 +8,7 @@ import {
 import {
   allowsRequestAppend,
   HTTP_TOKEN,
+  isValidHeaderValue,
   normalizeHeaderName,
 } from "./headers";
 import {
@@ -272,8 +273,8 @@ export function uncompilableReason(
 ): UncompilableReason | undefined {
   // The header-shape checks Chrome enforces before it admits a modifyHeaders
   // rule to the atomic batch: a token-grammar name that is not a pseudo-header,
-  // and a value with no line break. Kept to the shared grammar primitives (not
-  // the full validateHeader) so this stays lean in the background bundle.
+  // and a Chrome-valid value. Kept to the shared grammar primitives (not the
+  // full validateHeader) so this stays lean in the background bundle.
   const header = normalizeHeaderName(rule.header);
   if (!HTTP_TOKEN.test(header)) {
     return "header";
@@ -288,7 +289,7 @@ export function uncompilableReason(
   if (
     rule.operation !== "remove" &&
     rule.value !== undefined &&
-    /[\r\n]/.test(rule.value)
+    !isValidHeaderValue(rule.value)
   ) {
     return "value";
   }

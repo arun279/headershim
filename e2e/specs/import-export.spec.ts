@@ -186,23 +186,25 @@ test("an export round-trips through the options UI to an equivalent state, off",
 // exercise all of them. Four of the dropped-filter kinds (tab/tab-group/window/
 // time) deliberately share one copy string, so rows are matched on their
 // distinct name plus detail, not the detail alone.
-const WARNING_KINDS: readonly ImportPlanWarning["kind"][] = [
-  "credential",
-  "security-response",
-  "request-append-degraded",
-  "dynamic-token",
-  "cookie-semantics-degraded",
-  "set-cookie-semantics-degraded",
-  "csp-semantics-degraded",
-  "invalid-regex",
-  "exclude-url-filter-dropped",
-  "initiator-domain-filter-dropped",
-  "tab-filter-dropped",
-  "tab-group-filter-dropped",
-  "window-filter-dropped",
-  "time-filter-dropped",
-  "url-replacement-dropped",
-];
+const WARNING_KIND_COVERAGE = {
+  credential: true,
+  "security-response": true,
+  "request-append-degraded": true,
+  "dynamic-token": true,
+  "cookie-semantics-degraded": true,
+  "set-cookie-semantics-degraded": true,
+  "csp-semantics-degraded": true,
+  "invalid-regex": true,
+  "invalid-value": true,
+  "exclude-url-filter-dropped": true,
+  "initiator-domain-filter-dropped": true,
+  "tab-filter-dropped": true,
+  "tab-group-filter-dropped": true,
+  "window-filter-dropped": true,
+  "time-filter-dropped": true,
+  "url-replacement-dropped": true,
+} satisfies Record<ImportPlanWarning["kind"], true>;
+const WARNING_KINDS = Object.keys(WARNING_KIND_COVERAGE);
 
 function sentenceText(parts: Sentence): string {
   return parts

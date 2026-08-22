@@ -16,7 +16,7 @@ export function blockedCommitCopy(error: MutationError): string | undefined {
     case "name-invalid":
     case "name-not-modifiable":
     case "value-required":
-    case "value-line-break":
+    case "value-invalid":
     case "request-append-not-allowed":
       return headerErrorMessage(error);
     case "enabled-rule-limit-exceeded":

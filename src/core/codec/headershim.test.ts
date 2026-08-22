@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { compile } from "../compile";
 import type { Profile, Rule, Scope, StateDoc } from "../model";
 import {
   applyImportPlan,
@@ -406,6 +407,55 @@ describe("headershim import", () => {
     };
 
     expect(importHeadershim(envelope, [])).toMatchObject({ ok: true });
+  });
+
+  it("accepts a stored NUL value and lets compile refuse the rule", () => {
+    const source = profileSet();
+    const profile = source.profiles[0];
+    if (profile === undefined) {
+      throw new Error("fixture must contain a profile");
+    }
+    const envelope = createHeadershimEnvelope(
+      {
+        ...source,
+        profiles: [
+          {
+            ...profile,
+            rules: [
+              storedRule("rule-nul", 5, { type: "all" }, { value: "a\0b" }),
+            ],
+          },
+        ],
+      },
+      new Date("2026-07-12T19:03:00.000Z"),
+    );
+    const result = importHeadershim(envelope, []);
+    if (!result.ok) {
+      throw new Error(`fixture import failed: ${result.error.kind}`);
+    }
+
+    const applied = applyImportPlan(targetDoc(), result.value);
+    const imported = applied.profiles[1];
+    if (imported === undefined) {
+      throw new Error("fixture must import a profile");
+    }
+    const batch = compile({
+      doc: { ...applied, activeProfileId: imported.id },
+      overrides: [],
+      granted: { origins: [], allSites: true },
+      isRegexSupported: () => true,
+    });
+
+    expect(result.value.profiles[0]?.rules[0]?.value).toBe("a\0b");
+    expect(batch.dynamic).toEqual([]);
+    expect(batch.entries).toMatchObject([
+      {
+        standing: {
+          kind: "absent",
+          reason: { kind: "refused", reason: "value" },
+        },
+      },
+    ]);
   });
 
   it("rejects malformed recognized envelopes without throwing", () => {

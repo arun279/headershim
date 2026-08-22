@@ -144,7 +144,7 @@ describe("saveRule", () => {
     [draft({ header: "bad header" }), "name-invalid"],
     [draft({ header: "   " }), "name-required"],
     [withoutValue(draft()), "value-required"],
-    [draft({ value: "a\r\nb" }), "value-line-break"],
+    [draft({ value: "a\r\nb" }), "value-invalid"],
     [
       draft({ operation: "append", header: "x-custom-token" }),
       "request-append-not-allowed",
@@ -330,14 +330,12 @@ describe("setRuleEnabled", () => {
   });
 });
 
-// Header grammar and urlFilter grammar are re-checked whenever a stored
-// rule enters the enabled set. An imported (untrusted) rule can carry a CRLF
-// value, a pseudo-header name, or a urlFilter Chrome rejects — stored disabled
-// and structurally indistinguishable from a user-disabled one — so the enable
-// gesture, on every path, is the last gate before the compiler.
+// Header value/name grammar and urlFilter grammar are re-checked whenever a
+// stored rule enters the enabled set. Stored docs are shape-only, so the enable
+// gesture is the last gate before the compiler.
 describe("enable-path grammar re-validation", () => {
   it.each<[string, Partial<Rule>, MutationError["kind"]]>([
-    ["a CRLF header value", { value: "a\r\nb" }, "value-line-break"],
+    ["a CRLF header value", { value: "a\r\nb" }, "value-invalid"],
     ["a pseudo-header name", { header: ":authority" }, "name-not-modifiable"],
     [
       "a non-ASCII url pattern",

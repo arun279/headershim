@@ -1142,7 +1142,7 @@ describe("background lifecycle", () => {
     expect(doc.previousProfileId).toBe(seed.activeProfileId);
   });
 
-  // The profile command writes state without the commit guard, so an imported
+  // The profile command writes state without the commit guard, so a stored
   // inactive profile can carry an enabled rule Chrome rejects (a bad urlFilter,
   // a CRLF value) that would sink the whole atomic batch when the command
   // enables it. The reconcile drops that one rule from the compiled set, so the

@@ -38,6 +38,8 @@ export function importWarningCopy(warning: ImportPlanWarning): {
         name: warning.ruleName,
         detail: strings.invalidRegex(warning.pattern),
       };
+    case "invalid-value":
+      return { name: warning.ruleName, detail: [strings.invalidValue] };
     case "dynamic-token":
       return { name: warning.ruleName, detail: [strings.dynamicToken] };
     case "exclude-url-filter-dropped":

@@ -180,6 +180,26 @@ describe("migrate", () => {
     }
   });
 
+  it("preserves a stored rule with a value older builds accepted", () => {
+    const doc = validDoc();
+    const invalid = storedRule(5, { type: "all" }, { value: "a\0b" });
+    const profile = firstProfile(doc);
+    const stored = {
+      ...doc,
+      profiles: [
+        {
+          ...profile,
+          rules: [...profile.rules, invalid],
+        },
+      ],
+      nextRuleNum: 6,
+    };
+
+    const result = migrate(stored);
+
+    expect(result).toEqual({ ok: true, value: stored });
+  });
+
   it("preserves a document with a long profile name", () => {
     const doc = withProfile({ name: "x".repeat(200) });
     const result = migrate(doc);

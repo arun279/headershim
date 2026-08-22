@@ -185,6 +185,8 @@ function isRule(value: unknown): value is Rule {
     typeof header === "string" &&
     header.length > 0 &&
     header === normalizeHeaderName(header) &&
+    // A stored value Chrome rejects must not discard the document; compile
+    // keeps it out of the batch.
     hasValidHeaderValue(value) &&
     isScope(scope) &&
     isResourceTypes(resourceTypes) &&
