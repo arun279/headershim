@@ -74,12 +74,14 @@
   color: var(--ink);
 }
 /* The header is the row's identifier and the meta cluster is its second facts
-   (status, caveat, Grant); neither pulls width from the other. The cluster's
-   own margin-left: auto already claims the row's free space, so the header
-   does not grow into it: both sides sit at their content width until the row
-   is genuinely short, then give way, gap by gap, down to their own floors. */
+   (status, caveat, Grant); neither pulls width from the other. The header takes
+   the row's free space so that its box states the room the name may take rather
+   than the width of the name already drawn: that box is what the truncation
+   primitive measures, and one hugging a cut name reports no room to grow it
+   back. The name draws from the left of it, so nothing moves. Both sides give
+   way, gap by gap, down to their own floors when the row is genuinely short. */
 .tape-row .tape-header {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-width: 8ch;
 }
 /* Direction in the glyph slot, operation in the word beside it: two rules that
@@ -97,16 +99,15 @@
   font-weight: 500;
   color: var(--ink2);
 }
-/* The row's second facts, packed at the right edge by this wrapper's own auto
-   margin: the status word, the caveat word, and the Grant pill, whichever of
-   them the row carries. No flex-grow and no cap: the cluster resolves at its
-   content width and only gives width back, word by word, when the row is
-   genuinely short of room. */
+/* The row's second facts, held at the right edge by the header beside it
+   claiming the free space: the status word, the caveat word, and the Grant
+   pill, whichever of them the row carries. No flex-grow and no cap: the cluster
+   resolves at its content width and only gives width back, word by word, when
+   the row is genuinely short of room. */
 .tape-meta {
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
 }
 /* The pill is an action, not a third word: a wider gap sets it apart from the
    prose beside it the way ChangeLine's own control column does. */

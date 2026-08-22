@@ -118,12 +118,12 @@ describe("Truncate middle mode", () => {
           ),
         }),
       } as unknown as CanvasRenderingContext2D);
-    const clientWidth = vi
-      .spyOn(HTMLElement.prototype, "clientWidth", "get")
-      .mockReturnValue(columnWidth);
+    const column = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockReturnValue(new DOMRect(0, 0, columnWidth, 0));
     return () => {
       getContext.mockRestore();
-      clientWidth.mockRestore();
+      column.mockRestore();
     };
   }
 
