@@ -130,6 +130,21 @@ assertExactEntry(
 const budgeted = new Set(
   [...sizeEntries.values()].flatMap(({ files: entryFiles }) => [...entryFiles]),
 );
+const deferred = budgeted
+  .difference(popupStartup)
+  .difference(optionsStartup)
+  .difference(new Set([`${outputRoot}/background.js`]));
+const declaredDeferred = new Set(
+  ["Options rule editor", "Options deferred pages", "ModHeader import"].flatMap(
+    (name) => [...sizeEntries.get(name).files],
+  ),
+);
+for (const file of deferred.difference(declaredDeferred)) {
+  violations.push(`Deferred size entries do not include ${file}`);
+}
+for (const file of declaredDeferred.difference(deferred)) {
+  violations.push(`Deferred size entries include unexpected file ${file}`);
+}
 for (const file of files.filter((file) =>
   [".css", ".html", ".js"].includes(path.extname(file)),
 )) {

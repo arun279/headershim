@@ -37,6 +37,7 @@ const releaseZipChecker = path.join(
   repositoryRoot,
   "scripts/check-release-zip.mjs",
 );
+const slackChecker = path.join(repositoryRoot, "scripts/check-size-slack.mjs");
 const hook = path.join(repositoryRoot, ".githooks/pre-push");
 const zero = "0".repeat(40);
 
@@ -154,6 +155,44 @@ function runReleaseZipChecker(cwd, zipPath) {
     cwd,
     encoding: "utf8",
     env: isolatedEnv,
+  });
+}
+
+function writeSizeLimitReport(cwd, results) {
+  writeFileSync(
+    path.join(cwd, "size-limit.json"),
+    `${JSON.stringify(results, null, 2)}\n`,
+  );
+}
+
+function createSizeSlackFixture(t, entries, results) {
+  const cwd = mkdtempSync(path.join(tmpdir(), "headershim-size-slack-"));
+  t.after(() => rmSync(cwd, { recursive: true }));
+  writeFileSync(
+    path.join(cwd, "package.json"),
+    `${JSON.stringify({ "size-limit": entries }, null, 2)}\n`,
+  );
+  writeSizeLimitReport(cwd, results);
+  return cwd;
+}
+
+function runSizeSlack(t, cwd, args = []) {
+  const bin = mkdtempSync(path.join(tmpdir(), "headershim-size-bin-"));
+  t.after(() => rmSync(bin, { recursive: true }));
+  const sizeLimit = path.join(bin, "size-limit");
+  writeFileSync(
+    sizeLimit,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+process.stdout.write(fs.readFileSync(path.join(process.cwd(), "size-limit.json"), "utf8"));
+`,
+  );
+  chmodSync(sizeLimit, 0o755);
+  return spawnSync(process.execPath, [slackChecker, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...isolatedEnv, PATH: `${bin}:${process.env.PATH}` },
   });
 }
 
@@ -433,6 +472,64 @@ test("the release zip checker matches the archive to the built extension", (t) =
   assert.match(withMap.stderr, /extra\.map/);
   assert.equal(exact.status, 0);
   assert.match(exact.stdout, /Release zip check passed/);
+});
+
+test("the size slack checker enforces the bounded slack gate", (t) => {
+  const cwd = createSizeSlackFixture(
+    t,
+    [{ name: "Chunk", limit: "2001 B" }],
+    [{ name: "Chunk", passed: true, size: 1000, sizeLimit: 2001 }],
+  );
+
+  const tooLoose = runSizeSlack(t, cwd);
+  writeSizeLimitReport(cwd, [
+    { name: "Chunk", passed: true, size: 1000, sizeLimit: 2000 },
+  ]);
+  const bounded = runSizeSlack(t, cwd);
+
+  assert.equal(tooLoose.status, 1);
+  assert.match(
+    tooLoose.stderr,
+    /Chunk is 1000 B against a 2001 B limit: 1001 B of slack/,
+  );
+  assert.equal(bounded.status, 0);
+});
+
+test("the size slack recorder lowers limits but never raises them", (t) => {
+  const lowered = createSizeSlackFixture(
+    t,
+    [{ name: "Chunk", limit: "2000 B" }],
+    [{ name: "Chunk", passed: true, size: 1000, sizeLimit: 2000 }],
+  );
+  const raised = createSizeSlackFixture(
+    t,
+    [{ name: "Chunk", limit: "1000 B" }],
+    [{ name: "Chunk", passed: false, size: 1100, sizeLimit: 1000 }],
+  );
+  const originalRaisedPackage = readFileSync(
+    path.join(raised, "package.json"),
+    "utf8",
+  );
+
+  const lowerResult = runSizeSlack(t, lowered, ["--record"]);
+  const raiseResult = runSizeSlack(t, raised, ["--record"]);
+
+  assert.equal(lowerResult.status, 0);
+  assert.equal(
+    JSON.parse(readFileSync(path.join(lowered, "package.json"), "utf8"))[
+      "size-limit"
+    ][0].limit,
+    "1500 B",
+  );
+  assert.equal(raiseResult.status, 0);
+  assert.match(
+    raiseResult.stderr,
+    /Chunk measures 1100 B, above its 1000 B limit\. size:record only lowers limits\./,
+  );
+  assert.equal(
+    readFileSync(path.join(raised, "package.json"), "utf8"),
+    originalRaisedPackage,
+  );
 });
 
 function runHook(t, input, cwd = repositoryRoot) {
