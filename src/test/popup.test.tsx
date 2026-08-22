@@ -21,14 +21,13 @@ import {
 import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
-// activeTabDomain is a spy: a tab with no web origin is its own popup state.
+// activeTabOrigin is a spy: a tab with no web origin is its own popup state.
 // Only the active-tab reads are stubbed, so openAboutPage still runs for real
 // against the fake browser.
 vi.mock("../platform/tabs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../platform/tabs")>()),
   activeTabId: () => Promise.resolve(5),
-  activeTabDomain: vi.fn(() => Promise.resolve("api.example.com")),
-  activeTabOrigin: () => Promise.resolve("https://api.example.com"),
+  activeTabOrigin: vi.fn(() => Promise.resolve("https://api.example.com")),
 }));
 
 const ORIGIN = "*://*.api.example.com/*";
@@ -730,8 +729,8 @@ describe("popup readout", () => {
   // thing still worth opening from here rather than asking for what the reader
   // has already done.
   it("says why there is nothing to change and offers the rule list", async () => {
-    const { activeTabDomain } = await import("../platform/tabs");
-    vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
+    const { activeTabOrigin } = await import("../platform/tabs");
+    vi.mocked(activeTabOrigin).mockResolvedValueOnce(undefined);
     const { root } = await mount(createV1Seed(), true);
     expect(root.querySelector(".empty")?.textContent).toContain(
       "this tab is not on one",
@@ -747,8 +746,8 @@ describe("popup readout", () => {
   // sitting empty; the marker is plain furniture, never the wire-byte host face,
   // so it never reads as a site of its own.
   it("marks the site slot as siteless rather than naming a site", async () => {
-    const { activeTabDomain } = await import("../platform/tabs");
-    vi.mocked(activeTabDomain).mockResolvedValueOnce(undefined);
+    const { activeTabOrigin } = await import("../platform/tabs");
+    vi.mocked(activeTabOrigin).mockResolvedValueOnce(undefined);
     const { root } = await mount(createV1Seed(), true);
     expect(root.querySelector(".site .no-site")?.textContent).toBe(
       copy.readout.noSite,

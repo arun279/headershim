@@ -5,6 +5,7 @@ import {
   type GrantSnapshot,
   grantNarrowings,
   missingGrants,
+  originCovered,
   originGranted,
   originPatternCoverage,
   requiredOrigins,
@@ -254,6 +255,41 @@ describe("origin patterns", () => {
         allSites: false,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("originCovered", () => {
+  it("matches scheme, port, and containing hosts", () => {
+    expect(
+      originCovered("https://app.example.com", {
+        origins: ["*://*.example.com/*"],
+        allSites: false,
+      }),
+    ).toBe(true);
+    expect(
+      originCovered("http://app.example.com", {
+        origins: ["https://*.example.com/*"],
+        allSites: false,
+      }),
+    ).toBe(false);
+    expect(
+      originCovered("http://localhost:15848", {
+        origins: ["http://localhost:15848/*"],
+        allSites: false,
+      }),
+    ).toBe(true);
+    expect(
+      originCovered("http://localhost:15848", {
+        origins: ["http://localhost:9999/*"],
+        allSites: false,
+      }),
+    ).toBe(false);
+    expect(
+      originCovered("https://app.example.com/path", {
+        origins: ["https://*.example.com/*"],
+        allSites: false,
+      }),
+    ).toBe(false);
   });
 });
 

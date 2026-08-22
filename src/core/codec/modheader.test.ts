@@ -403,6 +403,20 @@ describe("ModHeader import", () => {
     ]);
   });
 
+  it("deduplicates repeated source resource types", async () => {
+    const plan = await importParsed([
+      {
+        title: "Repeated resources",
+        headers: [{ enabled: true, name: "X-Debug", value: "on" }],
+        resourceFilters: [
+          { enabled: true, resourceType: ["main_frame", "main_frame"] },
+        ],
+      },
+    ]);
+
+    expect(onlyProfile(plan).rules[0]?.resourceTypes).toEqual(["pages"]);
+  });
+
   it("itemizes every dropped exclude-URL filter", async () => {
     const warnings = warningsOfKind(
       await importFixture(),
@@ -557,6 +571,16 @@ describe("ModHeader import", () => {
     await expect(
       importModHeader(
         [{ title: "Malformed", headers: [null] }],
+        [],
+        acceptRegex,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-export" },
+    });
+    await expect(
+      importModHeader(
+        [{ title: "Malformed", urlFilters: [{}] }],
         [],
         acceptRegex,
       ),

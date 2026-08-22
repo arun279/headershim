@@ -52,7 +52,7 @@ describe("siteAccessView", () => {
   const enabledOverride = {
     num: 1,
     tabId: 5,
-    originHost: "api.example.com",
+    origin: "https://api.example.com",
     direction: "request",
     operation: "set",
     header: "x-session",
@@ -211,30 +211,30 @@ describe("siteAccessView", () => {
     ]);
   });
 
-  it("keeps narrowed-grant rule and this-tab usage visible and actionable", () => {
+  it("counts a This-tab change covered by a narrowed grant on its partial row", () => {
     const observed = "https://api.example.com/*";
     const required = originPatternForDomain("api.example.com");
     const subject = doc([apiProfile()]);
 
-    expect(
-      siteAccessView(subject, { origins: [observed], allSites: false }, [
-        enabledOverride,
-      ]),
-    ).toMatchObject({
-      needed: [],
-      partial: [
-        {
-          coverage: "partial",
-          origin: required,
-          domain: "api.example.com",
-          ruleCount: 1,
-          thisTabCount: 1,
-          grantedOrigins: [observed],
-          coveringOrigins: [observed],
-        },
-      ],
-      granted: [],
-    });
+    const view = siteAccessView(
+      subject,
+      { origins: [observed], allSites: false },
+      [enabledOverride],
+    );
+
+    expect(view.needed).toEqual([]);
+    expect(view.granted).toEqual([]);
+    expect(view.partial).toMatchObject([
+      {
+        coverage: "partial",
+        origin: required,
+        domain: "api.example.com",
+        ruleCount: 1,
+        grantedOrigins: [observed],
+        coveringOrigins: [observed],
+      },
+    ]);
+    expect(view.partial[0]?.thisTabCount).toBe(1);
   });
 
   it("keeps every same-host origin that contributes to a partial row", () => {

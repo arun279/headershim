@@ -3,7 +3,15 @@ import type { Page } from "@playwright/test";
 import type { StateDoc } from "../../src/core/model";
 import { copy, siteAccessCopy } from "../../src/ui/copy";
 import { NARROWED_ORIGIN } from "../echo-ports.mjs";
-import { expect, seedState, stateWithRules, test } from "../fixtures";
+import {
+  activeTabId,
+  expect,
+  getSessionRules,
+  seedSession,
+  seedState,
+  stateWithRules,
+  test,
+} from "../fixtures";
 import { pathologicalDoc } from "../fixtures/pathological";
 import {
   collectLayoutOffenders,
@@ -289,12 +297,14 @@ test("partial site-access rows hold their surface", {
   await page.close();
 });
 
-test("this-tab composer names the narrowed grant it will ask for", {
+test("this-tab composer offers Add without a grant when a narrowed grant covers the tab's origin", {
   tag: "@narrow-host-access",
 }, async ({ context, echoServers, extensionId, serviceWorker }) => {
   const host = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
   const web = await context.newPage();
   await web.goto(`${echoServers.h1Url}/layout`);
+  const tabId = await activeTabId(serviceWorker);
 
   for (const theme of THEMES) {
     const doc = pathologicalDoc(host);
@@ -313,13 +323,44 @@ test("this-tab composer names the narrowed grant it will ask for", {
     await composer
       .getByRole("button", { name: copy.readout.justThisTab })
       .click();
-    await expect(
-      composer.getByRole("button", {
-        name: copy.readout.addThisTabAndAllow(host),
-      }),
-    ).toBeVisible();
+    const commit = composer
+      .getByRole("region", { name: copy.readout.newChange })
+      .getByRole("button", { name: copy.readout.addThisTab });
+    await expect(commit).toBeVisible();
+    await expect(commit).not.toContainText(
+      copy.readout.addThisTabAndAllow(host),
+    );
     await measure(composer, theme, `popup narrow this-tab composer (${theme})`);
+
+    await composer
+      .getByRole("textbox", { name: copy.editor.labels.headerName })
+      .fill("x-headershim-this-tab");
+    await composer
+      .getByRole("textbox", { name: copy.editor.labels.value })
+      .fill("on");
+    await commit.click();
+    await expect
+      .poll(async () => {
+        const rules = await getSessionRules(serviceWorker);
+        return rules.length === 1 &&
+          rules[0]?.condition.tabIds?.length === 1 &&
+          rules[0].condition.tabIds[0] === tabId &&
+          rules[0].condition.requestDomains?.length === 1 &&
+          rules[0].condition.requestDomains[0] === host &&
+          rules[0].condition.urlFilter === `|${origin}/`
+          ? rules[0].condition
+          : undefined;
+      })
+      .toMatchObject({
+        tabIds: [tabId],
+        requestDomains: [host],
+        urlFilter: `|${origin}/`,
+      });
     await composer.close();
+    await seedSession(serviceWorker, { nextNum: 1, tabs: {} });
+    await expect
+      .poll(async () => (await getSessionRules(serviceWorker)).length)
+      .toBe(0);
   }
 
   await web.close();

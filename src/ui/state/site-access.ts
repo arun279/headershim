@@ -5,6 +5,7 @@ import {
   grantNarrowings,
   isAllSitesOrigin,
   missingGrants,
+  originCovered,
   originGranted,
 } from "../../core/grants";
 import {
@@ -13,7 +14,11 @@ import {
   type StateDoc,
   type TabOverride,
 } from "../../core/model";
-import { expandResourceTypes, originPatternForDomain } from "../../core/scope";
+import {
+  expandResourceTypes,
+  originHost,
+  originPatternForDomain,
+} from "../../core/scope";
 
 export interface SiteAccessEntry {
   readonly coverage: "full" | "partial" | "none";
@@ -39,7 +44,8 @@ export interface SiteAccessView {
  * One row per displayed domain, classified as full, partial, or missing. Chrome
  * can retain several origin strings for one domain, but exposing each string as
  * a separate row makes one site appear simultaneously granted and ungranted.
- * Partial counts describe changes that need broader access, not current usage.
+ * A partial row counts the changes that need broader access plus the temporary
+ * ones its own grants already cover.
  * Needed entries never include the broad origin — the all-sites card is its
  * only grant affordance, so broad access stays behind its honest framing.
  */
@@ -58,12 +64,12 @@ export function siteAccessView(
     }
   }
   for (const override of overrides) {
-    if (!override.enabled || originGranted(override.originHost, granted)) {
+    if (!override.enabled || originCovered(override.origin, granted)) {
       continue;
     }
     incrementUsage(
       needed,
-      originPatternForDomain(override.originHost),
+      originPatternForDomain(originHost(override.origin)),
       "thisTabCount",
     );
   }
@@ -95,11 +101,22 @@ export function siteAccessView(
     const grantedOrigins = coveringOrigins.filter(
       (origin) => domainFromOriginPattern(origin) === neededEntry.domain,
     );
+    const thisTabCount =
+      (neededEntry.thisTabCount ?? 0) +
+      overrides.filter(
+        (override) =>
+          override.enabled &&
+          originCovered(override.origin, {
+            origins: grantedOrigins,
+            allSites: false,
+          }),
+      ).length;
     partialDomains.add(neededEntry.domain);
     return [
       {
         ...neededEntry,
         coverage: "partial" as const,
+        ...(thisTabCount === 0 ? {} : { thisTabCount }),
         coveringOrigins,
         ...(grantedOrigins.length === 0 ? {} : { grantedOrigins }),
       },
@@ -123,9 +140,7 @@ export function siteAccessView(
           .filter((rule) => ruleUsesGrant(rule, rowGrant, granted)).length;
         const thisTabCount = overrides.filter(
           (override) =>
-            override.enabled &&
-            (originGranted(override.originHost, rowGrant) ||
-              grantNarrowings(override.originHost, rowGrant).length !== 0),
+            override.enabled && originCovered(override.origin, rowGrant),
         ).length;
         return {
           ...entry(origins[0] ?? domain, { ruleCount, thisTabCount }, "full"),

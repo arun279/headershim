@@ -87,7 +87,7 @@ function temporary(
   return {
     num,
     tabId: TAB.tabId,
-    originHost: TAB.host,
+    origin: TAB.origin,
     direction: "request",
     operation: "set",
     header: "x-temporary",

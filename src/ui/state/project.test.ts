@@ -170,7 +170,7 @@ describe("tab projection", () => {
     const override: TabOverride = {
       num: 7,
       tabId: 42,
-      originHost: "example.com",
+      origin: "https://example.com",
       direction: "request",
       operation: "set",
       header: "Authorization",
@@ -208,7 +208,7 @@ describe("tab projection", () => {
     const override: TabOverride = {
       num: 7,
       tabId: 42,
-      originHost: "example.com",
+      origin: "https://example.com",
       direction: "request",
       operation: "set",
       header: "x-temporary",
@@ -293,7 +293,7 @@ describe("tab projection", () => {
     const override: TabOverride = {
       num: 7,
       tabId: 99,
-      originHost: "example.com",
+      origin: "https://example.com",
       direction: "request",
       operation: "set",
       header: "authorization",

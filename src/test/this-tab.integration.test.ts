@@ -36,7 +36,7 @@ describe("This-tab session overrides — end to end", () => {
     await settle();
     dnr.updateSessionRules.mockClear();
 
-    const outcome = await addOverride(5, "app.example.com", {
+    const outcome = await addOverride(5, "https://app.example.com", {
       direction: "request",
       operation: "set",
       header: "x-debug-trace",
@@ -62,7 +62,7 @@ describe("This-tab session overrides — end to end", () => {
   it("removes the session rule when the popup drops the row", async () => {
     background.main();
     await writeState(createV1Seed());
-    const added = await addOverride(5, "app.example.com", {
+    const added = await addOverride(5, "https://app.example.com", {
       direction: "request",
       operation: "set",
       header: "x-debug-trace",
@@ -87,13 +87,13 @@ describe("This-tab session overrides — end to end", () => {
   it("drops a popup override on tab close and cross-origin navigation", async () => {
     background.main();
     await writeState(createV1Seed());
-    await addOverride(5, "app.example.com", {
+    await addOverride(5, "https://app.example.com", {
       direction: "request",
       operation: "set",
       header: "x-a",
       value: "1",
     });
-    await addOverride(7, "kept.example.com", {
+    await addOverride(7, "https://kept.example.com", {
       direction: "request",
       operation: "set",
       header: "x-b",
@@ -122,7 +122,7 @@ describe("This-tab session overrides — end to end", () => {
     background.main();
     const seed = createV1Seed();
     await writeState(seed);
-    await addOverride(5, "app.example.com", {
+    await addOverride(5, "https://app.example.com", {
       direction: "request",
       operation: "set",
       header: "x-a",

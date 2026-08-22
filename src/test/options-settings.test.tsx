@@ -80,7 +80,7 @@ describe("erase everything", () => {
           {
             num: 1,
             tabId: 5,
-            originHost: "app.example.com",
+            origin: "https://app.example.com",
             direction: "request",
             operation: "set",
             header: "x-debug-trace",

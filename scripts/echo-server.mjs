@@ -144,12 +144,15 @@ export async function startEchoServers({
 
   const h2 = createSecureServer({ ...selfSignedCert(), allowHTTP1: false });
   h2.on("stream", (stream, headers) => {
+    const echoed = h2Headers(headers);
+    const json = headers[":path"] === "/echo.json";
     stream.respond({
       ":status": 200,
-      "cache-control": "no-store",
-      "content-type": "text/html; charset=utf-8",
+      ...responseHeaders({
+        "content-type": json ? "application/json" : "text/html; charset=utf-8",
+      }),
     });
-    stream.end(echoBody(h2Headers(headers)));
+    stream.end(json ? jsonBody(echoed) : echoBody(echoed));
   });
 
   const [boundH1Port, boundH2Port] = await Promise.all([

@@ -33,7 +33,7 @@ export type SessionMutationError =
 
 export function addOverride(
   tabId: number,
-  originHost: string,
+  origin: string,
   draft: OverrideDraft,
 ): Promise<Result<TabOverride, SessionMutationError>> {
   const validated = validateHeader({
@@ -55,7 +55,7 @@ export function addOverride(
     const row: TabOverride = {
       num: session.nextNum,
       tabId,
-      originHost,
+      origin,
       direction: draft.direction,
       operation: draft.operation,
       header: validated.value.header,
@@ -152,13 +152,13 @@ export function updateOverrideValue(
  */
 export function pruneForeignOrigins(
   tabId: number,
-  host: string | undefined,
+  origin: string | undefined,
 ): Promise<void> {
   return locked(async () => {
     const session = await readSession();
     const rows = session.tabs[tabId] ?? [];
     const kept =
-      host === undefined ? [] : rows.filter((row) => row.originHost === host);
+      origin === undefined ? [] : rows.filter((row) => row.origin === origin);
     if (kept.length === rows.length) {
       return;
     }

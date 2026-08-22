@@ -22,7 +22,6 @@ import { render, settle } from "../ui/test/render";
 // The popup's tab is pinned so the readout has the host the seeded rule targets.
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
-  activeTabDomain: () => Promise.resolve("api.acme.dev"),
   activeTabOrigin: () => Promise.resolve("https://api.acme.dev"),
 }));
 
