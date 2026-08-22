@@ -5,6 +5,7 @@ import {
   expandResourceTypes,
   hostUnder,
   originPatternForDomain,
+  webOriginFromUrl,
 } from "./scope";
 
 export const ALL_SITES_ORIGIN = "*://*/*";
@@ -73,6 +74,26 @@ export function originGranted(domain: string, granted: GrantSnapshot): boolean {
   return (
     grantedPatternCoverage(granted, originPatternForDomain(domain)) === "full"
   );
+}
+
+export function originCovered(origin: string, granted: GrantSnapshot): boolean {
+  if (granted.allSites) {
+    return true;
+  }
+  const required = webOriginFromUrl(origin);
+  if (required === undefined || required.origin !== origin) {
+    return false;
+  }
+  const target: OriginPattern = {
+    scheme: required.scheme,
+    host: required.host,
+    includesSubdomains: false,
+    port: required.port,
+  };
+  return granted.origins.some((grant) => {
+    const pattern = parseOriginPattern(grant);
+    return pattern !== undefined && patternContains(pattern, target);
+  });
 }
 
 export interface GrantNarrowing {

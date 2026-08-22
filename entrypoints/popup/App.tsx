@@ -6,7 +6,7 @@ import {
   useState,
 } from "preact/hooks";
 import { browser } from "wxt/browser";
-import { missingGrants, originGranted } from "../../src/core/grants";
+import { missingGrants, originCovered } from "../../src/core/grants";
 import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
   availableProfileName,
@@ -16,14 +16,10 @@ import {
 } from "../../src/core/model";
 import { err, type Result } from "../../src/core/result";
 import { CURRENT } from "../../src/core/schema";
-import { originPatternForDomain } from "../../src/core/scope";
+import { originHost, originPatternForDomain } from "../../src/core/scope";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
-import {
-  activeTabDomain,
-  activeTabOrigin,
-  openAboutPage,
-} from "../../src/platform/tabs";
+import { activeTabOrigin, openAboutPage } from "../../src/platform/tabs";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
@@ -114,7 +110,6 @@ function Ready({
   const [Editor, setEditor] =
     useState<typeof import("../../src/ui/components/RuleEditor").RuleEditor>();
   const [composing, setComposing] = useState(false);
-  const [tabDomain, setTabDomain] = useState<string | undefined>(undefined);
   const [tabOrigin, setTabOrigin] = useState<string | undefined>(undefined);
   const [tabResolved, setTabResolved] = useState(false);
   const [switchShortcut, setSwitchShortcut] = useState<string | undefined>(
@@ -144,11 +139,10 @@ function Ready({
   };
 
   useEffect(() => {
-    void activeTabDomain().then((host) => {
-      setTabDomain(host);
+    void activeTabOrigin().then((origin) => {
+      setTabOrigin(origin);
       setTabResolved(true);
     });
-    void activeTabOrigin().then(setTabOrigin);
     // The bound accelerator makes the profile shortcut discoverable; read once so
     // the switcher can print it on the row it would flip to.
     void browser.commands.getAll().then((commands) => {
@@ -172,8 +166,8 @@ function Ready({
   useEffect(() => {
     if (pruned || !tabResolved || tabId === undefined) return;
     setPruned(true);
-    run(pruneForeignOrigins(tabId, tabDomain));
-  }, [pruned, tabResolved, tabId, tabDomain]);
+    run(pruneForeignOrigins(tabId, tabOrigin));
+  }, [pruned, tabResolved, tabId, tabOrigin]);
 
   // An Undo outlives the render that armed it, so a write reads the rule as it
   // stands when it commits: only the value moves, and an edit made elsewhere in
@@ -183,6 +177,13 @@ function Ready({
 
   const paused = doc.settings.paused;
   const activeProfile = useMemo(() => getActiveProfile(doc), [doc]);
+  const tab = useMemo(
+    () =>
+      tabOrigin === undefined
+        ? undefined
+        : { origin: tabOrigin, host: originHost(tabOrigin) },
+    [tabOrigin],
+  );
   const globalNeedsAccess = activeProfile.rules.some(
     (rule) => rule.enabled && missingGrants(rule, grants).length > 0,
   );
@@ -192,9 +193,9 @@ function Ready({
         applied: live,
         doc,
         overrides,
-        tab: { tabId, host: tabDomain, origin: tabOrigin },
+        tab: { tabId, host: tab?.host, origin: tab?.origin },
       }),
-    [doc, live, tabId, tabDomain, tabOrigin, overrides],
+    [doc, live, overrides, tab, tabId],
   );
 
   const reportBlockedCommit = (error: MutationError, fallback?: string) => {
@@ -330,22 +331,24 @@ function Ready({
   const submitThisTab = async (
     draft: OverrideDraft,
   ): Promise<Result<TabOverride, ThisTabError>> => {
-    if (tabId === undefined || tabDomain === undefined) {
+    if (tabId === undefined || tab === undefined) {
       return err({
         kind: "name-required" as const,
         copyId: HEADER_ERROR_COPY_IDS["name-required"],
       });
     }
-    // The request fires inside the commit gesture, and its answer decides the
-    // write: an override on a host Chrome will not let us touch applies to
-    // nothing.
-    const granted = await requestPermissions([
-      originPatternForDomain(tabDomain),
-    ]);
+    // A permission request is needed only when the current origin is not
+    // already covered; without access, its override would apply to nothing.
+    const granted =
+      originCovered(tab.origin, grants) ||
+      (await requestPermissions([originPatternForDomain(tab.host)]));
     if (!granted) {
-      return err({ kind: "grant-declined" as const, host: tabDomain });
+      return err({
+        kind: "grant-declined" as const,
+        host: tab.host,
+      });
     }
-    return addOverride(tabId, tabDomain, draft);
+    return addOverride(tabId, tab.origin, draft);
   };
 
   // Starting a fresh attempt retires the verdict on the last one, so a spent
@@ -360,7 +363,7 @@ function Ready({
     setAddingTo(activeProfile.id);
   };
   const openComposer = () => {
-    if (tabDomain === undefined) return;
+    if (tabOrigin === undefined) return;
     retireVerdict();
     setAddingTo(undefined);
     setComposing(true);
@@ -433,8 +436,8 @@ function Ready({
             key="new-rule"
             profileName={addingProfile.name}
             grants={grants}
-            tabDomain={tabDomain}
-            prefillDomain={tabDomain}
+            tabDomain={tab?.host}
+            prefillDomain={tab?.host}
             onSave={(ruleId, draft) =>
               mutations.saveRule(addingProfile.id, ruleId, draft)
             }
@@ -481,7 +484,7 @@ function Ready({
         previousProfileId={doc.previousProfileId}
         switchShortcut={switchShortcut}
         projection={live}
-        tab={{ tabId, host: tabDomain, origin: tabOrigin }}
+        tab={{ tabId, host: tab?.host, origin: tab?.origin }}
         grants={grants}
         overrides={overrides}
         isRegexSupported={isRegexSupported}
@@ -506,7 +509,7 @@ function Ready({
             {copy.readout.addChange}
           </button>
         )}
-        {tabDomain !== undefined && (
+        {tab !== undefined && (
           <button type="button" class="tab-btn" onClick={openComposer}>
             {copy.readout.justThisTab}
           </button>
@@ -526,10 +529,10 @@ function Ready({
         />
       </footer>
       <div class="popup-body">
-        {composing && tabDomain !== undefined && (
+        {composing && tab !== undefined && (
           <ThisTabComposer
-            host={tabDomain}
-            needsGrant={!originGranted(tabDomain, grants)}
+            host={tab.host}
+            needsGrant={!originCovered(tab.origin, grants)}
             onSubmit={submitThisTab}
             onClose={() => setComposing(false)}
             onCommitted={() => show(copy.toast.changesSaved)}

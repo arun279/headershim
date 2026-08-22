@@ -18,11 +18,11 @@ const draft: OverrideDraft = {
   value: "1",
 };
 
-function row(num: number, tabId: number, originHost: string): TabOverride {
+function row(num: number, tabId: number, host: string): TabOverride {
   return {
     num,
     tabId,
-    originHost,
+    origin: `https://${host}`,
     direction: "request",
     operation: "set",
     header: "x-tab",
@@ -33,7 +33,7 @@ function row(num: number, tabId: number, originHost: string): TabOverride {
 
 describe("session mutations", () => {
   it("adds a row with an allocated num and lowercased header", async () => {
-    const outcome = await addOverride(5, "app.example.com", {
+    const outcome = await addOverride(5, "https://app.example.com", {
       ...draft,
       header: "X-Debug-Trace",
     });
@@ -44,7 +44,7 @@ describe("session mutations", () => {
     expect(outcome.value).toMatchObject({
       num: 1,
       tabId: 5,
-      originHost: "app.example.com",
+      origin: "https://app.example.com",
       header: "x-debug-trace",
       value: "1",
     });
@@ -54,9 +54,15 @@ describe("session mutations", () => {
   });
 
   it("appends to the tab and advances nextNum across tabs", async () => {
-    await addOverride(5, "app.example.com", draft);
-    await addOverride(5, "app.example.com", { ...draft, header: "x-two" });
-    await addOverride(9, "other.example.com", { ...draft, header: "x-three" });
+    await addOverride(5, "https://app.example.com", draft);
+    await addOverride(5, "https://app.example.com", {
+      ...draft,
+      header: "x-two",
+    });
+    await addOverride(9, "https://other.example.com", {
+      ...draft,
+      header: "x-three",
+    });
 
     const session = await readSession();
     expect(session.nextNum).toBe(4);
@@ -65,7 +71,7 @@ describe("session mutations", () => {
   });
 
   it("rejects an invalid header before writing anything", async () => {
-    const outcome = await addOverride(5, "app.example.com", {
+    const outcome = await addOverride(5, "https://app.example.com", {
       ...draft,
       header: ":authority",
     });
@@ -84,7 +90,7 @@ describe("session mutations", () => {
     };
     await write({ nextNum: MAX_SESSION_OVERRIDES + 1, tabs });
 
-    const outcome = await addOverride(9, "other.example.com", draft);
+    const outcome = await addOverride(9, "https://other.example.com", draft);
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
       expect(outcome.error.kind).toBe("session-override-limit-exceeded");
@@ -151,7 +157,7 @@ describe("session mutations", () => {
       },
     });
 
-    await pruneForeignOrigins(5, "app.example.com");
+    await pruneForeignOrigins(5, "https://app.example.com");
 
     expect((await readSession()).tabs[5]?.map((entry) => entry.num)).toEqual([
       1,
@@ -175,7 +181,7 @@ describe("session mutations", () => {
       tabs: { 5: [row(1, 5, "app.example.com")] },
     });
 
-    await pruneForeignOrigins(5, "app.example.com");
+    await pruneForeignOrigins(5, "https://app.example.com");
 
     expect((await readSession()).tabs[5]).toHaveLength(1);
   });

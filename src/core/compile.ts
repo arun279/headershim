@@ -5,6 +5,7 @@ import {
   type GrantSnapshot,
   grantNarrowings,
   missingGrants,
+  originCovered,
   originGranted,
 } from "./grants";
 import {
@@ -25,6 +26,7 @@ import {
   hostUnder,
   isDomainSupported,
   isRegexFilterSupported,
+  originHost,
   originPatternForDomain,
   scopeCondition,
   validateUrlFilter,
@@ -356,13 +358,8 @@ interface DynamicCandidate {
   readonly rule: Rule;
 }
 
-interface SessionNarrowing {
+interface SessionCandidate {
   readonly override: TabOverride;
-  readonly host: string;
-  readonly urlFilter: string | undefined;
-}
-
-interface SessionCandidate extends SessionNarrowing {
   readonly sourceIndex: number;
 }
 
@@ -429,9 +426,7 @@ export function compile(input: CompileInput): Batch {
         band: "session",
         priority: rule.priority,
         condition: copyCondition(rule.condition),
-        narrowed:
-          candidate.host !== candidate.override.originHost ||
-          candidate.urlFilter !== undefined,
+        narrowed: false,
         tabId: candidate.override.tabId,
       });
     }
@@ -494,11 +489,10 @@ export function emitRules(input: CompileInput): {
       ),
     ),
     session: emitSessionRules(
-      collectSessionNarrowings(input.overrides, input.granted).slice(
+      collectSessionOverrides(input.overrides, input.granted).slice(
         0,
         MAX_SESSION_OVERRIDES,
       ),
-      input.overrides,
     ),
   };
 }
@@ -509,13 +503,13 @@ function compileInput(input: CompileInput): CompiledInput {
     input.granted,
     input.isRegexSupported,
   );
-  const sessionCandidates = collectSessionNarrowings(
+  const sessionCandidates = collectSessionOverrides(
     input.overrides,
     input.granted,
   );
   return {
     dynamicBand: compileDynamicBand(dynamicCandidates),
-    sessionBand: compileSessionBand(sessionCandidates, input.overrides),
+    sessionBand: compileSessionBand(sessionCandidates),
   };
 }
 
@@ -543,11 +537,10 @@ export function compileSession(
   return paused
     ? []
     : emitSessionRules(
-        collectSessionNarrowings(overrides, granted).slice(
+        collectSessionOverrides(overrides, granted).slice(
           0,
           MAX_SESSION_OVERRIDES,
         ),
-        overrides,
       );
 }
 
@@ -637,30 +630,14 @@ function collectApplicableRules(
   return candidates;
 }
 
-function collectSessionNarrowings(
+function collectSessionOverrides(
   overrides: readonly TabOverride[],
   granted: GrantSnapshot,
 ): SessionCandidate[] {
   return overrides.flatMap((override, sourceIndex) =>
-    narrowOverride(override, granted).map((candidate) => ({
-      sourceIndex,
-      ...candidate,
-    })),
-  );
-}
-
-function narrowOverride(
-  override: TabOverride,
-  granted: GrantSnapshot,
-): SessionNarrowing[] {
-  if (!override.enabled) {
-    return [];
-  }
-  if (originGranted(override.originHost, granted)) {
-    return [{ override, host: override.originHost, urlFilter: undefined }];
-  }
-  return grantNarrowings(override.originHost, granted).map(
-    ({ host, urlFilter }) => ({ override, host, urlFilter }),
+    override.enabled && originCovered(override.origin, granted)
+      ? [{ override, sourceIndex }]
+      : [],
   );
 }
 
@@ -672,7 +649,6 @@ interface SessionBand {
 
 function compileSessionBand(
   candidates: readonly SessionCandidate[],
-  overrides: readonly TabOverride[],
 ): SessionBand {
   const eligible = candidates.slice(0, MAX_SESSION_OVERRIDES);
   const limits: (true | undefined)[] = [];
@@ -681,41 +657,25 @@ function compileSessionBand(
   }
   return {
     candidates: eligible,
-    rules: emitSessionRules(eligible, overrides),
+    rules: emitSessionRules(eligible),
     limits,
   };
 }
 
-function emitSessionRules(
-  candidates: readonly SessionNarrowing[],
-  overrides: readonly TabOverride[],
-): DnrRule[] {
-  let nextSyntheticNum =
-    overrides.reduce((max, override) => Math.max(max, override.num), 0) + 1;
-  const seenOverrideNums = new Set<number>();
-  return candidates.map(({ override, host, urlFilter }, index) => {
-    const id = seenOverrideNums.has(override.num)
-      ? nextSyntheticNum++
-      : override.num;
-    seenOverrideNums.add(override.num);
-    return {
-      id,
-      priority: SESSION_PRIORITY_TOP - index,
-      action: headerAction(override),
-      condition: overrideCondition(override, host, urlFilter),
-    };
-  });
+function emitSessionRules(candidates: readonly SessionCandidate[]): DnrRule[] {
+  return candidates.map(({ override }, index) => ({
+    id: override.num,
+    priority: SESSION_PRIORITY_TOP - index,
+    action: headerAction(override),
+    condition: overrideCondition(override),
+  }));
 }
 
-function overrideCondition(
-  override: TabOverride,
-  host = override.originHost,
-  urlFilter?: string,
-): DnrRuleCondition {
+function overrideCondition(override: TabOverride): DnrRuleCondition {
   return {
     tabIds: [override.tabId],
-    requestDomains: [host],
-    ...(urlFilter === undefined ? {} : { urlFilter }),
+    requestDomains: [originHost(override.origin)],
+    urlFilter: `|${override.origin}/`,
     resourceTypes: expandResourceTypes("all"),
   };
 }
@@ -729,9 +689,6 @@ function copyCondition(condition: DnrRuleCondition): ReadonlyDnrRuleCondition {
     ...(condition.initiatorDomains === undefined
       ? {}
       : { initiatorDomains: [...condition.initiatorDomains] }),
-    ...(condition.resourceTypes === undefined
-      ? {}
-      : { resourceTypes: [...condition.resourceTypes] }),
     ...(condition.tabIds === undefined
       ? {}
       : { tabIds: [...condition.tabIds] }),
@@ -896,7 +853,9 @@ function overrideEntry(
               ? { kind: "over-limit", limit: "session" }
               : {
                   kind: "ungranted",
-                  missing: [originPatternForDomain(override.originHost)],
+                  missing: [
+                    originPatternForDomain(originHost(override.origin)),
+                  ],
                 }
             : { kind: "off" },
         };

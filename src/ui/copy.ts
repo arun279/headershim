@@ -145,15 +145,15 @@ const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
       "Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file.",
       "Chrome's synced storage is not used, so nothing is copied to your Google account.",
       "The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.",
-      "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the hostname it belongs to, the direction, the operation, the header name, the value you typed, and whether it is on.",
-      `${BRAND_NAME} removes it when you close the tab or when the tab navigates away from that host, and Chrome clears session storage when the browser shuts down.`,
+      "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the origin it belongs to (scheme, host, and port), the direction, the operation, the header name, the value you typed, and whether it is on.",
+      `${BRAND_NAME} removes it when you close the tab or when the tab navigates away from that origin, and Chrome clears session storage when the browser shuts down.`,
       `If ${BRAND_NAME} cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data.`,
     ],
   },
   activeTab: {
     title: "Reading the current tab",
     reason:
-      "Opening the popup on a site reads that tab's address and reduces it to a hostname, to show what applies there and prefill a new rule's scope.",
+      "Opening the popup on a site reads that tab's address and reduces it to an origin (scheme, host, and port), to show what applies there and prefill a new rule's scope.",
     details: [
       "Full addresses are not stored.",
       `Chrome reports that tab's address as it navigates, for as long as the tab stays on that site, and ${BRAND_NAME} uses that to end a this-tab change when the tab leaves the site it was made for.`,
@@ -584,7 +584,7 @@ export const copy = {
             details: [
               "A rule scoped to named domains asks for those domains. A rule scoped to all sites asks for all sites, whether the request comes from that rule's own Grant button or from the Site access page, and it is a request you can decline.",
               "The Site access page lists every grant and revokes any of them.",
-              `While a site is granted, Chrome reports the address of every tab that navigates there, not only the tab the popup was opened on. ${BRAND_NAME} reduces each one to a hostname. Full addresses are not stored.`,
+              `While a site is granted, Chrome reports the address of every tab that navigates there, not only the tab the popup was opened on. ${BRAND_NAME} reduces each one to an origin. Full addresses are not stored.`,
             ],
           },
         ],

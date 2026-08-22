@@ -26,7 +26,6 @@ import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 // The popup's tab is pinned so This-tab writes bind to a known origin.
 vi.mock("../platform/tabs", () => ({
   activeTabId: () => Promise.resolve(5),
-  activeTabDomain: () => Promise.resolve("app.example.com"),
   activeTabOrigin: () => Promise.resolve("https://app.example.com"),
 }));
 
@@ -45,7 +44,7 @@ function override(overrides: Partial<TabOverride> = {}): TabOverride {
   return {
     num: 1,
     tabId: 5,
-    originHost: "app.example.com",
+    origin: "https://app.example.com",
     direction: "request",
     operation: "set",
     header: "x-debug-trace",
@@ -94,6 +93,32 @@ describe("popup This-tab overrides", () => {
     expect(composerCommitLabel(root)).toBe(copy.readout.addThisTab);
   });
 
+  it("commits under a scheme-narrowed origin grant without requesting access", async () => {
+    await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
+    await fakeBrowser.permissions.request({
+      origins: ["https://app.example.com/*"],
+    });
+    const request = vi.spyOn(fakeBrowser.permissions, "request");
+    const root = await mount(createV1Seed());
+    press(root.querySelector(".popup") as HTMLElement, "t");
+    await settle();
+    expect(composerCommitLabel(root)).toBe(copy.readout.addThisTab);
+    typeInto(root.querySelector(".cin.name") as HTMLInputElement, "x-a");
+    typeInto(root.querySelector(".cin.val") as HTMLInputElement, "42");
+
+    await act(async () => {
+      (
+        root.querySelector(".compose .btn.primary") as HTMLButtonElement
+      ).click();
+    });
+    await settle();
+
+    expect(request).not.toHaveBeenCalled();
+    expect((await readSession()).tabs[5]).toMatchObject([
+      { header: "x-a", value: "42", origin: "https://app.example.com" },
+    ]);
+  });
+
   it("names the host when the composer commit will request access", async () => {
     await fakeBrowser.permissions.remove({ origins: [TAB_ORIGIN] });
     const root = await mount(createV1Seed());
@@ -108,7 +133,7 @@ describe("popup This-tab overrides", () => {
     const root = await composeChange();
     expect(root.querySelector(".compose")).toBeNull();
     expect((await readSession()).tabs[5]).toMatchObject([
-      { header: "x-a", value: "42", originHost: "app.example.com" },
+      { header: "x-a", value: "42", origin: "https://app.example.com" },
     ]);
     const strip = root.querySelector(".thistab") as HTMLElement;
     expect(strip.textContent).toContain("This tab only");
@@ -523,7 +548,7 @@ describe("popup This-tab overrides", () => {
   it("prunes a stale-origin override on popup open", async () => {
     await mount(createV1Seed(), {
       nextNum: 2,
-      tabs: { 5: [override({ originHost: "old.example.com" })] },
+      tabs: { 5: [override({ origin: "https://old.example.com" })] },
     });
     await settle();
     expect((await readSession()).tabs).toEqual({});

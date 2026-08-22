@@ -77,8 +77,8 @@ function withRule(doc: StateDoc, header: string): StateDoc {
   };
 }
 
-const override = (tabId: number, originHost: string) =>
-  tabOverride({ tabId, originHost });
+const override = (tabId: number, host: string) =>
+  tabOverride({ tabId, origin: `https://${host}` });
 
 // The session store as the popup leaves it: rows grouped under their own tab.
 async function seedRows(...rows: TabOverride[]): Promise<TabOverride[]> {
@@ -1045,7 +1045,7 @@ describe("background lifecycle", () => {
     );
   });
 
-  it("ends overrides on cross-origin navigation but keeps them for same-origin updates", async () => {
+  it("ends overrides on an origin change but keeps them for same-origin updates", async () => {
     start();
     const row = override(5, "app.example.com");
     await seedRows(row);
@@ -1062,7 +1062,7 @@ describe("background lifecycle", () => {
     await fakeBrowser.tabs.onUpdated.trigger(
       5,
       { status: "loading" },
-      tabInfo("https://other.example.com/"),
+      tabInfo("http://app.example.com/"),
     );
     await settle();
     expect((await readSessionState()).tabs).toEqual({});

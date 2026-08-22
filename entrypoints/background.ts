@@ -34,7 +34,7 @@ import {
   subscribe as subscribeState,
   write as writeState,
 } from "../src/platform/store";
-import { domainFromUrl } from "../src/platform/tabs";
+import { originFromUrl } from "../src/platform/tabs";
 
 export default defineBackground(() => {
   let running: Promise<void> | undefined;
@@ -276,9 +276,9 @@ export default defineBackground(() => {
     // activeTab exposes tab.url exactly while its grant is alive; a missing,
     // empty, or cross-origin url means the override's lifetime ended (the rows
     // must be gone before the user can re-click the icon after an A→B→A trip).
-    // domainFromUrl parses defensively because an uncommitted tab hands back "".
-    const host = domainFromUrl(url);
-    return pruneOverrides((row, id) => id !== tabId || row.originHost === host);
+    // originFromUrl parses defensively because an uncommitted tab hands back "".
+    const origin = originFromUrl(url);
+    return pruneOverrides((row, id) => id !== tabId || row.origin === origin);
   }
 
   function handleCommand(command: string): Promise<void> | undefined {

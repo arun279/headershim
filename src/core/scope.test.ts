@@ -12,6 +12,7 @@ import {
   RESOURCE_TYPES_BY_GROUP,
   scopeCondition,
   validateUrlFilter,
+  webOriginFromUrl,
 } from "./scope";
 
 describe("resource type expansion", () => {
@@ -134,6 +135,29 @@ describe("origin patterns", () => {
   it("uses exact-host patterns for IP literals", () => {
     expect(originPatternForDomain("127.0.0.1")).toBe("*://127.0.0.1/*");
     expect(originPatternForDomain("[::1]")).toBe("*://[::1]/*");
+  });
+});
+
+describe("web origins", () => {
+  it("normalizes web URLs and retains a non-default port", () => {
+    expect(webOriginFromUrl("http://localhost:15848/path")).toEqual({
+      origin: "http://localhost:15848",
+      scheme: "http",
+      host: "localhost",
+      port: "15848",
+    });
+    expect(webOriginFromUrl("https://app.example.com/path")).toEqual({
+      origin: "https://app.example.com",
+      scheme: "https",
+      host: "app.example.com",
+      port: undefined,
+    });
+  });
+
+  it("rejects unavailable and non-web values", () => {
+    expect(webOriginFromUrl(undefined)).toBeUndefined();
+    expect(webOriginFromUrl("chrome://extensions")).toBeUndefined();
+    expect(webOriginFromUrl("not a url")).toBeUndefined();
   });
 });
 

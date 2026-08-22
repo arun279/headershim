@@ -7,6 +7,7 @@ import {
   type Scope,
   type TabOverride,
 } from "./model";
+import { webOriginFromUrl } from "./scope";
 
 export { BADGE_COLORS, DIRECTIONS, HEADER_OPERATIONS } from "./model";
 
@@ -71,8 +72,7 @@ export function isTabOverride(value: unknown): value is TabOverride {
     return false;
   }
 
-  const { num, tabId, originHost, direction, operation, header, enabled } =
-    value;
+  const { num, tabId, origin, direction, operation, header, enabled } = value;
   return (
     typeof num === "number" &&
     Number.isSafeInteger(num) &&
@@ -80,7 +80,8 @@ export function isTabOverride(value: unknown): value is TabOverride {
     typeof tabId === "number" &&
     Number.isSafeInteger(tabId) &&
     tabId >= 0 &&
-    typeof originHost === "string" &&
+    typeof origin === "string" &&
+    webOriginFromUrl(origin)?.origin === origin &&
     isOneOf(direction, DIRECTIONS) &&
     isOneOf(operation, HEADER_OPERATIONS) &&
     typeof header === "string" &&

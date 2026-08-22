@@ -42,6 +42,44 @@ export interface ScopeCondition {
   readonly regexFilter?: string;
 }
 
+export interface WebOrigin {
+  readonly origin: string;
+  readonly scheme: "http" | "https";
+  readonly host: string;
+  readonly port: string | undefined;
+}
+
+export function webOriginFromUrl(
+  url: string | undefined,
+): WebOrigin | undefined {
+  if (url === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(url);
+    const scheme =
+      parsed.protocol === "http:"
+        ? "http"
+        : parsed.protocol === "https:"
+          ? "https"
+          : undefined;
+    return scheme === undefined || parsed.hostname === ""
+      ? undefined
+      : {
+          origin: parsed.origin,
+          scheme,
+          host: parsed.hostname,
+          port: parsed.port === "" ? undefined : parsed.port,
+        };
+  } catch {
+    return undefined;
+  }
+}
+
+export function originHost(origin: string): string {
+  return new URL(origin).hostname;
+}
+
 export function anchoredOrigin(
   filter: string,
 ): { origin: string; anyPort: boolean } | undefined {

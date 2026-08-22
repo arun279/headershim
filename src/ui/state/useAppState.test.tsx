@@ -55,7 +55,7 @@ function override(num: number, tabId: number): TabOverride {
   return {
     num,
     tabId,
-    originHost: "example.com",
+    origin: "https://example.com",
     direction: "request",
     operation: "set",
     header: "x-debug",

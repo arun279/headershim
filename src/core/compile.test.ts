@@ -20,7 +20,11 @@ import {
   MAX_SESSION_OVERRIDES,
 } from "./limits";
 import type { HeaderOp, Profile, Rule, StateDoc, TabOverride } from "./model";
-import { DNR_RESOURCE_TYPES, originPatternForDomain } from "./scope";
+import {
+  DNR_RESOURCE_TYPES,
+  originHost,
+  originPatternForDomain,
+} from "./scope";
 import { overrideKey, ruleKey } from "./verdict";
 
 type RuleChanges = Omit<Partial<Rule>, "value"> & {
@@ -73,7 +77,7 @@ function sessionOverride(num: number): TabOverride {
   return {
     num,
     tabId: num + 100,
-    originHost: `host-${num}.example`,
+    origin: `https://host-${num}.example`,
     direction: "request",
     operation: "set",
     header: "x-session",
@@ -182,8 +186,8 @@ describe("batch compilation", () => {
     profile("inactive", [storedRule(6)]),
   ]);
   const overrides = [
-    { ...sessionOverride(11), originHost: "example.com" },
-    { ...sessionOverride(12), originHost: "partial.test" },
+    { ...sessionOverride(11), origin: "https://example.com" },
+    { ...sessionOverride(12), origin: "https://partial.test" },
   ];
   const granted: GrantSnapshot = {
     origins: [
@@ -223,18 +227,13 @@ describe("batch compilation", () => {
         goldenRequestRule(11, 10_000, "x-session", "11", {
           tabIds: [111],
           requestDomains: ["example.com"],
+          urlFilter: "|https://example.com/",
           resourceTypes: [...DNR_RESOURCE_TYPES],
         }),
         goldenRequestRule(12, 9_999, "x-session", "12", {
           tabIds: [112],
           requestDomains: ["partial.test"],
-          urlFilter: "|https://partial.test^",
-          resourceTypes: [...DNR_RESOURCE_TYPES],
-        }),
-        goldenRequestRule(13, 9_998, "x-session", "12", {
-          tabIds: [112],
-          requestDomains: ["partial.test"],
-          urlFilter: "|http://partial.test:8080/",
+          urlFilter: "|https://partial.test/",
           resourceTypes: [...DNR_RESOURCE_TYPES],
         }),
       ],
@@ -323,7 +322,7 @@ describe("batch compilation", () => {
     });
     expect(standings.get(overrideKey(12, 0))).toMatchObject({
       kind: "placed",
-      placements: [{ narrowed: true }, { narrowed: true }],
+      placements: [{ narrowed: false }],
     });
     expect(batch.entries[0]).toMatchObject({
       key: ruleKey("active", "rule-1", 0),
@@ -436,7 +435,7 @@ describe("batch compilation", () => {
     expect(
       compile({
         doc: state([profile("active", [])]),
-        overrides: [{ ...sessionOverride(1), originHost: "127.0.0.1" }],
+        overrides: [{ ...sessionOverride(1), origin: "https://127.0.0.1" }],
         granted: granting(),
         isRegexSupported: () => true,
       }).entries[0]?.standing,
@@ -456,7 +455,7 @@ describe("batch compilation", () => {
         {
           num: 7,
           tabId: 42,
-          originHost: "example.com",
+          origin: "https://example.com",
           direction: "response",
           operation: "remove",
           header: "X-Override",
@@ -479,6 +478,7 @@ describe("batch compilation", () => {
         authored: {
           tabIds: [42],
           requestDomains: ["example.com"],
+          urlFilter: "|https://example.com/",
           resourceTypes: [...DNR_RESOURCE_TYPES],
         },
         standing: {
@@ -491,6 +491,7 @@ describe("batch compilation", () => {
               condition: {
                 tabIds: [42],
                 requestDomains: ["example.com"],
+                urlFilter: "|https://example.com/",
                 resourceTypes: [...DNR_RESOURCE_TYPES],
               },
               narrowed: false,
@@ -503,7 +504,7 @@ describe("batch compilation", () => {
     ]);
   });
 
-  it("keeps placements distinct for duplicate stored and override ids", () => {
+  it("keeps placements distinct for duplicate stored ids and unique overrides", () => {
     const batch = compile({
       doc: state([
         profile("active", [
@@ -512,8 +513,8 @@ describe("batch compilation", () => {
         ]),
       ]),
       overrides: [
-        { ...sessionOverride(7), tabId: 41, originHost: "example.com" },
-        { ...sessionOverride(7), tabId: 42, originHost: "example.com" },
+        { ...sessionOverride(7), tabId: 41, origin: "https://example.com" },
+        { ...sessionOverride(8), tabId: 42, origin: "https://example.com" },
       ],
       granted: ALL_SITES,
       isRegexSupported: () => true,
@@ -533,7 +534,7 @@ describe("batch compilation", () => {
       [ruleKey("active", "duplicate", 0), [[1, undefined]]],
       [ruleKey("active", "duplicate", 1), [[2, undefined]]],
       [overrideKey(7, 0), [[7, 41]]],
-      [overrideKey(7, 1), [[8, 42]]],
+      [overrideKey(8, 0), [[8, 42]]],
     ]);
   });
 
@@ -1569,7 +1570,10 @@ describe("session rule compilation", () => {
       }
       expect(rule.id).toBe(override.num);
       expect(rule.condition.tabIds).toEqual([override.tabId]);
-      expect(rule.condition.requestDomains).toEqual([override.originHost]);
+      expect(rule.condition.requestDomains).toEqual([
+        originHost(override.origin),
+      ]);
+      expect(rule.condition.urlFilter).toBe(`|${override.origin}/`);
     }
   });
 
@@ -1586,7 +1590,7 @@ describe("session rule compilation", () => {
     const overrides = [...overflowing, disabled, ungranted];
     const granted = {
       origins: overflowing.map((override) =>
-        originPatternForDomain(override.originHost),
+        originPatternForDomain(originHost(override.origin)),
       ),
       allSites: false,
     };
@@ -1640,62 +1644,39 @@ describe("session rule compilation", () => {
     ).toEqual([]);
   });
 
-  it("confines an override to Chrome's exact-origin grant", () => {
+  it("drops an https override under an http-only grant", () => {
+    const override = { ...sessionOverride(1), origin: "https://h" };
+
     expect(
-      compileSession([sessionOverride(1)], false, {
-        origins: ["https://host-1.example/*"],
+      compileSession([override], false, {
+        origins: ["http://h/*"],
+        allSites: false,
+      }),
+    ).toEqual([]);
+  });
+
+  it("confines an override to its exact granted origin", () => {
+    const override = { ...sessionOverride(1), origin: "https://h" };
+
+    expect(
+      compileSession([override], false, {
+        origins: ["https://h/*"],
         allSites: false,
       })[0]?.condition,
     ).toMatchObject({
-      requestDomains: ["host-1.example"],
-      urlFilter: "|https://host-1.example^",
+      requestDomains: ["h"],
+      urlFilter: "|https://h/",
     });
   });
 
-  it("compiles every narrowed origin held for one override", () => {
-    const compiled = compileSession([sessionOverride(1)], false, {
-      origins: ["https://host-1.example/*", "http://host-1.example:55848/*"],
-      allSites: false,
-    });
-
-    expect(compiled.map((rule) => rule.id)).toEqual([1, 2]);
-    expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
-      "|https://host-1.example^",
-      "|http://host-1.example:55848/",
-    ]);
-  });
-
-  it("deduplicates overlapping narrowed override grants", () => {
-    const override = { ...sessionOverride(1), originHost: "example.com" };
-    const compiled = compileSession([override], false, {
-      origins: ["*://*.sub.example.com/*", "https://deep.sub.example.com/*"],
-      allSites: false,
-    });
-
-    expect(compiled).toHaveLength(1);
-    expect(compiled[0]?.condition).toMatchObject({
-      requestDomains: ["sub.example.com"],
-    });
-  });
-
-  it("keeps an override under a parent-domain grant", () => {
-    const override = { ...sessionOverride(1), originHost: "api.example.com" };
-    const compiled = compileSession([override], false, granting("example.com"));
-
-    expect(compiled).toHaveLength(1);
-    expect(compiled[0]?.condition.requestDomains).toEqual(["api.example.com"]);
-  });
-
-  it("confines an override to a granted subdomain", () => {
-    const override = { ...sessionOverride(1), originHost: "example.com" };
-    const granted = {
-      origins: ["*://*.sub.example.com/*"],
-      allSites: false,
+  it("keeps an origin under a matching wildcard grant", () => {
+    const override = {
+      ...sessionOverride(1),
+      origin: "https://app.example.com",
     };
-    const condition = compileSession([override], false, granted)[0]?.condition;
+    const granted = { origins: ["*://*.example.com/*"], allSites: false };
 
-    expect(condition).toMatchObject({ requestDomains: ["sub.example.com"] });
-    expect(condition?.urlFilter).toBeUndefined();
+    expect(compileSession([override], false, granted)).toHaveLength(1);
     expect(
       compile({
         doc: state([]),
@@ -1703,7 +1684,7 @@ describe("session rule compilation", () => {
         granted,
         isRegexSupported: () => true,
       }).entries[0]?.standing,
-    ).toMatchObject({ kind: "placed", placements: [{ narrowed: true }] });
+    ).toMatchObject({ kind: "placed", placements: [{ narrowed: false }] });
   });
 
   it("keeps an override under all-sites access", () => {
@@ -1713,8 +1694,14 @@ describe("session rule compilation", () => {
   });
 
   it("compiles the granted rows and drops the rest in one pass", () => {
-    const granted = { ...sessionOverride(1), originHost: "api.example.com" };
-    const ungranted = { ...sessionOverride(2), originHost: "api.other.test" };
+    const granted = {
+      ...sessionOverride(1),
+      origin: "https://api.example.com",
+    };
+    const ungranted = {
+      ...sessionOverride(2),
+      origin: "https://api.other.test",
+    };
     const compiled = compileSession(
       [granted, ungranted],
       false,

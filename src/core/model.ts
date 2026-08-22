@@ -83,7 +83,7 @@ export interface StateDoc {
 export interface TabOverride {
   num: number;
   tabId: number;
-  originHost: string;
+  origin: string;
   direction: Direction;
   operation: HeaderOp;
   header: string;

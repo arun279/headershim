@@ -11,11 +11,11 @@ import {
   test,
 } from "../fixtures";
 
-function override(tabId: number, originHost: string, num = 1): TabOverride {
+function override(tabId: number, origin: string, num = 1): TabOverride {
   return {
     num,
     tabId,
-    originHost,
+    origin,
     direction: "request",
     operation: "set",
     header: "x-headershim-this-tab",
@@ -77,8 +77,8 @@ test("the shipped build keeps an ungranted This-tab row out of the session band"
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/ungranted`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
-  const row = override(tabId, originHost);
+  const origin = new URL(echoServers.h1Url).origin;
+  const row = override(tabId, origin);
 
   // The row is stored before either probe, so it is there to be compiled by
   // every pass the probes wait on.
@@ -121,9 +121,9 @@ test("a This-tab override compiles to a session rule confined to its tab and ori
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/this-tab`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
 
   const rules = await getSessionRules(serviceWorker);
   expect(rules).toHaveLength(1);
@@ -135,7 +135,8 @@ test("a This-tab override compiles to a session rule confined to its tab and ori
   // excluded. Broad access is granted here, so the confinement on show is the
   // condition's own and not an artifact of a narrow grant.
   expect(rule?.condition.tabIds).toEqual([tabId]);
-  expect(rule?.condition.requestDomains).toEqual([originHost]);
+  expect(rule?.condition.requestDomains).toEqual([new URL(origin).hostname]);
+  expect(rule?.condition.urlFilter).toBe(`|${origin}/`);
   expect(rule?.condition.resourceTypes).toContain("main_frame");
   expect(rule?.action.requestHeaders?.[0]).toMatchObject({
     header: "x-headershim-this-tab",
@@ -150,9 +151,9 @@ test("cross-tab confinement holds regardless of open same-origin and cross-origi
   const first = await context.newPage();
   await first.goto(`${echoServers.h1Url}/tab-a`);
   const firstTabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(firstTabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(firstTabId, origin)]);
 
   // A second same-origin tab and a cross-origin tab exist alongside it.
   const sameOrigin = await context.newPage();
@@ -179,9 +180,9 @@ test("a cross-origin navigation drains the override and it stays ended across a 
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/a`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
   expect(await getSessionRules(serviceWorker)).toHaveLength(1);
 
   // A → B: the row is pruned on the hop, draining the session band.
@@ -204,9 +205,9 @@ test("closing a tab ends its overrides", {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/closing`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
   expect(await getSessionRules(serviceWorker)).toHaveLength(1);
 
   await page.close();
@@ -221,9 +222,9 @@ test("a same-site navigation and an SPA route change keep the override", {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/same-site-start`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
 
   const navigatedUrl = `${echoServers.h1Url}/same-site-navigation`;
   await page.goto(navigatedUrl);
@@ -269,11 +270,28 @@ test("a granted This-tab override modifies a same-origin request", {
   const page = await context.newPage();
   await page.goto(`${echoServers.h1Url}/on-wire`);
   const tabId = await activeTabId(serviceWorker);
-  const originHost = new URL(echoServers.h1Url).hostname;
+  const origin = new URL(echoServers.h1Url).origin;
 
-  await seedSessionAndWait(serviceWorker, [override(tabId, originHost)]);
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
 
   const result = await fetchEcho(page, `${echoServers.h1Url}/echo.json`);
   expect(result.status).toBe(200);
   expect(result.requestHeaders["x-headershim-this-tab"]).toBe("session");
+});
+
+test("a This-tab override does not modify a request to another origin", {
+  tag: "@host-access",
+}, async ({ context, echoServers, serviceWorker }) => {
+  const page = await context.newPage();
+  await page.goto(`${echoServers.h1Url}/origin-negative`);
+  const tabId = await activeTabId(serviceWorker);
+  const origin = new URL(echoServers.h1Url).origin;
+
+  await seedSessionAndWait(serviceWorker, [override(tabId, origin)]);
+
+  // Both echo fixtures use localhost, so this isolates the scheme-and-port
+  // boundary rather than merely proving request-domain confinement.
+  const result = await fetchEcho(page, `${echoServers.h2Url}/echo.json`);
+  expect(result.status).toBe(200);
+  expect(result.requestHeaders["x-headershim-this-tab"]).toBeUndefined();
 });

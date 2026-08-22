@@ -187,7 +187,7 @@ describe("options site access", () => {
           {
             num: 1,
             tabId: 5,
-            originHost: "api.example.com",
+            origin: "https://api.example.com",
             direction: "request",
             operation: "set",
             header: "x-session",
