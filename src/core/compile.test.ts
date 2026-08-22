@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   compile as compileCore,
-  compileDynamic,
-  compileSession,
   type DnrRule,
   DYNAMIC_PRIORITY_TOP,
-  dropInapplicable,
   emitRules,
   revisionOf,
   SESSION_PRIORITY_TOP,
@@ -111,6 +108,27 @@ const granting = (...domains: string[]): GrantSnapshot => ({
 });
 const supportAll = () => true;
 
+function emitDynamic(
+  doc: StateDoc,
+  granted: GrantSnapshot = ALL_SITES,
+  isRegexSupported: (regex: string) => boolean = supportAll,
+): DnrRule[] {
+  return emitRules({ doc, overrides: [], granted, isRegexSupported }).dynamic;
+}
+
+function emitSession(
+  overrides: readonly TabOverride[],
+  paused: boolean,
+  granted: GrantSnapshot,
+): DnrRule[] {
+  return emitRules({
+    doc: state([], paused),
+    overrides,
+    granted,
+    isRegexSupported: supportAll,
+  }).session;
+}
+
 function compiledNarrowedAppendRule(
   domains: string[],
   origins: string[],
@@ -124,9 +142,7 @@ function compiledNarrowedAppendRule(
       }),
     ]),
   ]);
-  return compileDynamic(
-    dropInapplicable(doc, supportAll, { origins, allSites: false }),
-  );
+  return emitDynamic(doc, { origins, allSites: false }, supportAll);
 }
 
 function expectNarrowedToSubdomain(compiled: DnrRule[]): void {
@@ -640,22 +656,20 @@ describe("dynamic rule compilation", () => {
       allSites: false,
     };
 
-    expect(compileDynamic(dropInapplicable(doc, () => true, narrowed))).toEqual(
-      [
-        expect.objectContaining({
-          id: 99,
-          condition: expect.objectContaining({
-            requestDomains: ["example.com"],
-            urlFilter: "|https://example.com^",
-          }),
+    expect(emitDynamic(doc, narrowed, () => true)).toEqual([
+      expect.objectContaining({
+        id: 99,
+        condition: expect.objectContaining({
+          requestDomains: ["example.com"],
+          urlFilter: "|https://example.com^",
         }),
-      ],
-    );
+      }),
+    ]);
   });
 
   it("matches the observed main-frame and cross-origin request rule shapes", () => {
     expect(
-      compileDynamic(
+      emitDynamic(
         state([
           profile("main-frame", [
             storedRule(100, {
@@ -689,7 +703,7 @@ describe("dynamic rule compilation", () => {
     ]);
 
     expect(
-      compileDynamic(
+      emitDynamic(
         state([
           profile("cross-origin", [
             storedRule(110, {
@@ -736,9 +750,7 @@ describe("dynamic rule compilation", () => {
       allSites: false,
     };
 
-    expect(
-      compileDynamic(dropInapplicable(doc, () => true, narrowed))[0]?.condition,
-    ).toMatchObject({
+    expect(emitDynamic(doc, narrowed, () => true)[0]?.condition).toMatchObject({
       requestDomains: ["localhost"],
       urlFilter: "|http://localhost:55848/",
     });
@@ -772,7 +784,7 @@ describe("dynamic rule compilation", () => {
           )
           ?.rules.filter((rule) => rule.enabled)
           .map((rule) => rule.num) ?? [];
-      const compiled = compileDynamic(arrangement);
+      const compiled = emitDynamic(arrangement);
 
       expect(compiled.map((rule) => rule.id)).toEqual(expectedIds);
       expect(compiled.map((rule) => rule.priority)).toEqual(
@@ -785,14 +797,34 @@ describe("dynamic rule compilation", () => {
   });
 
   it("applies higher priorities first, admits only later appends, stops after remove, and separates request from response", () => {
-    const requestRules = compileDynamic(
+    const requestRules = emitDynamic(
       state([
         profile("ordered", [
-          storedRule(1, { operation: "set", value: "first" }),
-          storedRule(2, { operation: "remove", value: undefined }),
-          storedRule(3, { operation: "append", value: "second" }),
-          storedRule(4, { operation: "set", value: "ignored" }),
-          storedRule(5, { operation: "append", value: "third" }),
+          storedRule(1, {
+            header: "accept",
+            operation: "set",
+            value: "first",
+          }),
+          storedRule(2, {
+            header: "accept",
+            operation: "remove",
+            value: undefined,
+          }),
+          storedRule(3, {
+            header: "accept",
+            operation: "append",
+            value: "second",
+          }),
+          storedRule(4, {
+            header: "accept",
+            operation: "set",
+            value: "ignored",
+          }),
+          storedRule(5, {
+            header: "accept",
+            operation: "append",
+            value: "third",
+          }),
           storedRule(6, {
             direction: "response",
             operation: "remove",
@@ -811,13 +843,13 @@ describe("dynamic rule compilation", () => {
       "remove",
     ]);
 
-    const appendFirst = compileDynamic(
+    const appendFirst = emitDynamic(
       state([
         profile("append-first", [
-          storedRule(11, { operation: "append" }),
-          storedRule(12, { operation: "set" }),
-          storedRule(13, { operation: "append" }),
-          storedRule(14, { operation: "remove" }),
+          storedRule(11, { header: "accept", operation: "append" }),
+          storedRule(12, { header: "accept", operation: "set" }),
+          storedRule(13, { header: "accept", operation: "append" }),
+          storedRule(14, { header: "accept", operation: "remove" }),
         ]),
       ]),
     );
@@ -826,12 +858,16 @@ describe("dynamic rule compilation", () => {
       "append",
     ]);
 
-    const removeFirst = compileDynamic(
+    const removeFirst = emitDynamic(
       state([
         profile("remove-first", [
-          storedRule(21, { operation: "remove", value: undefined }),
-          storedRule(22, { operation: "append" }),
-          storedRule(23, { operation: "set" }),
+          storedRule(21, {
+            header: "accept",
+            operation: "remove",
+            value: undefined,
+          }),
+          storedRule(22, { header: "accept", operation: "append" }),
+          storedRule(23, { header: "accept", operation: "set" }),
         ]),
       ]),
     );
@@ -866,7 +902,7 @@ describe("dynamic rule compilation", () => {
       }),
     ];
 
-    expect(compileDynamic(state([profile("scopes", rules)]))).toEqual([
+    expect(emitDynamic(state([profile("scopes", rules)]))).toEqual([
       {
         id: 1,
         priority: 5_000,
@@ -913,26 +949,26 @@ describe("dynamic rule compilation", () => {
 
   it("compiles paused, disabled-profile, and disabled-rule inputs to no rules", () => {
     expect(
-      compileDynamic(state([profile("paused", [storedRule(1)])], true)),
+      emitDynamic(state([profile("paused", [storedRule(1)])], true)),
     ).toEqual([]);
     expect(
-      compileDynamic(
+      emitDynamic(
         state([profile("profile-off", [storedRule(2)])], false, "missing"),
       ),
     ).toEqual([]);
     expect(
-      compileDynamic(
+      emitDynamic(
         state([profile("rule-off", [storedRule(3, { enabled: false })])]),
       ),
     ).toEqual([]);
-    expect(compileSession([sessionOverride(1)], true, ALL_SITES)).toEqual([]);
+    expect(emitSession([sessionOverride(1)], true, ALL_SITES)).toEqual([]);
   });
 
   it("reports dynamic and regex rule counts above their compile limits", () => {
     const atLimit = Array.from({ length: MAX_ENABLED_RULES }, (_, index) =>
       storedRule(index + 1),
     );
-    const compiled = compileDynamic(state([profile("full", atLimit)]));
+    const compiled = emitDynamic(state([profile("full", atLimit)]));
 
     expect(compiled).toHaveLength(MAX_ENABLED_RULES);
     expect(compiled.at(-1)?.priority).toBe(
@@ -949,7 +985,7 @@ describe("dynamic rule compilation", () => {
         }),
       ]),
     ]);
-    expect(compileDynamic(dynamicOverflowDoc)).toHaveLength(MAX_DYNAMIC_RULES);
+    expect(emitDynamic(dynamicOverflowDoc)).toHaveLength(MAX_DYNAMIC_RULES);
     const dynamicOverflow = compile({
       doc: dynamicOverflowDoc,
       overrides: [],
@@ -1000,7 +1036,7 @@ describe("dynamic rule compilation", () => {
     });
     expect(regexOverflow.dynamic).toHaveLength(MAX_REGEX_RULES + 1);
     expect(
-      compileDynamic(
+      emitDynamic(
         state([
           profile("regex-overflow", [
             ...regexRules,
@@ -1039,10 +1075,7 @@ describe("dropping inapplicable rules", () => {
     doc: StateDoc,
     supported: (regex: string) => boolean,
     granted: GrantSnapshot = ALL_SITES,
-  ) =>
-    compileDynamic(dropInapplicable(doc, supported, granted)).map(
-      (rule) => rule.id,
-    );
+  ) => emitDynamic(doc, granted, supported).map((rule) => rule.id);
 
   // Chrome applies whatever is installed to any host it has access to, and
   // invoking the action hands it activeTab access to that tab. A rule the user
@@ -1134,12 +1167,12 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const onA = compileDynamic(
-      dropInapplicable(doc, supportAll, granting("a.example")),
-    );
+    const onA = emitDynamic(doc, granting("a.example"), supportAll);
     expect(onA[0]?.condition.requestDomains).toEqual(["a.example"]);
-    const onBoth = compileDynamic(
-      dropInapplicable(doc, supportAll, granting("a.example", "b.example")),
+    const onBoth = emitDynamic(
+      doc,
+      granting("a.example", "b.example"),
+      supportAll,
     );
     expect(onBoth[0]?.condition.requestDomains).toEqual([
       "a.example",
@@ -1159,11 +1192,13 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: ["*://*.example.test/*", "https://example.com/*"],
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled.map(({ condition }) => condition)).toEqual([
@@ -1185,11 +1220,13 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: ["*://*.example.test/*", "https://example.test/*"],
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled).toHaveLength(1);
@@ -1298,11 +1335,13 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: ["*://*.sub.example.com/*"],
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled).toHaveLength(1);
@@ -1325,11 +1364,13 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: ["*://*.example.com/*"],
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled).toHaveLength(1);
@@ -1348,11 +1389,13 @@ describe("dropping inapplicable rules", () => {
       ]),
     ]);
     const grants = ["https://b.example.com/*", "https://a.example.com/*"];
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: grants,
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
@@ -1360,11 +1403,13 @@ describe("dropping inapplicable rules", () => {
       "|https://a.example.com^",
     ]);
     expect(
-      compileDynamic(
-        dropInapplicable(doc, supportAll, {
+      emitDynamic(
+        doc,
+        {
           origins: grants.toReversed(),
           allSites: false,
-        }),
+        },
+        supportAll,
       ).map((rule) => rule.condition.urlFilter),
     ).toEqual(["|https://a.example.com^", "|https://b.example.com^"]);
   });
@@ -1377,11 +1422,13 @@ describe("dropping inapplicable rules", () => {
         }),
       ]),
     ]);
-    const compiled = compileDynamic(
-      dropInapplicable(doc, supportAll, {
+    const compiled = emitDynamic(
+      doc,
+      {
         origins: ["*://example.com/*"],
         allSites: false,
-      }),
+      },
+      supportAll,
     );
 
     expect(compiled.map((rule) => rule.condition.urlFilter)).toEqual([
@@ -1425,9 +1472,7 @@ describe("dropping inapplicable rules", () => {
               hosts: ["a.example", "b.example"],
             };
       const doc = state([profile(type, [storedRule(1, { scope })])]);
-      const compiled = compileDynamic(
-        dropInapplicable(doc, supportAll, granting("a.example")),
-      );
+      const compiled = emitDynamic(doc, granting("a.example"), supportAll);
 
       expect(compiled[0]?.condition.requestDomains).toEqual(["a.example"]);
     },
@@ -1525,16 +1570,13 @@ describe("dropping inapplicable rules", () => {
     expect(compiledIds(doc, supportAll)).toEqual([1]);
   });
 
-  it("never removes disabled rules or touches disabled profiles", () => {
+  it("does not emit disabled rules or inactive profiles", () => {
     const bad = storedRule(2, { enabled: false, value: "a\r\nb" });
     const doc = state([
       profile("on", [storedRule(1), bad]),
       profile("off", [storedRule(3, { header: ":authority" })]),
     ]);
 
-    const dropped = dropInapplicable(doc, supportAll, ALL_SITES);
-    expect(dropped.profiles[0]?.rules).toEqual([storedRule(1), bad]);
-    expect(dropped.profiles[1]).toEqual(doc.profiles[1]);
     expect(compiledIds(doc, supportAll)).toEqual([1]);
   });
 });
@@ -1545,7 +1587,7 @@ describe("session rule compilation", () => {
       { length: MAX_SESSION_OVERRIDES },
       (_, index) => sessionOverride(index + 1),
     );
-    const compiled = compileSession(overrides, false, ALL_SITES);
+    const compiled = emitSession(overrides, false, ALL_SITES);
 
     expect(compiled).toHaveLength(MAX_SESSION_OVERRIDES);
     expect(compiled[0]?.priority).toBe(SESSION_PRIORITY_TOP);
@@ -1602,7 +1644,7 @@ describe("session rule compilation", () => {
     });
 
     expect(batch.session).toHaveLength(MAX_SESSION_OVERRIDES);
-    expect(compileSession(overrides, false, granted)).toHaveLength(
+    expect(emitSession(overrides, false, granted)).toHaveLength(
       MAX_SESSION_OVERRIDES,
     );
     expect(
@@ -1640,7 +1682,7 @@ describe("session rule compilation", () => {
   // pinned to, so an ungranted row has to be absent, not merely tidied away.
   it("drops an override whose host is not granted", () => {
     expect(
-      compileSession([sessionOverride(1)], false, granting("other.test")),
+      emitSession([sessionOverride(1)], false, granting("other.test")),
     ).toEqual([]);
   });
 
@@ -1648,7 +1690,7 @@ describe("session rule compilation", () => {
     const override = { ...sessionOverride(1), origin: "https://h" };
 
     expect(
-      compileSession([override], false, {
+      emitSession([override], false, {
         origins: ["http://h/*"],
         allSites: false,
       }),
@@ -1659,7 +1701,7 @@ describe("session rule compilation", () => {
     const override = { ...sessionOverride(1), origin: "https://h" };
 
     expect(
-      compileSession([override], false, {
+      emitSession([override], false, {
         origins: ["https://h/*"],
         allSites: false,
       })[0]?.condition,
@@ -1676,7 +1718,7 @@ describe("session rule compilation", () => {
     };
     const granted = { origins: ["*://*.example.com/*"], allSites: false };
 
-    expect(compileSession([override], false, granted)).toHaveLength(1);
+    expect(emitSession([override], false, granted)).toHaveLength(1);
     expect(
       compile({
         doc: state([]),
@@ -1688,9 +1730,7 @@ describe("session rule compilation", () => {
   });
 
   it("keeps an override under all-sites access", () => {
-    expect(compileSession([sessionOverride(1)], false, ALL_SITES)).toHaveLength(
-      1,
-    );
+    expect(emitSession([sessionOverride(1)], false, ALL_SITES)).toHaveLength(1);
   });
 
   it("compiles the granted rows and drops the rest in one pass", () => {
@@ -1702,7 +1742,7 @@ describe("session rule compilation", () => {
       ...sessionOverride(2),
       origin: "https://api.other.test",
     };
-    const compiled = compileSession(
+    const compiled = emitSession(
       [granted, ungranted],
       false,
       granting("example.com"),
@@ -1714,7 +1754,7 @@ describe("session rule compilation", () => {
 
 describe("portable conditions", () => {
   it("never emits unsupported top-level or response-header condition keys", () => {
-    const dynamic = compileDynamic(
+    const dynamic = emitDynamic(
       state([
         profile("portable", [
           storedRule(1, { scope: { type: "all" } }),
@@ -1738,7 +1778,7 @@ describe("portable conditions", () => {
     );
     const compiled = [
       ...dynamic,
-      ...compileSession([sessionOverride(4)], false, ALL_SITES),
+      ...emitSession([sessionOverride(4)], false, ALL_SITES),
     ];
 
     for (const rule of compiled) {

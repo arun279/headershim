@@ -15,6 +15,7 @@ import { ToastHost } from "../../../src/ui/components/Toast";
 import { Toggle } from "../../../src/ui/components/Toggle";
 import { HeaderValue, Truncate } from "../../../src/ui/components/Truncate";
 import { copy } from "../../../src/ui/copy";
+import { loadDeferred } from "../../../src/ui/deferred";
 import {
   caveatNote,
   controlTone,
@@ -66,10 +67,14 @@ export function RulesPage({
       typeof import("../../../src/ui/components/RuleEditor").RuleEditor
     >();
   useEffect(() => {
-    void import("../../../src/ui/components/RuleEditor").then((module) =>
-      setEditor(() => module.RuleEditor),
+    if (editing === undefined || Editor !== undefined) return;
+    void loadDeferred(
+      () => import("../../../src/ui/components/RuleEditor"),
+    ).then(
+      (module) => setEditor(() => module.RuleEditor),
+      () => window.location.reload(),
     );
-  }, []);
+  }, [editing, Editor]);
 
   const fleet = fleetRules(projection, doc);
 

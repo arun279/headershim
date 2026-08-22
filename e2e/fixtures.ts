@@ -10,11 +10,7 @@ import {
   type Page,
   type Worker,
 } from "@playwright/test";
-import {
-  compileDynamic,
-  compileSession,
-  type DnrRule,
-} from "../src/core/compile";
+import { type DnrRule, emitRules } from "../src/core/compile";
 import { type GrantSnapshot, isAllSitesOrigin } from "../src/core/grants";
 import {
   createRule,
@@ -170,7 +166,12 @@ export async function seedSessionAndWait(
   overrides: readonly TabOverride[],
 ): Promise<DnrRule[]> {
   await assertAllSitesGranted(worker);
-  const desired = compileSession(overrides, false, ALL_SITES);
+  const desired = emitRules({
+    doc: createV1Seed(),
+    overrides,
+    granted: ALL_SITES,
+    isRegexSupported: () => true,
+  }).session;
   const tabs: { [tabId: number]: TabOverride[] } = {};
   for (const override of overrides) {
     const rows = tabs[override.tabId] ?? [];
@@ -248,7 +249,12 @@ export async function seedStateAndWait(
 ): Promise<DnrRule[]> {
   // Every caller runs on the static host-access build, which holds all-sites, so
   // no rule is grant-dropped and the plain compile is what the background lands.
-  const desired = compileDynamic(doc);
+  const desired = emitRules({
+    doc,
+    overrides: [],
+    granted: ALL_SITES,
+    isRegexSupported: () => true,
+  }).dynamic;
   await seedState(worker, doc);
   await expect
     .poll(

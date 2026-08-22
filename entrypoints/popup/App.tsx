@@ -7,7 +7,6 @@ import {
 } from "preact/hooks";
 import { browser } from "wxt/browser";
 import { missingGrants, originCovered } from "../../src/core/grants";
-import { HEADER_ERROR_COPY_IDS } from "../../src/core/headers";
 import {
   availableProfileName,
   type Direction,
@@ -332,10 +331,7 @@ function Ready({
     draft: OverrideDraft,
   ): Promise<Result<TabOverride, ThisTabError>> => {
     if (tabId === undefined || tab === undefined) {
-      return err({
-        kind: "name-required" as const,
-        copyId: HEADER_ERROR_COPY_IDS["name-required"],
-      });
+      return err({ kind: "name-required" });
     }
     // A permission request is needed only when the current origin is not
     // already covered; without access, its override would apply to nothing.

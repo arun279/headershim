@@ -135,10 +135,6 @@
   margin-top: var(--sp-2);
 }
 
-.editor-request-target {
-  color: var(--ink);
-}
-
 .editor-actions {
   display: flex;
   align-items: center;

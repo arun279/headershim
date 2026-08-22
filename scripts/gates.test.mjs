@@ -532,6 +532,24 @@ test("the size slack recorder lowers limits but never raises them", (t) => {
   );
 });
 
+test("the size slack recorder accepts a result below its limit", (t) => {
+  const cwd = createSizeSlackFixture(
+    t,
+    [{ name: "Chunk", limit: "2000 B" }],
+    [{ name: "Chunk", passed: true, size: 1900, sizeLimit: 2000 }],
+  );
+  const originalPackage = readFileSync(path.join(cwd, "package.json"), "utf8");
+
+  const result = runSizeSlack(t, cwd, ["--record"]);
+
+  assert.equal(result.status, 0);
+  assert.doesNotMatch(result.stderr, /above its .* limit/);
+  assert.equal(
+    readFileSync(path.join(cwd, "package.json"), "utf8"),
+    originalPackage,
+  );
+});
+
 function runHook(t, input, cwd = repositoryRoot) {
   const bin = mkdtempSync(path.join(tmpdir(), "headershim-hook-"));
   t.after(() => rmSync(bin, { recursive: true }));

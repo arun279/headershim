@@ -7,7 +7,10 @@ import {
   DirectionGlyph,
   StatusGlyph,
 } from "../../../src/ui/components/readout/fleetGlyphs";
-import { Truncate } from "../../../src/ui/components/Truncate";
+import {
+  TRUNCATION_LIMITS,
+  Truncate,
+} from "../../../src/ui/components/Truncate";
 import { copy, siteAccessCopy } from "../../../src/ui/copy";
 import {
   canRun,
@@ -88,7 +91,12 @@ function TapeLine({ row }: { row: TapeRow }) {
       <span class="tape-mark" aria-hidden="true">
         <StatusGlyph outcome={row.outcome} paused={row.paused} />
       </span>
-      <Truncate mode="middle" value={host} class="mono tape-host" />
+      <Truncate
+        mode="middle"
+        value={host}
+        maxChars={TRUNCATION_LIMITS.domain}
+        class="mono tape-host"
+      />
       <span class="tape-stamp mono">
         <span class="tape-op" aria-hidden="true">
           <DirectionGlyph direction={row.direction} />
@@ -96,7 +104,12 @@ function TapeLine({ row }: { row: TapeRow }) {
         <span class="tape-verb">
           {verb(row.outcome, row.operation, row.paused)}
         </span>
-        <Truncate mode="middle" value={row.header} class="tape-header" />
+        <Truncate
+          mode="middle"
+          value={row.header}
+          maxChars={TRUNCATION_LIMITS.header}
+          class="tape-header"
+        />
         {/* Two independent facts, as on every change line: where the rule
             stands, and the transport caveat its header carries either way. The
             Grant pill states the access fact itself, so the "needs access" word

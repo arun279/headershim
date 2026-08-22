@@ -31,30 +31,17 @@ describe("headerValueEmptyErrors", () => {
 
 describe("headerErrorToFieldError", () => {
   const cases: Array<[HeaderValidationError, Record<string, string>]> = [
+    [{ kind: "name-required" }, { name: copy.errors.headerNameRequired }],
+    [{ kind: "name-invalid" }, { name: copy.errors.headerNameInvalid }],
     [
-      { kind: "name-required", copyId: "header-name-required" },
-      { name: copy.errors.headerNameRequired },
-    ],
-    [
-      { kind: "name-invalid", copyId: "header-name-invalid" },
-      { name: copy.errors.headerNameInvalid },
-    ],
-    [
-      { kind: "name-not-modifiable", copyId: "header-not-modifiable" },
+      { kind: "name-not-modifiable" },
       { name: copy.errors.headerNotModifiable },
     ],
-    [
-      { kind: "value-required", copyId: "header-value-required" },
-      { value: copy.errors.valueRequired },
-    ],
-    [
-      { kind: "value-invalid", copyId: "header-value-invalid" },
-      { value: copy.errors.valueInvalid },
-    ],
+    [{ kind: "value-required" }, { value: copy.errors.valueRequired }],
+    [{ kind: "value-invalid" }, { value: copy.errors.valueInvalid }],
     [
       {
         kind: "request-append-not-allowed",
-        copyId: "request-append-not-allowed",
         header: "x-custom",
       },
       { operation: copy.errors.appendDisallowed("x-custom") },

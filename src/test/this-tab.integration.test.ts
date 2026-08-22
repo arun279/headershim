@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import background from "../../entrypoints/background";
-import { compileSession } from "../core/compile";
+import { emitRules } from "../core/compile";
 import type { GrantSnapshot } from "../core/grants";
 import { createV1Seed } from "../core/schema";
 import { read as readSession } from "../platform/session-store";
@@ -48,7 +48,12 @@ describe("This-tab session overrides — end to end", () => {
     const rows = (await readSession()).tabs[5] ?? [];
     expect(dnr.updateSessionRules).toHaveBeenCalledExactlyOnceWith({
       removeRuleIds: [],
-      addRules: compileSession(rows, false, GRANTS),
+      addRules: emitRules({
+        doc: createV1Seed(),
+        overrides: rows,
+        granted: GRANTS,
+        isRegexSupported: () => true,
+      }).session,
     });
     // The popup never touches the dynamic set for a session change.
     expect(dnr.updateDynamicRules).not.toHaveBeenCalled();

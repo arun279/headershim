@@ -302,6 +302,17 @@ describe("ModHeader import", () => {
         error: { kind: "invalid-export" },
       });
     }
+
+    await expect(
+      importModHeader(
+        [{ title: "Malformed CSP", cspHeaders: [{ name: "X-Bad" }] }],
+        [],
+        acceptRegex,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: { kind: "invalid-export" },
+    });
   });
 
   it("drops rules whose values Chrome rejects", async () => {

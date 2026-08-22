@@ -1,5 +1,10 @@
 [
   {
+    "base": "597633f5dea124b70da7a59d17d0655703b4bb80",
+    "test": "host-access: e2e/specs/state-color.spec.ts > @host-access a per-request rule wears the running spine, not the at-rest grey",
+    "reason": "Replaced by \"every rule tone paints its own spine on both row surfaces\". The former assertion encoded the defect; the replacement verifies every declared tone, including doubt, on both row surfaces and their direction glyphs."
+  },
+  {
     "base": "d2b396f7eaa4e65b703d9f10ddb67cd547b09238",
     "test": "shipped: e2e/specs/badge.spec.ts > engages the Chrome-managed count badge",
     "reason": "Replaced. The count badge is gone from the product: planBadge in src/core/badge.ts paints the active profile's badge text, with pause as the only override, and no source references displayActionCountAsBadgeText. The same shipped project covers what took its place, in the same file: \"paints the active profile's badge text and colour\" and \"repaints the badge when the active profile changes\"."
@@ -52,12 +57,12 @@
   {
     "base": "d2b396f7eaa4e65b703d9f10ddb67cd547b09238",
     "test": "shipped: e2e/specs/this-tab.spec.ts > a This-tab override compiles to a session rule confined to its tab and origin",
-    "reason": "Moved to host-access under the same name. compileSession now takes a grant snapshot, so an ungranted This-tab row never enters the session band and there is no compiled condition left in shipped to inspect. The shipped project keeps the complementary guarantee as \"the shipped build keeps an ungranted This-tab row out of the session band\"."
+    "reason": "Moved to host-access under the same name. emitRules keeps an ungranted This-tab row out of the session band, so there is no compiled condition left in shipped to inspect. The shipped project keeps the complementary guarantee as \"the shipped build keeps an ungranted This-tab row out of the session band\"."
   },
   {
     "base": "d2b396f7eaa4e65b703d9f10ddb67cd547b09238",
     "test": "shipped: e2e/specs/this-tab.spec.ts > closing a tab ends its overrides",
-    "reason": "Moved to host-access under the same name. It waits for the session rule to be installed before closing the tab, and since compileSession gained its grant filter only a build holding the grant ever installs one."
+    "reason": "Moved to host-access under the same name. It waits for the session rule to be installed before closing the tab, and emitRules only puts one in the session band when the build holds the grant."
   },
   {
     "base": "d2b396f7eaa4e65b703d9f10ddb67cd547b09238",
