@@ -1,5 +1,7 @@
 import type { Rule } from "./model";
 import {
+  anchorAdmits,
+  anchoredOrigin,
   expandResourceTypes,
   hostUnder,
   originPatternForDomain,
@@ -68,49 +70,87 @@ export function requiredOrigins(
 }
 
 export function originGranted(domain: string, granted: GrantSnapshot): boolean {
-  return originGrantCoverage(domain, granted) === "full";
-}
-
-function originGrantCoverage(
-  domain: string,
-  granted: GrantSnapshot,
-): GrantCoverage {
-  if (granted.allSites) {
-    return "full";
-  }
-  const required = originPatternForDomain(domain);
-  return combinedCoverage(
-    granted.origins.map((origin) => originPatternCoverage(origin, required)),
+  return (
+    grantedPatternCoverage(granted, originPatternForDomain(domain)) === "full"
   );
 }
 
+export interface GrantNarrowing {
+  readonly host: string;
+  readonly urlFilter?: string;
+}
+
 /**
- * URL filters that confine a wider requestDomains condition to every partial
- * grant Chrome actually holds. One stored pattern can require more than one
- * filter: a wildcard-scheme bare host needs separate HTTP and HTTPS anchors,
- * while a concrete-scheme subdomain grant needs apex and wildcard-host anchors.
- * Keeping every intersection prevents grant ordering from deciding which
- * origins run, and preserving each stored scheme/host/port subset prevents
- * activeTab from widening it to the rest of the authored rule.
+ * Returns partial-grant narrowings for a domain. A concrete-scheme or ported
+ * grant that includes subdomains is pinned to its apex host, so the subdomains
+ * that grant also covers are not served by the projection.
  */
-export function narrowedGrantUrlFilters(
+export function grantNarrowings(
   domain: string,
   granted: GrantSnapshot,
-): string[] {
+): GrantNarrowing[] {
   const required = originPatternForDomain(domain);
-  const filters = new Set<string>();
+  const narrowings: GrantNarrowing[] = [];
   for (const origin of granted.origins) {
     const pattern = parseOriginPattern(origin);
     if (
       pattern !== undefined &&
       originPatternCoverage(origin, required) === "partial"
     ) {
-      for (const filter of urlFiltersForPattern(pattern)) {
-        filters.add(filter);
+      const host = hostUnder(pattern.host, domain) ? pattern.host : domain;
+      if (
+        pattern.scheme === "*" &&
+        pattern.includesSubdomains &&
+        pattern.port === undefined
+      ) {
+        narrowings.push({ host });
+        continue;
+      }
+      for (const scheme of pattern.scheme === "*"
+        ? ["http", "https"]
+        : [pattern.scheme]) {
+        const urlFilter = `|${scheme}://${host}${pattern.port === undefined ? "^" : `:${pattern.port}/`}`;
+        narrowings.push({ host, urlFilter });
       }
     }
   }
-  return [...filters];
+  return dropCoveredNarrowings(narrowings);
+}
+
+export function dropCoveredNarrowings<T extends GrantNarrowing>(
+  items: readonly T[],
+): T[] {
+  const unique = new Map<string, T>();
+  for (const item of items) {
+    const key = `${item.host}\u0000${item.urlFilter ?? ""}`;
+    if (!unique.has(key)) {
+      unique.set(key, item);
+    }
+  }
+  const collected = [...unique.values()];
+  return collected.filter(
+    (narrowing) =>
+      !collected.some(
+        (other) => other !== narrowing && narrowingCoveredBy(narrowing, other),
+      ),
+  );
+}
+
+function narrowingCoveredBy(
+  narrowing: GrantNarrowing,
+  other: GrantNarrowing,
+): boolean {
+  if (other.urlFilter === undefined) {
+    return hostUnder(narrowing.host, other.host);
+  }
+  if (narrowing.urlFilter === undefined) {
+    return false;
+  }
+  const narrowingAnchor = anchoredOrigin(narrowing.urlFilter);
+  return (
+    narrowingAnchor !== undefined &&
+    anchorAdmits(other.urlFilter, narrowingAnchor.origin) === true
+  );
 }
 
 export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
@@ -119,12 +159,7 @@ export function missingGrants(rule: Rule, granted: GrantSnapshot): string[] {
   }
 
   return requiredOrigins(rule).filter(
-    (origin) =>
-      combinedCoverage(
-        granted.origins.map((grantedOrigin) =>
-          originPatternCoverage(grantedOrigin, origin),
-        ),
-      ) !== "full",
+    (origin) => grantedPatternCoverage(granted, origin) !== "full",
   );
 }
 
@@ -175,10 +210,12 @@ interface OriginPattern {
 // port when present. Keep all three axes: Chrome enforces them independently.
 function parseOriginPattern(pattern: string): OriginPattern | undefined {
   const match =
-    /^(\*|https?):\/\/(\*\.)?(\[[^\]]+\]|[^/:]+)(?::(\d+))?\/\*$/.exec(pattern);
+    /^(\*|https?):\/\/(\*\.)?(\[[^\]]+\]|[^/:*]+)(?::(\d+))?\/\*$/.exec(
+      pattern,
+    );
   const scheme = match?.[1] as OriginPattern["scheme"] | undefined;
   const host = match?.[3];
-  if (scheme === undefined || host === undefined || host === "*") {
+  if (scheme === undefined || host === undefined) {
     return undefined;
   }
   return {
@@ -189,35 +226,38 @@ function parseOriginPattern(pattern: string): OriginPattern | undefined {
   };
 }
 
-function urlFiltersForPattern(pattern: OriginPattern): string[] {
-  if (pattern.scheme === "*" && pattern.includesSubdomains) {
-    return [
-      pattern.port === undefined
-        ? `||${pattern.host}^`
-        : `||${pattern.host}:${pattern.port}/`,
-    ];
+function grantedPatternCoverage(
+  granted: GrantSnapshot,
+  required: string,
+): GrantCoverage {
+  if (granted.allSites) {
+    return "full";
   }
-
-  const schemes =
-    pattern.scheme === "*" ? (["http", "https"] as const) : [pattern.scheme];
-  const hosts = pattern.includesSubdomains
-    ? [pattern.host, `*.${pattern.host}`]
-    : [pattern.host];
-  return schemes.flatMap((scheme) =>
-    hosts.map((host) =>
-      pattern.port === undefined
-        ? `|${scheme}://${host}^`
-        : `|${scheme}://${host}:${pattern.port}/`,
-    ),
-  );
-}
-
-function combinedCoverage(coverages: readonly GrantCoverage[]): GrantCoverage {
-  return coverages.includes("full")
-    ? "full"
-    : coverages.includes("partial")
-      ? "partial"
-      : "none";
+  const requiredPattern = parseOriginPattern(required);
+  if (requiredPattern === undefined) {
+    return "none";
+  }
+  if (
+    (["http", "https"] as const).every((scheme) =>
+      granted.origins.some((origin) => {
+        const pattern = parseOriginPattern(origin);
+        return (
+          pattern !== undefined &&
+          (pattern.scheme === "*" || pattern.scheme === scheme) &&
+          pattern.port === undefined &&
+          hostContains(pattern, requiredPattern)
+        );
+      }),
+    )
+  ) {
+    return "full";
+  }
+  return granted.origins.some((origin) => {
+    const pattern = parseOriginPattern(origin);
+    return pattern !== undefined && patternsIntersect(pattern, requiredPattern);
+  })
+    ? "partial"
+    : "none";
 }
 
 function patternContains(
@@ -227,10 +267,17 @@ function patternContains(
   return (
     (granted.scheme === "*" || granted.scheme === required.scheme) &&
     (granted.port === undefined || granted.port === required.port) &&
-    (granted.includesSubdomains
-      ? hostUnder(required.host, granted.host)
-      : !required.includesSubdomains && granted.host === required.host)
+    hostContains(granted, required)
   );
+}
+
+function hostContains(
+  granted: OriginPattern,
+  required: OriginPattern,
+): boolean {
+  return granted.includesSubdomains
+    ? hostUnder(required.host, granted.host)
+    : !required.includesSubdomains && granted.host === required.host;
 }
 
 function patternsIntersect(left: OriginPattern, right: OriginPattern): boolean {

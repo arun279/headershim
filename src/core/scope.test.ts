@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ResourceGroup } from "./model";
 import {
+  anchorAdmits,
+  anchoredOrigin,
   DNR_RESOURCE_TYPES,
   expandResourceTypes,
   isDomainSupported,
@@ -136,6 +138,35 @@ describe("origin patterns", () => {
 });
 
 describe("urlFilter grammar", () => {
+  it.each([
+    ["|https://h^", "https://h", true],
+    ["|https://h^", "https://h:8443", true],
+    ["|https://h^", "http://h", false],
+    ["|https://h:8443/", "https://h:8443", true],
+    ["|https://h:8443/", "https://h", false],
+  ])("anchors %s against %s", (filter, origin, admitted) => {
+    expect(anchorAdmits(filter, origin)).toBe(admitted);
+  });
+
+  it("parses an anchor's origin and port behavior", () => {
+    expect(anchoredOrigin("|https://h^")).toEqual({
+      origin: "https://h",
+      anyPort: true,
+    });
+    expect(anchoredOrigin("|https://h:8443/")).toEqual({
+      origin: "https://h:8443",
+      anyPort: false,
+    });
+  });
+
+  it.each(["||h^", "|https://*.h^", "*foo*"])(
+    "does not parse %s as an origin anchor",
+    (filter) => {
+      expect(anchoredOrigin(filter)).toBeUndefined();
+      expect(anchorAdmits(filter, "https://h")).toBeUndefined();
+    },
+  );
+
   it.each([
     "||example.com^",
     "||example.com/",

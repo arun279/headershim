@@ -3,7 +3,11 @@ import {
   classifyHeaderName,
   isSecurityResponseHeader,
 } from "../../core/headers";
-import { hostUnder, originPatternForDomain } from "../../core/scope";
+import {
+  anchorAdmits,
+  hostUnder,
+  originPatternForDomain,
+} from "../../core/scope";
 import type {
   AbsentReason,
   Entry,
@@ -225,15 +229,10 @@ function conditionReaches(
     false;
   if (!target && !initiator) return false;
   if (!target || condition.urlFilter === undefined) return true;
-  const filter = anchoredOrigin(condition.urlFilter);
-  return filter === undefined || tab.origin === undefined
-    ? true
-    : tab.origin === filter;
-}
-
-function anchoredOrigin(filter: string): string | undefined {
-  const match = /^\|(https?):\/\/([^/^]+)\^$/.exec(filter);
-  return match === null ? undefined : `${match[1]}://${match[2]}`;
+  return (
+    tab.origin === undefined ||
+    anchorAdmits(condition.urlFilter, tab.origin) !== false
+  );
 }
 
 function undecidablePart(
@@ -244,7 +243,7 @@ function undecidablePart(
   if (
     condition.urlFilter !== undefined &&
     (tab.origin === undefined ||
-      anchoredOrigin(condition.urlFilter) !== tab.origin)
+      anchorAdmits(condition.urlFilter, tab.origin) !== true)
   ) {
     return "url-filter";
   }

@@ -42,6 +42,36 @@ export interface ScopeCondition {
   readonly regexFilter?: string;
 }
 
+export function anchoredOrigin(
+  filter: string,
+): { origin: string; anyPort: boolean } | undefined {
+  const match = /^\|(https?):\/\/(\[[^\]]+\]|[^/^:*]+)(?::(\d+))?([/^])$/.exec(
+    filter,
+  );
+  if (match === null) {
+    return undefined;
+  }
+  const [, scheme, host, port, terminator] = match;
+  return {
+    origin: `${scheme}://${host}${port === undefined ? "" : `:${port}`}`,
+    anyPort: terminator === "^" && port === undefined,
+  };
+}
+
+export function anchorAdmits(
+  filter: string,
+  origin: string,
+): boolean | undefined {
+  const anchor = anchoredOrigin(filter);
+  if (anchor === undefined) {
+    return undefined;
+  }
+  return (
+    anchor.origin === origin ||
+    (anchor.anyPort && origin.startsWith(`${anchor.origin}:`))
+  );
+}
+
 export function expandResourceTypes(
   resourceTypes: Rule["resourceTypes"],
 ): DnrResourceType[] {
