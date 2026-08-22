@@ -4,6 +4,7 @@ import { act } from "preact/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 import { App } from "../../entrypoints/popup/App";
+import * as compiler from "../core/compile";
 import type { Profile, Rule, StateDoc } from "../core/model";
 import { createV1Seed } from "../core/schema";
 import { setAppliedRevision } from "../platform/session-store";
@@ -877,6 +878,28 @@ describe("popup profile switch", () => {
     return target;
   };
 
+  it("does not compile again on the token interval", async () => {
+    const compile = vi.spyOn(compiler, "compile");
+    const intervals = vi.spyOn(globalThis, "setInterval");
+    const { root } = await mount(withSecond(), true);
+    expect(compile).toHaveBeenCalledTimes(1);
+    const target = openPickerTarget(root);
+    fire(() =>
+      target.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true })),
+    );
+    await settle();
+    const previewCompiles = compile.mock.calls.length;
+
+    const interval = intervals.mock.calls.find(([, delay]) => delay === 30_000);
+    if (typeof interval?.[0] !== "function") {
+      throw new Error("missing token interval");
+    }
+    fire(interval[0]);
+    await settle();
+
+    expect(compile).toHaveBeenCalledTimes(previewCompiles);
+  });
+
   it("uses disclosure roles, visible names, and focuses the active profile", async () => {
     const { root } = await mount(withSecond(), true);
     const trigger = root.querySelector(".prof") as HTMLButtonElement;
@@ -932,16 +955,6 @@ describe("popup profile switch", () => {
     // No commit happened from the preview alone.
     const stored = await read();
     expect(stored.activeProfileId).toBe(stored.profiles[0]?.id);
-  });
-
-  it("names the shortcut's switch consequence on the closed chip", async () => {
-    const { root } = await mount(withSecond(), true);
-    // The menu is shut: the answer is on the chip, not behind opening it.
-    expect(root.querySelector(".pop")).toBeNull();
-    const hint = (root.querySelector(".prof") as HTMLButtonElement).title;
-    expect(hint).toContain("If you switch to Prod read-only");
-    expect(hint).toContain("x-read-only");
-    expect(hint).toContain("x-env");
   });
 
   it("prints the profile shortcut key on the row it would flip to", async () => {

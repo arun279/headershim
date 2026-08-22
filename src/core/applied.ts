@@ -1,38 +1,24 @@
 import type { RulesRevision } from "./revision";
 import type { Batch, Entry } from "./verdict";
 
-class AppliedProjection {
-  private declare readonly brand: undefined;
-  readonly confirmation = "applied";
+export type Applied = {
+  readonly confirmation: "applied";
+  readonly batch: Batch;
+};
 
-  constructor(readonly batch: Batch) {}
-}
+type Pending = {
+  readonly confirmation: "pending";
+  readonly confirmed: {
+    readonly dynamic: boolean;
+    readonly session: boolean;
+  };
+  readonly batch: Batch;
+};
 
-class PendingProjection {
-  private declare readonly brand: undefined;
-  readonly confirmation = "pending";
-
-  constructor(
-    readonly confirmed: {
-      readonly dynamic: boolean;
-      readonly session: boolean;
-    },
-    readonly batch: Batch,
-  ) {}
-}
-
-class PreviewProjection {
-  private declare readonly brand: undefined;
-  readonly confirmation = "preview";
-
-  constructor(readonly batch: Batch) {}
-}
-
-export type Applied = AppliedProjection;
-
-type Pending = PendingProjection;
-
-type Preview = PreviewProjection;
+type Preview = {
+  readonly confirmation: "preview";
+  readonly batch: Batch;
+};
 
 export type Projection = Applied | Pending | Preview;
 
@@ -48,12 +34,12 @@ export function confirm(
     session: expected?.session != null && expected.session === applied?.session,
   };
   return confirmed.dynamic && confirmed.session
-    ? new AppliedProjection(batch)
-    : new PendingProjection(confirmed, batch);
+    ? { confirmation: "applied", batch }
+    : { confirmation: "pending", confirmed, batch };
 }
 
 export function preview(batch: Batch): Projection {
-  return new PreviewProjection(batch);
+  return { confirmation: "preview", batch };
 }
 
 export function entryIsConfirmed(

@@ -78,7 +78,7 @@
         ".output/chrome-mv3/chunks/header-errors-*.js",
         ".output/chrome-mv3/chunks/preload-helper-*.js"
       ],
-      "limit": "26250 B"
+      "limit": "26000 B"
     },
     {
       "name": "Popup initial load",
@@ -116,7 +116,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "39750 B"
+      "limit": "39500 B"
     },
     {
       "name": "Options rule editor",
@@ -124,7 +124,7 @@
         ".output/chrome-mv3/chunks/RuleEditor-*.js",
         ".output/chrome-mv3/assets/RuleEditor-*.css"
       ],
-      "limit": "9500 B"
+      "limit": "9250 B"
     },
     {
       "name": "Options deferred pages",

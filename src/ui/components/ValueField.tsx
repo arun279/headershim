@@ -1,11 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Rule } from "../../core/model";
 import { copy as editorCopy } from "../copy.editor";
-import {
-  closePopover,
-  openPositionedPopover,
-  trapPopoverFocus,
-} from "./popover";
+import { closePopover, openPositionedPopover } from "./popover";
 import "./ValueField.css";
 
 interface ValueFieldProps {
@@ -171,10 +167,6 @@ function GenerateMenu({
           aria-label={editorCopy.editor.generate}
           ref={menuRef}
           onKeyDown={(event) => {
-            if (event.key === "Tab" && menuRef.current !== null) {
-              trapPopoverFocus(event, menuRef.current);
-              return;
-            }
             if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
@@ -193,6 +185,7 @@ function GenerateMenu({
               ArrowUp: index - 1,
               Home: 0,
               End: -1,
+              Tab: event.shiftKey ? index - 1 : index + 1,
             }[event.key];
             if (next !== undefined) {
               event.preventDefault();

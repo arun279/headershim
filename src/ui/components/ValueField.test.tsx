@@ -55,6 +55,18 @@ describe("ValueField generate menu", () => {
     press(item, "Escape");
     expect(ctx.menuItems()).toHaveLength(0);
   });
+
+  it("cycles Tab from the last item without closing the menu", () => {
+    const ctx = mount();
+    fire(() => ctx.generateButton().click());
+    const items = ctx.menuItems();
+    const last = items.at(-1);
+    if (last === undefined) throw new Error("Expected generate menu items");
+    last.focus();
+    press(last, "Tab");
+    expect(document.activeElement).toBe(items[0]);
+    expect(ctx.menuItems()).toHaveLength(2);
+  });
 });
 
 describe("ValueField multiline control", () => {

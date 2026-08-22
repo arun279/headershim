@@ -1,5 +1,5 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
-import { type Applied, confirm } from "./applied";
+import { describe, expect, it } from "vitest";
+import { confirm } from "./applied";
 import { compile } from "./compile";
 import type { Rule, StateDoc } from "./model";
 import { revisionOf } from "./revision";
@@ -48,10 +48,6 @@ describe("applied ruleset confirmation", () => {
     expect(applied.confirmation).toBe("applied");
     if (applied.confirmation === "applied") {
       expect(applied.batch).toBe(compiled);
-      expectTypeOf({
-        ...applied,
-        batch: batch(),
-      }).not.toMatchTypeOf<Applied>();
     }
   });
 
