@@ -56,8 +56,15 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
 
+  security:
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: read
+
   build-and-release:
-    needs: [check, e2e]
+    needs: [check, e2e, security]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -74,7 +81,7 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - name: Build release archive
-        run: pnpm exec wxt zip
+        run: pnpm zip
       - name: Enforce release manifest policy
         env:
           RELEASE_TAG: ${{ github.ref_name }}
