@@ -301,7 +301,13 @@ export function RuleEditor(props: RuleEditorProps) {
   };
 
   const mode = props.rule === undefined ? "new" : "edit";
-  const title = editorCopy.editor.heading(mode, props.profileName);
+  // Where the rule will land, which the picker can move: naming the profile the
+  // editor opened in would be a heading the save then contradicts.
+  const title = editorCopy.editor.heading(
+    mode,
+    props.profiles?.find((profile) => profile.id === draft.profileId)?.name ??
+      props.profileName,
+  );
   const commitGrant = planCommitGrant(
     toRuleDraft(draft, props.rule),
     props.grants,

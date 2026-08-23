@@ -48,6 +48,34 @@ async function seed(profiles: Profile[]): Promise<void> {
   await write(stateDoc(profiles));
 }
 
+/** The bytes a picked HeaderShim export would hand over, around these profiles. */
+function headershimFile(profiles: unknown[], schemaVersion = 1): string {
+  return JSON.stringify({
+    app: "headershim",
+    schemaVersion,
+    exportedAt: "2026-07-12T14:03:00Z",
+    profiles,
+  });
+}
+
+/** One exported rule, valid until a patch makes it otherwise. */
+function exportedRule(patch: Record<string, unknown> = {}): unknown {
+  return {
+    direction: "request",
+    operation: "set",
+    header: "x-good",
+    value: "ok",
+    enabled: true,
+    scope: {
+      type: "domains",
+      domains: ["api.example.com"],
+      resourceTypes: "all",
+    },
+    initiators: [],
+    ...patch,
+  };
+}
+
 async function mount(): Promise<HTMLElement> {
   window.location.hash = "#import-export";
   const root = render(<App />);
@@ -206,19 +234,64 @@ describe("import failure modes", () => {
     expect((await read()).profiles).toHaveLength(1);
   });
 
-  it("renders the newer-version copy for a future schema", async () => {
+  // The envelope is recognized before any rule is read, so a file this build
+  // could have written is placed rather than denied: the message names the
+  // profile, the rule's position in it, and the first field that failed, and
+  // falls back to the rule's shape when there is no field to name.
+  it("places a malformed rule instead of denying the format", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+    const broken = (rules: unknown[]) => ({
+      name: "Broken",
+      badge: "BR",
+      color: "slate",
+      rules,
+    });
+
+    await pick(
+      root,
+      headershimFile([
+        broken([exportedRule(), { direction: "sideways", header: "" }]),
+      ]),
+    );
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      "This is a HeaderShim export, but rule 2 in profile Broken is not valid (direction). Fix or remove it and import again; nothing was changed.",
+    );
+    expect(summary(root)).toBeNull();
+
+    await pick(root, headershimFile([broken([7])]));
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      "This is a HeaderShim export, but rule 1 in profile Broken is not valid (its shape). Fix or remove it and import again; nothing was changed.",
+    );
+    expect((await read()).profiles).toHaveLength(1);
+  });
+
+  // A fault outside the rules leaves no place in the file to point at, but the
+  // envelope was still recognized: reading the file back as one of an unknown
+  // format sends the reader looking for an export they already picked.
+  it("keeps a recognized envelope recognized when no rule is at fault", async () => {
     await seed([profile("p1", { name: "Default" })]);
     const root = await mount();
 
     await pick(
       root,
-      JSON.stringify({
-        app: "headershim",
-        schemaVersion: 2,
-        exportedAt: "2026-07-12T14:03:00Z",
-        profiles: [],
-      }),
+      headershimFile([
+        { name: "Wide badge", badge: "ABC", color: "slate", rules: [] },
+      ]),
     );
+
+    expect(root.querySelector(".ie-error")?.textContent).toBe(
+      "HeaderShim recognizes the format of this file but not its contents, so nothing was imported and nothing was changed. Export it again from the app that wrote it.",
+    );
+    expect(summary(root)).toBeNull();
+    expect((await read()).profiles).toHaveLength(1);
+  });
+
+  it("renders the newer-version copy for a future schema", async () => {
+    await seed([profile("p1", { name: "Default" })]);
+    const root = await mount();
+
+    await pick(root, headershimFile([], 2));
 
     expect(root.querySelector(".ie-error")?.textContent).toBe(
       copy.errors.importNewer(2, 1),
@@ -232,33 +305,20 @@ describe("import failure modes", () => {
 
     await pick(
       root,
-      JSON.stringify({
-        app: "headershim",
-        schemaVersion: 1,
-        exportedAt: "2026-07-12T14:03:00Z",
-        profiles: [
-          {
-            name: "Huge",
-            badge: "HU",
-            color: "blue",
-            rules: [
-              {
-                direction: "request",
-                operation: "set",
-                header: "x-huge",
-                value: "x".repeat(4 * 1024 * 1024),
-                enabled: false,
-                scope: {
-                  type: "domains",
-                  domains: ["example.com"],
-                  resourceTypes: "all",
-                },
-                initiators: [],
-              },
-            ],
-          },
-        ],
-      }),
+      headershimFile([
+        {
+          name: "Huge",
+          badge: "HU",
+          color: "blue",
+          rules: [
+            exportedRule({
+              header: "x-huge",
+              value: "x".repeat(4 * 1024 * 1024),
+              enabled: false,
+            }),
+          ],
+        },
+      ]),
     );
 
     fire(() => findButton(summary(root) as HTMLElement, text.import).click());
@@ -305,12 +365,18 @@ describe("import summary and apply", () => {
   // of profiles and credentials with no visible confirmation leaves the reader
   // looking at the screen they started on. Every other write on these pages
   // raises a toast, and this one carries the fact they have to act on.
-  it("says on screen that the import landed, and that it landed turned off", async () => {
+  it("says on screen that the import landed, and that it is not running", async () => {
     const root = await importInto([profile("p1", { name: "Default" })]);
 
     const toast = root.querySelector<HTMLElement>(".toast");
     expect(toast?.textContent).toBe(text.imported(1));
-    expect(toast?.textContent).toContain("turned off");
+    // What arrived off is the profile, not the rules in it: every imported rule
+    // keeps the enabled flag the file gave it, so a line about changes being
+    // turned off would send the reader hunting through toggles that are on.
+    const imported = (await read()).profiles.at(-1);
+    expect(imported?.rules.every((one) => one.enabled)).toBe(true);
+    expect(toast?.textContent).toContain("It is not active");
+    expect(toast?.textContent).not.toContain("turned off");
   });
 
   // The badge is the only mark that tells one profile's rules from another's in

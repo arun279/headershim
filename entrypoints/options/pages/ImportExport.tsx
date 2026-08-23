@@ -99,7 +99,8 @@ export function ImportExportPage({
       if (outcome.ok) {
         // The summary that named the import is gone the moment it applies, so
         // the write says so where every other write on these pages does. That
-        // the profiles landed turned off is the part the reader has to act on.
+        // none of the profiles is the running one is the part the reader has to
+        // act on; their rules arrive with the enabled flags the file gave them.
         clear();
         show(text.imported(count));
       } else {
@@ -238,8 +239,15 @@ function importErrorCopy(error: ImportError): string {
         error.supportedVersion,
       );
     case "unrecognized-format":
-    case "invalid-export":
       return copy.errors.importUnrecognized;
+    case "invalid-export":
+      return optionsCopy.options.importExport.invalidExport;
+    case "invalid-rule":
+      return optionsCopy.options.importExport.invalidRule(
+        error.profileName,
+        error.ruleNumber,
+        error.field,
+      );
   }
 }
 

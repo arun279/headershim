@@ -18,7 +18,7 @@ import { CURRENT } from "../../src/core/schema";
 import { originHost, originPatternForDomain } from "../../src/core/scope";
 import { isRegexSupported } from "../../src/platform/dnr";
 import { request as requestPermissions } from "../../src/platform/permissions";
-import { activeTabOrigin, openAboutPage } from "../../src/platform/tabs";
+import { activeTabOrigin } from "../../src/platform/tabs";
 import { LiveRegionProvider } from "../../src/ui/a11y/LiveRegion";
 import { Button } from "../../src/ui/components/Button";
 import { EmptyState } from "../../src/ui/components/EmptyState";
@@ -518,7 +518,7 @@ function Ready({
         <Button
           kind="ghost"
           label={copy.actions.options}
-          onClick={() => void openAboutPage()}
+          onClick={() => void browser.runtime.openOptionsPage()}
         >
           <GearGlyph />
         </Button>

@@ -104,12 +104,23 @@ export type ImportError =
       readonly supportedVersion: typeof CURRENT_SCHEMA_VERSION;
     }
   | { readonly kind: "unrecognized-format" }
-  | { readonly kind: "invalid-export" };
+  | { readonly kind: "invalid-export" }
+  | ({
+      readonly kind: "invalid-rule";
+      readonly profileName: string;
+      /** The rule's place in its profile, counted the way the file reads. */
+      readonly ruleNumber: number;
+    } & RuleFault);
 
 type EnvelopeMigrationError = Extract<
   ImportError,
-  { kind: "newer-version" | "invalid-export" }
+  { kind: "newer-version" | "invalid-export" | "invalid-rule" }
 >;
+
+interface RuleFault {
+  /** The first field that failed, absent when the rule is not a record. */
+  readonly field?: string;
+}
 
 export function createHeadershimEnvelope(
   source: StateDoc | Profile,
@@ -149,6 +160,10 @@ export function importHeadershim(
 export function migrate(
   envelope: unknown,
 ): Result<HeadershimEnvelope, EnvelopeMigrationError> {
+  if (!isRecord(envelope)) {
+    return err({ kind: "invalid-export" });
+  }
+
   const version = versionOf(envelope);
   if (version === undefined) {
     return err({ kind: "invalid-export" });
@@ -163,7 +178,7 @@ export function migrate(
 
   return isHeadershimEnvelope(envelope)
     ? ok(envelope)
-    : err({ kind: "invalid-export" });
+    : err(envelopeFault(envelope));
 }
 
 export function applyImportPlan(doc: StateDoc, plan: ImportPlan): StateDoc {
@@ -343,11 +358,7 @@ function importScope(scope: ExportedScope): Scope {
   }
 }
 
-function versionOf(value: unknown): number | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
+function versionOf(value: Record<string, unknown>): number | undefined {
   const { schemaVersion } = value;
   return typeof schemaVersion === "number" &&
     Number.isSafeInteger(schemaVersion) &&
@@ -395,8 +406,18 @@ function isExportedProfile(value: unknown): value is ExportedProfile {
 }
 
 function isExportedRule(value: unknown): value is ExportedRule {
+  return ruleFault(value) === undefined;
+}
+
+/**
+ * The first field of an exported rule that fails, or undefined when the rule is
+ * one this version can read. It is the single reading of a rule's shape: the
+ * guard above and the error that places a fault in the file are both this
+ * function, so a rule cannot be refused for a reason it is not told.
+ */
+function ruleFault(value: unknown): RuleFault | undefined {
   if (!isRecord(value)) {
-    return false;
+    return {};
   }
 
   const {
@@ -409,19 +430,60 @@ function isExportedRule(value: unknown): value is ExportedRule {
     initiators,
     generated,
   } = value;
-  return (
-    isOneOf(direction, DIRECTIONS) &&
-    isOneOf(operation, HEADER_OPERATIONS) &&
-    typeof header === "string" &&
-    header.length > 0 &&
-    header === normalizeHeaderName(header) &&
-    hasValidHeaderValue(value) &&
-    (comment === undefined || typeof comment === "string") &&
-    typeof enabled === "boolean" &&
-    isExportedScope(scope) &&
-    isStringArray(initiators) &&
-    (generated === undefined || isGeneratedValue(generated))
-  );
+  if (!isOneOf(direction, DIRECTIONS)) return { field: "direction" };
+  if (!isOneOf(operation, HEADER_OPERATIONS)) return { field: "operation" };
+  if (
+    typeof header !== "string" ||
+    header.length === 0 ||
+    header !== normalizeHeaderName(header)
+  ) {
+    return { field: "header" };
+  }
+  if (!hasValidHeaderValue(value)) return { field: "value" };
+  if (comment !== undefined && typeof comment !== "string") {
+    return { field: "comment" };
+  }
+  if (typeof enabled !== "boolean") return { field: "enabled" };
+  if (!isExportedScope(scope)) return { field: "scope" };
+  if (!isStringArray(initiators)) return { field: "initiators" };
+  if (generated !== undefined && !isGeneratedValue(generated)) {
+    return { field: "generated" };
+  }
+  return undefined;
+}
+
+/**
+ * Why a recognized envelope was refused. A rule this version cannot read is
+ * reported where it sits, so the file has an address to fix; a fault in the
+ * envelope around the rules has none to give.
+ */
+function envelopeFault(
+  envelope: Record<string, unknown>,
+): EnvelopeMigrationError {
+  const { profiles } = envelope;
+  for (const profile of Array.isArray(profiles) ? profiles : []) {
+    if (!isRecord(profile)) continue;
+    const { name, rules } = profile;
+    if (
+      typeof name !== "string" ||
+      !isStoredProfileNameValid([], name) ||
+      !Array.isArray(rules)
+    ) {
+      continue;
+    }
+    for (const [index, rule] of rules.entries()) {
+      const fault = ruleFault(rule);
+      if (fault !== undefined) {
+        return {
+          kind: "invalid-rule",
+          profileName: name,
+          ruleNumber: index + 1,
+          ...fault,
+        };
+      }
+    }
+  }
+  return { kind: "invalid-export" };
 }
 
 function isExportedScope(value: unknown): value is ExportedScope {

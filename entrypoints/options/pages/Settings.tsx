@@ -5,6 +5,7 @@ import type { StateDoc } from "../../../src/core/model";
 import { createV1Seed } from "../../../src/core/schema";
 import { remove as removePermissions } from "../../../src/platform/permissions";
 import { clearOverrides } from "../../../src/platform/session-store";
+import { clearQuarantine } from "../../../src/platform/store";
 import { Button } from "../../../src/ui/components/Button";
 import { Modal } from "../../../src/ui/components/Modal";
 import { Segmented } from "../../../src/ui/components/Segmented";
@@ -56,11 +57,12 @@ export function SettingsPage({
     });
   }, []);
 
-  // A clean slate spans all three stores the product keeps: the seed replaces
-  // the document, every grant is revoked, and every tab's live overrides are
-  // dropped. Undo restores the document alone: a revoked grant needs its own
-  // gesture to return, and a live override belongs to its tab, not to a saved
-  // document.
+  // A clean slate spans every store the product keeps: the seed replaces the
+  // document, every grant is revoked, every tab's live overrides are dropped,
+  // and a configuration set aside as unreadable goes with them, since it holds
+  // the header values of whatever could not be read. Undo restores the document
+  // alone: a revoked grant needs its own gesture to return, and a live override
+  // belongs to its tab, not to a saved document.
   const erase = async () => {
     setConfirmErase(false);
     try {
@@ -72,6 +74,7 @@ export function SettingsPage({
       await Promise.all([
         removePermissions([...grants.origins]),
         clearOverrides(),
+        clearQuarantine(),
       ]);
       showUndoable(text.eraseAll.done, () =>
         mutations.replaceDoc(outcome.value),

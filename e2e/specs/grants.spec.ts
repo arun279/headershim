@@ -1,3 +1,4 @@
+import { createV1Seed } from "../../src/core/schema";
 import { siteAccessCopy } from "../../src/ui/copy.options";
 import { NARROW_H1_PORT, NARROWED_ORIGIN } from "../echo-ports.mjs";
 import {
@@ -275,4 +276,35 @@ test("the site-access page mirrors the browser's granted and needed origins", as
     return (all.origins ?? []).filter((origin) => origin !== "*://*/*");
   });
   expect(live).toEqual([]);
+});
+
+// The Site access page's own revoke, driven through a real browser. Chrome
+// refuses to remove a host permission the manifest requires, and that refusal
+// is the only revoke outcome an e2e build can reach: an optional grant cannot
+// be obtained here, because permissions.request needs a user gesture and
+// answers it with a native dialog no driver can click. What this pins is the
+// rule the page has to keep on every outcome, that the line reports what
+// happened, so a refused revoke cannot read as a grant that is gone. The
+// removed and nothing-removed outcomes are driven against a fake permissions
+// API in src/test/options-site-access.test.tsx.
+test("the site-access page reports a revoke Chrome refused", {
+  tag: "@narrow-host-access",
+}, async ({ context, extensionId, serviceWorker }) => {
+  await seedState(serviceWorker, createV1Seed());
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html#site-access`);
+  const granted = page.getByRole("list", {
+    name: siteAccessCopy.grantedHeading,
+  });
+  await expect(granted.locator(".sa-domain")).toHaveText(["localhost"]);
+
+  await page
+    .getByRole("button", { name: siteAccessCopy.revokeLabel("localhost") })
+    .click();
+
+  await expect(page.locator('[role="status"]')).toHaveText(
+    siteAccessCopy.revokeFailed("localhost"),
+  );
+  await expect(granted.locator(".sa-domain")).toHaveText(["localhost"]);
 });

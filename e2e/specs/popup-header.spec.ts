@@ -89,7 +89,10 @@ test("a popup-created profile becomes active without reloading", async ({
   expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 });
 
-test("the popup options button opens the About page", async ({
+// The gear is labelled Options, so it opens the options page where the browser
+// opens it: no section is named for the reader, and the page lands on its own
+// default, the rule list. About keeps its own entry in the page's nav.
+test("the popup options button opens the options workspace", async ({
   context,
   extensionId,
   serviceWorker,
@@ -104,15 +107,19 @@ test("the popup options button opens the About page", async ({
     context.waitForEvent("page"),
     popup.getByRole("button", { name: copy.actions.options }).click(),
   ]);
-  await options.waitForURL(/\/options\.html#about$/);
+  await options.waitForURL(/\/options\.html$/);
   const optionsUrl = new URL(options.url());
   expect(optionsUrl.protocol).toBe("chrome-extension:");
   expect(optionsUrl.host).toBe(extensionId);
   expect(optionsUrl.pathname).toBe("/options.html");
+  expect(optionsUrl.hash).toBe("");
   await expect(
     options.getByRole("heading", {
       level: 1,
-      name: optionsCopy.options.about.title,
+      name: optionsCopy.options.allRules.title,
     }),
+  ).toBeVisible();
+  await expect(
+    options.getByRole("link", { name: optionsCopy.options.nav.about }),
   ).toBeVisible();
 });

@@ -7,6 +7,7 @@ import { App as OptionsApp } from "../../entrypoints/options/App";
 import { ALL_SITES_ORIGIN } from "../core/grants";
 import type { Profile, Rule } from "../core/model";
 import { originPatternForDomain } from "../core/scope";
+import * as permissions from "../platform/permissions";
 import { write as writeSession } from "../platform/session-store";
 import { write } from "../platform/store";
 import { copy, sentenceText } from "../ui/copy";
@@ -298,7 +299,21 @@ describe("options site access", () => {
       sentenceText(text.partial([parent])),
     );
     expect(root.querySelector('[role="status"]')?.textContent).toBe(
-      text.revoked("api.example.com"),
+      text.revoked("api.example.com", [parent]),
+    );
+  });
+
+  it("reports a revoke that leaves the host with no access at all", async () => {
+    await grantOrigins("api.example.com");
+    const root = await mount(apiRuleOnly());
+
+    await revokeRow(root, "api.example.com");
+
+    expect(root.querySelector('[role="status"]')?.textContent).toBe(
+      text.revoked("api.example.com", []),
+    );
+    expect(group(root, text.neededHeading).textContent).toContain(
+      "api.example.com",
     );
   });
 
@@ -567,7 +582,7 @@ describe("options site access", () => {
     await revokeRow(root, "api.example.com");
 
     expect(root.querySelector('[role="status"]')?.textContent).toBe(
-      text.revokedUnderAllSites("api.example.com"),
+      text.revoked("api.example.com", [ALL_SITES_ORIGIN]),
     );
     expect(
       await fakeBrowser.permissions.contains({
@@ -638,6 +653,21 @@ describe("options site access", () => {
     expect(
       await fakeBrowser.permissions.contains({ origins: [observed] }),
     ).toBe(true);
+  });
+
+  it("says nothing was removed when the grant is already gone", async () => {
+    await grantOrigins("api.example.com");
+    const root = await mount(apiRuleOnly());
+    vi.spyOn(permissions, "snapshot").mockResolvedValueOnce({
+      origins: [],
+      allSites: false,
+    });
+
+    await revokeRow(root, "api.example.com");
+
+    expect(root.querySelector('[role="status"]')?.textContent).toBe(
+      text.noDirectGrant("api.example.com", []),
+    );
   });
 
   it("announces a rejected revoke", async () => {
