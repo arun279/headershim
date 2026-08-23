@@ -41,6 +41,11 @@ import {
 // reachable. None of these encodes a pixel, colour, font, or markup shape, so a
 // green run is a licence to redesign boldly, not a freeze of the current design.
 //
+// One test at the end of the file is deliberately not design-agnostic: the
+// traffic tape's truncation gate names that row's markup, because a cut taken
+// where the row had room to spare can only be caught by measuring the name
+// against the room its own cells leave it. Redesign that row and move it too.
+//
 // Geometry is only real in a layout engine: happy-dom stubs every rect to zero,
 // so this lives in Playwright/Chromium, the extension's own render target.
 
@@ -410,3 +415,108 @@ for (const theme of THEMES) {
     await page.close();
   });
 }
+
+// Two names any width here holds whole and the two longest the tape has to
+// place, all on one site so they share a row shape and differ only in length.
+const TAPE_HEADERS = [
+  "x-api-key",
+  "authorization",
+  "content-security-policy",
+  "access-control-allow-origin",
+];
+
+// The room the identifier competes for and the width its full name wants, both
+// read fractionally in the page: the row less the cells beside it, and the name
+// laid out on a canvas in the identifier's own font, the instrument the
+// primitive measures its own candidates with.
+function readTapeHeaders(page: Page) {
+  return page.evaluate(() => {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (ctx === null) throw new Error("no 2d context to measure header names");
+    return [...document.querySelectorAll<HTMLElement>(".tape-stamp")].flatMap(
+      (row) =>
+        [...row.querySelectorAll<HTMLElement>(".tape-header")].map((header) => {
+          const others = [...row.children].filter((cell) => cell !== header);
+          ctx.font = getComputedStyle(header).font;
+          return {
+            name: header.title,
+            shown: header.textContent ?? "",
+            needed: ctx.measureText(header.title).width,
+            room:
+              row.getBoundingClientRect().width -
+              others.reduce(
+                (total, cell) => total + cell.getBoundingClientRect().width,
+                0,
+              ) -
+              Number.parseFloat(getComputedStyle(row).columnGap) *
+                others.length,
+          };
+        }),
+    );
+  });
+}
+
+// A cut answers a shortage of room, so a name with the room for it is drawn
+// whole. The identifier shares the tape's flex row with the op glyph, the verb,
+// and the status cluster, so the room it may take is that row's width less what
+// those cells hold. Room and name are both fractional: rounding either, or
+// reading the room off a box that has already shrunk to the cut, cuts a name
+// that fits and leaves it cut at every width after.
+test("the traffic tape cuts a header name only when its row cannot hold it", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedState(
+    serviceWorker,
+    withTheme(
+      stateWithRules(
+        TAPE_HEADERS.map((header) => ({
+          direction: "request",
+          operation: "set",
+          header,
+          value: "1",
+          scope: { type: "domains", domains: [OPTIONS_HOST] },
+          resourceTypes: "all",
+          initiators: [],
+          enabled: true,
+        })),
+      ),
+      "light",
+    ),
+  );
+
+  const page = await context.newPage();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(optionsUrl(extensionId, "traffic"));
+  await expect(page.locator(".tape-header")).toHaveCount(TAPE_HEADERS.length);
+
+  // One load, then only the window moves: a cut that sticks is invisible to a
+  // page that never lived through the narrow width. The first two widths hold
+  // every name whole, 360 is short enough to cut the two longest, and the
+  // closing 1280 is the grow-back that a box shrunk to its own cut fails. Every
+  // width is judged before any is reported, as the sweep above names every
+  // culprit rather than the first.
+  const offenders: string[] = [];
+  for (const width of [1280, 900, 360, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await settle(page, "light");
+
+    for (const { name, shown, needed, room } of await readTapeHeaders(page)) {
+      if (needed <= room && shown !== name) {
+        offenders.push(
+          `@${width}: "${name}" wants ${needed}px, the row holds ${room}px, and it was cut to "${shown}"`,
+        );
+      }
+      if (needed > room && !shown.includes("…")) {
+        offenders.push(
+          `@${width}: "${name}" wants ${needed}px in ${room}px of row and was left uncut`,
+        );
+      }
+    }
+  }
+  expect(offenders).toEqual([]);
+
+  await page.close();
+});

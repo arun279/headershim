@@ -32,7 +32,10 @@ interface TruncateProps {
   value: string;
   /**
    * "end" (default) keeps the leading portion and clips the tail with a CSS
-   * ellipsis. "middle" keeps both ends for machine identifiers and values.
+   * ellipsis. "middle" keeps both ends for machine identifiers and values, and
+   * asks the caller for a cell that sizes the element: it cuts the string to
+   * the box it is given, so an element left to size itself hands back the width
+   * of its own last cut and the cut can never widen again.
    */
   mode?: "end" | "middle";
   /**
@@ -133,7 +136,14 @@ function textMeasurer(el: HTMLElement): ((text: string) => number) | undefined {
 
 type Cut = (text: string, max: number) => string;
 
-/** The longest cut of `value` that still fits the live column. */
+/**
+ * The longest cut of `value` that still fits the live column, which is the
+ * element's own box: the cell around it sizes that box, so it holds the room
+ * the text competes for rather than the width of the text already in it. Both
+ * widths are fractional and neither is rounded, because a string that misses a
+ * whole-pixel box by a hundredth of a pixel fits the column that box stands
+ * for, and cutting it there trades a name for a longer stand-in.
+ */
 function fitToColumn(
   el: HTMLElement,
   value: string,
@@ -142,11 +152,13 @@ function fitToColumn(
 ): string {
   const ceiling = Math.min(maxChars ?? value.length, value.length);
   const measure = textMeasurer(el);
-  const width = el.clientWidth;
+  const width = el.getBoundingClientRect().width;
   if (measure === undefined || width <= 0) {
     return cut(value, ceiling);
   }
-  let low = 1;
+  // Two characters is the shortest cut that still marks itself; a one-character
+  // budget hands back the whole string, which would render clipped and unmarked.
+  let low = 2;
   let high = ceiling;
   let best = cut(value, low);
   while (low <= high) {
