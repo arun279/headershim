@@ -141,6 +141,11 @@ describe("options site access", () => {
     await settle();
 
     expectGranted(root, "api.example.com");
+    // Seeable, not only announced: the grant names the site in the same visible
+    // toast the other options pages raise.
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      text.granted("api.example.com"),
+    );
     // The clicked row reparented to the granted group, unmounting its button;
     // focus lands on the page heading, never <body> (WCAG 2.4.3).
     expect(document.activeElement?.id).toBe("site-access-title");
@@ -309,6 +314,9 @@ describe("options site access", () => {
 
     await revokeRow(root, "api.example.com");
 
+    expect(root.querySelector(".toast-msg")?.textContent).toBe(
+      text.revoked("api.example.com", []),
+    );
     expect(root.querySelector('[role="status"]')?.textContent).toBe(
       text.revoked("api.example.com", []),
     );

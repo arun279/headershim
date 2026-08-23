@@ -52,6 +52,8 @@ export const siteAccessCopy = {
   unused: "Not used by an active rule or tab change",
   grant: "Grant",
   grantLabel: (domain: string) => `Grant access to ${domain}`,
+  granted: (domain: string) => `Access to ${domain} granted`,
+  notGranted: (domain: string) => `Access to ${domain} was not granted`,
   broaden: "Broaden",
   broadenLabel: (domain: string) => `Broaden access to ${domain}`,
   broadened: (domain: string) => `Access to ${domain} broadened`,
@@ -64,7 +66,6 @@ export const siteAccessCopy = {
     `Access to ${domain} revoked${stillCovered(covering)}`,
   noDirectGrant: (domain: string, covering: readonly string[]) =>
     `No direct grant for ${domain}${stillCovered(covering)}`,
-  notGranted: (domain: string) => `Access to ${domain} was not granted`,
   revokeFailed: (domain: string) =>
     `Site grant for ${domain} could not be removed`,
   allSites: {

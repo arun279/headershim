@@ -21,13 +21,13 @@ import {
   read as readSession,
   subscribe as subscribeSession,
 } from "../../../src/platform/session-store";
-import { useAnnounce } from "../../../src/ui/a11y/LiveRegion";
 import { Button } from "../../../src/ui/components/Button";
 import {
   CheckGlyph,
   TriangleGlyph,
 } from "../../../src/ui/components/readout/glyphs";
 import { sentence } from "../../../src/ui/components/sentence";
+import { ToastHost } from "../../../src/ui/components/Toast";
 import { copy } from "../../../src/ui/copy";
 import { siteAccessCopy } from "../../../src/ui/copy.options";
 import {
@@ -38,6 +38,7 @@ import {
   siteAccessView,
 } from "../../../src/ui/state/site-access";
 import { revokeMessage } from "../../../src/ui/state/site-access-copy";
+import { useToast } from "../../../src/ui/state/useToast";
 import "./SiteAccess.css";
 
 const text = siteAccessCopy;
@@ -57,7 +58,7 @@ export function SiteAccessPage({
   doc: StateDoc;
   grants: GrantSnapshot;
 }) {
-  const announce = useAnnounce();
+  const { toast, show, dismiss } = useToast();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const pendingRef = useRef(false);
   const [allSitesOpen, setAllSitesOpen] = useState(false);
@@ -83,9 +84,11 @@ export function SiteAccessPage({
   // <body> (WCAG 2.4.3).
   const anchorFocus = () => titleRef.current?.focus();
 
-  // The gesture reports its own outcome, and the announcement is read from
-  // that: a request the browser declined and a removal it refused each get
-  // their own line, so no line can claim a change the grants did not take.
+  // The gesture reports its own outcome, and the line is read from that: a
+  // request the browser declined and a removal it refused each get their own
+  // words, so no line can claim a change the grants did not take. It goes
+  // through the toast channel every other page reports through, which speaks it
+  // to the live region too, so the outcome is never invisible on screen.
   const runPermission = (
     start: () => Promise<PermissionOutcome>,
     message: (outcome: PermissionOutcome) => string,
@@ -101,9 +104,9 @@ export function SiteAccessPage({
             if (collapseAllSites) setAllSitesOpen(false);
             anchorFocus();
           }
-          announce(message(outcome));
+          show(message(outcome));
         },
-        () => announce(message("failed")),
+        () => show(message("failed")),
       )
       .finally(() => {
         pendingRef.current = false;
@@ -116,7 +119,7 @@ export function SiteAccessPage({
       () => requestOrigins([entry.origin]),
       (outcome) =>
         outcome === "changed"
-          ? copy.toast.accessGranted
+          ? text.granted(entry.domain)
           : text.notGranted(entry.domain),
     );
 
@@ -282,6 +285,8 @@ export function SiteAccessPage({
           )}
         </div>
       )}
+
+      <ToastHost toast={toast} onDismiss={dismiss} />
     </section>
   );
 }

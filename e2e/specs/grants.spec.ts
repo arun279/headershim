@@ -303,6 +303,14 @@ test("the site-access page reports a revoke Chrome refused", {
     .getByRole("button", { name: siteAccessCopy.revokeLabel("localhost") })
     .click();
 
+  // Seeable, not only announced: the outcome renders in the same visible toast
+  // the other options pages raise, alongside the live region that carries it to
+  // assistive technology.
+  await expect(
+    page.locator(".toast", {
+      hasText: siteAccessCopy.revokeFailed("localhost"),
+    }),
+  ).toBeVisible();
   await expect(page.locator('[role="status"]')).toHaveText(
     siteAccessCopy.revokeFailed("localhost"),
   );
