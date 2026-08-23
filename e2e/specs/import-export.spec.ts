@@ -29,6 +29,9 @@ const strings = optionsCopy.options.importExport;
 const ALL_WARNINGS_FIXTURE = fileURLToPath(
   new URL("../fixtures/modheader-all-warnings.json", import.meta.url),
 );
+const INVALID_RULE_FIXTURE = fileURLToPath(
+  new URL("../fixtures/headershim-invalid-rule.json", import.meta.url),
+);
 
 // A two-profile document whose names never collide with the wiped seed's
 // "Default", exercising both directions, a disabled rule, and a distinct badge
@@ -257,4 +260,32 @@ test("a ModHeader import surfaces every warning class on the summary", async ({
       body.filter({ hasText: name }).filter({ hasText: sentenceText(detail) }),
     ).toHaveCount(1);
   }
+});
+
+// One malformed rule in a file this build could have written: the page has to
+// place the fault, not deny the format. The envelope is recognized before any
+// rule is read, so the message names the profile and the rule's position in it,
+// and the import stays all-or-nothing.
+test("a HeaderShim export with one malformed rule names the profile and rule", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedState(serviceWorker, createV1Seed());
+
+  const page = await context.newPage();
+  await page.goto(
+    `chrome-extension://${extensionId}/options.html#import-export`,
+  );
+  await page.locator('input[type="file"]').setInputFiles(INVALID_RULE_FIXTURE);
+
+  await expect(page.locator(".ie-error")).toHaveText(
+    strings.invalidRule("Broken", 2, "direction"),
+  );
+  await expect(
+    page.getByRole("region", { name: strings.summaryHeading }),
+  ).toHaveCount(0);
+  expect(
+    (await readDoc(serviceWorker)).profiles.map((one) => one.name),
+  ).toEqual(["Default"]);
 });

@@ -463,11 +463,7 @@ describe("headershim import", () => {
       profileSet(),
       new Date("2026-07-12T19:03:00.000Z"),
     );
-    const profile = valid.profiles[0];
-    const rule = profile?.rules[0];
-    if (profile === undefined || rule === undefined) {
-      throw new Error("fixture must contain a rule");
-    }
+    const { profile } = envelopeRule(valid);
 
     const malformed: unknown[] = [
       { ...valid, schemaVersion: "1" },
@@ -478,28 +474,13 @@ describe("headershim import", () => {
       { ...valid, profiles: null },
       { ...valid, profiles: [null] },
       { ...valid, profiles: [{ ...profile, name: "" }] },
+      { ...valid, profiles: [{ ...profile, name: 7 }] },
       { ...valid, profiles: [{ ...profile, badge: "ABC" }] },
       { ...valid, profiles: [{ ...profile, color: "amber" }] },
       { ...valid, profiles: [{ ...profile, rules: null }] },
-      { ...valid, profiles: [{ ...profile, rules: [null] }] },
-      withRule(valid, { direction: "both" }),
-      withRule(valid, { operation: "replace" }),
-      withRule(valid, { header: "" }),
-      withRule(valid, { header: "X-Debug" }),
-      withRule(valid, { value: undefined }),
-      withRule(valid, { comment: 1 }),
-      withRule(valid, { enabled: "true" }),
-      withRule(valid, { initiators: [""] }),
-      withRule(valid, { generated: { kind: "random", at: "now" } }),
-      withRule(valid, { scope: null }),
-      withScope(valid, { resourceTypes: [] }),
-      withScope(valid, { resourceTypes: ["pages", "pages"] }),
-      withScope(valid, { resourceTypes: ["main_frame"] }),
-      withScope(valid, { type: "domains", domains: [] }),
-      withScope(valid, { type: "pattern", pattern: "", hosts: [] }),
-      withScope(valid, { type: "pattern", pattern: "x", hosts: [""] }),
-      withScope(valid, { type: "regex", regex: "", hosts: [] }),
-      withScope(valid, { type: "unknown" }),
+      // A profile whose own name is unreadable can hold no address for a rule,
+      // so the fault stays with the envelope even though the rule is malformed.
+      { ...valid, profiles: [{ ...profile, name: "", rules: [null] }] },
     ];
 
     for (const envelope of malformed) {
@@ -509,6 +490,85 @@ describe("headershim import", () => {
         error: { kind: "invalid-export" },
       });
     }
+  });
+
+  it("places a malformed rule in the file and names the field that failed", () => {
+    const valid = createHeadershimEnvelope(
+      profileSet(),
+      new Date("2026-07-12T19:03:00.000Z"),
+    );
+    const { profile } = envelopeRule(valid);
+
+    const faults: [unknown, string | undefined][] = [
+      [{ ...valid, profiles: [{ ...profile, rules: [null] }] }, undefined],
+      [withRule(valid, { direction: "both" }), "direction"],
+      [withRule(valid, { operation: "replace" }), "operation"],
+      [withRule(valid, { header: "" }), "header"],
+      [withRule(valid, { header: "X-Debug" }), "header"],
+      [withRule(valid, { value: undefined }), "value"],
+      [withRule(valid, { comment: 1 }), "comment"],
+      [withRule(valid, { enabled: "true" }), "enabled"],
+      [withRule(valid, { initiators: [""] }), "initiators"],
+      [
+        withRule(valid, { generated: { kind: "random", at: "now" } }),
+        "generated",
+      ],
+      [withRule(valid, { scope: null }), "scope"],
+      [withScope(valid, { resourceTypes: [] }), "scope"],
+      [withScope(valid, { resourceTypes: ["pages", "pages"] }), "scope"],
+      [withScope(valid, { resourceTypes: ["main_frame"] }), "scope"],
+      [withScope(valid, { type: "domains", domains: [] }), "scope"],
+      [withScope(valid, { type: "pattern", pattern: "", hosts: [] }), "scope"],
+      [
+        withScope(valid, { type: "pattern", pattern: "x", hosts: [""] }),
+        "scope",
+      ],
+      [withScope(valid, { type: "regex", regex: "", hosts: [] }), "scope"],
+      [withScope(valid, { type: "unknown" }), "scope"],
+    ];
+
+    for (const [envelope, field] of faults) {
+      expect(() => importHeadershim(envelope, [])).not.toThrow();
+      expect(importHeadershim(envelope, [])).toEqual({
+        ok: false,
+        error: {
+          kind: "invalid-rule",
+          profileName: "Default",
+          ruleNumber: 1,
+          ...(field === undefined ? {} : { field }),
+        },
+      });
+    }
+  });
+
+  it("counts a malformed rule inside its own profile", () => {
+    const valid = createHeadershimEnvelope(
+      profileSet(),
+      new Date("2026-07-12T19:03:00.000Z"),
+    );
+    const [first, second] = valid.profiles;
+    if (first === undefined || second === undefined) {
+      throw new Error("fixture must contain two profiles");
+    }
+    const rules = [
+      second.rules[0],
+      { ...second.rules[1], direction: "sideways" },
+    ];
+
+    expect(
+      importHeadershim(
+        { ...valid, profiles: [first, { ...second, rules }] },
+        [],
+      ),
+    ).toEqual({
+      ok: false,
+      error: {
+        kind: "invalid-rule",
+        profileName: second.name,
+        ruleNumber: 2,
+        field: "direction",
+      },
+    });
   });
 });
 

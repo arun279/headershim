@@ -11,7 +11,7 @@ import {
   read as readSession,
   write as writeSession,
 } from "../platform/session-store";
-import { read, write } from "../platform/store";
+import { quarantine, read, write } from "../platform/store";
 import { copy } from "../ui/copy";
 import { profile, resetFixtures, rule, stateDoc } from "../ui/test/fixtures";
 import { findButton, fire, render, settle } from "../ui/test/render";
@@ -94,6 +94,16 @@ describe("erase everything", () => {
     await eraseWith(populated());
 
     expect(await readSession()).toEqual({ nextNum: 1, tabs: {} });
+  });
+
+  // The set-aside copy holds the header values of a configuration that could
+  // not be read, so a start-over that left it behind would keep credentials the
+  // user asked to be rid of.
+  it("removes the configuration that was set aside as unreadable", async () => {
+    await quarantine({ v: 1, profiles: "unreadable" });
+    await eraseWith(populated());
+
+    expect(await fakeBrowser.storage.local.get("state_quarantine")).toEqual({});
   });
 
   it("announces success only after revoking access and clearing overrides", async () => {

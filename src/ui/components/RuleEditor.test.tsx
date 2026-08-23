@@ -812,6 +812,30 @@ describe("RuleEditor profile choice", () => {
     expect(ctx.profileSelect()).toBeNull();
   });
 
+  // The heading is the only place the editor names where the rule will land,
+  // and the picker can move it: a heading left on the profile the editor opened
+  // in tells the author the rule is going somewhere it is not.
+  it("follows the picked profile in the heading", () => {
+    const ctx = mount({
+      profileName: "Staging auth",
+      profiles: PROFILES,
+      profileId: "p1",
+    });
+    const title = () => ctx.root.querySelector(".editor-title")?.textContent;
+    expect(title()).toBe(editorCopy.editor.heading("new", "Staging auth"));
+
+    const select = ctx.profileSelect() as HTMLSelectElement;
+    fire(() => {
+      select.value = "p2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(title()).toBe(editorCopy.editor.heading("new", "Prod read-only"));
+    expect(
+      ctx.root.querySelector('[role="dialog"]')?.getAttribute("aria-label"),
+    ).toBe(title());
+  });
+
   it("saves the rule into the picked profile", async () => {
     const ctx = mount({
       rule: rule(),

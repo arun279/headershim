@@ -2,7 +2,6 @@ import type { ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
   ALL_SITES_ORIGIN,
-  domainFromOriginPattern,
   type GrantSnapshot,
   isAllSitesOrigin,
   requiredOrigins,
@@ -32,9 +31,13 @@ import { sentence } from "../../../src/ui/components/sentence";
 import { copy } from "../../../src/ui/copy";
 import { siteAccessCopy } from "../../../src/ui/copy.options";
 import {
+  coverageAfterRevoke,
+  grantForHost,
+  type PermissionOutcome,
   type SiteAccessEntry,
   siteAccessView,
 } from "../../../src/ui/state/site-access";
+import { revokeMessage } from "../../../src/ui/state/site-access-copy";
 import "./SiteAccess.css";
 
 const text = siteAccessCopy;
@@ -80,10 +83,12 @@ export function SiteAccessPage({
   // <body> (WCAG 2.4.3).
   const anchorFocus = () => titleRef.current?.focus();
 
+  // The gesture reports its own outcome, and the announcement is read from
+  // that: a request the browser declined and a removal it refused each get
+  // their own line, so no line can claim a change the grants did not take.
   const runPermission = (
-    start: () => Promise<boolean>,
-    success: string,
-    failure: string,
+    start: () => Promise<PermissionOutcome>,
+    message: (outcome: PermissionOutcome) => string,
     collapseAllSites = false,
   ) => {
     if (pendingRef.current) return;
@@ -91,16 +96,14 @@ export function SiteAccessPage({
     setPending(true);
     void start()
       .then(
-        (completed) => {
-          if (completed) {
+        (outcome) => {
+          if (outcome === "changed") {
             if (collapseAllSites) setAllSitesOpen(false);
-            announce(success);
             anchorFocus();
-          } else {
-            announce(failure);
           }
+          announce(message(outcome));
         },
-        () => announce(failure),
+        () => announce(message("failed")),
       )
       .finally(() => {
         pendingRef.current = false;
@@ -110,45 +113,48 @@ export function SiteAccessPage({
 
   const grant = (entry: SiteAccessEntry) =>
     runPermission(
-      () => requestPermissions([entry.origin]),
-      copy.toast.accessGranted,
-      text.notGranted(entry.domain),
+      () => requestOrigins([entry.origin]),
+      (outcome) =>
+        outcome === "changed"
+          ? copy.toast.accessGranted
+          : text.notGranted(entry.domain),
     );
 
   const broaden = (entry: SiteAccessEntry) =>
     runPermission(
-      () => requestPermissions([entry.origin]),
-      text.broadened(entry.domain),
-      text.notBroadened(entry.domain),
+      () => requestOrigins([entry.origin]),
+      (outcome) =>
+        outcome === "changed"
+          ? text.broadened(entry.domain)
+          : text.notBroadened(entry.domain),
     );
 
   const revoke = (entry: SiteAccessEntry) =>
     runPermission(
-      () =>
-        removeCurrentOrigins(
-          (origin) =>
-            !isAllSitesOrigin(origin) &&
-            domainFromOriginPattern(origin) === entry.domain,
+      () => removeCurrentOrigins(grantForHost(entry.domain)),
+      (outcome) =>
+        revokeMessage(
+          outcome,
+          entry.domain,
+          coverageAfterRevoke(entry.domain, grants),
         ),
-      grants.allSites
-        ? text.revokedUnderAllSites(entry.domain)
-        : text.revoked(entry.domain),
-      text.revokeFailed(entry.domain),
     );
 
   const grantAllSites = () =>
     runPermission(
-      () => requestPermissions([ALL_SITES_ORIGIN]),
-      text.allSites.on,
-      text.allSites.notGranted,
+      () => requestOrigins([ALL_SITES_ORIGIN]),
+      (outcome) =>
+        outcome === "changed" ? text.allSites.on : text.allSites.notGranted,
       true,
     );
 
   const revokeAllSites = () =>
     runPermission(
       () => removeCurrentOrigins(isAllSitesOrigin),
-      text.allSites.revoked,
-      text.allSites.revokeFailed,
+      (outcome) =>
+        outcome === "failed"
+          ? text.allSites.revokeFailed
+          : text.allSites.revoked,
     );
 
   return (
@@ -280,11 +286,18 @@ export function SiteAccessPage({
   );
 }
 
+async function requestOrigins(origins: string[]): Promise<PermissionOutcome> {
+  return (await requestPermissions(origins)) ? "changed" : "unchanged";
+}
+
 async function removeCurrentOrigins(
   matches: (origin: string) => boolean,
-): Promise<boolean> {
+): Promise<PermissionOutcome> {
   const origins = (await readPermissions()).origins.filter(matches);
-  return origins.length === 0 || removePermissions(origins);
+  if (origins.length === 0) {
+    return "unchanged";
+  }
+  return (await removePermissions(origins)) ? "changed" : "failed";
 }
 
 /** Global session usage belongs to this global page, not the popup's tab view. */

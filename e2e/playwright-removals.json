@@ -83,5 +83,10 @@
     "base": "7167644015ffe5a4f4c67e89d132c7071ba08144",
     "test": "narrow-host-access: e2e/specs/layout-invariants.spec.ts > this-tab composer names the narrowed grant it will ask for",
     "reason": "Replaced in the same narrow-host-access project, in the same file, by \"this-tab composer offers Add without a grant when a narrowed grant covers the tab's origin\". The and-allow label is no longer reachable on any e2e build because origin-level coverage means any grant that makes the tab URL readable also covers its origin. The label is pinned by src/test/this-tab-popup.test.tsx and src/ui/copy.test.ts."
+  },
+  {
+    "base": "0c87ff1b52a40683cf851674ab782529378f8ae4",
+    "test": "shipped: e2e/specs/popup-header.spec.ts > the popup options button opens the About page",
+    "reason": "Replaced in the same shipped project, in the same file, by \"the popup options button opens the options workspace\". The button is labelled Options and now opens the options page where the browser opens it, so the assertion moved from the About route to the page's own default section; the replacement still pins the extension origin and path, and additionally pins that About keeps its own nav entry there."
   }
 ]

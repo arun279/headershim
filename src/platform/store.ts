@@ -23,6 +23,10 @@ export function quarantine(value: unknown): Promise<void> {
   return browser.storage.local.set({ [QUARANTINE_KEY]: value });
 }
 
+export function clearQuarantine(): Promise<void> {
+  return browser.storage.local.remove(QUARANTINE_KEY);
+}
+
 export function locked<T>(task: () => Promise<T>): Promise<T> {
   return navigator.locks.request(STATE_KEY, task);
 }

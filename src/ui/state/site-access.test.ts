@@ -6,7 +6,7 @@ import {
 } from "../../core/grants";
 import type { Profile, Rule, Scope, StateDoc } from "../../core/model";
 import { originPatternForDomain } from "../../core/scope";
-import { siteAccessView } from "./site-access";
+import { coverageAfterRevoke, siteAccessView } from "./site-access";
 
 const baseRule = {
   id: "rule-1",
@@ -414,5 +414,36 @@ describe("siteAccessView", () => {
         allSites: true,
       }).initiatorNote,
     ).toBe(false);
+  });
+});
+
+describe("coverageAfterRevoke", () => {
+  const domain = "api.example.com";
+  const own = originPatternForDomain(domain);
+  const narrowed = "https://api.example.com/*";
+  const parent = "https://*.example.com/*";
+
+  it("keeps every grant the row's Revoke leaves reaching the host", () => {
+    expect(
+      coverageAfterRevoke(domain, {
+        origins: [
+          own,
+          narrowed,
+          parent,
+          originPatternForDomain("other.test"),
+          ALL_SITES_ORIGIN,
+        ],
+        allSites: true,
+      }),
+    ).toEqual([parent, ALL_SITES_ORIGIN]);
+  });
+
+  it("reports nothing left when the host's own grants were all of it", () => {
+    expect(
+      coverageAfterRevoke(domain, {
+        origins: [own, narrowed],
+        allSites: false,
+      }),
+    ).toEqual([]);
   });
 });

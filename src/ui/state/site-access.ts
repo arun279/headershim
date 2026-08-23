@@ -7,6 +7,7 @@ import {
   missingGrants,
   originCovered,
   originGranted,
+  originPatternCoverage,
 } from "../../core/grants";
 import {
   activeProfile,
@@ -32,6 +33,9 @@ export interface SiteAccessEntry {
   /** Every Chrome grant that supplies some coverage for this row. */
   readonly coveringOrigins?: readonly string[];
 }
+
+/** What a permission gesture did to the browser's grants. */
+export type PermissionOutcome = "changed" | "unchanged" | "failed";
 
 export interface SiteAccessView {
   readonly needed: readonly SiteAccessEntry[];
@@ -159,6 +163,31 @@ export function siteAccessView(
           subresourceScopedRule(rule),
       ),
   };
+}
+
+/**
+ * A row's Revoke takes the grants whose own host is the row's and leaves every
+ * broader one standing. The two halves are defined together because the line
+ * the click announces is read from the second: whatever the first does not
+ * take is what still reaches the host.
+ */
+export const grantForHost =
+  (domain: string) =>
+  (origin: string): boolean =>
+    !isAllSitesOrigin(origin) && domainFromOriginPattern(origin) === domain;
+
+export function coverageAfterRevoke(
+  domain: string,
+  granted: GrantSnapshot,
+): readonly string[] {
+  const removed = grantForHost(domain);
+  const required = originPatternForDomain(domain);
+  return granted.origins.filter(
+    (origin) =>
+      !removed(origin) &&
+      (isAllSitesOrigin(origin) ||
+        originPatternCoverage(origin, required) !== "none"),
+  );
 }
 
 interface UsageCount {

@@ -208,9 +208,17 @@ describe("copy", () => {
       action: "Start over",
       confirmTitle: "Start over?",
       confirmBody:
-        "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, and clears any This-tab overrides. Undo restores only the configuration, not site access or This-tab overrides.",
+        "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, clears any This-tab overrides, and removes any configuration that was set aside as unreadable. Undo restores only the configuration, not site access, This-tab overrides, or the set-aside copy.",
       done: "Configuration replaced",
     });
+    // What arrives off is the profile, not the rules in it, so both halves of
+    // the line say active and neither says turned off.
+    expect(optionsCopy.options.importExport.imported(1)).toBe(
+      "Imported 1 profile. It is not active; switch to it from the popup.",
+    );
+    expect(optionsCopy.options.importExport.imported(4)).toBe(
+      "Imported 4 profiles. None is active; switch to one from the popup.",
+    );
     // One canonical label per state across the popup and the options
     // Active-changes surface: no per-surface drift.
     expect(optionsCopy.options.traffic.status.unconfirmed).toBe(
@@ -295,9 +303,11 @@ describe("copy", () => {
     expect(siteAccessCopy.guidance).toContain(
       "Add rules in the popup or rule editor, and this-tab changes in the popup.",
     );
-    expect(siteAccessCopy.guidance).toContain("Grant access there or here.");
+    // Chrome's own site-access controls cannot hand this extension a host it
+    // asks for at runtime; they can only take one back. The line says which
+    // half is true and where the other half happens.
     expect(siteAccessCopy.guidance).toContain(
-      "Chrome's controls can also add, limit, or remove access.",
+      "Chrome's own controls can limit or remove access. Granting a site happens here or from a rule's Grant button.",
     );
     expect(
       sentenceText(siteAccessCopy.partial(["https://*.api.example.com/*"])),
@@ -323,8 +333,21 @@ describe("copy", () => {
     expect(copy.readout.grantAllSites).toBe(siteAccessCopy.allSites.button);
     expect(siteAccessCopy.ruleCount(2)).toBe("2 rules");
     expect(siteAccessCopy.tabCount(1)).toBe("1 tab change");
-    expect(siteAccessCopy.revoked("api.example.com")).toBe(
-      "No direct grant for api.example.com",
+    expect(siteAccessCopy.revoked("api.example.com", [])).toBe(
+      "Access to api.example.com revoked",
+    );
+    // The grants that outlast a revoke are named the way the row names them,
+    // so the line cannot read as access removed while one of them still
+    // reaches the host.
+    expect(
+      siteAccessCopy.revoked("api.example.com", ["https://*.example.com/*"]),
+    ).toBe(
+      "Access to api.example.com revoked; https://*.example.com still covers it",
+    );
+    expect(
+      siteAccessCopy.noDirectGrant("api.example.com", [ALL_SITES_ORIGIN]),
+    ).toBe(
+      "No direct grant for api.example.com; all-sites access still covers it",
     );
     expect(siteAccessCopy.notGranted("api.example.com")).toBe(
       "Access to api.example.com was not granted",
@@ -396,6 +419,7 @@ describe("copy", () => {
       ["QA roles"],
       ["x-custom-token"],
       ["2026-07-12 14:03 UTC"],
+      ["api.example.com", ["https://*.example.com/*", ALL_SITES_ORIGIN]],
       [true, true],
       [false, false],
       [1],

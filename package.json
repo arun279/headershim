@@ -116,7 +116,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "39500 B"
+      "limit": "40000 B"
     },
     {
       "name": "Options rule editor",

@@ -1,0 +1,60 @@
+{
+  "app": "headershim",
+  "schemaVersion": 1,
+  "exportedAt": "2026-08-22T18:20:00.000Z",
+  "profiles": [
+    {
+      "name": "Working",
+      "badge": "WO",
+      "color": "indigo",
+      "rules": [
+        {
+          "direction": "request",
+          "operation": "set",
+          "header": "x-env",
+          "value": "staging",
+          "enabled": true,
+          "scope": {
+            "type": "domains",
+            "domains": ["api.example.com"],
+            "resourceTypes": "all"
+          },
+          "initiators": []
+        }
+      ]
+    },
+    {
+      "name": "Broken",
+      "badge": "BR",
+      "color": "slate",
+      "rules": [
+        {
+          "direction": "request",
+          "operation": "set",
+          "header": "x-good",
+          "value": "ok",
+          "enabled": true,
+          "scope": {
+            "type": "domains",
+            "domains": ["delta.example.com"],
+            "resourceTypes": "all"
+          },
+          "initiators": []
+        },
+        {
+          "direction": "sideways",
+          "operation": "set",
+          "header": "",
+          "value": "no",
+          "enabled": true,
+          "scope": {
+            "type": "domains",
+            "domains": ["delta.example.com"],
+            "resourceTypes": "all"
+          },
+          "initiators": []
+        }
+      ]
+    }
+  ]
+}

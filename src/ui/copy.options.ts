@@ -3,6 +3,7 @@
 import { BRAND_NAME } from "../brand";
 import {
   ALL_SITES_ORIGIN,
+  isAllSitesOrigin,
   MANIFEST_PERMISSIONS,
   type ManifestPermission,
 } from "../core/grants";
@@ -17,7 +18,20 @@ import {
 } from "./copy";
 
 const rules = (n: number) => (n === 1 ? "rule" : "rules");
-const profiles = (n: number) => (n === 1 ? "profile" : "profiles");
+const covers = (n: number) => (n === 1 ? "covers" : "cover");
+
+const bareOrigin = (origin: string) => origin.replace(/\/\*$/, "");
+
+const coverageName = (origin: string) =>
+  isAllSitesOrigin(origin) ? "all-sites access" : bareOrigin(origin);
+
+// Revoking one host leaves every broader grant in place, and a line that
+// stopped at the host would read as access removed when it is not. The grants
+// that outlast the click are named here in the words the row uses for them.
+const stillCovered = (covering: readonly string[]) =>
+  covering.length === 0
+    ? ""
+    : `; ${andList(covering.map(coverageName))} still ${covers(covering.length)} it`;
 
 export const siteAccessCopy = {
   empty: "No individual sites to show.",
@@ -26,12 +40,12 @@ export const siteAccessCopy = {
   partialHeading: "Limited access",
   grantedHeading: "Granted",
   guidance:
-    "Add rules in the popup or rule editor, and this-tab changes in the popup. Grant access there or here. Chrome's controls can also add, limit, or remove access.",
+    "Add rules in the popup or rule editor, and this-tab changes in the popup. Chrome's own controls can limit or remove access. Granting a site happens here or from a rule's Grant button.",
   usageLead: (coverage: "full" | "partial" | "none") =>
     coverage === "none" ? "Needed by" : "Used by",
   partial: (origins: readonly string[]): Sentence => [
     "Covers only ",
-    data(andList(origins.map((origin) => origin.replace(/\/\*$/, "")))),
+    data(andList(origins.map(bareOrigin))),
   ],
   ruleCount: (count: number) => `${count} ${rules(count)}`,
   tabCount: (count: number) => `${count} tab ${changes(count)}`,
@@ -46,9 +60,10 @@ export const siteAccessCopy = {
     `Grant access to ${andList(origins)}`,
   revoke: "Revoke",
   revokeLabel: (domain: string) => `Remove grant for ${domain}`,
-  revoked: (domain: string) => `No direct grant for ${domain}`,
-  revokedUnderAllSites: (domain: string) =>
-    `No direct grant for ${domain}; all-sites access still covers it`,
+  revoked: (domain: string, covering: readonly string[]) =>
+    `Access to ${domain} revoked${stillCovered(covering)}`,
+  noDirectGrant: (domain: string, covering: readonly string[]) =>
+    `No direct grant for ${domain}${stillCovered(covering)}`,
   notGranted: (domain: string) => `Access to ${domain} was not granted`,
   revokeFailed: (domain: string) =>
     `Site grant for ${domain} could not be removed`,
@@ -109,7 +124,7 @@ const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
       "The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.",
       "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the origin it belongs to (scheme, host, and port), the direction, the operation, the header name, the value you typed, and whether it is on.",
       `${BRAND_NAME} removes it when you close the tab or when the tab navigates away from that origin, and Chrome clears session storage when the browser shuts down.`,
-      `If ${BRAND_NAME} cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data.`,
+      `If ${BRAND_NAME} cannot read the saved configuration, it sets that configuration aside under a separate key in the same local storage and starts over with an empty one, so a configuration it cannot parse is not discarded without a trace. The copy holds whatever that configuration held, header values included. Nothing in this version deletes that copy on its own; a later configuration set aside the same way replaces it, and removing the extension deletes it along with the rest of the stored data. Start over in Settings removes that set-aside copy as well.`,
     ],
   },
   activeTab: {
@@ -266,6 +281,22 @@ export const copy = {
         "This file holds your profiles and rules. Treat it like a credentials file. Site access stays in this browser, not the file.",
       exportFilename: "headershim-export.json",
       profileFilename: (slug: string) => `headershim-${slug}.json`,
+      // A file this build could have written, holding one rule it cannot read:
+      // the envelope is recognized before any rule is validated, so the message
+      // places the fault instead of denying the format. The field is the first
+      // one the validator can name, and a rule that is not even a record has
+      // its shape named instead.
+      invalidRule: (
+        profileName: string,
+        ruleNumber: number,
+        field = "its shape",
+      ) =>
+        `This is a ${BRAND_NAME} export, but rule ${ruleNumber} in profile ${profileName} is not valid (${field}). Fix or remove it and import again; nothing was changed.`,
+      // The fallback for a file whose format was recognized and whose fault has
+      // no rule to point at. Naming it a file of an unknown format would be
+      // false: the reader picked an export this build reads, and the part that
+      // failed is inside it.
+      invalidExport: `${BRAND_NAME} recognizes the format of this file but not its contents, so nothing was imported and nothing was changed. Export it again from the app that wrote it.`,
       summaryHeading: "Import summary",
       addsLead: "Adds these profiles and keeps the ones you have:",
       needAttention: (count: number) =>
@@ -275,7 +306,9 @@ export const copy = {
       import: "Import",
       convert: "Convert to frozen value",
       imported: (count: number) =>
-        `Imported ${count} ${profiles(count)}, turned off. Turn them on when you're ready.`,
+        count === 1
+          ? "Imported 1 profile. It is not active; switch to it from the popup."
+          : `Imported ${count} profiles. None is active; switch to one from the popup.`,
       exported: (filename: string) => `Exported ${filename}`,
       warnings: {
         credentialHeader: (header: string): Sentence => [
@@ -334,7 +367,7 @@ export const copy = {
         action: "Start over",
         confirmTitle: "Start over?",
         confirmBody:
-          "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, and clears any This-tab overrides. Undo restores only the configuration, not site access or This-tab overrides.",
+          "This replaces your configuration with a new empty Default profile and default settings, revokes all site access, clears any This-tab overrides, and removes any configuration that was set aside as unreadable. Undo restores only the configuration, not site access, This-tab overrides, or the set-aside copy.",
         done: "Configuration replaced",
       },
     },

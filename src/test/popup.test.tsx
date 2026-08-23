@@ -23,8 +23,7 @@ import { followCurrentBatch, stopFollowingCurrentBatch } from "./applied";
 
 // The popup's tab is pinned so the readout has a host and This-tab writes bind.
 // activeTabOrigin is a spy: a tab with no web origin is its own popup state.
-// Only the active-tab reads are stubbed, so openAboutPage still runs for real
-// against the fake browser.
+// Only the active-tab reads are stubbed.
 vi.mock("../platform/tabs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../platform/tabs")>()),
   activeTabId: () => Promise.resolve(5),
@@ -830,8 +829,16 @@ describe("popup readout", () => {
     expect(root.querySelector(".lamp.held")).not.toBeNull();
   });
 
-  it("opens options from the footer gear", async () => {
-    const open = vi.spyOn(fakeBrowser.tabs, "create");
+  // The gear says Options, so it lands on the options page as the browser
+  // opens it: its own default section, the rule list, and not a section chosen
+  // for it here.
+  it("opens the options workspace from the footer gear", async () => {
+    // The fake browser leaves runtime.openOptionsPage unimplemented, and
+    // calling it throws, so the test supplies it and reads the call.
+    const open = vi
+      .spyOn(fakeBrowser.runtime, "openOptionsPage")
+      .mockResolvedValue(undefined);
+    const create = vi.spyOn(fakeBrowser.tabs, "create");
     const { root } = await mount(createV1Seed(), true);
     fire(() =>
       (
@@ -839,9 +846,8 @@ describe("popup readout", () => {
       ).click(),
     );
     await settle();
-    expect(open).toHaveBeenCalledExactlyOnceWith({
-      url: fakeBrowser.runtime.getURL("/options.html#about"),
-    });
+    expect(open).toHaveBeenCalledOnce();
+    expect(create).not.toHaveBeenCalled();
   });
 });
 
