@@ -4,7 +4,9 @@ HeaderShim is a free, MIT-licensed Chrome extension that modifies HTTP request a
 
 ## Install
 
-Build the extension and load it unpacked:
+Install it from the Chrome Web Store: https://chromewebstore.google.com/detail/headershim/ecejnncfklopghicmcigpmdfogblpigd
+
+Or build the extension and load it unpacked:
 
 ```sh
 pnpm install
