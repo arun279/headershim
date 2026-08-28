@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 440px; height: 280px; background: #fcfcfb; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; color: #191a1d; -webkit-font-smoothing: antialiased; }
+  .tile { position: relative; box-sizing: border-box; width: 440px; height: 280px; padding: 38px 40px 34px; display: grid; grid-template-rows: auto 1fr auto; }
+  .frame { position: absolute; inset: 0; border: 1px solid rgba(25, 26, 29, 0.10); pointer-events: none; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand svg { width: 52px; height: 52px; display: block; }
+  .name { font-size: 32px; font-weight: 700; letter-spacing: -0.01em; line-height: 1; }
+  .line { align-self: center; font-size: 20px; line-height: 1.3; color: #191a1d; letter-spacing: -0.005em; }
+  .line span { color: #565961; }
+  .shim { display: flex; align-items: center; gap: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: #0a7a57; letter-spacing: 0.01em; white-space: nowrap; }
+  .shim i { display: block; width: 24px; height: 3px; border-radius: 2px; background: #0c8a63; flex: none; }
+</style>
+<div class="tile">
+  <div class="frame"></div>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#fcfcfb"/>
+      <path d="M3.5 14.6 A10.5 10.5 0 0 1 24.5 14.6 Z" fill="#191a1d"/>
+      <path d="M7.5 17.4 A10.5 10.5 0 0 0 28.5 17.4 Z" fill="#191a1d"/>
+      <rect x="11" y="15.2" width="10" height="1.6" rx="0.8" fill="#0c8a63"/>
+      <rect x="0.5" y="0.5" width="31" height="31" rx="6.5" stroke="#191a1d" stroke-opacity="0.10"/>
+    </svg>
+    <div class="name">HeaderShim</div>
+  </div>
+  <div class="line">Set, append, or remove HTTP headers, <span>scoped to the sites you grant.</span></div>
+  <div class="shim"><i></i>Free and open source. Nothing leaves your browser.</div>
+</div>

@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1400px; height: 560px; background: #fcfcfb; overflow: hidden; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; color: #191a1d; -webkit-font-smoothing: antialiased; }
+  .tile { position: relative; box-sizing: border-box; width: 1400px; height: 560px; padding: 96px 0 84px 120px; display: grid; grid-template-columns: 620px 1fr; }
+  .frame { position: absolute; inset: 0; border: 1px solid rgba(25, 26, 29, 0.10); pointer-events: none; }
+  .copy { display: grid; grid-template-rows: auto 1fr auto; }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .brand svg { width: 84px; height: 84px; display: block; }
+  .name { font-size: 56px; font-weight: 700; letter-spacing: -0.015em; line-height: 1; }
+  .line { align-self: center; font-size: 30px; line-height: 1.3; letter-spacing: -0.005em; max-width: 17ch; }
+  .line span { color: #565961; }
+  .shim { display: flex; align-items: center; gap: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; color: #0a7a57; letter-spacing: 0.01em; white-space: nowrap; }
+  .shim i { display: block; width: 36px; height: 4px; border-radius: 2px; background: #0c8a63; flex: none; }
+  .shot { position: absolute; right: 120px; top: 70px; width: 398px; height: 478px; border-radius: 12px; overflow: hidden; background: #fff; border: 1px solid rgba(25, 26, 29, 0.12); box-shadow: 0 1px 2px rgba(18, 22, 33, 0.06), 0 24px 48px rgba(18, 22, 33, 0.12); }
+  .shot img { display: block; width: 398px; height: 478px; }
+</style>
+<div class="tile">
+  <div class="frame"></div>
+  <div class="copy">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect width="32" height="32" rx="7" fill="#fcfcfb"/>
+        <path d="M3.5 14.6 A10.5 10.5 0 0 1 24.5 14.6 Z" fill="#191a1d"/>
+        <path d="M7.5 17.4 A10.5 10.5 0 0 0 28.5 17.4 Z" fill="#191a1d"/>
+        <rect x="11" y="15.2" width="10" height="1.6" rx="0.8" fill="#0c8a63"/>
+        <rect x="0.5" y="0.5" width="31" height="31" rx="6.5" stroke="#191a1d" stroke-opacity="0.10"/>
+      </svg>
+      <div class="name">HeaderShim</div>
+    </div>
+    <div class="line">Set, append, or remove HTTP headers, <span>scoped to the sites you grant.</span></div>
+    <div class="shim"><i></i>Free and open source. Nothing leaves your browser.</div>
+  </div>
+  <div class="shot"><img src="popup.png" alt=""></div>
+</div>

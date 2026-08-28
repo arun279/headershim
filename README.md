@@ -37,6 +37,8 @@ pnpm verify
 
 `pnpm size:record` lowers size limits to the current bounded slack grain after intentional size reductions.
 
+`store/` holds the Chrome Web Store listing images: the four 1280x800 screenshots and the two promo tiles. The tiles render from `store/tiles/*.html` at 440x280 and 1400x560 with a device scale factor of 1; retake the screenshots and re-render the tiles whenever the surfaces they show change.
+
 The Playwright project gate compares the working tree with committed `HEAD` and the default-branch merge base. The pre-push hook and pull-request CI also compare the prior remote revision through `PLAYWRIGHT_PREVIOUS_REFS`. A deliberate removal needs one `{ "base", "test", "reason" }` acknowledgement for each reported comparison commit that contained the test. Acknowledgements become inactive when their comparison commit is no longer used.
 
 ## License
