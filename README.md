@@ -35,6 +35,8 @@ pnpm verify
 
 `pnpm zip` builds the release archive and checks that it exactly matches `.output/chrome-mv3` with no source maps.
 
+A pull request that raises `version` in `package.json` is a release. Merging it runs the Release workflow, which checks and builds the package, publishes the GitHub release with its provenance attestation, and submits the archive to the Chrome Web Store for review. The store step needs the `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET` and `CHROME_REFRESH_TOKEN` repository secrets and is skipped while they are absent.
+
 `pnpm size:record` lowers size limits to the current bounded slack grain after intentional size reductions.
 
 `store/` holds the Chrome Web Store listing images: the four 1280x800 screenshots and the two promo tiles. The tiles render from `store/tiles/*.html` at 440x280 and 1400x560 with a device scale factor of 1; retake the screenshots and re-render the tiles whenever the surfaces they show change.
