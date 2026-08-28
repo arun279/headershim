@@ -2,18 +2,40 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - package.json
 
 permissions:
   contents: read
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.compare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - id: compare
+        run: |
+          current=$(jq -r .version package.json)
+          previous=$(git show HEAD^:package.json | jq -r .version)
+          if [ "$current" != "$previous" ]; then
+            echo "tag=v$current" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
+    needs: version
+    if: needs.version.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,6 +56,8 @@ jobs:
           PLAYWRIGHT_BASE_REF: HEAD^
 
   e2e:
+    needs: version
+    if: needs.version.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +81,8 @@ jobs:
       - run: pnpm e2e
 
   security:
+    needs: version
+    if: needs.version.outputs.tag != ''
     uses: ./.github/workflows/security.yml
     permissions:
       contents: read
@@ -64,12 +90,18 @@ jobs:
       pull-requests: read
 
   build-and-release:
-    needs: [check, e2e, security]
+    needs: [version, check, e2e, security]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
       attestations: write
+    env:
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
+      CHROME_EXTENSION_ID: ecejnncfklopghicmcigpmdfogblpigd
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -83,8 +115,6 @@ jobs:
       - name: Build release archive
         run: pnpm zip
       - name: Enforce release manifest policy
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: node scripts/manifest-policy.mjs --release
       - name: Compute checksums
         run: |
@@ -95,16 +125,18 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: '.output/*.zip'
-      - name: Create draft release
+      - name: Publish the GitHub release
         env:
           BUNDLE_PATH: ${{ steps.attest.outputs.bundle-path }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" \
-            --draft \
+            --target "$GITHUB_SHA" \
             --title "$RELEASE_TAG" \
             --notes "Verify the downloaded archive with gh attestation verify <zip> --owner ${{ github.repository_owner }}." \
             .output/*.zip \
             .output/SHA256SUMS \
             "$BUNDLE_PATH"
+      - name: Submit to the Chrome Web Store
+        if: env.CHROME_REFRESH_TOKEN != ''
+        run: pnpm wxt submit --chrome-zip .output/*-chrome.zip
