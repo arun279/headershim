@@ -98,10 +98,7 @@ jobs:
       attestations: write
     env:
       RELEASE_TAG: ${{ needs.version.outputs.tag }}
-      CHROME_EXTENSION_ID: ecejnncfklopghicmcigpmdfogblpigd
-      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      STORE_ITEM: publishers/${{ vars.CWS_PUBLISHER_ID }}/items/ecejnncfklopghicmcigpmdfogblpigd
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -137,6 +134,32 @@ jobs:
             .output/*.zip \
             .output/SHA256SUMS \
             "$BUNDLE_PATH"
+      - name: Authenticate to Google Cloud
+        id: store-auth
+        if: vars.CWS_WORKLOAD_IDENTITY_PROVIDER != ''
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.CWS_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CWS_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
       - name: Submit to the Chrome Web Store
-        if: env.CHROME_REFRESH_TOKEN != ''
-        run: pnpm wxt submit --chrome-zip .output/*-chrome.zip
+        if: steps.store-auth.conclusion == 'success'
+        env:
+          TOKEN: ${{ steps.store-auth.outputs.access_token }}
+        run: |
+          upload=$(curl --fail-with-body -sS -X POST -T .output/*-chrome.zip \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/zip" \
+            "https://chromewebstore.googleapis.com/upload/v2/$STORE_ITEM:upload")
+          echo "$upload"
+          state=$(jq -r '.uploadState // "SUCCESS"' <<< "$upload")
+          if [ "$state" != "SUCCESS" ]; then
+            echo "upload did not succeed: $state"
+            exit 1
+          fi
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"publishType":"DEFAULT_PUBLISH"}' \
+            "https://chromewebstore.googleapis.com/v2/$STORE_ITEM:publish"
