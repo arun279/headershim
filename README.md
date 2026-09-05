@@ -37,7 +37,7 @@ pnpm verify
 
 `pnpm zip` builds the release archive and checks that it exactly matches `.output/chrome-mv3` with no source maps.
 
-A pull request that raises `version` in `package.json` is a release. Merging it runs the Release workflow, which checks and builds the package, publishes the GitHub release with its provenance attestation, and submits the archive to the Chrome Web Store for review. The store step needs the `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET` and `CHROME_REFRESH_TOKEN` repository secrets and is skipped while they are absent.
+A pull request that raises `version` in `package.json` is a release. Merging it runs the Release workflow, which checks and builds the package, publishes the GitHub release with its provenance attestation, and submits the archive to the Chrome Web Store for review. The store step authenticates as a Google Cloud service account through workload identity federation, so the repository stores no publishing credential: it exchanges the workflow's own OIDC token for an access token that lasts an hour. It reads the `CWS_WORKLOAD_IDENTITY_PROVIDER`, `CWS_SERVICE_ACCOUNT` and `CWS_PUBLISHER_ID` repository variables and is skipped while they are absent.
 
 `pnpm size:record` lowers size limits to the current bounded slack grain after intentional size reductions.
 
