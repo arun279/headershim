@@ -7,6 +7,7 @@ export default {
     "scripts/echo-server.mjs",
     // Loaded synchronously from both extension-page heads before UI modules.
     "public/theme-bootstrap.js",
+    "e2e/fixtures/dnr-probe/worker.js",
   ],
   // Tests are entry points above, which is what lets knip see the whole repo —
   // but it also means a module stays "used" for as long as a test imports it,

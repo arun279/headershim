@@ -15,6 +15,8 @@ HEADED=1 pnpm e2e
 - `.output/chrome-mv3-e2e-hostaccess` is the test-only traffic build. Setting `E2E_HOST_ACCESS=1` adds `host_permissions: ["*://*/*"]` and selects the distinct output directory. The `host-access` Playwright project loads it only for tests tagged `@host-access`.
 - `.output/chrome-mv3-e2e-narrow-hostaccess` holds the literal browser-observed `host_permissions: ["http://localhost:15848/*"]`. Its one test proves the background installs the anchored rule, the HTTP echo receives the header, and the HTTPS echo does not.
 
+`e2e/fixtures/dnr-probe` is a fourth, hand-written extension with an empty service worker. `dnr-contract.spec.ts` loads it because those tests pin what Chrome accepts, and HeaderShim's background would remove the rules they add.
+
 The static grant lets Chromium apply DNR rules immediately without an optional permission prompt. The three builds differ in nothing but that block. The test-only artifact is never packaged or checked as a release artifact. `scripts/manifest-policy.mjs` continues to inspect only `.output/chrome-mv3`, requiring zero static host permissions and the exact optional wildcard permission.
 
 The extension uses standard WebExtension manifest permissions and `wxt/browser` in shipped code. The test grant does not introduce a Chrome-only application path; Playwright uses Chromium to exercise Chromium's DNR network implementation.

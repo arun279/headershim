@@ -4,16 +4,20 @@ import {
   MAX_REGEX_RULES,
   MAX_SESSION_OVERRIDES,
 } from "../../src/core/limits";
-import { createV1Seed } from "../../src/core/schema";
 import {
   contractBaseRule,
   contractRuleBatch,
   DNR_CONTRACT_CASES,
   DNR_REGEX_CONTRACT_CASES,
 } from "../../src/test/dnr-contract";
-import { expect, getDynamicRules, seedStateAndWait, test } from "../fixtures";
+import { expect, getDynamicRules, test } from "../fixtures";
 
 const PROBE_RULE_ID = 987_654;
+
+// These tests pin what Chrome accepts, not what HeaderShim does. HeaderShim's
+// background removes every rule it did not compile, so they run in an extension
+// that has no background logic.
+test.use({ extensionBuild: "dnr-probe" });
 
 async function update(
   serviceWorker: Parameters<typeof getDynamicRules>[0],
@@ -57,17 +61,7 @@ async function updateSession(
   );
 }
 
-test("matches Chrome's dynamic-rule boundary", {
-  tag: "@host-access",
-}, async ({ serviceWorker }) => {
-  // The probes below drive chrome.declarativeNetRequest directly, so they
-  // need the background's own reconciliation of the seeded (empty) doc to
-  // have finished settling before they add rules of their own: measured, an
-  // unconfined bare seedState here is a real race — the background's reconcile
-  // of the just-seeded doc can still be in flight and strip a probe rule that
-  // landed while it was computing its own removal batch.
-  await seedStateAndWait(serviceWorker, createV1Seed());
-
+test("matches Chrome's dynamic-rule boundary", async ({ serviceWorker }) => {
   for (const contractCase of DNR_CONTRACT_CASES) {
     await test.step(contractCase.name, async () => {
       const rules = contractRuleBatch(contractCase);
@@ -79,44 +73,24 @@ test("matches Chrome's dynamic-rule boundary", {
         ),
       ];
       const rejection = await update(serviceWorker, rules, ruleIds);
+      const installedIds = (await getDynamicRules(serviceWorker)).map(
+        (rule) => rule.id,
+      );
       if (contractCase.accepted) {
         expect(rejection).toBeNull();
-        await expect
-          .poll(async () => {
-            const installed = await getDynamicRules(serviceWorker);
-            return ruleIds.every((id) =>
-              installed.some((candidate) => candidate.id === id),
-            );
-          })
-          .toBe(true);
+        expect(installedIds).toEqual(expect.arrayContaining(ruleIds));
         expect(await update(serviceWorker, [], ruleIds)).toBeNull();
       } else {
         expect(rejection).not.toBeNull();
-        const installed = await getDynamicRules(serviceWorker);
-        expect(
-          ruleIds.some((id) =>
-            installed.some((candidate) => candidate.id === id),
-          ),
-        ).toBe(false);
+        expect(installedIds.filter((id) => ruleIds.includes(id))).toEqual([]);
       }
     });
   }
 });
 
-test("rejects an invalid batch atomically", {
-  tag: "@host-access",
-}, async ({ serviceWorker }) => {
-  // Same reasoning as above.
-  await seedStateAndWait(serviceWorker, createV1Seed());
+test("rejects an invalid batch atomically", async ({ serviceWorker }) => {
   const installed = contractBaseRule(PROBE_RULE_ID);
   expect(await update(serviceWorker, [installed], [PROBE_RULE_ID])).toBeNull();
-  await expect
-    .poll(async () =>
-      (await getDynamicRules(serviceWorker)).some(
-        (candidate) => candidate.id === PROBE_RULE_ID,
-      ),
-    )
-    .toBe(true);
 
   const invalid = {
     ...contractBaseRule(PROBE_RULE_ID + 1),
@@ -125,13 +99,9 @@ test("rejects an invalid batch atomically", {
   expect(
     await update(serviceWorker, [invalid], [PROBE_RULE_ID]),
   ).not.toBeNull();
-  await expect
-    .poll(async () =>
-      (await getDynamicRules(serviceWorker)).some(
-        (candidate) => candidate.id === PROBE_RULE_ID,
-      ),
-    )
-    .toBe(true);
+  expect((await getDynamicRules(serviceWorker)).map((rule) => rule.id)).toEqual(
+    [PROBE_RULE_ID],
+  );
   expect(await update(serviceWorker, [], [PROBE_RULE_ID])).toBeNull();
 });
 
