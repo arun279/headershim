@@ -105,9 +105,9 @@ export function ProfilePicker({
         class="prof"
         aria-expanded={open}
         aria-controls="profile-switch-pop"
-        aria-label={copy.readout.switcher.chipLabel}
         onClick={() => setPickerOpen(!openRef.current)}
       >
+        <span class="sr-only">{copy.readout.switcher.chipLabel}: </span>
         <ProfileBadge
           text={activeProfile.badgeText}
           color={activeProfile.color}

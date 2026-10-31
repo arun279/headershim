@@ -397,14 +397,13 @@ function FleetRow({
       <button
         type="button"
         class="fleet-open"
-        aria-label={text.editRule(
-          copy.readout.direction[rule.direction],
-          rule.header,
-        )}
         onClick={() =>
           onEdit({ profileId: rule.profileId, ruleId: rule.ruleId })
         }
       >
+        <span class="sr-only">
+          {text.editRule(copy.readout.direction[rule.direction], rule.header)}:{" "}
+        </span>
         <span class="say">
           <ProfileBadge
             text={rule.provenance.badgeText}

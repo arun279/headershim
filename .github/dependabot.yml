@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
     groups:
@@ -11,10 +11,10 @@ updates:
           - patch
 
   - package-ecosystem: github-actions
-    directory: '/'
+    directory: "/"
     schedule:
       interval: weekly
     groups:
       all-updates:
         patterns:
-          - '*'
+          - "*"

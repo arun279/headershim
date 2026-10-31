@@ -99,9 +99,11 @@ export function ChangeLine({
                 <button
                   type="button"
                   class="v-edit"
-                  aria-label={copy.readout.editValue(change.header)}
                   onClick={() => setEditing(true)}
                 >
+                  <span class="sr-only">
+                    {copy.readout.editValue(change.header)}:{" "}
+                  </span>
                   <HeaderValue
                     value={change.display}
                     secret={change.secret}

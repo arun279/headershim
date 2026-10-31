@@ -50,7 +50,7 @@ test("a popup-created profile becomes active without reloading", async ({
   // The popup's profiles live behind the picker, so the New profile action is
   // reachable only once it is open.
   await page
-    .getByRole("button", { name: copy.readout.switcher.chipLabel, exact: true })
+    .getByRole("button", { name: copy.readout.switcher.chipLabel })
     .click();
   await page
     .getByRole("button", {
