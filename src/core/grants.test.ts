@@ -224,27 +224,28 @@ describe("origin patterns", () => {
     const subdomains = [false, true];
     const ports = [undefined, "8443"] as const;
 
-    for (const scheme of schemes) {
-      for (const includesSubdomains of subdomains) {
-        for (const port of ports) {
-          const origin = `${scheme}://${includesSubdomains ? "*." : ""}example.com${port === undefined ? "" : `:${port}`}/*`;
-          const narrowings = grantNarrowings("example.com", {
-            origins: [origin],
-            allSites: false,
-          });
-          if (
-            !originGranted("example.com", {
-              origins: [origin],
-              allSites: false,
-            })
-          ) {
-            expect(narrowings).not.toEqual([]);
-          }
-          expect(
-            narrowings.every(({ urlFilter }) => !urlFilter?.includes("*")),
-          ).toBe(true);
-        }
+    const cases = schemes.flatMap((scheme) =>
+      subdomains.flatMap((includesSubdomains) =>
+        ports.map((port) => ({ scheme, includesSubdomains, port })),
+      ),
+    );
+    for (const { scheme, includesSubdomains, port } of cases) {
+      const origin = `${scheme}://${includesSubdomains ? "*." : ""}example.com${port === undefined ? "" : `:${port}`}/*`;
+      const narrowings = grantNarrowings("example.com", {
+        origins: [origin],
+        allSites: false,
+      });
+      if (
+        !originGranted("example.com", {
+          origins: [origin],
+          allSites: false,
+        })
+      ) {
+        expect(narrowings).not.toEqual([]);
       }
+      expect(
+        narrowings.every(({ urlFilter }) => !urlFilter?.includes("*")),
+      ).toBe(true);
     }
   });
 

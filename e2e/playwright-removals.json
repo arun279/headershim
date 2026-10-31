@@ -88,5 +88,15 @@
     "base": "0c87ff1b52a40683cf851674ab782529378f8ae4",
     "test": "shipped: e2e/specs/popup-header.spec.ts > the popup options button opens the About page",
     "reason": "Replaced in the same shipped project, in the same file, by \"the popup options button opens the options workspace\". The button is labelled Options and now opens the options page where the browser opens it, so the assertion moved from the About route to the page's own default section; the replacement still pins the extension origin and path, and additionally pins that About keeps its own nav entry there."
+  },
+  {
+    "base": "a84b848ec21475942d0e9849e5b963b638e937c5",
+    "test": "host-access: e2e/specs/dnr-contract.spec.ts > matches Chrome's dynamic-rule boundary",
+    "reason": "Moved to the shipped project under the same name, running on the dnr-probe extension. These tests pin what Chrome accepts, and an empty seed gave no signal that HeaderShim had finished reconciling, so its background intermittently removed the probe rule. The probe extension has no background logic to race."
+  },
+  {
+    "base": "a84b848ec21475942d0e9849e5b963b638e937c5",
+    "test": "host-access: e2e/specs/dnr-contract.spec.ts > rejects an invalid batch atomically",
+    "reason": "Moved to the shipped project under the same name, running on the dnr-probe extension. These tests pin what Chrome accepts, and an empty seed gave no signal that HeaderShim had finished reconciling, so its background intermittently removed the probe rule. The probe extension has no background logic to race."
   }
 ]

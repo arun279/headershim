@@ -129,35 +129,92 @@ export function createMutations({ validateRegex }: MutationDeps) {
       if (prevEnabledIds.has(rule.id)) {
         continue;
       }
-      const header = validateHeader({
-        direction: rule.direction,
-        operation: rule.operation,
-        header: rule.header,
-        ...(rule.value === undefined ? {} : { value: rule.value }),
-      });
-      if (!header.ok) {
-        return header;
-      }
-      if (rule.scope.type === "pattern") {
-        if (!validateUrlFilter(rule.scope.pattern).ok) {
-          return err({ kind: "pattern-invalid" } as const);
-        }
-        continue;
-      }
-      if (rule.scope.type !== "regex") {
-        continue;
-      }
-      const supported = await validateRegex(rule.scope.regex);
-      if (!supported.ok) {
-        return err({
-          kind: "regex-invalid",
-          regex: rule.scope.regex,
-          reason: supported.error,
-        } as const);
-      }
+      const valid = await validateEnabledRule(rule);
+      if (!valid.ok) return valid;
     }
 
     return checkStateDocByteLimit(next);
+  }
+
+  async function validateEnabledRule(
+    rule: Rule,
+  ): Promise<Result<void, MutationError>> {
+    const header = validateHeader({
+      direction: rule.direction,
+      operation: rule.operation,
+      header: rule.header,
+      ...(rule.value === undefined ? {} : { value: rule.value }),
+    });
+    if (!header.ok) {
+      return header;
+    }
+    if (rule.scope.type === "pattern") {
+      if (!validateUrlFilter(rule.scope.pattern).ok) {
+        return err({ kind: "pattern-invalid" } as const);
+      }
+      return ok(undefined);
+    }
+    if (rule.scope.type !== "regex") {
+      return ok(undefined);
+    }
+    const supported = await validateRegex(rule.scope.regex);
+    if (!supported.ok) {
+      return err({
+        kind: "regex-invalid",
+        regex: rule.scope.regex,
+        reason: supported.error,
+      } as const);
+    }
+    return ok(undefined);
+  }
+
+  function deleteProfileStep(
+    doc: StateDoc,
+    profileId: string,
+  ): Step<DeletedProfile> {
+    const index = doc.profiles.findIndex((profile) => profile.id === profileId);
+    const removed = doc.profiles[index];
+    if (removed === undefined) {
+      return notFound();
+    }
+    const remaining = doc.profiles.filter(
+      (profile) => profile.id !== profileId,
+    );
+    // The product never has zero profiles: deleting the last one
+    // immediately recreates an empty Default.
+    const placeholder =
+      remaining.length > 0 ? undefined : createDefaultProfile();
+    const profiles = placeholder === undefined ? remaining : [placeholder];
+    const wasActive = doc.activeProfileId === profileId;
+    // Deleting the active profile hands activation to the profile that takes
+    // its slot (the previous one when it was last), so one is always active.
+    const heir = profiles[Math.min(index, profiles.length - 1)];
+    const activeProfileId =
+      wasActive && heir !== undefined ? heir.id : doc.activeProfileId;
+    // Deleting the active profile hands its slot to the heir, which can be the
+    // very profile the shortcut flips back to; drop the flip target then, so
+    // it never points at the row that is now active.
+    const { previousProfileId, ...rest } = doc;
+    const next: StateDoc = {
+      ...rest,
+      profiles,
+      activeProfileId,
+      ...(previousProfileId !== undefined &&
+      previousProfileId !== activeProfileId
+        ? { previousProfileId }
+        : {}),
+    };
+    return ok([
+      next,
+      {
+        profile: removed,
+        index,
+        wasActive,
+        ...(placeholder === undefined
+          ? {}
+          : { placeholderProfileId: placeholder.id }),
+      },
+    ]);
   }
 
   async function saveRuleStep(
@@ -402,53 +459,7 @@ export function createMutations({ validateRegex }: MutationDeps) {
     },
 
     deleteProfile(profileId: string): MutationResult<DeletedProfile> {
-      return commit((doc) => {
-        const index = doc.profiles.findIndex(
-          (profile) => profile.id === profileId,
-        );
-        const removed = doc.profiles[index];
-        if (removed === undefined) {
-          return notFound();
-        }
-        const remaining = doc.profiles.filter(
-          (profile) => profile.id !== profileId,
-        );
-        // The product never has zero profiles: deleting the last one
-        // immediately recreates an empty Default.
-        const placeholder =
-          remaining.length > 0 ? undefined : createDefaultProfile();
-        const profiles = placeholder === undefined ? remaining : [placeholder];
-        const wasActive = doc.activeProfileId === profileId;
-        // Deleting the active profile hands activation to the profile that takes
-        // its slot (the previous one when it was last), so one is always active.
-        const heir = profiles[Math.min(index, profiles.length - 1)];
-        const activeProfileId =
-          wasActive && heir !== undefined ? heir.id : doc.activeProfileId;
-        // Deleting the active profile hands its slot to the heir, which can be the
-        // very profile the shortcut flips back to; drop the flip target then, so
-        // it never points at the row that is now active.
-        const { previousProfileId, ...rest } = doc;
-        const next: StateDoc = {
-          ...rest,
-          profiles,
-          activeProfileId,
-          ...(previousProfileId !== undefined &&
-          previousProfileId !== activeProfileId
-            ? { previousProfileId }
-            : {}),
-        };
-        return ok([
-          next,
-          {
-            profile: removed,
-            index,
-            wasActive,
-            ...(placeholder === undefined
-              ? {}
-              : { placeholderProfileId: placeholder.id }),
-          },
-        ]);
-      });
+      return commit((doc) => deleteProfileStep(doc, profileId));
     },
 
     restoreProfile(deleted: DeletedProfile): MutationResult<void> {

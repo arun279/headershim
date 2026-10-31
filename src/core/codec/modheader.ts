@@ -229,112 +229,37 @@ async function mapProfile(
 
   const mappings: RuleMapping[] = [];
   const warnings: ModHeaderImportWarning[] = [];
-  for (const row of source.headers ?? []) {
-    const parsed = parseSourceRule(row);
-    if (parsed === undefined) {
-      return err({ kind: "invalid-export" });
+  for (const [field, direction] of [
+    ["headers", "request"],
+    ["respHeaders", "response"],
+  ] as const) {
+    for (const row of source[field] ?? []) {
+      const parsed = parseSourceRule(row);
+      if (parsed === undefined) return err({ kind: "invalid-export" });
+      routeRuleMappingResult(
+        mappings,
+        warnings,
+        mapHeaderRule(
+          parsed,
+          direction,
+          scopeResult.value.scope,
+          resourceTypes,
+          { profileIndex: plannedProfiles.length, ruleIndex: mappings.length },
+        ),
+      );
     }
-    routeRuleMappingResult(
+  }
+  if (
+    !mapSpecialRows(
+      source,
+      scopeResult.value.scope,
+      resourceTypes,
+      plannedProfiles.length,
       mappings,
       warnings,
-      mapHeaderRule(parsed, "request", scopeResult.value.scope, resourceTypes, {
-        profileIndex: plannedProfiles.length,
-        ruleIndex: mappings.length,
-      }),
-    );
-  }
-  for (const row of source.respHeaders ?? []) {
-    const parsed = parseSourceRule(row);
-    if (parsed === undefined) {
-      return err({ kind: "invalid-export" });
-    }
-    routeRuleMappingResult(
-      mappings,
-      warnings,
-      mapHeaderRule(
-        parsed,
-        "response",
-        scopeResult.value.scope,
-        resourceTypes,
-        {
-          profileIndex: plannedProfiles.length,
-          ruleIndex: mappings.length,
-        },
-      ),
-    );
-  }
-  for (const row of source.cookieHeaders ?? []) {
-    const parsed = parseNamedValue(row);
-    if (parsed?.value === undefined) {
-      return err({ kind: "invalid-export" });
-    }
-    routeRuleMappingResult(
-      mappings,
-      warnings,
-      mapSpecialRule(
-        parsed,
-        "request",
-        "append",
-        "cookie",
-        `${parsed.name}=${parsed.value}`,
-        "cookie-semantics-degraded",
-        scopeResult.value.scope,
-        resourceTypes,
-        {
-          profileIndex: plannedProfiles.length,
-          ruleIndex: mappings.length,
-        },
-      ),
-    );
-  }
-  for (const row of source.setCookieHeaders ?? []) {
-    const parsed = parseNamedValue(row);
-    if (parsed?.value === undefined) {
-      return err({ kind: "invalid-export" });
-    }
-    routeRuleMappingResult(
-      mappings,
-      warnings,
-      mapSpecialRule(
-        parsed,
-        "response",
-        "set",
-        "set-cookie",
-        `${parsed.name}=${parsed.value}`,
-        "set-cookie-semantics-degraded",
-        scopeResult.value.scope,
-        resourceTypes,
-        {
-          profileIndex: plannedProfiles.length,
-          ruleIndex: mappings.length,
-        },
-      ),
-    );
-  }
-  for (const row of source.cspHeaders ?? []) {
-    const parsed = parseNamedValue(row);
-    if (parsed?.value === undefined) {
-      return err({ kind: "invalid-export" });
-    }
-    routeRuleMappingResult(
-      mappings,
-      warnings,
-      mapSpecialRule(
-        parsed,
-        "response",
-        "set",
-        "content-security-policy",
-        `${parsed.name}${parsed.value.length === 0 ? "" : ` ${parsed.value}`}`,
-        "csp-semantics-degraded",
-        scopeResult.value.scope,
-        resourceTypes,
-        {
-          profileIndex: plannedProfiles.length,
-          ruleIndex: mappings.length,
-        },
-      ),
-    );
-  }
+    )
+  )
+    return err({ kind: "invalid-export" });
 
   // ModHeader url filters are one scope shared by every rule in the profile, so
   // one invalid pattern disables the whole profile. Itemize it once per distinct
@@ -359,6 +284,64 @@ async function mapProfile(
     },
     warnings,
   });
+}
+
+function mapSpecialRows(
+  source: ModHeaderProfile,
+  scope: Scope,
+  resourceTypes: ResourceGroup[] | "all",
+  profileIndex: number,
+  mappings: RuleMapping[],
+  warnings: ModHeaderImportWarning[],
+): boolean {
+  for (const [field, direction, operation, header, warning] of [
+    [
+      "cookieHeaders",
+      "request",
+      "append",
+      "cookie",
+      "cookie-semantics-degraded",
+    ],
+    [
+      "setCookieHeaders",
+      "response",
+      "set",
+      "set-cookie",
+      "set-cookie-semantics-degraded",
+    ],
+    [
+      "cspHeaders",
+      "response",
+      "set",
+      "content-security-policy",
+      "csp-semantics-degraded",
+    ],
+  ] as const) {
+    for (const row of source[field] ?? []) {
+      const parsed = parseNamedValue(row);
+      if (parsed?.value === undefined) return false;
+      const value =
+        field === "cspHeaders"
+          ? `${parsed.name}${parsed.value.length === 0 ? "" : ` ${parsed.value}`}`
+          : `${parsed.name}=${parsed.value}`;
+      routeRuleMappingResult(
+        mappings,
+        warnings,
+        mapSpecialRule(
+          parsed,
+          direction,
+          operation,
+          header,
+          value,
+          warning,
+          scope,
+          resourceTypes,
+          { profileIndex, ruleIndex: mappings.length },
+        ),
+      );
+    }
+  }
+  return true;
 }
 
 function mapHeaderRule(

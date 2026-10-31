@@ -1,5 +1,5 @@
 import { planBadge } from "../src/core/badge";
-import { emitRules } from "../src/core/compile";
+import { type DnrRule, emitRules } from "../src/core/compile";
 import {
   activatePreviousProfile,
   type StateDoc,
@@ -115,54 +115,54 @@ export default defineBackground(() => {
         granted,
         isRegexSupported,
       });
-      const [actualDynamic, actualSession] = await readRuleBands();
-      const desiredRevision = await revisionOf(batch.dynamic, batch.session);
-      if (actualDynamic === undefined || actualSession === undefined) {
-        await publishRevision(
-          actualDynamic === undefined ||
-            planReconcile(batch.dynamic, actualDynamic) !== null,
-          actualSession === undefined ||
-            planReconcile(batch.session, actualSession) !== null,
-          desiredRevision,
-        );
-        return false;
-      }
-      const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
-      const sessionPlan = planReconcile(batch.session, actualSession);
-      if (dynamicPlan === null && sessionPlan === null) {
-        const applied = await getAppliedRevision();
-        if (
-          applied?.dynamic !== desiredRevision.dynamic ||
-          applied?.session !== desiredRevision.session
-        ) {
-          await setAppliedRevision(desiredRevision);
-        }
-        return true;
-      }
-      await publishRevision(
-        dynamicPlan !== null,
-        sessionPlan !== null,
-        desiredRevision,
-      );
-      if (dynamicPlan !== null) {
-        await updateDynamicRules(dynamicPlan).catch(noop);
-      }
-      if (sessionPlan !== null) {
-        await updateSessionRules(sessionPlan).catch(noop);
-      }
-      const [installedDynamic, installedSession] = await readRuleBands();
-      const dynamicMismatch =
-        installedDynamic === undefined ||
-        planReconcile(batch.dynamic, installedDynamic) !== null;
-      const sessionMismatch =
-        installedSession === undefined ||
-        planReconcile(batch.session, installedSession) !== null;
-      await publishRevision(dynamicMismatch, sessionMismatch, desiredRevision);
-      return !dynamicMismatch && !sessionMismatch;
+      return await reconcileBands(batch);
     } catch {
       await setAppliedRevision({}).catch(noop);
       return false;
     }
+  }
+
+  async function reconcileBands(
+    batch: ReturnType<typeof emitRules>,
+  ): Promise<boolean> {
+    const [actualDynamic, actualSession] = await readRuleBands();
+    const desiredRevision = await revisionOf(batch.dynamic, batch.session);
+    if (actualDynamic === undefined || actualSession === undefined) {
+      await publishRevision(
+        bandMismatch(batch.dynamic, actualDynamic),
+        bandMismatch(batch.session, actualSession),
+        desiredRevision,
+      );
+      return false;
+    }
+    const dynamicPlan = planReconcile(batch.dynamic, actualDynamic);
+    const sessionPlan = planReconcile(batch.session, actualSession);
+    if (dynamicPlan === null && sessionPlan === null) {
+      const applied = await getAppliedRevision();
+      if (
+        applied?.dynamic !== desiredRevision.dynamic ||
+        applied?.session !== desiredRevision.session
+      ) {
+        await setAppliedRevision(desiredRevision);
+      }
+      return true;
+    }
+    await publishRevision(
+      dynamicPlan !== null,
+      sessionPlan !== null,
+      desiredRevision,
+    );
+    if (dynamicPlan !== null) {
+      await updateDynamicRules(dynamicPlan).catch(noop);
+    }
+    if (sessionPlan !== null) {
+      await updateSessionRules(sessionPlan).catch(noop);
+    }
+    const [installedDynamic, installedSession] = await readRuleBands();
+    const dynamicMismatch = bandMismatch(batch.dynamic, installedDynamic);
+    const sessionMismatch = bandMismatch(batch.session, installedSession);
+    await publishRevision(dynamicMismatch, sessionMismatch, desiredRevision);
+    return !dynamicMismatch && !sessionMismatch;
   }
 
   async function readRuleBands(): Promise<
@@ -305,3 +305,10 @@ export default defineBackground(() => {
 });
 
 function noop(): void {}
+
+function bandMismatch(
+  desired: DnrRule[],
+  actual: DnrRule[] | undefined,
+): boolean {
+  return actual === undefined || planReconcile(desired, actual) !== null;
+}

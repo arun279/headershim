@@ -41,13 +41,8 @@ function testCallRanges(file, source) {
   );
   const ranges = [];
   let previousKind;
-  // 0: idle: looking for a leading `test` identifier.
-  // 1: saw `test`: an immediate `(` confirms the call, a `.` opens `test.foo(`.
-  // 2: saw `test.`: expects the member identifier.
-  // 3: saw `test.foo`: an immediate `(` confirms the call.
-  let state = 0;
+  let state = IDLE;
   let callStart = -1;
-  let depth = 0;
   // One counter per open template substitution (`${`): scan() does not know
   // template nesting on its own, so a `}` that closes a substitution reads
   // as an ordinary brace unless reScanTemplateToken tells the scanner to
@@ -60,57 +55,83 @@ function testCallRanges(file, source) {
     kind !== SyntaxKind.EndOfFile;
     kind = scanner.scan()
   ) {
-    if (kind === SyntaxKind.TemplateHead) {
-      templateDepths.push(0);
-    } else if (
-      templateDepths.length > 0 &&
-      kind === SyntaxKind.OpenBraceToken
-    ) {
-      templateDepths[templateDepths.length - 1] += 1;
-    } else if (
-      templateDepths.length > 0 &&
-      kind === SyntaxKind.CloseBraceToken
-    ) {
-      if (templateDepths[templateDepths.length - 1] > 0) {
-        templateDepths[templateDepths.length - 1] -= 1;
-      } else {
-        kind = scanner.reScanTemplateToken(false);
-        if (kind === SyntaxKind.TemplateTail) templateDepths.pop();
-      }
-    }
-    if (depth > 0) {
-      if (kind === SyntaxKind.OpenParenToken) depth += 1;
-      else if (kind === SyntaxKind.CloseParenToken) {
-        depth -= 1;
-        if (depth === 0) ranges.push([callStart, scanner.getTokenEnd()]);
+    kind = scanTemplateToken(scanner, templateDepths, kind);
+    if (state !== IDLE) {
+      state = testCallState(state, kind);
+      if (state === IN_CALL) {
+        const end = scanCallEnd(scanner, templateDepths);
+        if (end !== undefined) ranges.push([callStart, end]);
+        state = IDLE;
+        previousKind = SyntaxKind.CloseParenToken;
+        continue;
       }
       previousKind = kind;
       continue;
     }
     if (
-      state === 0 &&
       kind === SyntaxKind.Identifier &&
       scanner.getTokenText() === "test" &&
       previousKind !== SyntaxKind.DotToken
     ) {
-      state = 1;
+      state = AFTER_TEST;
       callStart = scanner.getTokenStart();
-    } else if (state === 1 && kind === SyntaxKind.OpenParenToken) {
-      depth = 1;
-      state = 0;
-    } else if (state === 1 && kind === SyntaxKind.DotToken) {
-      state = 2;
-    } else if (state === 2 && kind === SyntaxKind.Identifier) {
-      state = 3;
-    } else if (state === 3 && kind === SyntaxKind.OpenParenToken) {
-      depth = 1;
-      state = 0;
-    } else {
-      state = 0;
     }
     previousKind = kind;
   }
   return ranges;
+}
+
+function scanCallEnd(scanner, templateDepths) {
+  let depth = 1;
+  for (
+    let kind = scanner.scan();
+    kind !== SyntaxKind.EndOfFile;
+    kind = scanner.scan()
+  ) {
+    kind = scanTemplateToken(scanner, templateDepths, kind);
+    if (kind === SyntaxKind.OpenParenToken) depth += 1;
+    else if (kind === SyntaxKind.CloseParenToken) {
+      depth -= 1;
+      if (depth === 0) return scanner.getTokenEnd();
+    }
+  }
+  return undefined;
+}
+
+const IDLE = "idle";
+const AFTER_TEST = "after test";
+const AFTER_DOT = "after test.";
+const AFTER_MEMBER = "after test.member";
+const IN_CALL = "in call";
+
+function testCallState(state, kind) {
+  switch (state) {
+    case AFTER_TEST:
+      if (kind === SyntaxKind.OpenParenToken) return IN_CALL;
+      return kind === SyntaxKind.DotToken ? AFTER_DOT : IDLE;
+    case AFTER_DOT:
+      return kind === SyntaxKind.Identifier ? AFTER_MEMBER : IDLE;
+    case AFTER_MEMBER:
+      return kind === SyntaxKind.OpenParenToken ? IN_CALL : IDLE;
+    default:
+      return IDLE;
+  }
+}
+
+function scanTemplateToken(scanner, templateDepths, kind) {
+  if (kind === SyntaxKind.TemplateHead) {
+    templateDepths.push(0);
+  } else if (templateDepths.length > 0 && kind === SyntaxKind.OpenBraceToken) {
+    templateDepths[templateDepths.length - 1] += 1;
+  } else if (templateDepths.length > 0 && kind === SyntaxKind.CloseBraceToken) {
+    if (templateDepths[templateDepths.length - 1] > 0) {
+      templateDepths[templateDepths.length - 1] -= 1;
+    } else {
+      kind = scanner.reScanTemplateToken(false);
+      if (kind === SyntaxKind.TemplateTail) templateDepths.pop();
+    }
+  }
+  return kind;
 }
 
 const SEEDER = "seedStateAndWait(";

@@ -111,6 +111,15 @@ export function collectLayoutOffenders(tolerance: number): SweepResult {
     const style = getComputedStyle(el);
     const rect = el.getBoundingClientRect();
 
+    collectEscapes(el, style, rect);
+    collectClips(el, style, rect);
+  }
+
+  function collectEscapes(
+    el: Element,
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+  ): void {
     // Escape: the border box leaves the fixed surface. A declared horizontal
     // scroll port, and anything inside one, is exempt.
     if (!isScroll(style.overflowX) && !insideHorizontalScroller(el)) {
@@ -134,22 +143,9 @@ export function collectLayoutOffenders(tolerance: number): SweepResult {
         });
       }
     }
+  }
 
-    // Clip: content clipped by the author with no sanctioned recovery. Three
-    // recoveries count: a W3C ellipsis; the truncation contract (overflow
-    // clipped, nowrap, and the full value carried in title); a text-free,
-    // aria-hidden SVG; or an explicit decorative opt-in. aria-hidden alone is
-    // not recovery: visible copy can be hidden from assistive technology when a
-    // sibling carries its accessible name. Keyed on the computed contract, not
-    // a class name, so any design that truncates the standard way passes and only
-    // an unrecoverable clip fails. Decorative exemptions are clips only:
-    // decoration that escapes the surface is still a real defect, and the escape
-    // check above still fails it.
-    //
-    // A degenerate box (a 1px dimension) is visually-hidden accessible text (the
-    // sr-only pattern, deliberately clipped to hide it from sight while keeping
-    // it for assistive tech) or a hairline: never a real content box, so its
-    // clip is intended and this check skips it.
+  function recoverableClip(el: Element, style: CSSStyleDeclaration): boolean {
     const title = (el.getAttribute("title") ?? "").trim();
     const ellipsis = style.textOverflow.includes("ellipsis");
     const nowrap = style.whiteSpace === "nowrap" || style.whiteSpace === "pre";
@@ -157,23 +153,39 @@ export function collectLayoutOffenders(tolerance: number): SweepResult {
       el instanceof SVGElement &&
       el.getAttribute("aria-hidden") === "true" &&
       (el.textContent ?? "").trim() === "";
-    const visuallyHidden =
-      style.position === "absolute" &&
-      (style.clip !== "auto" || style.clipPath !== "none");
-    const recoverable =
+    return (
       ellipsis ||
       (nowrap && title !== "") ||
       decorativeSvg ||
-      el.closest("[data-decorative]") !== null;
+      el.closest("[data-decorative]") !== null
+    );
+  }
 
-    if (
+  function collapsedContent(
+    el: Element,
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+  ): boolean {
+    const visuallyHidden =
+      style.position === "absolute" &&
+      (style.clip !== "auto" || style.clipPath !== "none");
+    return (
       rect.width <= 1 &&
       rect.height > 1 &&
       el.scrollWidth > 1 &&
       (el.textContent ?? "").trim() !== "" &&
       el.getAttribute("aria-hidden") !== "true" &&
       !visuallyHidden
-    ) {
+    );
+  }
+
+  function collectClips(
+    el: Element,
+    style: CSSStyleDeclaration,
+    rect: DOMRect,
+  ): void {
+    const recoverable = recoverableClip(el, style);
+    if (collapsedContent(el, style, rect)) {
       pushClip(
         el,
         "inline",

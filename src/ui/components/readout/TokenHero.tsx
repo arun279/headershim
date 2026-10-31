@@ -46,25 +46,7 @@ export function TokenHero({ change, now, onSwap, onGrant }: TokenHeroProps) {
               maxChars={TRUNCATION_LIMITS.header}
             />
           </div>
-          {!swapping && (
-            <div class="tk-val mono" aria-hidden="true">
-              {masked.scheme !== undefined && (
-                <span class="pre">{masked.scheme}</span>
-              )}
-              <span class="dots" data-decorative>
-                ••••••••
-              </span>
-              {masked.hasTail && <span class="last">{masked.last4}</span>}
-            </div>
-          )}
-          {!swapping && (
-            <span class="sr-only">
-              {copy.token.maskedValue(
-                masked.scheme,
-                masked.hasTail ? masked.last4 : undefined,
-              )}
-            </span>
-          )}
+          {!swapping && <MaskedValue masked={masked} />}
           {!swapping && change.paused && (
             <p class="tk-held">{copy.token.held}</p>
           )}
@@ -103,39 +85,70 @@ export function TokenHero({ change, now, onSwap, onGrant }: TokenHeroProps) {
                 : copy.readout.widerReach.sites(change.widerReach)}
             </p>
           )}
-          <div class="fresh">
-            {fresh.kind === "countdown" ? (
-              <>
-                {/* An empty track is a bar that reports no share of a life left.
-                  When none is left the words beside it already say "expired". */}
-                {fresh.fraction !== undefined && fresh.fraction > 0 && (
-                  <div class="fresh-track" aria-hidden="true">
-                    <div
-                      class={`fresh-fill${fresh.warn ? " warn" : ""}`}
-                      style={{ width: `${Math.round(fresh.fraction * 100)}%` }}
-                    />
-                  </div>
-                )}
-                <div class="fresh-lab">
-                  <span class="tag mono">{copy.token.jwtTag}</span>
-                  <span class={`lead${fresh.warn ? " warn" : ""}`}>
-                    {copy.token.expiresIn(fresh.remainingMs)}
-                  </span>
-                  {fresh.warn && !fresh.expired && (
-                    <span class="rt">{copy.token.warnNote}</span>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div class="age">
-                <ClockGlyph />
-                <span class="lead">{copy.token.opaque}</span>
-              </div>
-            )}
-          </div>
+          <TokenFreshness fresh={fresh} />
         </>
       )}
     </section>
+  );
+}
+
+function MaskedValue({ masked }: { masked: ReturnType<typeof maskToken> }) {
+  return (
+    <>
+      <div class="tk-val mono" aria-hidden="true">
+        {masked.scheme !== undefined && (
+          <span class="pre">{masked.scheme}</span>
+        )}
+        <span class="dots" data-decorative>
+          ••••••••
+        </span>
+        {masked.hasTail && <span class="last">{masked.last4}</span>}
+      </div>
+      <span class="sr-only">
+        {copy.token.maskedValue(
+          masked.scheme,
+          masked.hasTail ? masked.last4 : undefined,
+        )}
+      </span>
+    </>
+  );
+}
+
+function TokenFreshness({
+  fresh,
+}: {
+  fresh: ReturnType<typeof tokenFreshness>;
+}) {
+  return (
+    <div class="fresh">
+      {fresh.kind === "countdown" ? (
+        <>
+          {/* An empty track adds nothing to the expiry text. */}
+          {fresh.fraction !== undefined && fresh.fraction > 0 && (
+            <div class="fresh-track" aria-hidden="true">
+              <div
+                class={`fresh-fill${fresh.warn ? " warn" : ""}`}
+                style={{ width: `${Math.round(fresh.fraction * 100)}%` }}
+              />
+            </div>
+          )}
+          <div class="fresh-lab">
+            <span class="tag mono">{copy.token.jwtTag}</span>
+            <span class={`lead${fresh.warn ? " warn" : ""}`}>
+              {copy.token.expiresIn(fresh.remainingMs)}
+            </span>
+            {fresh.warn && !fresh.expired && (
+              <span class="rt">{copy.token.warnNote}</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div class="age">
+          <ClockGlyph />
+          <span class="lead">{copy.token.opaque}</span>
+        </div>
+      )}
+    </div>
   );
 }
 

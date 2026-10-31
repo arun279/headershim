@@ -36,14 +36,6 @@ export function ReadoutHead({
   onNewProfile,
   onRenameProfile,
 }: ReadoutHeadProps) {
-  const attention =
-    readout.needsAccess > 0 ||
-    readout.refused > 0 ||
-    readout.transport > 0 ||
-    readout.security > 0;
-  const doubt = readout.unconfirmed > 0;
-  // Pause is the state the count is most worth having, so the line stays and
-  // says what it is counting instead of disappearing.
   const showGlance = readout.host !== undefined && hasRows;
 
   return (
@@ -94,74 +86,64 @@ export function ReadoutHead({
         </p>
       )}
 
-      {showGlance && (
-        <div class="glance-wrap">
-          <div class="glance">
-            {(readout.total > 0 || readout.held > 0 || attention || doubt) && (
-              <span
-                class={`lamp ${
-                  paused
-                    ? "held"
-                    : attention
-                      ? "warn"
-                      : doubt
-                        ? "doubt"
-                        : "live"
-                }`}
-                aria-hidden="true"
-              />
-            )}
-            <p class="status">
-              {sentence(
-                copy.readout.status(
-                  paused ? readout.held : readout.total,
-                  readout.listed,
-                  paused,
-                ),
-              )}
-            </p>
-          </div>
-          {(readout.needsAccess > 0 ||
-            readout.refused > 0 ||
-            readout.transport > 0 ||
-            readout.security > 0 ||
-            readout.unconfirmed > 0 ||
-            readout.overridden > 0) && (
-            <p class="substatus">
-              {readout.needsAccess > 0 && (
-                <span class="seg amber">
-                  {copy.readout.needsAccess(readout.needsAccess)}
-                </span>
-              )}
-              {readout.refused > 0 && (
-                <span class="seg stop">
-                  {copy.readout.refused(readout.refused)}
-                </span>
-              )}
-              {readout.transport > 0 && (
-                <span class="seg amber">
-                  {copy.readout.transport(readout.transport)}
-                </span>
-              )}
-              {readout.security > 0 && (
-                <span class="seg amber">
-                  {copy.readout.security(readout.security)}
-                </span>
-              )}
-              {readout.unconfirmed > 0 && (
-                <span class="seg rest">
-                  {copy.readout.unconfirmed(readout.unconfirmed)}
-                </span>
-              )}
-              {readout.overridden > 0 && (
-                <span class="seg rest">
-                  {copy.readout.overridden(readout.overridden)}
-                </span>
-              )}
-            </p>
-          )}
-        </div>
-      )}
+      {showGlance && <ReadoutGlance readout={readout} paused={paused} />}
     </header>
+  );
+}
+
+function ReadoutGlance({
+  readout,
+  paused,
+}: {
+  readout: TabReadout;
+  paused: boolean;
+}) {
+  const attention =
+    readout.needsAccess > 0 ||
+    readout.refused > 0 ||
+    readout.transport > 0 ||
+    readout.security > 0;
+  const doubt = readout.unconfirmed > 0;
+  const segments = (
+    [
+      ["needsAccess", "amber"],
+      ["refused", "stop"],
+      ["transport", "amber"],
+      ["security", "amber"],
+      ["unconfirmed", "rest"],
+      ["overridden", "rest"],
+    ] as const
+  ).filter(([key]) => readout[key] > 0);
+  return (
+    <div class="glance-wrap">
+      <div class="glance">
+        {(readout.total > 0 || readout.held > 0 || attention || doubt) && (
+          <span
+            class={`lamp ${
+              paused ? "held" : attention ? "warn" : doubt ? "doubt" : "live"
+            }`}
+            aria-hidden="true"
+          />
+        )}
+        <p class="status">
+          {sentence(
+            copy.readout.status(
+              paused ? readout.held : readout.total,
+              readout.listed,
+              paused,
+            ),
+          )}
+        </p>
+      </div>
+      {segments.length > 0 && (
+        <p class="substatus">
+          {segments.map(([key, tone]) => (
+            <span key={key} class={`seg ${tone}`}>
+              {copy.readout[key](readout[key])}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
   );
 }

@@ -66,6 +66,51 @@ export function ChangeLine({
       ? copy.readout.overrideToggle(change.header, change.enabled)
       : copy.rules.switchLabel(change.header, change.enabled);
 
+  function renderValue() {
+    return (
+      change.display !== undefined && (
+        <>
+          {" "}
+          <span class="to" aria-hidden="true">
+            {copy.readout.to}
+          </span>{" "}
+          {editing && canEdit ? (
+            <ValueEdit
+              header={change.header}
+              secret={change.secret}
+              initial={change.value ?? ""}
+              onCommit={async (value) => {
+                if (await onEditValue(value)) setEditing(false);
+              }}
+              onCancel={() => setEditing(false)}
+            />
+          ) : canEdit ? (
+            <button
+              type="button"
+              class="v-edit"
+              onClick={() => setEditing(true)}
+            >
+              <span class="sr-only">
+                {copy.readout.editValue(change.header)}:{" "}
+              </span>
+              <HeaderValue
+                value={change.display}
+                secret={change.secret}
+                class="v"
+              />
+            </button>
+          ) : (
+            <HeaderValue
+              value={change.display}
+              secret={change.secret}
+              class="v"
+            />
+          )}
+        </>
+      )
+    );
+  }
+
   return (
     <div
       class={`change-line ${tone}${toggleTone === "paused" ? " paused" : ""}`}
@@ -79,46 +124,7 @@ export function ChangeLine({
         <p class="say">
           <span class="verb">{lineVerb}</span>{" "}
           <Truncate mode="end" value={change.header} class="k" />
-          {change.display !== undefined && (
-            <>
-              {" "}
-              <span class="to" aria-hidden="true">
-                {copy.readout.to}
-              </span>{" "}
-              {editing && canEdit ? (
-                <ValueEdit
-                  header={change.header}
-                  secret={change.secret}
-                  initial={change.value ?? ""}
-                  onCommit={async (value) => {
-                    if (await onEditValue(value)) setEditing(false);
-                  }}
-                  onCancel={() => setEditing(false)}
-                />
-              ) : canEdit ? (
-                <button
-                  type="button"
-                  class="v-edit"
-                  onClick={() => setEditing(true)}
-                >
-                  <span class="sr-only">
-                    {copy.readout.editValue(change.header)}:{" "}
-                  </span>
-                  <HeaderValue
-                    value={change.display}
-                    secret={change.secret}
-                    class="v"
-                  />
-                </button>
-              ) : (
-                <HeaderValue
-                  value={change.display}
-                  secret={change.secret}
-                  class="v"
-                />
-              )}
-            </>
-          )}
+          {renderValue()}
         </p>
         {editing && <p class="edit-hint">{copy.rules.editValueHint}</p>}
         {reason !== undefined && (

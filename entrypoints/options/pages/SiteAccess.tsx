@@ -33,6 +33,7 @@ import { siteAccessCopy } from "../../../src/ui/copy.options";
 import {
   coverageAfterRevoke,
   grantForHost,
+  hasSiteRows,
   type PermissionOutcome,
   type SiteAccessEntry,
   siteAccessView,
@@ -65,10 +66,7 @@ export function SiteAccessPage({
   const [pending, setPending] = useState(false);
   const overrides = useSessionOverrides();
   const view = siteAccessView(doc, grants, overrides);
-  const hasSiteRows =
-    view.needed.length > 0 ||
-    view.partial.length > 0 ||
-    view.granted.length > 0;
+  const hasRows = hasSiteRows(view);
   // A sensitive rule cautions only when its honest requirement is broad access:
   // requiredOrigins yields the all-sites origin for all-scope or hostless
   // pattern/regex rules, the only ones widened beyond one-at-a-time host grants.
@@ -188,7 +186,7 @@ export function SiteAccessPage({
         </div>
       )}
 
-      {hasSiteRows && (
+      {hasRows && (
         <div class="sa-card">
           {view.needed.length > 0 && (
             <SiteGroup
@@ -249,7 +247,7 @@ export function SiteAccessPage({
         </div>
       )}
 
-      {!grants.allSites && !hasSiteRows && (
+      {!grants.allSites && !hasRows && (
         <div class="sa-card">
           <p class="sa-empty">{text.empty}</p>
         </div>

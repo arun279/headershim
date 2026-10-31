@@ -53,30 +53,18 @@ export interface SiteAccessView {
  * Needed entries never include the broad origin — the all-sites card is its
  * only grant affordance, so broad access stays behind its honest framing.
  */
+export function hasSiteRows(view: SiteAccessView): boolean {
+  return (
+    view.needed.length > 0 || view.partial.length > 0 || view.granted.length > 0
+  );
+}
+
 export function siteAccessView(
   doc: StateDoc,
   granted: GrantSnapshot,
   overrides: readonly TabOverride[] = [],
 ): SiteAccessView {
-  const needed = new Map<string, UsageCount>();
-  for (const rule of activeProfile(doc).rules) {
-    if (!rule.enabled) continue;
-    for (const origin of missingGrants(rule, granted)) {
-      if (!isAllSitesOrigin(origin)) {
-        incrementUsage(needed, origin, "ruleCount");
-      }
-    }
-  }
-  for (const override of overrides) {
-    if (!override.enabled || originCovered(override.origin, granted)) {
-      continue;
-    }
-    incrementUsage(
-      needed,
-      originPatternForDomain(originHost(override.origin)),
-      "thisTabCount",
-    );
-  }
+  const needed = missingUsage(doc, granted, overrides);
 
   const grantedByDomain = new Map<string, string[]>();
   for (const origin of granted.origins) {
@@ -163,6 +151,34 @@ export function siteAccessView(
           subresourceScopedRule(rule),
       ),
   };
+}
+
+function missingUsage(
+  doc: StateDoc,
+  granted: GrantSnapshot,
+  overrides: readonly TabOverride[],
+): Map<string, UsageCount> {
+  const needed = new Map<string, UsageCount>();
+  for (const rule of activeProfile(doc).rules) {
+    if (!rule.enabled) continue;
+    for (const origin of missingGrants(rule, granted)) {
+      if (!isAllSitesOrigin(origin)) {
+        incrementUsage(needed, origin, "ruleCount");
+      }
+    }
+  }
+  for (const override of overrides) {
+    if (!override.enabled || originCovered(override.origin, granted)) {
+      continue;
+    }
+    incrementUsage(
+      needed,
+      originPatternForDomain(originHost(override.origin)),
+      "thisTabCount",
+    );
+  }
+
+  return needed;
 }
 
 /**

@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "DNR contract probe",
+  "version": "1.0",
+  "permissions": ["declarativeNetRequestWithHostAccess"],
+  "background": { "service_worker": "worker.js" }
+}

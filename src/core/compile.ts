@@ -181,22 +181,22 @@ function narrowToGranted(
   for (const narrowing of survivors) {
     if (!narrowing.fullyGranted) {
       narrowed.push({
-        rule: {
-          ...rule,
-          scope:
-            narrowing.urlFilter === undefined
-              ? { type: "domains", domains: [narrowing.host] }
-              : {
-                  type: "pattern",
-                  pattern: narrowing.urlFilter,
-                  hosts: [narrowing.host],
-                },
-        },
+        rule: { ...rule, scope: scopeForNarrowing(narrowing) },
         targetSecured: true,
       });
     }
   }
   return narrowed;
+}
+
+function scopeForNarrowing(narrowing: GrantNarrowing): Rule["scope"] {
+  return narrowing.urlFilter === undefined
+    ? { type: "domains", domains: [narrowing.host] }
+    : {
+        type: "pattern",
+        pattern: narrowing.urlFilter,
+        hosts: [narrowing.host],
+      };
 }
 
 function initiatorsGranted(rule: Rule, granted: GrantSnapshot): boolean {
@@ -261,19 +261,25 @@ export function uncompilableReason(
   ) {
     return "domains";
   }
-  switch (rule.scope.type) {
+  return scopeRefusal(rule.scope, isRegexSupported);
+}
+
+function scopeRefusal(
+  scope: Rule["scope"],
+  isRegexSupported: (regex: string) => boolean,
+): UncompilableReason | undefined {
+  switch (scope.type) {
     case "pattern":
-      return validateUrlFilter(rule.scope.pattern).ok ? undefined : "pattern";
+      return validateUrlFilter(scope.pattern).ok ? undefined : "pattern";
     case "regex":
-      return isRegexFilterSupported(rule.scope.regex) &&
-        isRegexSupported(rule.scope.regex)
+      return isRegexFilterSupported(scope.regex) &&
+        isRegexSupported(scope.regex)
         ? undefined
         : "regex";
     case "domains":
       // Chrome refuses an empty requestDomains list outright, and any entry
       // with a non-ASCII character in it.
-      return rule.scope.domains.length > 0 &&
-        rule.scope.domains.every(isDomainSupported)
+      return scope.domains.length > 0 && scope.domains.every(isDomainSupported)
         ? undefined
         : "domains";
     case "all":

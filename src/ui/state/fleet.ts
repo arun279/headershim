@@ -88,29 +88,12 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
   const domains = new Map<string, FleetRule[]>();
   const crossSite: FleetRule[] = [];
   for (const rule of fleet) {
-    if (rule.scope.type === "domains") {
-      const installed = outcomeScope(rule.outcome);
-      const installedDomains = new Set<string>();
-      if (installed?.kind === "sites") {
-        for (const domain of installed.domains) {
-          installedDomains.add(domain);
-          push(domains, domain, rule);
-        }
-      }
-      if (rule.outcome.kind === "absent" || rule.outcome.kind === "partial") {
-        for (const domain of rule.scope.domains) {
-          if (!installedDomains.has(domain)) push(domains, domain, rule);
-        }
-      }
-    } else {
-      const installed = outcomeScope(rule.outcome);
-      if (installed?.kind === "sites") {
-        for (const domain of installed.domains) push(domains, domain, rule);
-      } else {
-        crossSite.push(rule);
-      }
-    }
+    const hosts = siteHosts(rule);
+    for (const host of hosts) push(domains, host, rule);
+    if (rule.scope.type !== "domains" && hosts.length === 0)
+      crossSite.push(rule);
   }
+
   const groups: SiteGroup[] = [...domains.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([host, rules]) => ({ kind: "domain" as const, host, rules }));
@@ -118,6 +101,22 @@ export function groupBySite(fleet: readonly FleetRule[]): SiteGroup[] {
     groups.push({ kind: "cross-site", host: "*", rules: crossSite });
   }
   return groups;
+}
+
+function siteHosts(rule: FleetRule): readonly string[] {
+  const installed = outcomeScope(rule.outcome);
+  const domains = installed?.kind === "sites" ? installed.domains : [];
+  if (
+    rule.scope.type !== "domains" ||
+    (rule.outcome.kind !== "absent" && rule.outcome.kind !== "partial")
+  ) {
+    return domains;
+  }
+  const installedDomains = new Set(domains);
+  return [
+    ...domains,
+    ...rule.scope.domains.filter((domain) => !installedDomains.has(domain)),
+  ];
 }
 
 export interface HeaderGroup {
@@ -227,19 +226,14 @@ function outcomeAtSite(
     group.kind !== "domain" ||
     (rule.outcome.kind !== "partial" && rule.outcome.kind !== "pending") ||
     rule.outcome.scope?.kind !== "sites" ||
-    rule.outcome.scope.origins?.some(
-      (origin) => new URL(origin).hostname === group.host,
-    ) === true ||
+    scopeHasOrigin(rule.outcome.scope, group.host) ||
     rule.outcome.scope.domains.some(
       (domain) => group.host === domain || group.host.endsWith(`.${domain}`),
     )
   ) {
     if (
       rule.outcome.kind === "partial" &&
-      rule.outcome.scope.kind === "sites" &&
-      rule.outcome.scope.origins?.some(
-        (origin) => new URL(origin).hostname === group.host,
-      ) === true
+      scopeHasOrigin(rule.outcome.scope, group.host)
     ) {
       return rule.outcome;
     }
@@ -254,6 +248,13 @@ function outcomeAtSite(
       missing: [originPatternForDomain(group.host)],
     },
   };
+}
+
+function scopeHasOrigin(scope: InstalledScope, host: string): boolean {
+  return (
+    scope.kind === "sites" &&
+    scope.origins?.some((origin) => new URL(origin).hostname === host) === true
+  );
 }
 
 function push<T>(map: Map<string, T[]>, key: string, value: T): void {

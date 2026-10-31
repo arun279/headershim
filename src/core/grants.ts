@@ -115,27 +115,34 @@ export function grantNarrowings(
   for (const origin of granted.origins) {
     const pattern = parseOriginPattern(origin);
     if (
-      pattern !== undefined &&
-      originPatternCoverage(origin, required) === "partial"
+      pattern === undefined ||
+      originPatternCoverage(origin, required) !== "partial"
     ) {
-      const host = hostUnder(pattern.host, domain) ? pattern.host : domain;
-      if (
-        pattern.scheme === "*" &&
-        pattern.includesSubdomains &&
-        pattern.port === undefined
-      ) {
-        narrowings.push({ host });
-        continue;
-      }
-      for (const scheme of pattern.scheme === "*"
-        ? ["http", "https"]
-        : [pattern.scheme]) {
-        const urlFilter = `|${scheme}://${host}${pattern.port === undefined ? "^" : `:${pattern.port}/`}`;
-        narrowings.push({ host, urlFilter });
-      }
+      continue;
     }
+    narrowings.push(...narrowPatternToDomain(pattern, domain));
   }
   return dropCoveredNarrowings(narrowings);
+}
+
+function narrowPatternToDomain(
+  pattern: OriginPattern,
+  domain: string,
+): GrantNarrowing[] {
+  const host = hostUnder(pattern.host, domain) ? pattern.host : domain;
+  if (
+    pattern.scheme === "*" &&
+    pattern.includesSubdomains &&
+    pattern.port === undefined
+  ) {
+    return [{ host }];
+  }
+  return (pattern.scheme === "*" ? ["http", "https"] : [pattern.scheme]).map(
+    (scheme) => ({
+      host,
+      urlFilter: `|${scheme}://${host}${pattern.port === undefined ? "^" : `:${pattern.port}/`}`,
+    }),
+  );
 }
 
 export function dropCoveredNarrowings<T extends GrantNarrowing>(

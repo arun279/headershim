@@ -89,6 +89,45 @@ test("a popup-created profile becomes active without reloading", async ({
   expect(doc.profiles.every((profile) => !("enabled" in profile))).toBe(true);
 });
 
+test("an open profile menu makes room for itself whatever the profile count", async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  const seed = createV1Seed();
+  const [first] = seed.profiles;
+  if (first === undefined) {
+    throw new Error("seed has no profile");
+  }
+  await seedState(serviceWorker, {
+    ...seed,
+    profiles: Array.from({ length: 14 }, (_, index) => ({
+      ...first,
+      id: index === 0 ? first.id : `profile-${index}`,
+      name: `Profile ${index + 1}`,
+    })),
+  });
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 398, height: 286 });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page
+    .getByRole("button", { name: copy.readout.switcher.chipLabel })
+    .click();
+
+  const { documentHeight, menuBottom } = await page
+    .locator(".pop")
+    .evaluate((menu) => ({
+      documentHeight: document.documentElement.scrollHeight,
+      menuBottom: menu.getBoundingClientRect().bottom,
+    }));
+  expect(documentHeight).toBeGreaterThanOrEqual(Math.floor(menuBottom));
+
+  await page.getByRole("button", { name: "Profile 14" }).click({ trial: true });
+  await page
+    .getByRole("button", { name: copy.readout.switcher.newProfile })
+    .click({ trial: true });
+});
+
 // The gear is labelled Options, so it opens the options page where the browser
 // opens it: no section is named for the reader, and the page lands on its own
 // default, the rule list. About keeps its own entry in the page's nav.

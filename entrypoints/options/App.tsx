@@ -106,43 +106,67 @@ export function App() {
         </div>
         <main class="wb-main">
           {app.phase === "ready" && app.doc.settings.paused && <PauseBanner />}
-          {app.phase === "initializing" ? (
-            <div aria-busy="true" />
-          ) : app.phase === "newer-store" || app.phase === "unavailable" ? (
-            <div class="wb-page">
-              <EmptyState
-                message={
-                  app.phase === "newer-store"
-                    ? copy.errors.newerStore(app.foundVersion, CURRENT)
-                    : copy.errors.unavailable
-                }
-              />
-            </div>
-          ) : section === "rules" ? (
-            <RulesPage
-              doc={app.doc}
-              projection={app.live}
-              grants={app.grants}
-              mutations={mutations}
-            />
-          ) : deferredFailed ? (
-            <div class="wb-page">
-              <EmptyState message={copy.errors.pageLoad} />
-            </div>
-          ) : DeferredPage === undefined ? (
-            <div aria-busy="true" />
-          ) : (
-            <DeferredPage
-              section={section}
-              doc={app.doc}
-              projection={app.live}
-              grants={app.grants}
-              mutations={mutations}
-            />
-          )}
+          <PageContent
+            app={app}
+            section={section}
+            DeferredPage={DeferredPage}
+            deferredFailed={deferredFailed}
+          />
         </main>
       </div>
     </LiveRegionProvider>
+  );
+}
+
+function PageContent({
+  app,
+  section,
+  DeferredPage,
+  deferredFailed,
+}: {
+  app: ReturnType<typeof useAppState>;
+  section: SectionId;
+  DeferredPage: ComponentType<DeferredPageProps> | undefined;
+  deferredFailed: boolean;
+}) {
+  if (app.phase === "initializing") return <div aria-busy="true" />;
+  if (app.phase === "newer-store" || app.phase === "unavailable") {
+    return (
+      <div class="wb-page">
+        <EmptyState
+          message={
+            app.phase === "newer-store"
+              ? copy.errors.newerStore(app.foundVersion, CURRENT)
+              : copy.errors.unavailable
+          }
+        />
+      </div>
+    );
+  }
+  if (section === "rules")
+    return (
+      <RulesPage
+        doc={app.doc}
+        projection={app.live}
+        grants={app.grants}
+        mutations={mutations}
+      />
+    );
+  if (deferredFailed)
+    return (
+      <div class="wb-page">
+        <EmptyState message={copy.errors.pageLoad} />
+      </div>
+    );
+  if (DeferredPage === undefined) return <div aria-busy="true" />;
+  return (
+    <DeferredPage
+      section={section}
+      doc={app.doc}
+      projection={app.live}
+      grants={app.grants}
+      mutations={mutations}
+    />
   );
 }
 
