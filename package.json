@@ -55,14 +55,14 @@
     "@resvg/resvg-js": "^2.6.2",
     "@size-limit/file": "^13.0.3",
     "@tsconfig/strictest": "^2.0.8",
-    "@vitest/coverage-v8": "^4.1.11",
-    "happy-dom": "^20.11.12",
+    "@vitest/coverage-v8": "^4.1.12",
+    "happy-dom": "^21.0.4",
     "jscpd": "^5.0.16",
-    "knip": "^6.32.3",
+    "knip": "^6.43.0",
     "preact": "^10.29.8",
     "size-limit": "^13.0.3",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "wxt": "^0.21.4"
   },
   "size-limit": [
