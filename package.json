@@ -13,6 +13,7 @@
   },
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
@@ -23,6 +24,8 @@
     "format": "biome format --write .",
     "check:lint": "biome ci . --error-on-warnings",
     "check:types": "tsc --noEmit",
+    "check:complexity": "oxlint -c .oxlintrc.json src entrypoints scripts e2e",
+    "check:comments": "node scripts/check-comments.mjs",
     "check:test": "node scripts/check-coverage.mjs",
     "check:knip": "knip --treat-config-hints-as-errors",
     "check:knip:production": "knip --production --include files --treat-config-hints-as-errors",
@@ -39,7 +42,8 @@
     "check:em-dash": "node scripts/check-em-dash.mjs",
     "check:test-classes": "node scripts/check-test-classes.mjs",
     "check:host-access-confinement": "node scripts/check-host-access-confinement.mjs",
-    "check": "pnpm check:lint && pnpm check:types && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && node scripts/check-size-slack.mjs && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
+    "check": "pnpm check:lint && pnpm check:types && pnpm check:complexity && pnpm check:comments && pnpm check:test && pnpm check:knip && pnpm check:knip:production && pnpm check:gates && pnpm check:playwright-projects && pnpm check:fake-browser && pnpm check:dup && pnpm build && node scripts/manifest-policy.mjs && node scripts/check-no-network.mjs && node scripts/check-size-coverage.mjs && size-limit && node scripts/check-size-slack.mjs && pnpm check:icons && pnpm check:overrides && pnpm check:self-contained && pnpm check:em-dash && pnpm check:test-classes && pnpm check:host-access-confinement",
+    "comments:record": "node scripts/check-comments.mjs --record",
     "size:record": "pnpm build && node scripts/check-size-slack.mjs --record",
     "e2e": "pnpm build && pnpm build:e2e:hostaccess && pnpm build:e2e:narrow-hostaccess && playwright test",
     "verify": "pnpm check && pnpm e2e",
@@ -59,6 +63,8 @@
     "happy-dom": "^21.0.4",
     "jscpd": "^5.4.2",
     "knip": "^6.44.0",
+    "oxc-parser": "0.155.0",
+    "oxlint": "1.90.0",
     "preact": "^10.29.8",
     "size-limit": "^13.0.3",
     "typescript": "^7.0.2",
@@ -144,5 +150,19 @@
     "onlyBuiltDependencies": [
       "spawn-sync"
     ]
+  },
+  "commentLoad": {
+    "product": {
+      "comments": 1589,
+      "longBlocks": 173
+    },
+    "tests": {
+      "comments": 1223,
+      "longBlocks": 107
+    },
+    "scripts": {
+      "comments": 130,
+      "longBlocks": 13
+    }
   }
 }

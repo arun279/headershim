@@ -38,6 +38,7 @@ const releaseZipChecker = path.join(
   "scripts/check-release-zip.mjs",
 );
 const slackChecker = path.join(repositoryRoot, "scripts/check-size-slack.mjs");
+const commentChecker = path.join(repositoryRoot, "scripts/check-comments.mjs");
 const hook = path.join(repositoryRoot, ".githooks/pre-push");
 const zero = "0".repeat(40);
 
@@ -622,4 +623,138 @@ test("workflows provide the comparison history required by the project checker",
   assert.match(ci, /PLAYWRIGHT_PREVIOUS_REFS:.*github\.event\.before/);
   assert.match(release, /fetch-depth: 0/);
   assert.match(release, /PLAYWRIGHT_BASE_REF: HEAD\^/);
+});
+
+function commentFixture(t, source, commentLoad) {
+  const cwd = mkdtempSync(path.join(realpathSync(tmpdir()), "comments-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(path.join(cwd, "src"));
+  writeFileSync(path.join(cwd, "src/a.ts"), source);
+  writeFileSync(
+    path.join(cwd, "package.json"),
+    JSON.stringify({ commentLoad }),
+  );
+  execFileSync("git", ["init", "--quiet"], { cwd, env: isolatedEnv });
+  execFileSync("git", ["add", "."], { cwd, env: isolatedEnv });
+  return cwd;
+}
+
+function runComments(cwd, ...args) {
+  return spawnSync(process.execPath, [commentChecker, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: isolatedEnv,
+  });
+}
+
+const zeroLoad = { comments: 0, longBlocks: 0 };
+
+test("the comment check counts comment lines and blocks past three lines", (t) => {
+  const source = "// one\n// two\n// three\n// four\nconst a = 1;\n";
+  const recorded = {
+    product: { comments: 4, longBlocks: 1 },
+    tests: zeroLoad,
+    scripts: zeroLoad,
+  };
+  assert.equal(runComments(commentFixture(t, source, recorded)).status, 0);
+});
+
+test("the comment check ignores tool directives", (t) => {
+  const source = "// biome-ignore lint/style/x: reason\nconst a = 1;\n";
+  const recorded = { product: zeroLoad, tests: zeroLoad, scripts: zeroLoad };
+  assert.equal(runComments(commentFixture(t, source, recorded)).status, 0);
+});
+
+test("the comment check does not count comment markers inside strings", (t) => {
+  const source = 'const a = "// not a comment";\n';
+  const recorded = { product: zeroLoad, tests: zeroLoad, scripts: zeroLoad };
+  assert.equal(runComments(commentFixture(t, source, recorded)).status, 0);
+});
+
+test("the comment check fails when load grows and asks to record when it falls", (t) => {
+  const recorded = {
+    product: { comments: 1, longBlocks: 0 },
+    tests: zeroLoad,
+    scripts: zeroLoad,
+  };
+  const grew = runComments(
+    commentFixture(t, "// a\n// b\nconst a = 1;\n", recorded),
+  );
+  assert.equal(grew.status, 1);
+  assert.match(grew.stderr, /Comment load grew: product comments is 2/);
+  const fell = runComments(commentFixture(t, "const a = 1;\n", recorded));
+  assert.equal(fell.status, 1);
+  assert.match(fell.stderr, /pnpm comments:record/);
+});
+
+test("the comment recorder lowers the load but refuses to raise it", (t) => {
+  const recorded = {
+    product: { comments: 1, longBlocks: 0 },
+    tests: zeroLoad,
+    scripts: zeroLoad,
+  };
+  const lower = commentFixture(t, "const a = 1;\n", recorded);
+  assert.equal(runComments(lower, "--record").status, 0);
+  const manifest = JSON.parse(
+    readFileSync(path.join(lower, "package.json"), "utf8"),
+  );
+  assert.equal(manifest.commentLoad.product.comments, 0);
+  const higher = commentFixture(t, "// a\n// b\nconst a = 1;\n", recorded);
+  assert.equal(runComments(higher, "--record").status, 1);
+});
+
+test("the comment check fails when a metric is missing from the record", (t) => {
+  const recorded = { product: zeroLoad, tests: zeroLoad };
+  const missing = runComments(commentFixture(t, "const a = 1;\n", recorded));
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /scripts comments is recorded as undefined/);
+});
+
+test("the comment check fails when the record rises above the target branch", (t) => {
+  const recorded = { product: zeroLoad, tests: zeroLoad, scripts: zeroLoad };
+  const cwd = commentFixture(t, "const a = 1;\n", recorded);
+  const git = (...args) =>
+    execFileSync(
+      "git",
+      ["-c", "user.name=t", "-c", "user.email=t@t", ...args],
+      { cwd, env: isolatedEnv },
+    );
+  git("commit", "--quiet", "-m", "base");
+  git("update-ref", "refs/remotes/origin/HEAD", "HEAD");
+  writeFileSync(path.join(cwd, "src/a.ts"), "// a\nconst a = 1;\n");
+  writeFileSync(
+    path.join(cwd, "package.json"),
+    JSON.stringify({
+      commentLoad: {
+        ...recorded,
+        product: { comments: 1, longBlocks: 0 },
+      },
+    }),
+  );
+  const raised = runComments(cwd);
+  assert.equal(raised.status, 1);
+  assert.match(raised.stderr, /Comment load was raised: product comments/);
+});
+
+test("the comment check counts type directives where nothing checks them", (t) => {
+  const recorded = {
+    product: zeroLoad,
+    tests: zeroLoad,
+    scripts: { comments: 1, longBlocks: 0 },
+  };
+  const cwd = commentFixture(t, "const a = 1;\n", recorded);
+  mkdirSync(path.join(cwd, "scripts"));
+  writeFileSync(
+    path.join(cwd, "scripts/b.mjs"),
+    "// @ts-expect-error free text\nconst b = 1;\n",
+  );
+  execFileSync("git", ["add", "."], { cwd, env: isolatedEnv });
+  assert.equal(runComments(cwd).status, 0);
+});
+
+test("the comment check skips tracked files deleted from the working tree", (t) => {
+  const recorded = { product: zeroLoad, tests: zeroLoad, scripts: zeroLoad };
+  const cwd = commentFixture(t, "const a = 1;\n", recorded);
+  rmSync(path.join(cwd, "src/a.ts"));
+  assert.equal(runComments(cwd).status, 0);
 });
