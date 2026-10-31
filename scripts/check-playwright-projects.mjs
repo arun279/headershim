@@ -317,6 +317,17 @@ function testsAt({ base }) {
   }
 }
 
+function landedRemovals(mergeBase) {
+  const { status, stdout } = spawnSync(
+    "git",
+    ["show", `${mergeBase}:e2e/playwright-removals.json`],
+    { cwd: root, encoding: "utf8" },
+  );
+  return new Set(
+    status === 0 ? JSON.parse(stdout).map(({ test }) => test) : [],
+  );
+}
+
 function missingTests(head, comparisons) {
   const missing = new Map();
   for (const comparison of comparisons) {
@@ -350,6 +361,8 @@ try {
   const head = testSet(listTests(root, "the working tree"), root);
   const missing = missingTests(head, comparisons);
   const acknowledged = readAcknowledgements(missing, comparisons);
+  const strictBases = new Set([headCommit, defaultComparison.base]);
+  const landed = landedRemovals(defaultComparison.base);
   const unacknowledged = [...missing]
     .map(([test, value]) => [
       test,
@@ -357,7 +370,9 @@ try {
         ...value,
         comparisons: new Map(
           [...value.comparisons].filter(
-            ([base]) => !acknowledged.has(acknowledgementKey(base, test)),
+            ([base]) =>
+              !acknowledged.has(acknowledgementKey(base, test)) &&
+              (strictBases.has(base) || !landed.has(test)),
           ),
         ),
       },
