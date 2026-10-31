@@ -519,13 +519,7 @@ describe("popup This-tab overrides", () => {
     expect(
       line.querySelector('[aria-label="This-tab change on: authorization"]'),
     ).not.toBeNull();
-    fire(() =>
-      line
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Edit authorization value"]',
-        )
-        ?.click(),
-    );
+    fire(() => line.querySelector<HTMLButtonElement>(".v-edit")?.click());
     const field = line.querySelector(".v-input") as HTMLInputElement;
     typeInto(field, "Bearer replacement-5678");
     const get = vi.spyOn(fakeBrowser.storage.session, "get").mockImplementation(
