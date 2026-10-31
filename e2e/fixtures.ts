@@ -33,8 +33,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // this suite's browsers out of the process table.
 export const PROFILE_PREFIX = "headershim-e2e-";
 
+const EXTENSION_PATHS = {
+  "dnr-probe": "e2e/fixtures/dnr-probe",
+  "host-access": ".output/chrome-mv3-e2e-hostaccess",
+  "narrow-host-access": ".output/chrome-mv3-e2e-narrow-hostaccess",
+  shipped: ".output/chrome-mv3",
+};
+
 interface ExtensionBuildOptions {
-  extensionBuild: "host-access" | "narrow-host-access" | "shipped";
+  extensionBuild: keyof typeof EXTENSION_PATHS;
 }
 
 interface WorkerFixtures extends ExtensionBuildOptions {
@@ -63,15 +70,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   context: async ({ extensionBuild }, use) => {
     const userDataDir = await mkdtemp(path.join(tmpdir(), PROFILE_PREFIX));
     const { HEADED } = process.env;
-    const extensionPath = path.join(
-      root,
-      ".output",
-      extensionBuild === "host-access"
-        ? "chrome-mv3-e2e-hostaccess"
-        : extensionBuild === "narrow-host-access"
-          ? "chrome-mv3-e2e-narrow-hostaccess"
-          : "chrome-mv3",
-    );
+    const extensionPath = path.join(root, EXTENSION_PATHS[extensionBuild]);
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",
       // Try pure headless first (the harness proves it works); flip via HEADED=1

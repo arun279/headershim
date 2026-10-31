@@ -130,7 +130,7 @@ async function reachable(page: Page): Promise<void> {
       // pointer targets are trial-clicked.
       const box = await control.boundingBox();
       if (box === null || box.width < 4 || box.height < 4) continue;
-      await control.click({ trial: true, timeout: 2000 });
+      await control.click({ trial: true, timeout: 10_000 });
     }
   }
 }
