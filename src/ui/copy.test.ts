@@ -427,34 +427,9 @@ describe("copy", () => {
     ];
 
     const strings: string[] = [];
-    const collect = (value: unknown): void => {
-      if (typeof value === "string") {
-        strings.push(value);
-      } else if (Array.isArray(value)) {
-        for (const part of value) {
-          if (part !== null && typeof part === "object" && "data" in part) {
-            collect((part as { data: unknown }).data);
-          } else {
-            collect(part);
-          }
-        }
-      } else if (typeof value === "function") {
-        for (const args of sampleArgs) {
-          try {
-            collect((value as (...a: unknown[]) => unknown)(...args));
-          } catch {
-            // A sample tuple that doesn't fit this signature; another will.
-          }
-        }
-      } else if (value !== null && typeof value === "object") {
-        for (const child of Object.values(value)) {
-          collect(child);
-        }
-      }
-    };
-    collect(copy);
-    collect(optionsCopy);
-    collect(editorCopy);
+    collectCopyStrings(copy, sampleArgs, strings);
+    collectCopyStrings(optionsCopy, sampleArgs, strings);
+    collectCopyStrings(editorCopy, sampleArgs, strings);
 
     expect(strings.length).toBeGreaterThan(100);
     for (const text of strings) {
@@ -462,3 +437,52 @@ describe("copy", () => {
     }
   });
 });
+
+function collectCopyStrings(
+  value: unknown,
+  sampleArgs: readonly unknown[][],
+  strings: string[],
+): void {
+  if (typeof value === "string") {
+    strings.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const part of value) {
+      collectCopyStrings(
+        part !== null && typeof part === "object" && "data" in part
+          ? part.data
+          : part,
+        sampleArgs,
+        strings,
+      );
+    }
+    return;
+  }
+  if (typeof value === "function") {
+    collectSamples(
+      value as (...args: unknown[]) => unknown,
+      sampleArgs,
+      strings,
+    );
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value))
+      collectCopyStrings(child, sampleArgs, strings);
+  }
+}
+
+function collectSamples(
+  value: (...args: unknown[]) => unknown,
+  sampleArgs: readonly unknown[][],
+  strings: string[],
+): void {
+  for (const args of sampleArgs) {
+    try {
+      collectCopyStrings(value(...args), sampleArgs, strings);
+    } catch {
+      // A sample tuple that does not fit this signature; another will.
+    }
+  }
+}

@@ -90,25 +90,29 @@ function testSet(report, cwd) {
   function visit(suites, ancestors = []) {
     for (const suite of suites) {
       const titles = suite.file ? ancestors : [...ancestors, suite.title];
-      for (const spec of suite.specs ?? []) {
-        const file = path
-          .relative(
-            repositoryRoot,
-            path.resolve(report.config.rootDir, spec.file),
-          )
-          .replaceAll(path.sep, "/");
-        const title = [...titles, spec.title].join(" > ");
-        for (const test of spec.tests) {
-          if (test.expectedStatus !== "skipped") {
-            tests.set(`${test.projectName}\0${spec.id}`, {
-              acknowledgement: `${test.projectName}: ${file} > ${title}`,
-              label: `${file} > ${title} [${spec.id}]`,
-              project: test.projectName,
-            });
-          }
+      addSpecs(suite.specs ?? [], titles);
+      visit(suite.suites ?? [], titles);
+    }
+  }
+
+  function addSpecs(specs, titles) {
+    for (const spec of specs) {
+      const file = path
+        .relative(
+          repositoryRoot,
+          path.resolve(report.config.rootDir, spec.file),
+        )
+        .replaceAll(path.sep, "/");
+      const title = [...titles, spec.title].join(" > ");
+      for (const test of spec.tests) {
+        if (test.expectedStatus !== "skipped") {
+          tests.set(`${test.projectName}\0${spec.id}`, {
+            acknowledgement: `${test.projectName}: ${file} > ${title}`,
+            label: `${file} > ${title} [${spec.id}]`,
+            project: test.projectName,
+          });
         }
       }
-      visit(suite.suites ?? [], titles);
     }
   }
 
@@ -181,23 +185,7 @@ function rejectSkippedEndToEndTests() {
       if (tokens.length > 4) {
         tokens.shift();
       }
-      const directName =
-        tokens.at(-3)?.kind === SyntaxKind.DotToken &&
-        tokens.at(-2)?.kind === SyntaxKind.Identifier &&
-        tokens.at(-1)?.kind === SyntaxKind.OpenParenToken
-          ? tokens.at(-2)
-          : undefined;
-      const computedName =
-        tokens.at(-4)?.kind === SyntaxKind.OpenBracketToken &&
-        tokens.at(-3)?.kind === SyntaxKind.StringLiteral &&
-        tokens.at(-2)?.kind === SyntaxKind.CloseBracketToken &&
-        tokens.at(-1)?.kind === SyntaxKind.OpenParenToken
-          ? tokens.at(-3)
-          : undefined;
-      const blocked = directName ?? computedName;
-      const name = computedName
-        ? computedName.text.slice(1, -1)
-        : directName?.text;
+      const { blocked, name } = callMember(tokens);
       if (blocked && (name === "skip" || name === "fixme")) {
         const line = source.slice(0, blocked.start).split("\n").length;
         violations.push(
@@ -209,6 +197,28 @@ function rejectSkippedEndToEndTests() {
   if (violations.length > 0) {
     throw new Error(violations.join("\n"));
   }
+}
+
+function callMember(tokens) {
+  const directName =
+    tokens.at(-3)?.kind === SyntaxKind.DotToken &&
+    tokens.at(-2)?.kind === SyntaxKind.Identifier &&
+    tokens.at(-1)?.kind === SyntaxKind.OpenParenToken
+      ? tokens.at(-2)
+      : undefined;
+  const computedName = computedCallMember(tokens);
+  const blocked = directName ?? computedName;
+  const name = computedName ? computedName.text.slice(1, -1) : directName?.text;
+  return { blocked, name };
+}
+
+function computedCallMember(tokens) {
+  return tokens.at(-4)?.kind === SyntaxKind.OpenBracketToken &&
+    tokens.at(-3)?.kind === SyntaxKind.StringLiteral &&
+    tokens.at(-2)?.kind === SyntaxKind.CloseBracketToken &&
+    tokens.at(-1)?.kind === SyntaxKind.OpenParenToken
+    ? tokens.at(-3)
+    : undefined;
 }
 
 function baseTarget() {

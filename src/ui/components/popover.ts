@@ -20,6 +20,15 @@ export function openPositionedPopover(
     popover.setAttribute("data-popover-open", "");
   }
 
+  positionPopover(popover, trigger, align, preferAbove);
+}
+
+function positionPopover(
+  popover: HTMLElement,
+  trigger: HTMLElement,
+  align: "start" | "end",
+  preferAbove: boolean,
+) {
   const triggerRect = trigger.getBoundingClientRect();
   const popoverRect = popover.getBoundingClientRect();
   const popup = document

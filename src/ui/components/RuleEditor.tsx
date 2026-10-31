@@ -205,19 +205,13 @@ export function RuleEditor(props: RuleEditorProps) {
           granted = false;
         }
       }
-      props.onCommitted?.({
-        kind: props.rule === undefined ? "create" : "edit",
-        rule: outcome.value,
-        profileId: current.profileId,
-      });
-      if (grant !== undefined) {
-        if (granted === true) {
-          props.onGranted?.();
-        } else {
-          props.onGrantDeclined?.(editorCopy.actions.andSites(grant.sites));
-        }
-      }
-      props.onClose();
+      completeRuleCommit(
+        props,
+        outcome.value,
+        current.profileId,
+        grant,
+        granted,
+      );
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -313,18 +307,7 @@ export function RuleEditor(props: RuleEditorProps) {
     props.grants,
     props.tabDomain,
   );
-  const saveLabel =
-    commitGrant === undefined
-      ? mode === "new"
-        ? editorCopy.actions.createRule
-        : editorCopy.actions.saveChanges
-      : mode === "new"
-        ? editorCopy.actions.createRuleAndAllow(
-            editorCopy.actions.andSites(commitGrant.sites),
-          )
-        : editorCopy.actions.saveChangesAndAllow(
-            editorCopy.actions.andSites(commitGrant.sites),
-          );
+  const saveLabel = commitLabel(mode, commitGrant);
 
   return (
     <Sheet
@@ -488,9 +471,7 @@ export function RuleEditor(props: RuleEditorProps) {
           resourceTypes={draft.resourceTypes}
           error={errors.scope}
           typesError={errors.types}
-          defaultResourceTypesOpen={
-            props.rule !== undefined && props.rule.resourceTypes !== "all"
-          }
+          defaultResourceTypesOpen={narrowsResourceTypes(props.rule)}
           onScope={(scope) => update((current) => ({ ...current, scope }))}
           onResourceTypes={(resourceTypes) =>
             update((current) => ({ ...current, resourceTypes }))
@@ -579,11 +560,51 @@ function CommentDisclosure({
   );
 }
 
+function completeRuleCommit(
+  props: RuleEditorProps,
+  rule: Rule,
+  profileId: string | undefined,
+  grant: CommitGrant | undefined,
+  granted: boolean | undefined,
+): void {
+  props.onCommitted?.({
+    kind: props.rule === undefined ? "create" : "edit",
+    rule,
+    profileId,
+  });
+  if (grant !== undefined) {
+    if (granted === true) props.onGranted?.();
+    else props.onGrantDeclined?.(editorCopy.actions.andSites(grant.sites));
+  }
+  props.onClose();
+}
+
+function commitLabel(
+  mode: "new" | "edit",
+  commitGrant: CommitGrant | undefined,
+): string {
+  return commitGrant === undefined
+    ? mode === "new"
+      ? editorCopy.actions.createRule
+      : editorCopy.actions.saveChanges
+    : mode === "new"
+      ? editorCopy.actions.createRuleAndAllow(
+          editorCopy.actions.andSites(commitGrant.sites),
+        )
+      : editorCopy.actions.saveChangesAndAllow(
+          editorCopy.actions.andSites(commitGrant.sites),
+        );
+}
+
 /**
  * Which profile the rule is saved in. Choosing a profile that is not running
  * parks the rule there: it is authored and stored, and live traffic is untouched
  * until that profile is switched on.
  */
+function narrowsResourceTypes(rule: RuleEditorProps["rule"]): boolean {
+  return rule !== undefined && rule.resourceTypes !== "all";
+}
+
 function ProfileField({
   id,
   profiles,

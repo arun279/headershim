@@ -434,19 +434,23 @@ test("transport caveats state what the wire does on each protocol", {
       expect(h2Headers[CONTROL_HEADER], `${row.header} HTTP/2 control`).toBe(
         CONTROL_VALUE,
       );
-      if (row.h2 === "arrives") {
-        expect(h2Headers[row.header], `${row.header} over HTTP/2`).toBe(
-          row.value,
-        );
-      } else if (row.h2 === "stripped") {
-        expect(
-          Object.keys(h2Headers),
-          `${row.header} over HTTP/2`,
-        ).not.toContain(row.header);
-      } else {
-        expect(h2Headers[":authority"], "host over HTTP/2").toBe(
-          new URL(echoServers.h2Url).host,
-        );
+      switch (row.h2) {
+        case "arrives":
+          expect(h2Headers[row.header], `${row.header} over HTTP/2`).toBe(
+            row.value,
+          );
+          break;
+        case "stripped":
+          expect(
+            Object.keys(h2Headers),
+            `${row.header} over HTTP/2`,
+          ).not.toContain(row.header);
+          break;
+        default:
+          expect(h2Headers[":authority"], "host over HTTP/2").toBe(
+            new URL(echoServers.h2Url).host,
+          );
+          break;
       }
       await h2Page.close();
     }

@@ -122,6 +122,13 @@ function isStateDoc(value: unknown): value is StateDoc {
     return false;
   }
 
+  return hasConsistentProfiles(profiles, nextRuleNum);
+}
+
+function hasConsistentProfiles(
+  profiles: readonly Profile[],
+  nextRuleNum: number,
+): boolean {
   const profileIds = profiles.map(({ id }) => id);
   const profileNames = profiles.map(({ name }) => name.toLowerCase());
   const rules = profiles.flatMap(({ rules: profileRules }) => profileRules);
@@ -164,9 +171,6 @@ function isRule(value: unknown): value is Rule {
   const {
     id,
     num,
-    direction,
-    operation,
-    header,
     scope,
     resourceTypes,
     initiators,
@@ -180,20 +184,27 @@ function isRule(value: unknown): value is Rule {
     typeof num === "number" &&
     Number.isSafeInteger(num) &&
     num > 0 &&
-    isOneOf(direction, DIRECTIONS) &&
-    isOneOf(operation, HEADER_OPERATIONS) &&
-    typeof header === "string" &&
-    header.length > 0 &&
-    header === normalizeHeaderName(header) &&
-    // A stored value Chrome rejects must not discard the document; compile
-    // keeps it out of the batch.
-    hasValidHeaderValue(value) &&
+    isHeaderAction(value) &&
     isScope(scope) &&
     isResourceTypes(resourceTypes) &&
     isStringArray(initiators) &&
     typeof enabled === "boolean" &&
     (comment === undefined || typeof comment === "string") &&
     (generated === undefined || isGeneratedValue(generated))
+  );
+}
+
+function isHeaderAction(value: Record<string, unknown>): boolean {
+  const { direction, operation, header } = value;
+  return (
+    isOneOf(direction, DIRECTIONS) &&
+    isOneOf(operation, HEADER_OPERATIONS) &&
+    typeof header === "string" &&
+    header.length > 0 &&
+    header === normalizeHeaderName(header) &&
+    // A stored value Chrome rejects must not discard the document; compile keeps
+    // it out of the batch.
+    hasValidHeaderValue(value)
   );
 }
 

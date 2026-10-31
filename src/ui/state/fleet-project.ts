@@ -78,36 +78,51 @@ function fullyShadowed(
   const blockers = new Map<RuleKey, Entry>();
   for (const entry of batch.entries) {
     if (entry.standing.kind !== "placed") continue;
-    let blocker: Entry | undefined;
-    const refs = batch.slots.get(`${entry.stage}:${entry.headerKey}`) ?? [];
-    for (const placement of entry.standing.placements) {
-      const index = refs.findIndex(
-        (ref) =>
-          ref.key === entry.key &&
-          ref.placement.band === placement.band &&
-          ref.placement.dnrId === placement.dnrId,
-      );
-      const barrier = refs
-        .slice(0, index)
-        .find((candidate) =>
-          conditionContains(candidate.placement.condition, placement.condition),
-        );
-      const current =
-        barrier === undefined || admits(barrier.operation, entry.operation)
-          ? undefined
-          : entries.get(barrier.key);
-      if (
-        current === undefined ||
-        (blocker !== undefined && blocker.key !== current.key)
-      ) {
-        blocker = undefined;
-        break;
-      }
-      blocker = current;
-    }
+    const blocker = sharedBlocker(
+      batch,
+      entry,
+      entry.standing.placements,
+      entries,
+    );
     if (blocker !== undefined) blockers.set(entry.key, blocker);
   }
   return blockers;
+}
+
+function sharedBlocker(
+  batch: Projection["batch"],
+  entry: Entry,
+  placements: readonly Placement[],
+  entries: ReadonlyMap<RuleKey, Entry>,
+): Entry | undefined {
+  let blocker: Entry | undefined;
+  const refs = batch.slots.get(`${entry.stage}:${entry.headerKey}`) ?? [];
+  for (const placement of placements) {
+    const index = refs.findIndex(
+      (ref) =>
+        ref.key === entry.key &&
+        ref.placement.band === placement.band &&
+        ref.placement.dnrId === placement.dnrId,
+    );
+    const barrier = refs
+      .slice(0, index)
+      .find((candidate) =>
+        conditionContains(candidate.placement.condition, placement.condition),
+      );
+    const current =
+      barrier === undefined || admits(barrier.operation, entry.operation)
+        ? undefined
+        : entries.get(barrier.key);
+    if (
+      current === undefined ||
+      (blocker !== undefined && blocker.key !== current.key)
+    ) {
+      blocker = undefined;
+      break;
+    }
+    blocker = current;
+  }
+  return blocker;
 }
 
 function conditionContains(

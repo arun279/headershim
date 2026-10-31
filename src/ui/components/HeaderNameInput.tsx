@@ -112,20 +112,35 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
     setActiveIndex(undefined);
   };
 
+  function moveActive(down: boolean) {
+    if (matches.length === 0) {
+      return;
+    }
+    if (!open) {
+      setOpen(true);
+      setActiveIndex(down ? 0 : matches.length - 1);
+      return;
+    }
+    setActiveIndex(
+      active === undefined
+        ? down
+          ? 0
+          : matches.length - 1
+        : (active + (down ? 1 : -1) + matches.length) % matches.length,
+    );
+  }
+
   const listId = `${id}-list`;
   const errorId = `${id}-error`;
   const caseId = `${id}-case`;
   // The same verdict the commit runs, one keystroke early: an illegal name puts
   // its error where the case line would sit, so the field never reassures about
   // a name the save will refuse. A commit that got further raises props.error.
-  const nameError =
-    props.value.trim() === "" ? undefined : validateHeaderName(normalized);
-  const message =
-    nameError === undefined ? props.error : headerErrorMessage(nameError);
-  const showCase =
-    message === undefined &&
-    props.value.trim() !== "" &&
-    props.value.trim() !== normalized;
+  const { message, showCase } = fieldFeedback(
+    props.value,
+    normalized,
+    props.error,
+  );
   const describedBy = message !== undefined ? errorId : showCase ? caseId : "";
 
   return (
@@ -168,23 +183,7 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
               case "ArrowDown":
               case "ArrowUp": {
                 event.preventDefault();
-                if (matches.length === 0) {
-                  return;
-                }
-                const down = event.key === "ArrowDown";
-                if (!open) {
-                  setOpen(true);
-                  setActiveIndex(down ? 0 : matches.length - 1);
-                  return;
-                }
-                setActiveIndex(
-                  active === undefined
-                    ? down
-                      ? 0
-                      : matches.length - 1
-                    : (active + (down ? 1 : -1) + matches.length) %
-                        matches.length,
-                );
+                moveActive(event.key === "ArrowDown");
                 return;
               }
               case "Enter": {
@@ -287,6 +286,20 @@ export function HeaderNameInput(props: HeaderNameInputProps) {
       )}
     </div>
   );
+}
+
+function fieldFeedback(
+  value: string,
+  normalized: string,
+  error: string | undefined,
+) {
+  const nameError =
+    value.trim() === "" ? undefined : validateHeaderName(normalized);
+  const message =
+    nameError === undefined ? error : headerErrorMessage(nameError);
+  const showCase =
+    message === undefined && value.trim() !== "" && value.trim() !== normalized;
+  return { message, showCase };
 }
 
 /** Prefix matches lead, substring matches follow; empty input offers the whole list. */
