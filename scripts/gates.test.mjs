@@ -258,6 +258,50 @@ test("the project checker compares an explicitly supplied previous revision", (t
   assert.match(result.stderr, /starts on the branch/);
 });
 
+test("the project checker accepts a removal acknowledged on the target branch", (t) => {
+  const stable = {
+    id: "stable-test",
+    title: "stays shipped",
+    projects: [{ name: "shipped" }],
+  };
+  const retired = {
+    id: "retired-test",
+    title: "retired on main",
+    projects: [{ name: "shipped" }],
+  };
+  const added = {
+    id: "branch-test",
+    title: "starts on the branch",
+    projects: [{ name: "shipped" }],
+  };
+  const cwd = createCheckerRepository(t, report([stable, retired]));
+  const base = git(cwd, "rev-parse", "HEAD");
+  git(cwd, "switch", "-c", "feature");
+  setReport(cwd, report([stable, retired, added]));
+  commit(cwd, "add branch test");
+  const previous = git(cwd, "rev-parse", "HEAD");
+  git(cwd, "switch", "main");
+  setReport(cwd, report([stable]));
+  writeFileSync(
+    path.join(cwd, "e2e", "playwright-removals.json"),
+    `${JSON.stringify([
+      {
+        base,
+        test: "shipped: e2e/specs/sample.spec.ts > retired on main",
+        reason: "Removed on main.",
+      },
+    ])}\n`,
+  );
+  commit(cwd, "retire a test");
+  git(cwd, "switch", "-C", "feature", "main");
+  setReport(cwd, report([stable, added]));
+  commit(cwd, "add branch test again");
+
+  const result = runChecker(cwd, { PLAYWRIGHT_PREVIOUS_REFS: previous });
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("the project checker treats a static skip as a removal", (t) => {
   const cwd = createCheckerRepository(
     t,
