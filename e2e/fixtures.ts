@@ -85,6 +85,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // changing what it does, so nothing a spec renders is affected and the
         // browser each test launches costs one process less.
         "--in-process-gpu",
+        "--disable-gpu",
         // On macOS, Chromium otherwise asks the OS for the Chromium Safe
         // Storage keychain entry, putting a login-keychain password prompt
         // in front of whoever is at the machine. A throwaway test profile
