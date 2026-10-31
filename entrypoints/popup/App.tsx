@@ -42,7 +42,11 @@ import {
   createMutations,
   type MutationError,
 } from "../../src/ui/state/mutations";
-import { computeReadout, type TabChange } from "../../src/ui/state/readout";
+import {
+  computeReadout,
+  readoutHasRows,
+  type TabChange,
+} from "../../src/ui/state/readout";
 import {
   addOverride,
   type OverrideDraft,
@@ -459,12 +463,62 @@ function Ready({
   // Bound once so the callbacks act on the token this render drew, not on
   // whatever the readout holds by the time the click lands.
   const token = readout.token;
-  const hasRows =
-    token !== undefined ||
-    readout.request.length > 0 ||
-    readout.response.length > 0 ||
-    readout.overrides.length > 0;
+  const hasRows = readoutHasRows(readout);
   const nothing = !composing && !hasRows;
+
+  function renderReadoutBody() {
+    return (
+      <div class="popup-body">
+        {composing && tab !== undefined && (
+          <ThisTabComposer
+            host={tab.host}
+            needsGrant={!originCovered(tab.origin, grants)}
+            onSubmit={submitThisTab}
+            onClose={() => setComposing(false)}
+            onCommitted={() => show(copy.toast.changesSaved)}
+          />
+        )}
+        {token !== undefined && (
+          <TokenHero
+            change={token}
+            now={now}
+            onSwap={(value) => editChangeValue(token, value)}
+            onGrant={() => grantChange(token)}
+          />
+        )}
+        {readout.overrides.length > 0 && (
+          <ThisTabStrip
+            overrides={readout.overrides}
+            onToggle={toggleChange}
+            onGrant={grantChange}
+            onRemove={removeChange}
+            onEditValue={editChangeValue}
+          />
+        )}
+        <DirectionGroup
+          direction="request"
+          changes={readout.request}
+          onToggle={toggleChange}
+          onGrant={grantChange}
+          onEditValue={editChangeValue}
+        />
+        <DirectionGroup
+          direction="response"
+          changes={readout.response}
+          onToggle={toggleChange}
+          onGrant={grantChange}
+          onEditValue={editChangeValue}
+        />
+        {nothing && (
+          <ReadoutEmpty
+            host={readout.host}
+            paused={paused}
+            onAdd={openAddChange}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     // tabIndex -1 lets a removed section land focus on the landmark, not <body>.
@@ -528,55 +582,7 @@ function Ready({
           onChange={(next) => run(mutations.setPaused(!next))}
         />
       </footer>
-      <div class="popup-body">
-        {composing && tab !== undefined && (
-          <ThisTabComposer
-            host={tab.host}
-            needsGrant={!originCovered(tab.origin, grants)}
-            onSubmit={submitThisTab}
-            onClose={() => setComposing(false)}
-            onCommitted={() => show(copy.toast.changesSaved)}
-          />
-        )}
-        {token !== undefined && (
-          <TokenHero
-            change={token}
-            now={now}
-            onSwap={(value) => editChangeValue(token, value)}
-            onGrant={() => grantChange(token)}
-          />
-        )}
-        {readout.overrides.length > 0 && (
-          <ThisTabStrip
-            overrides={readout.overrides}
-            onToggle={toggleChange}
-            onGrant={grantChange}
-            onRemove={removeChange}
-            onEditValue={editChangeValue}
-          />
-        )}
-        <DirectionGroup
-          direction="request"
-          changes={readout.request}
-          onToggle={toggleChange}
-          onGrant={grantChange}
-          onEditValue={editChangeValue}
-        />
-        <DirectionGroup
-          direction="response"
-          changes={readout.response}
-          onToggle={toggleChange}
-          onGrant={grantChange}
-          onEditValue={editChangeValue}
-        />
-        {nothing && (
-          <ReadoutEmpty
-            host={readout.host}
-            paused={paused}
-            onAdd={openAddChange}
-          />
-        )}
-      </div>
+      {renderReadoutBody()}
       <ToastHost toast={toast} onDismiss={dismiss} />
     </main>
   );

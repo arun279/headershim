@@ -32,10 +32,10 @@ export default defineConfig({
       thresholds: {
         autoUpdate: true,
         "src/core/**": {
-          statements: 99.18,
-          branches: 97.33,
+          statements: 99.53,
+          branches: 97.64,
           functions: 100,
-          lines: 99.15,
+          lines: 99.51,
         },
       },
     },

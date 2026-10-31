@@ -79,14 +79,12 @@ export function RulesPage({
 
   const fleet = fleetRules(projection);
 
-  const editProfile =
-    editing === undefined
-      ? undefined
-      : doc.profiles.find((profile) => profile.id === editing.profileId);
-  const editingRule =
-    editing?.ruleId === undefined
-      ? undefined
-      : editProfile?.rules.find((rule) => rule.id === editing.ruleId);
+  const editProfile = doc.profiles.find(
+    (profile) => profile.id === editing?.profileId,
+  );
+  const editingRule = editProfile?.rules.find(
+    (rule) => rule.id === editing?.ruleId,
+  );
   // A rule deleted or a profile removed elsewhere retires a stale editor.
   useEffect(() => {
     if (

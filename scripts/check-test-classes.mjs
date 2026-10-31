@@ -125,19 +125,24 @@ function productClasses(files) {
       }
       continue;
     }
-    for (const match of source.matchAll(CLASS_ATTRIBUTE)) {
-      addClassTokens(match[1] ?? match[2] ?? "", classes);
-    }
-    for (const match of source.matchAll(CLASS_EXPRESSION)) {
-      for (const literal of (match[1] ?? "").matchAll(STRING_LITERAL)) {
-        addClassTokens(literal[1] ?? literal[2] ?? "", classes);
-      }
-    }
-    for (const match of source.matchAll(CLASS_TEMPLATE)) {
-      addTemplateClasses(match[1] ?? "", source, classes);
+    addMarkupClasses(source, classes);
+  }
+
+  return classes;
+}
+
+function addMarkupClasses(source, classes) {
+  for (const match of source.matchAll(CLASS_ATTRIBUTE)) {
+    addClassTokens(match[1] ?? match[2] ?? "", classes);
+  }
+  for (const match of source.matchAll(CLASS_EXPRESSION)) {
+    for (const literal of (match[1] ?? "").matchAll(STRING_LITERAL)) {
+      addClassTokens(literal[1] ?? literal[2] ?? "", classes);
     }
   }
-  return classes;
+  for (const match of source.matchAll(CLASS_TEMPLATE)) {
+    addTemplateClasses(match[1] ?? "", source, classes);
+  }
 }
 
 const tracked = execFileSync("git", ["ls-files"], {

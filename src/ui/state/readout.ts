@@ -198,6 +198,19 @@ function tokenChange(
   return candidates[0];
 }
 
+export function readoutHasRows(readout: TabReadout): boolean {
+  return (
+    readout.token !== undefined ||
+    readout.request.length > 0 ||
+    readout.response.length > 0 ||
+    readout.overrides.length > 0
+  );
+}
+
+function hasTransportCaveat({ caveats }: TabChange): boolean {
+  return caveats.includes("h1-only") || caveats.includes("h2-breaking");
+}
+
 function summarize(
   changes: readonly TabChange[],
   paused: boolean,
@@ -213,48 +226,38 @@ function summarize(
   | "overridden"
   | "unconfirmed"
 > {
-  let running = 0;
-  let needsAccess = 0;
-  let refused = 0;
-  let transport = 0;
-  let security = 0;
-  let overridden = 0;
-  let unconfirmed = 0;
-  for (const change of changes) {
-    const { outcome } = change;
-    const canRun =
-      outcome.kind === "runs" || outcome.kind === "runs-if-matched";
-    // The popup cannot see the connection a request will use, so a change
-    // that is definitely running (outcome "runs") but whose header carries a
-    // transport caveat is left out of the headline count and carried by the
-    // transport count instead. A "runs-if-matched" change is already
-    // uncertain for an unrelated reason (its match), so a caveat on top of
-    // that changes nothing about where it is counted.
-    const transportCaveat =
-      change.caveats.includes("h1-only") ||
-      change.caveats.includes("h2-breaking");
-    if (canRun && change.caveats.includes("security-response")) {
-      security += 1;
-    }
-    if (outcome.kind === "runs") {
-      if (!transportCaveat) running += 1;
-    } else if (outcome.kind === "runs-if-matched") {
-      running += 1;
-      unconfirmed += 1;
-    } else if (outcome.kind === "shadowed") {
-      overridden += 1;
-    } else if (outcome.kind === "absent") {
-      if (
-        outcome.reason.kind === "ungranted" ||
-        outcome.reason.kind === "ungranted-initiator"
-      ) {
-        needsAccess += 1;
-      } else if (outcome.reason.kind === "refused") {
-        refused += 1;
-      }
-    }
-    if (outcome.kind === "runs" && transportCaveat) transport += 1;
-  }
+  const count = (matches: (change: TabChange) => boolean) =>
+    changes.filter(matches).length;
+  // The popup cannot see the connection a request will use, so a change that
+  // is definitely running but has a transport caveat is left out of the
+  // headline count and carried by the transport count instead.
+  const running = count(
+    (change) =>
+      change.outcome.kind === "runs-if-matched" ||
+      (change.outcome.kind === "runs" && !hasTransportCaveat(change)),
+  );
+  const unconfirmed = count(
+    ({ outcome }) => outcome.kind === "runs-if-matched",
+  );
+  const transport = count(
+    (change) => change.outcome.kind === "runs" && hasTransportCaveat(change),
+  );
+  const security = count(
+    ({ caveats, outcome }) =>
+      (outcome.kind === "runs" || outcome.kind === "runs-if-matched") &&
+      caveats.includes("security-response"),
+  );
+  const overridden = count(({ outcome }) => outcome.kind === "shadowed");
+  const needsAccess = count(
+    ({ outcome }) =>
+      outcome.kind === "absent" &&
+      (outcome.reason.kind === "ungranted" ||
+        outcome.reason.kind === "ungranted-initiator"),
+  );
+  const refused = count(
+    ({ outcome }) =>
+      outcome.kind === "absent" && outcome.reason.kind === "refused",
+  );
   return {
     listed: changes.length,
     total: paused ? 0 : running,
