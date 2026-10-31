@@ -9,7 +9,17 @@
     "indentStyle": "space"
   },
   "linter": {
-    "enabled": true
+    "enabled": true,
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 15
+          }
+        }
+      }
+    }
   },
   "javascript": {
     "formatter": {
@@ -79,10 +89,14 @@
     },
     {
       "includes": ["**/tokens.css"],
-      "formatter": { "enabled": false },
+      "formatter": {
+        "enabled": false
+      },
       "linter": {
         "rules": {
-          "complexity": { "noImportantStyles": "off" }
+          "complexity": {
+            "noImportantStyles": "off"
+          }
         }
       }
     }

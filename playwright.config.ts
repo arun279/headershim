@@ -26,6 +26,10 @@ export default defineConfig<ExtensionBuildOptions>({
   workers: 2,
   // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
   retries: process.env["CI"] ? 2 : 0,
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
+  failOnFlakyTests: Boolean(process.env["CI"]),
+  // biome-ignore lint/complexity/useLiteralKeys: process.env is an index signature; TS noPropertyAccessFromIndexSignature requires bracket access
+  forbidOnly: Boolean(process.env["CI"]),
   reporter: [["list"]],
   // Generous per-test ceiling: each test launches its own persistent context for
   // isolation, and a cold browser launch on a loaded runner can take a while.
