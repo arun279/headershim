@@ -7,7 +7,6 @@ import type { ImportPlan } from "./headershim";
 import {
   type ImportPlanWarning,
   importModHeader,
-  nearestBadgeColor,
   type RegexValidator,
 } from "./modheader";
 
@@ -78,19 +77,15 @@ function warningsOfKind<Kind extends ImportPlanWarning["kind"]>(
 }
 
 describe("ModHeader import", () => {
-  it("maps profile title, short title, and nearest badge color", async () => {
+  it("maps profile title and short title onto the default badge color", async () => {
     const profile = onlyProfile(await importFixture());
 
     expect(profile).toMatchObject({
       name: "Development",
       badgeText: "DE",
-      color: "blue",
+      color: "indigo",
     });
     expect(profile).not.toHaveProperty("enabled");
-    expect(nearestBadgeColor("#b03a78")).toBe("magenta");
-    expect(nearestBadgeColor("#fff")).toBe("plum");
-    expect(nearestBadgeColor("not-a-color")).toBe("indigo");
-    expect(nearestBadgeColor(undefined)).toBe("indigo");
   });
 
   it("suffixes profile titles already used earlier in the same import", async () => {

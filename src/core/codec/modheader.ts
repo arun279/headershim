@@ -1,4 +1,3 @@
-import { BADGE_PALETTE } from "../badge";
 import {
   allowsRequestAppend,
   isValidHeaderValue,
@@ -6,8 +5,6 @@ import {
 } from "../headers";
 import {
   availableProfileName,
-  BADGE_COLORS,
-  type BadgeColor,
   type HeaderOp,
   normalizeBadgeText,
   type Profile,
@@ -56,7 +53,6 @@ const DROPPED_FILTER_FIELDS = [
 interface ModHeaderProfile {
   readonly title: string;
   readonly shortTitle?: string;
-  readonly backgroundColor?: string;
   readonly headers?: readonly Record<string, unknown>[];
   readonly respHeaders?: readonly Record<string, unknown>[];
   readonly cookieHeaders?: readonly Record<string, unknown>[];
@@ -172,33 +168,6 @@ export async function importModHeader(
   return ok({ profiles, warnings });
 }
 
-// Parsed once at load: BADGE_PALETTE holds eight valid hex literals, so
-// undefined entries are filtered out and the tuple type carries the invariant
-// (no per-lookup guard needed).
-const PALETTE_RGB: readonly [BadgeColor, readonly [number, number, number]][] =
-  BADGE_COLORS.flatMap((name) => {
-    const rgb = parseHexColor(BADGE_PALETTE[name]);
-    return rgb === undefined ? [] : [[name, rgb] as const];
-  });
-
-export function nearestBadgeColor(color: string | undefined): BadgeColor {
-  const source = parseHexColor(color);
-  if (source === undefined) {
-    return "indigo";
-  }
-
-  let nearest: BadgeColor = "indigo";
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  for (const [name, candidate] of PALETTE_RGB) {
-    const distance = colorDistance(source, candidate);
-    if (distance < nearestDistance) {
-      nearest = name;
-      nearestDistance = distance;
-    }
-  }
-  return nearest;
-}
-
 async function mapProfile(
   source: ModHeaderProfile,
   existingProfiles: readonly Profile[],
@@ -275,7 +244,7 @@ async function mapProfile(
     profile: {
       name,
       badgeText: normalizeBadgeText(source.shortTitle ?? source.title),
-      color: nearestBadgeColor(source.backgroundColor),
+      color: "indigo",
       rules: mappings.map(({ rule }) =>
         scopeResult.value.invalidPatterns.length === 0
           ? rule
@@ -659,12 +628,11 @@ function isProfile(value: unknown): value is ModHeaderProfile {
   if (!isRecord(value)) {
     return false;
   }
-  const { title, shortTitle, backgroundColor } = value;
+  const { title, shortTitle } = value;
   return (
     typeof title === "string" &&
     title.trim().length > 0 &&
     (shortTitle === undefined || typeof shortTitle === "string") &&
-    (backgroundColor === undefined || typeof backgroundColor === "string") &&
     PROFILE_ARRAY_FIELDS.every((field) => isOptionalRecordArray(value[field]))
   );
 }
@@ -691,37 +659,4 @@ function describeRow(row: Record<string, unknown>): string {
     }
   }
   return JSON.stringify(row);
-}
-
-function parseHexColor(
-  color: string | undefined,
-): readonly [number, number, number] | undefined {
-  if (color === undefined) {
-    return undefined;
-  }
-  const match = /^#([\da-f]{3}|[\da-f]{6})$/i.exec(color.trim());
-  const hex = match?.[1];
-  if (hex === undefined) {
-    return undefined;
-  }
-  const expanded =
-    hex.length === 3
-      ? Array.from(hex, (character) => `${character}${character}`).join("")
-      : hex;
-  return [
-    Number.parseInt(expanded.slice(0, 2), 16),
-    Number.parseInt(expanded.slice(2, 4), 16),
-    Number.parseInt(expanded.slice(4, 6), 16),
-  ];
-}
-
-function colorDistance(
-  left: readonly [number, number, number],
-  right: readonly [number, number, number],
-): number {
-  return left.reduce(
-    (distance, channel, index) =>
-      distance + (channel - (right[index] ?? 0)) ** 2,
-    0,
-  );
 }
