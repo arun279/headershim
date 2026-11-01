@@ -190,7 +190,7 @@ export const copy = {
   // countdown can be true, an opaque token stating only that it has none.
   token: {
     jwtTag: "JWT",
-    opaque: "opaque token · no expiry to read",
+    opaque: "no expiry in this token",
     expiresIn: (remainingMs: number) =>
       remainingMs <= 0 ? "expired" : `expires in ${duration(remainingMs)}`,
     warnNote: "replace it before it lapses",

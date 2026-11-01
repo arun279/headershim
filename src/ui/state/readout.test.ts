@@ -398,6 +398,39 @@ describe("computeReadout", () => {
       outcome: { kind: "runs" },
     });
   });
+
+  it("gives the token hero to a JWT in any request header, Authorization first", () => {
+    const payload = btoa(JSON.stringify({ exp: 2_000_000_000 }));
+    const jwt = `e30.${payload}.sig`;
+    const custom = storedRule("custom", 1, {
+      header: "x-auth-token",
+      value: jwt,
+    });
+    const plain = storedRule("plain", 2, {
+      header: "x-trace",
+      value: "not-a-token",
+    });
+    const authorization = storedRule("authorization", 3, {
+      header: "authorization",
+      value: "Bearer opaque",
+    });
+
+    const heroFor = (rules: Rule[]) => {
+      const doc = state(rules);
+      return computeReadout({
+        applied: appliedFor(doc, [], API_SITE),
+        doc,
+        overrides: [],
+        tab: TAB,
+      }).token;
+    };
+
+    expect(heroFor([custom, plain])).toMatchObject({ ruleId: "custom" });
+    expect(heroFor([plain])).toBeUndefined();
+    expect(heroFor([custom, authorization])).toMatchObject({
+      ruleId: "authorization",
+    });
+  });
 });
 
 describe("previewSwitch", () => {

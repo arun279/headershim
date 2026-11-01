@@ -56,17 +56,20 @@ export function decodeJwtExp(value: string): JwtClaims | undefined {
   if (payload === undefined) {
     return undefined;
   }
-  const exp = payload.exp;
-  if (typeof exp !== "number" || !Number.isFinite(exp)) {
+  const expMs = claimMs(payload.exp);
+  if (expMs === undefined) {
     return undefined;
   }
-  const iat = payload.iat;
-  return {
-    expMs: exp * 1000,
-    ...(typeof iat === "number" && Number.isFinite(iat)
-      ? { iatMs: iat * 1000 }
-      : {}),
-  };
+  const iatMs = claimMs(payload.iat);
+  return { expMs, ...(iatMs === undefined ? {} : { iatMs }) };
+}
+
+function claimMs(claim: unknown): number | undefined {
+  const seconds =
+    typeof claim === "string" && claim.trim() !== "" ? Number(claim) : claim;
+  return typeof seconds === "number" && Number.isFinite(seconds)
+    ? seconds * 1000
+    : undefined;
 }
 
 interface JwtPayload {

@@ -50,6 +50,13 @@ export function TokenHero({ change, now, onSwap, onGrant }: TokenHeroProps) {
           {!swapping && change.paused && (
             <p class="tk-held">{copy.token.held}</p>
           )}
+          {!swapping && change.widerReach !== undefined && (
+            <p class="tk-held">
+              {change.widerReach === "broad"
+                ? copy.readout.widerReach.broad
+                : copy.readout.widerReach.sites(change.widerReach)}
+            </p>
+          )}
         </div>
         {!swapping &&
           (needsAccess ? (
@@ -77,16 +84,7 @@ export function TokenHero({ change, now, onSwap, onGrant }: TokenHeroProps) {
           onCancel={() => setSwapping(false)}
         />
       ) : (
-        <>
-          {change.widerReach !== undefined && (
-            <p class="tk-held">
-              {change.widerReach === "broad"
-                ? copy.readout.widerReach.broad
-                : copy.readout.widerReach.sites(change.widerReach)}
-            </p>
-          )}
-          <TokenFreshness fresh={fresh} />
-        </>
+        <TokenFreshness fresh={fresh} />
       )}
     </section>
   );
