@@ -101,7 +101,7 @@
         "!.output/chrome-mv3/assets/RuleEditor-*.css",
         "!.output/chrome-mv3/assets/options-*.css"
       ],
-      "limit": "41500 B"
+      "limit": "41250 B"
     },
     {
       "name": "Options initial load",
@@ -122,7 +122,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "40000 B"
+      "limit": "39750 B"
     },
     {
       "name": "Options rule editor",
@@ -153,12 +153,12 @@
   },
   "commentLoad": {
     "product": {
-      "comments": 1586,
-      "longBlocks": 173
+      "comments": 1557,
+      "longBlocks": 169
     },
     "tests": {
-      "comments": 1223,
-      "longBlocks": 107
+      "comments": 1212,
+      "longBlocks": 106
     },
     "scripts": {
       "comments": 130,

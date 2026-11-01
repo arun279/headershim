@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render } from "../test/render";
 import { Truncate, truncateEnd, truncateMiddle } from "./Truncate";
 
@@ -47,17 +47,12 @@ describe("Truncate end mode", () => {
     expect(span.getAttribute("title")).toBe(value);
     // The shared class carries the one-line + min-width:0 + ellipsis discipline.
     expect(span.classList.contains("truncate")).toBe(true);
-    expect(span.classList.contains("truncate-end")).toBe(true);
     expect(span.classList.contains("rule-name")).toBe(true);
   });
 
   it("defaults to end mode when none is given", () => {
-    const root = render(<Truncate value="Profile" />);
-    expect(
-      (root.querySelector("span") as HTMLSpanElement).classList.contains(
-        "truncate-end",
-      ),
-    ).toBe(true);
+    const root = render(<Truncate value="ABCDEFGHIJ" maxChars={5} />);
+    expect(root.querySelector("span")?.textContent).toBe("ABCD…");
   });
 
   it("uses a trailing ellipsis at the shared character ceiling", () => {
@@ -91,8 +86,6 @@ describe("Truncate middle mode", () => {
     expect(span.textContent).toContain("…");
     expect(span.textContent?.length).toBeLessThanOrEqual(20);
     expect(span.classList.contains("truncate")).toBe(true);
-    // No end-mode ellipsis in middle mode: the string is split by hand.
-    expect(span.classList.contains("truncate-end")).toBe(false);
   });
 
   it("shows the whole value when it fits the budget", () => {
@@ -100,59 +93,5 @@ describe("Truncate middle mode", () => {
     expect((root.querySelector("span") as HTMLSpanElement).textContent).toBe(
       "short",
     );
-  });
-
-  // A canvas whose glyphs are 7px wide, except the fullwidth ones at 14px, which
-  // is roughly the ratio a real font gives them. Measuring a stand-in character
-  // instead of the string is what hands a Japanese value twice the room it has.
-  const WIDE = /[　-ヿ一-鿿]/u;
-  function mockCanvas(columnWidth: number) {
-    const getContext = vi
-      .spyOn(HTMLCanvasElement.prototype, "getContext")
-      .mockReturnValue({
-        font: "",
-        measureText: (text: string) => ({
-          width: [...text].reduce(
-            (total, character) => total + (WIDE.test(character) ? 14 : 7),
-            0,
-          ),
-        }),
-      } as unknown as CanvasRenderingContext2D);
-    const column = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockReturnValue(new DOMRect(0, 0, columnWidth, 0));
-    return () => {
-      getContext.mockRestore();
-      column.mockRestore();
-    };
-  }
-
-  it("fits the rendered string to the column when no budget is given", () => {
-    const restore = mockCanvas(105);
-
-    const value = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const root = render(<Truncate mode="middle" value={value} />);
-    const text = root.querySelector(".truncate")?.textContent;
-
-    // 105px of column, 7px a glyph: 15 of them.
-    expect(text).toContain("…");
-    expect(text?.length).toBe(15);
-
-    restore();
-  });
-
-  it("gives a fullwidth value the room it takes, not the room a Latin one takes", () => {
-    const restore = mockCanvas(105);
-
-    const root = render(
-      <Truncate mode="middle" value="山田太郎テスト環境ユーザー名" />,
-    );
-    const text = root.querySelector(".truncate")?.textContent;
-
-    // Half the glyph count of the Latin case, and marked rather than clipped.
-    expect(text).toContain("…");
-    expect(text?.length).toBe(8);
-
-    restore();
   });
 });

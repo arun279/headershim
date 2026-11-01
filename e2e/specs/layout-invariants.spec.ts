@@ -427,8 +427,7 @@ const TAPE_HEADERS = [
 
 // The room the identifier competes for and the width its full name wants, both
 // read fractionally in the page: the row less the cells beside it, and the name
-// laid out on a canvas in the identifier's own font, the instrument the
-// primitive measures its own candidates with.
+// laid out on a canvas in the identifier's own font.
 function readTapeHeaders(page: Page) {
   return page.evaluate(() => {
     const ctx = document.createElement("canvas").getContext("2d");
@@ -440,7 +439,9 @@ function readTapeHeaders(page: Page) {
           ctx.font = getComputedStyle(header).font;
           return {
             name: header.title,
-            shown: header.textContent ?? "",
+            clipped:
+              header.scrollWidth > header.clientWidth &&
+              getComputedStyle(header).textOverflow === "ellipsis",
             needed: ctx.measureText(header.title).width,
             room:
               row.getBoundingClientRect().width -
@@ -459,9 +460,7 @@ function readTapeHeaders(page: Page) {
 // A cut answers a shortage of room, so a name with the room for it is drawn
 // whole. The identifier shares the tape's flex row with the op glyph, the verb,
 // and the status cluster, so the room it may take is that row's width less what
-// those cells hold. Room and name are both fractional: rounding either, or
-// reading the room off a box that has already shrunk to the cut, cuts a name
-// that fits and leaves it cut at every width after.
+// those cells hold.
 test("the traffic tape cuts a header name only when its row cannot hold it", async ({
   context,
   extensionId,
@@ -493,25 +492,23 @@ test("the traffic tape cuts a header name only when its row cannot hold it", asy
   await expect(page.locator(".tape-header")).toHaveCount(TAPE_HEADERS.length);
 
   // One load, then only the window moves: a cut that sticks is invisible to a
-  // page that never lived through the narrow width. The first two widths hold
-  // every name whole, 360 is short enough to cut the two longest, and the
-  // closing 1280 is the grow-back that a box shrunk to its own cut fails. Every
-  // width is judged before any is reported, as the sweep above names every
-  // culprit rather than the first.
+  // page that never lived through the narrow width. 360 is short enough to cut
+  // the longest names, and the closing 1280 is the grow-back. Every width is
+  // judged before any is reported, as the sweep above names every culprit.
   const offenders: string[] = [];
   for (const width of [1280, 900, 360, 1280]) {
     await page.setViewportSize({ width, height: 800 });
     await settle(page, "light");
 
-    for (const { name, shown, needed, room } of await readTapeHeaders(page)) {
-      if (needed <= room && shown !== name) {
+    for (const { name, clipped, needed, room } of await readTapeHeaders(page)) {
+      if (needed <= room && clipped) {
         offenders.push(
-          `@${width}: "${name}" wants ${needed}px, the row holds ${room}px, and it was cut to "${shown}"`,
+          `@${width}: "${name}" wants ${needed}px, the row holds ${room}px, and it was cut`,
         );
       }
-      if (needed > room && !shown.includes("…")) {
+      if (needed > room && !clipped) {
         offenders.push(
-          `@${width}: "${name}" wants ${needed}px in ${room}px of row and was left uncut`,
+          `@${width}: "${name}" wants ${needed}px in ${room}px of row and has no ellipsis`,
         );
       }
     }
