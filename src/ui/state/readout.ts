@@ -17,6 +17,7 @@ import {
   isSecretHeader,
   ruleValueSummary,
 } from "../secret";
+import { decodeJwtExp } from "../token";
 import {
   type HeaderChange,
   type Line,
@@ -183,7 +184,8 @@ function tokenChange(
       change.direction === "request" &&
       change.operation !== "remove" &&
       change.value !== undefined &&
-      normalizeHeaderName(change.header) === "authorization" &&
+      (normalizeHeaderName(change.header) === "authorization" ||
+        decodeJwtExp(change.value) !== undefined) &&
       (change.outcome.kind === "runs" ||
         change.outcome.kind === "runs-if-matched" ||
         (change.outcome.kind === "absent" &&
