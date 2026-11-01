@@ -33,7 +33,7 @@ pnpm zip
 pnpm verify
 ```
 
-`pnpm install` configures git hooks: staged files are checked with Biome on commit, and the full verification gate runs before every push that sends a non-deletion ref. `pnpm verify` runs the same gate on demand.
+`pnpm install` configures git hooks: staged files are checked with Biome on commit, and `pnpm check` runs before every push that sends a non-deletion ref. The browser tests run in CI, which must pass before merge, and `pnpm verify` runs both on demand.
 
 `pnpm zip` builds the release archive and checks that it exactly matches `.output/chrome-mv3` with no source maps.
 

@@ -35,7 +35,7 @@ if [ -n "$verify" ]; then
   if [ -n "$previous_refs" ]; then
     export PLAYWRIGHT_PREVIOUS_REFS="$previous_refs"
   fi
-  exec pnpm verify
+  exec pnpm check
 fi
 
 if [ -n "$records" ]; then

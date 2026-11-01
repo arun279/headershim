@@ -602,7 +602,7 @@ function runHook(t, input, cwd = repositoryRoot) {
   writeFileSync(
     pnpm,
     `#!/bin/sh
-printf "verify:%s\\n" "\${PLAYWRIGHT_PREVIOUS_REFS-}"
+printf "%s:%s\\n" "$1" "\${PLAYWRIGHT_PREVIOUS_REFS-}"
 `,
   );
   chmodSync(pnpm, 0o755);
@@ -648,9 +648,9 @@ test("the pre-push hook verifies malformed and unterminated updates", (t) => {
   );
 
   assert.equal(malformed.status, 0);
-  assert.equal(malformed.stdout, "verify:\n");
+  assert.equal(malformed.stdout, "check:\n");
   assert.equal(update.status, 0);
-  assert.equal(update.stdout, `verify:${previous}\n`);
+  assert.equal(update.stdout, `check:${previous}\n`);
 });
 
 test("workflows provide the comparison history required by the project checker", () => {
