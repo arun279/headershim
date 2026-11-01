@@ -506,7 +506,9 @@
 .tk-val .dots {
   flex: 0 1 auto;
   min-width: 0;
+  height: 1lh;
   overflow: hidden;
+  word-break: break-all;
   color: var(--ink3);
   letter-spacing: 0.14em;
   margin: 0 4px;

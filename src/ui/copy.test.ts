@@ -109,7 +109,7 @@ describe("copy", () => {
       "expires in 5h 18m",
     );
     expect(copy.token.expiresIn(8 * 60_000)).toBe("expires in 8m");
-    expect(copy.token.opaque).toBe("opaque token · no expiry to read");
+    expect(copy.token.opaque).toBe("no expiry in this token");
   });
 
   it("names every site a commit will ask Chrome for, not a count", () => {

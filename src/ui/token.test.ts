@@ -45,6 +45,18 @@ describe("decodeJwtExp", () => {
     });
   });
 
+  it("reads exp and iat written as numeric strings", () => {
+    expect(decodeJwtExp(jwt({ exp: "1000", iat: "100" }))).toEqual({
+      expMs: 1_000_000,
+      iatMs: 100_000,
+    });
+  });
+
+  it("returns undefined for an exp that is not a number", () => {
+    expect(decodeJwtExp(jwt({ exp: "tomorrow" }))).toBeUndefined();
+    expect(decodeJwtExp(jwt({ exp: "" }))).toBeUndefined();
+  });
+
   it("returns undefined for a non-three-segment token", () => {
     expect(decodeJwtExp("Bearer opaque-value")).toBeUndefined();
   });
