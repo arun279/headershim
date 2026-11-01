@@ -111,7 +111,7 @@ const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
     reason: `${BRAND_NAME} applies your header rules through Chrome's rules engine, which runs a rule only where Chrome's own host access covers the request. The engine does not hand ${BRAND_NAME} request or response content.`,
     details: [
       "A request rule sends the value you typed to every site it matches and you have granted, so where that value goes is limited by the rule's scope and by the sites you have granted. A response rule changes what this browser sees.",
-      "While header changes are running, each rule you turn on in the active profile that Chrome accepts, and whose sites you have granted, is handed to the rules engine as a dynamic rule, with the header value in the clear. A rule in a profile that is not active is not, and neither is one still waiting on a site grant. Chrome keeps that dynamic ruleset on disk, across browser sessions and across extension updates, so it holds a second copy of each of those values, alongside the one in local storage.",
+      "While header changes are running, each rule you turn on in the active profile that Chrome accepts, and whose sites you have granted, is handed to the rules engine as a dynamic rule, with the header value in the clear. A rule in a profile that is not active is not, and neither is one still waiting on a site grant. Chrome keeps that dynamic ruleset on disk in two files, across browser sessions and across extension updates, so each of those values sits in both, alongside the copy in local storage.",
       "Turning the rule off, deleting it, switching to another profile, revoking a site the rule needs, or pausing every header change takes it back out of the dynamic ruleset.",
       "A this-tab change goes to the session ruleset instead, which Chrome clears when the browser shuts down.",
     ],
@@ -121,6 +121,7 @@ const PERMISSION_REASONS: Record<ManifestPermission, PermissionReason> = {
     reason: `${BRAND_NAME} keeps your rules, profiles, and settings in Chrome's local extension storage, in this browser on this device.`,
     details: [
       "Header values are stored on this device without encryption, exactly as you typed them, and an exported configuration file contains them in the clear. Treat it like a credentials file.",
+      "A value you overwrite or delete can stay on disk for some time afterwards, because Chrome's local storage does not erase old data straight away.",
       "Chrome's synced storage is not used, so nothing is copied to your Google account.",
       "The theme you pick is also kept in the extension pages' own web storage, so a page paints in it before the stored settings load. No header value is kept there.",
       "Adding a this-tab change writes it to Chrome's session storage rather than to local storage, and it is not part of an export. The record is the tab it applies to, the number Chrome matches the change by, the origin it belongs to (scheme, host, and port), the direction, the operation, the header name, the value you typed, and whether it is on.",
