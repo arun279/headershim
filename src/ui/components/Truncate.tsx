@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import "./Truncate.css";
 
 export const TRUNCATION_LIMITS = {
@@ -31,19 +30,11 @@ export function truncateEnd(text: string, max: number): string {
 interface TruncateProps {
   value: string;
   /**
-   * "end" (default) keeps the leading portion and clips the tail with a CSS
-   * ellipsis. "middle" keeps both ends for machine identifiers and values, and
-   * asks the caller for a cell that sizes the element: it cuts the string to
-   * the box it is given, so an element left to size itself hands back the width
-   * of its own last cut and the cut can never widen again.
+   * "end" (default) keeps the leading portion. "middle" keeps both ends for
+   * machine identifiers, where the tail is what tells one from another.
    */
   mode?: "end" | "middle";
-  /**
-   * A shared character ceiling for the data type. A mode that cuts the string by
-   * hand also measures the rendered result against its live container and takes
-   * whichever of the two bites first, because a character count is a different
-   * width in every script.
-   */
+  /** A character ceiling. The CSS ellipsis clips whatever still overflows. */
   maxChars?: number;
   class?: string;
 }
@@ -92,122 +83,13 @@ export function Truncate({
   maxChars,
   class: className,
 }: TruncateProps) {
-  // Middle mode cuts the string by hand and measures the column it is cut for;
-  // end mode hands that job to the CSS ellipsis, which measures it for free.
-  // Either way the character ceiling is a ceiling, not the whole answer: 22 CJK
-  // characters take about twice the room 22 Latin ones do.
-  if (mode === "middle") {
-    return (
-      <Measured
-        value={value}
-        maxChars={maxChars}
-        cut={truncateMiddle}
-        {...(className === undefined ? {} : { class: className })}
-      />
-    );
-  }
+  const cut = mode === "middle" ? truncateMiddle : truncateEnd;
   return (
     <span
-      class={className === undefined ? END_CLASS : `${END_CLASS} ${className}`}
-      title={value}
-    >
-      {maxChars === undefined ? value : truncateEnd(value, maxChars)}
-    </span>
-  );
-}
-
-const END_CLASS = "truncate truncate-end";
-
-let probe: HTMLCanvasElement | undefined;
-
-/**
- * Measures candidate strings in the element's own font. The strings themselves
- * are measured, not a stand-in character: a CJK glyph is about twice the width
- * of a Latin one, so a budget counted in characters gives a Japanese value twice
- * the room it has and the column clips it mid-glyph.
- */
-function textMeasurer(el: HTMLElement): ((text: string) => number) | undefined {
-  probe ??= document.createElement("canvas");
-  const ctx = probe.getContext("2d");
-  if (ctx === null) return undefined;
-  ctx.font = getComputedStyle(el).font;
-  return (text) => ctx.measureText(text).width;
-}
-
-type Cut = (text: string, max: number) => string;
-
-/**
- * The longest cut of `value` that still fits the live column, which is the
- * element's own box: the cell around it sizes that box, so it holds the room
- * the text competes for rather than the width of the text already in it. Both
- * widths are fractional and neither is rounded, because a string that misses a
- * whole-pixel box by a hundredth of a pixel fits the column that box stands
- * for, and cutting it there trades a name for a longer stand-in.
- */
-function fitToColumn(
-  el: HTMLElement,
-  value: string,
-  maxChars: number | undefined,
-  cut: Cut,
-): string {
-  const ceiling = Math.min(maxChars ?? value.length, value.length);
-  const measure = textMeasurer(el);
-  const width = el.getBoundingClientRect().width;
-  if (measure === undefined || width <= 0) {
-    return cut(value, ceiling);
-  }
-  // Two characters is the shortest cut that still marks itself; a one-character
-  // budget hands back the whole string, which would render clipped and unmarked.
-  let low = 2;
-  let high = ceiling;
-  let best = cut(value, low);
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = cut(value, mid);
-    if (measure(candidate) <= width) {
-      best = candidate;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return best;
-}
-
-function Measured({
-  value,
-  maxChars,
-  cut,
-  class: className,
-}: {
-  value: string;
-  maxChars: number | undefined;
-  cut: Cut;
-  class?: string;
-}) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [display, setDisplay] = useState(() =>
-    maxChars === undefined ? value : cut(value, maxChars),
-  );
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
-    const measure = () => setDisplay(fitToColumn(el, value, maxChars, cut));
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [maxChars, value, cut]);
-
-  return (
-    <span
-      ref={ref}
       class={className === undefined ? "truncate" : `truncate ${className}`}
       title={value}
     >
-      {display}
+      {maxChars === undefined ? value : cut(value, maxChars)}
     </span>
   );
 }

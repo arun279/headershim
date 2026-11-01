@@ -9,12 +9,8 @@
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
-}
-
-/* End mode: a CSS ellipsis on the tail (middle mode splits the string itself). */
-.truncate-end {
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Shown whole: fixed text that a cut would turn into something reading as a

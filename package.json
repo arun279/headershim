@@ -122,7 +122,7 @@
         "!.output/chrome-mv3/assets/headerLine-*.css",
         "!.output/chrome-mv3/assets/popup-*.css"
       ],
-      "limit": "40000 B"
+      "limit": "39750 B"
     },
     {
       "name": "Options rule editor",
@@ -153,11 +153,11 @@
   },
   "commentLoad": {
     "product": {
-      "comments": 1589,
-      "longBlocks": 173
+      "comments": 1560,
+      "longBlocks": 169
     },
     "tests": {
-      "comments": 1223,
+      "comments": 1217,
       "longBlocks": 107
     },
     "scripts": {
