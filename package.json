@@ -65,7 +65,7 @@
     "knip": "^6.44.0",
     "oxc-parser": "0.155.0",
     "oxlint": "1.90.0",
-    "preact": "^10.29.8",
+    "preact": "^11.1.1",
     "size-limit": "^13.0.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
