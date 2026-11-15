@@ -54,22 +54,22 @@
   "dependencies": {},
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@biomejs/biome": "^2.6.4",
-    "@playwright/test": "1.64.1",
+    "@biomejs/biome": "^2.6.7",
+    "@playwright/test": "1.65.0",
     "@resvg/resvg-js": "^2.6.2",
     "@size-limit/file": "^13.0.3",
-    "@tsconfig/strictest": "^2.0.8",
+    "@tsconfig/strictest": "^2.0.9",
     "@vitest/coverage-v8": "^4.1.12",
     "happy-dom": "^21.0.4",
-    "jscpd": "^5.4.2",
-    "knip": "^6.44.0",
-    "oxc-parser": "0.155.0",
-    "oxlint": "1.90.0",
+    "jscpd": "^5.4.3",
+    "knip": "^6.45.1",
+    "oxc-parser": "0.158.0",
+    "oxlint": "1.93.0",
     "preact": "^10.29.8",
     "size-limit": "^13.0.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
-    "wxt": "^0.21.4"
+    "wxt": "^0.21.5"
   },
   "size-limit": [
     {
